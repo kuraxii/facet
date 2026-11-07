@@ -17,3 +17,7 @@ Thumbs.db
 .local/
 .env
 .env.local
+
+*.swp
+*.swo
+*~

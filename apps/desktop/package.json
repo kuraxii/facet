@@ -5,9 +5,11 @@
 	"type": "module",
 	"main": "./out/main/index.js",
 	"scripts": {
+		"predev": "node ../../scripts/ensure-electron.mjs",
 		"dev": "electron-vite dev",
-		"build": "electron-vite build",
+		"prestart": "node ../../scripts/ensure-electron.mjs",
 		"start": "electron-vite preview",
+		"build": "electron-vite build",
 		"typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
 		"dist": "npm run build && electron-builder"
 	},

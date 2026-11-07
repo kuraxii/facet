@@ -1,0 +1,398 @@
+# 功能需求
+
+本文件把现有 Percho 应用（v0.6.5）的功能整理成可讨论的需求清单，作为 facet 重新实现的功能基线。每条需求有稳定编号，后续详细设计按编号逐条展开。
+
+## 阅读方式
+
+- 编号：`FR-<域>-<序号>`。域划分见目录。
+- 优先级：**P0** 核心，没有它应用不可用；**P1** 重要，缺失会让产品失去竞争力；**P2** 增强，可在核心稳定后补。
+- 复杂度：按实现工作量估计的粗档（小 / 中 / 大），用于排期参考，不作为取舍依据。
+- 取舍列留空，供逐条评估：保留 / 简化 / 移除。
+
+| 域 | 前缀 | 范围 |
+|---|---|---|
+| 应用外壳 | SHELL | 窗口、外观、更新、日志、崩溃恢复 |
+| 项目与导航 | NAV | 项目、侧栏、搜索、顶栏 |
+| 会话生命周期 | SESS | 新建、打开、分叉、撤回、删除、卸载 |
+| 对话渲染 | CHAT | 消息流、markdown、工具卡、图片、错误 |
+| 输入与发送 | COMPOSE | 输入框、补全、排队、附件 |
+| 权限与信任 | PERM | 审批、规则引擎、项目信任 |
+| 扩展与工具 | EXT | 扩展 UI、内置工具、MCP、社区包 |
+| 文件与差异 | FILES | 文件树、编辑器、差异侧栏 |
+| 终端 | TERM | 伪终端、分屏、终端设置 |
+| 设置 | SET | 提供方、模型、外观、各面板 |
+| UI 插件 | PLUG | 槽位、宿主接口、构建 |
+| 跨设备 | LAN | 局域网观察、远程控制 |
+| 数据与持久化 | DATA | 写入磁盘、事件顺序、状态重放 |
+| 非功能 | NFR | 性能、可靠性、安全、可测 |
+
+---
+
+# 一、应用外壳（SHELL）
+
+| 编号 | 需求 | 行为要点 | 优先级 | 复杂度 | 取舍 |
+|---|---|---|---|---|---|
+| FR-SHELL-01 | 窗口创建与尺寸恢复 | 记住上次位置与尺寸；恢复前校验该位置是否仍在某块屏幕上，否则回到主屏居中；最小尺寸限制 | P0 | 小 | |
+| FR-SHELL-02 | 退出确认 | 有任务在运行时点关闭先确认；说明"退出后正在跑的任务会终止"；主进程在渲染进程无响应时按超时直接放行 | P1 | 小 | |
+| FR-SHELL-03 | 背景图与遮罩 | 选本地图片复制到用户数据目录；支持遮罩浓度调节；亮/暗主题各一套取值 | P2 | 小 | |
+| FR-SHELL-04 | 主题切换 | 亮色 / 暗色 / 跟随系统；系统主题变化实时生效；自定义背景图上文字可读 | P0 | 中 | |
+| FR-SHELL-05 | 字号档位 | 界面字号与代码字号各自可调，含预设档与连续调节；字号通过 CSS 变量下发 | P1 | 小 | |
+| FR-SHELL-06 | 界面语言 | 中文与英文；文案集中管理，禁止散落在组件里 | P1 | 中 | |
+| FR-SHELL-07 | 启动开屏 | 主窗口内容就绪前显示开屏层，避免白屏闪烁 | P2 | 小 | |
+| FR-SHELL-08 | 渲染进程崩溃恢复 | 监听渲染进程崩溃与无响应，自动重载；短时间高频崩溃转为提示人工处理；保留临终日志快照 | P1 | 中 | |
+| FR-SHELL-09 | 自动更新 | 检查、提示、下载、安装；平台差异（macOS 无法自装跳转发布页）；下载进度可取消 | P1 | 大 | |
+| FR-SHELL-10 | 更新诊断 | 记录安装交接是否观察到新版本启动；可导出诊断文件（不含会话与凭证） | P2 | 中 | |
+| FR-SHELL-11 | 运行环境修正 | GUI 启动时补齐 PATH（仅 macOS / Linux）；开发与正式数据目录隔离 | P0 | 小 | |
+| FR-SHELL-12 | 日志与诊断 | 分级日志、可选写入磁盘、按天分文件；会话诊断信息可一键复制 | P1 | 中 | |
+
+# 二、项目与导航（NAV）
+
+| 编号 | 需求 | 行为要点 | 优先级 | 复杂度 | 取舍 |
+|---|---|---|---|---|---|
+| FR-NAV-01 | 项目添加 | 目录选择器添加；添加前走信任确认；同一目录不重复添加 | P0 | 小 | |
+| FR-NAV-02 | 项目菜单 | 置顶、移除、在文件管理器中打开、查看与切换 Git 分支 | P1 | 中 | |
+| FR-NAV-03 | 侧栏分组 | 项目分组（不可折叠）+ 日常空间 + 最近分组；展开态持久化 | P0 | 中 | |
+| FR-NAV-04 | 最近分组 | 跨项目固定 8 条、顺序持久化、可收起；只在"发消息"或"停留满 10 秒"时记录，仅浏览不记录；日常空间与只读检视会话不计入 | P1 | 中 | |
+| FR-NAV-05 | 会话行 | 标题、时间、状态点（工作中 / 待应答 / 完成未读 / 空闲）；置顶会话有独立视觉 | P0 | 中 | |
+| FR-NAV-06 | 会话行菜单 | 重命名、删除、导出、复制路径、打开所在目录；删除需确认 | P1 | 小 | |
+| FR-NAV-07 | 侧栏搜索 | 按标题与内容筛选会话；结果按项目分组 | P1 | 中 | |
+| FR-NAV-08 | 侧栏宽度 | 拖拽调宽，夹紧到允许区间；拖动过程关闭过渡动画；宽度持久化 | P1 | 小 | |
+| FR-NAV-09 | 侧栏折叠 | 整栏收起与展开；收起后设置入口随栏隐藏 | P1 | 小 | |
+| FR-NAV-10 | 顶栏 | 窗口拖动区、左栏开关、差异侧栏开关、文件视图入口、新建会话 | P0 | 小 | |
+| FR-NAV-11 | 空状态页 | 无会话时展示引导（选择项目 / 新建会话 / 最近会话） | P1 | 小 | |
+
+# 三、会话生命周期（SESS）
+
+| 编号 | 需求 | 行为要点 | 优先级 | 复杂度 | 取舍 |
+|---|---|---|---|---|---|
+| FR-SESS-01 | 新建会话 | 指定工作目录、模型、思考档位；缺省用全局默认 | P0 | 中 | |
+| FR-SESS-02 | 打开历史会话 | 读会话文件回放完整分支历史；打开期间到达的实时事件要等历史就绪后合流，不能乱序 | P0 | 大 | |
+| FR-SESS-03 | 关闭会话 | 会话运行中或等待审批时拒绝关闭；未打开过的会话关闭视为成功（幂等） | P0 | 中 | |
+| FR-SESS-04 | 删除会话 | 同时删除磁盘会话文件；不可恢复；操作前确认 | P0 | 小 | |
+| FR-SESS-05 | 会话改名 | 活跃会话直接改；历史会话离线追加一条会话信息记录，不启动会话 | P1 | 中 | |
+| FR-SESS-06 | 分叉会话 | 从某条消息或选中内容分叉出新会话，保留到该点为止的上下文 | P1 | 大 | |
+| FR-SESS-07 | 撤回消息 | 撤回自己发出的消息，回退到该消息之前，内容放回输入框（含图片） | P1 | 大 | |
+| FR-SESS-08 | 重试失败轮次 | 只重试末端失败的模型调用，不新增用户消息；结果走事件流 | P1 | 中 | |
+| FR-SESS-09 | 导出会话 | 导出 HTML（可读）与 JSONL（原始记录） | P2 | 中 | |
+| FR-SESS-10 | 会话自动卸载 | 长时间离开的会话释放其运行态，释放内存；受频道订阅与运行状态保护；卸载不影响侧栏行的存在 | P1 | 大 | |
+| FR-SESS-11 | 只读子代理检视 | 点击子代理运行卡打开其子会话，只读展示，可返回父会话；子会话不出现在导航里 | P1 | 中 | |
+| FR-SESS-12 | 会话状态机 | 空闲 / 运行中 / 等待审批 / 压缩中；状态同时驱动侧栏状态点与输入框可用性 | P0 | 中 | |
+| FR-SESS-13 | 日常空间 | 固定草稿工作目录，随手提问用；与项目会话在侧栏分组、最近列表规则上区别对待 | P2 | 中 | |
+
+# 四、对话渲染（CHAT）
+
+| 编号 | 需求 | 行为要点 | 优先级 | 复杂度 | 取舍 |
+|---|---|---|---|---|---|
+| FR-CHAT-01 | 消息流布局 | 居中列、最大宽度限制、消息间距、滚动跟随底部、向上滚动脱离跟随并显示回底按钮 | P0 | 中 | |
+| FR-CHAT-02 | 流式 markdown | 增量解析与渲染；未闭合构造（代码块、表格、链接）按进行中状态展示；提交后固化 | P0 | 大 | |
+| FR-CHAT-03 | 平滑输出 | 令牌到达速率不稳定时按字逐出，避免整块蹦出；减少动效偏好时直出 | P2 | 中 | |
+| FR-CHAT-04 | 代码块 | 语法高亮、语言标签、复制按钮；未知语言降级为纯文本；流式中未写完的代码块不显示空卡 | P0 | 中 | |
+| FR-CHAT-05 | 图表与公式 | mermaid 图渲染（含失败降级为源码）；KaTeX 公式 | P1 | 中 | |
+| FR-CHAT-06 | 工具调用卡 | 折叠行：工具名、参数摘要、状态（运行中 / 完成 / 失败）、输出；长输出折叠；编辑类工具展示差异摘要 | P0 | 大 | |
+| FR-CHAT-07 | 折叠组 | 一轮内思考与工具调用合并为一个可折叠组，正文作为分组边界；组头显示活动摘要与状态点 | P1 | 大 | |
+| FR-CHAT-08 | 轮次收尾行 | 每轮结束显示耗时与文件变更统计，可点击跳到差异侧栏对应轮 | P1 | 中 | |
+| FR-CHAT-09 | 用户消息 | 文本、附件图片、引用块；超长内容折叠展开；支持复制与撤回 | P0 | 中 | |
+| FR-CHAT-10 | 助手消息操作 | 复制全文、从该处分叉、重新生成（若纳入范围） | P1 | 小 | |
+| FR-CHAT-11 | 图片显示 | 历史图片懒加载缩略（后台线程解码）、点击全屏预览、多图按数量分档布局 | P1 | 中 | |
+| FR-CHAT-12 | 选中文本菜单 | 选中文字后浮出"引用 / 复制"菜单，位置夹紧在视口内 | P1 | 中 | |
+| FR-CHAT-13 | 错误卡 | 按错误类型分类展示标题与建议动作（重试 / 打开设置 / 复制详情）；可一键重试 | P0 | 中 | |
+| FR-CHAT-14 | 自动重试状态行 | 模型自动重试期间显示尝试次数与倒计时；成功后不留痕 | P1 | 小 | |
+| FR-CHAT-15 | 系统消息 | 压缩完成、上下文提示、互斥提示等以分割线形式插入消息流 | P1 | 小 | |
+| FR-CHAT-16 | 上下文压缩展示 | 压缩进行中显示状态；压缩后历史按压缩条目分界 | P1 | 中 | |
+| FR-CHAT-17 | 长会话性能 | 切换会话耗时与会话长度无关；流式期间挂载规模有界；方案详见详情设计 | P0 | 大 | |
+| FR-CHAT-18 | 子代理运行卡 | 独立行展示并行子代理状态、名称、进度、token 数；点击进入只读检视 | P1 | 中 | |
+| FR-CHAT-19 | 任务面板 | 展示 agent 维护的任务清单（todo），带完成进度环 | P1 | 中 | |
+| FR-CHAT-20 | 频道订阅指示 | 会话订阅了哪些协作频道以胶囊形式展示 | P2 | 小 | |
+| FR-CHAT-21 | 状态动画 | agent 工作中的中央状态动画；可开关 | P2 | 中 | |
+| FR-CHAT-22 | 消息时间与元信息 | 悬停或分组头显示时间；轮次内不重复显示 | P2 | 小 | |
+
+# 五、输入与发送（COMPOSE）
+
+| 编号 | 需求 | 行为要点 | 优先级 | 复杂度 | 取舍 |
+|---|---|---|---|---|---|
+| FR-COMPOSE-01 | 发送与停止 | 回车发送（可配置换行键位）；运行中可停止；空内容不发送 | P0 | 小 | |
+| FR-COMPOSE-02 | 排队消息 | 运行中发送进入队列，按序在轮次结束后发出；可清空并把内容还原到输入框 | P1 | 中 | |
+| FR-COMPOSE-03 | 草稿 | 新会话页有唯一全局草稿；每个会话各自保留草稿；切换会话不丢 | P0 | 中 | |
+| FR-COMPOSE-04 | 文件引用补全 | `@` 触发项目文件补全，模糊匹配在本地完成；选中后以胶囊形式插入；发送时展开为路径 | P1 | 中 | |
+| FR-COMPOSE-05 | 斜杠命令 | `/` 触发命令清单（内置、模板、skill、扩展）；无会话时也可按目录列出 | P1 | 中 | |
+| FR-COMPOSE-06 | 模型选择 | 按提供方分组，显示可用性；切换后立即作用于当前会话；隐藏的模型不在列表出现 | P0 | 中 | |
+| FR-COMPOSE-07 | 思考档位 | 滑杆或分段控件选择思考深度；模型不支持时隐藏或禁用 | P1 | 中 | |
+| FR-COMPOSE-08 | 权限模式选择 | 在输入框区展示当前会话权限模式并可切换（默认 / 完全访问）；完全访问需明确提示 | P1 | 小 | |
+| FR-COMPOSE-09 | 图片附件 | 粘贴与拖入；本地预缩放；缩略条展示、可删除、点击预览 | P1 | 中 | |
+| FR-COMPOSE-10 | 引用选中文本 | 从消息流选中文字后进入输入框，作为引用块随消息发送 | P1 | 小 | |
+| FR-COMPOSE-11 | 上下文用量 | 环形指示当前上下文占用，接近上限时提示压缩 | P1 | 中 | |
+| FR-COMPOSE-12 | 发送失败提示 | 发送被拒（无模型、无凭证、只读会话、压缩中）时在输入框内联提示，并可重试 | P0 | 小 | |
+| FR-COMPOSE-13 | 快捷键 | 新建会话、切换面板、聚焦输入框等常用操作的键盘入口 | P2 | 小 | |
+
+# 六、权限与信任（PERM）
+
+| 编号 | 需求 | 行为要点 | 优先级 | 复杂度 | 取舍 |
+|---|---|---|---|---|---|
+| FR-PERM-01 | 工具审批 | 需要授权的工具调用在底部停靠槽展示请求：工具名、参数、影响路径或命令；用户选择允许一次、始终允许、允许该目录、拒绝 | P0 | 大 | |
+| FR-PERM-02 | 逐工具规则引擎 | 规则按工具粒度配置允许 / 询问 / 拒绝，支持通配模式；后命中者生效 | P0 | 大 | |
+| FR-PERM-03 | bash 命令链解析 | 引号感知地切分命令链、去除包装执行、提取命令替换，按最严格的片段求值 | P1 | 大 | |
+| FR-PERM-04 | 路径边界判定 | 判断访问是否在工作区或项目根内；越界时建议加入工作区的根目录 | P0 | 中 | |
+| FR-PERM-05 | 临时区豁免 | 系统临时目录内的删除类操作放宽判定，带明确的边界规则 | P2 | 中 | |
+| FR-PERM-06 | 未知工具默认策略 | 没有只读声明的第三方或 MCP 工具默认询问，不默认放行 | P0 | 小 | |
+| FR-PERM-07 | 会话权限模式 | 默认档与完全访问档；完全访问仅对当前会话生效、不写盘、重启归零 | P1 | 中 | |
+| FR-PERM-08 | 完全访问审计 | 完全访问档下本该询问或拒绝的调用写入审计日志，供事后核查 | P1 | 小 | |
+| FR-PERM-09 | 项目信任 | 首次打开某目录前询问是否信任；未信任不加载项目级扩展与项目级 MCP 配置 | P0 | 中 | |
+| FR-PERM-10 | 审批排队 | 多个请求同时到达时按队列逐个展示，前一个结算后自动顶上 | P1 | 中 | |
+
+# 七、扩展与工具（EXT）
+
+| 编号 | 需求 | 行为要点 | 优先级 | 复杂度 | 取舍 |
+|---|---|---|---|---|---|
+| FR-EXT-01 | 扩展交互桥 | 扩展发起的选择、输入、多行编辑、确认以图形界面对话框呈现；取消返回明确否定；带超时与中止信号 | P1 | 大 | |
+| FR-EXT-02 | 扩展通知 | 扩展的 notify 转为应用内提示，同源同文合并并限流 | P2 | 小 | |
+| FR-EXT-03 | 编辑器预填 | 扩展可以把文本写进当前会话的输入框，并提示来源 | P2 | 小 | |
+| FR-EXT-04 | 降级规则 | 图形界面无法承载的扩展能力（终端组件、状态行、标题设置等）返回明确的失败或空操作，不伪造用户输入 | P0 | 中 | |
+| FR-EXT-05 | 内置任务工具 | agent 维护任务清单（新增、更新状态、完成），面板实时展示 | P1 | 中 | |
+| FR-EXT-06 | 任务恢复提醒 | 上下文压缩后把当前任务清单重新注入模型上下文 | P2 | 中 | |
+| FR-EXT-07 | 图片展示工具 | agent 主动展示图片（单张或成组），带数量与体积上限 | P1 | 中 | |
+| FR-EXT-08 | 网页抓取工具 | 抓取公开网页并转为可读文本；拦截内网与保留地址；限制输出长度 | P2 | 大 | |
+| FR-EXT-09 | 子代理 | 并行运行子代理，各自独立会话与模型；结果汇总回主会话；支持内置与自定义代理定义 | P1 | 大 | |
+| FR-EXT-10 | 子代理互斥 | 同一工作目录下的写操作类子代理互斥，避免互相覆盖 | P2 | 中 | |
+| FR-EXT-11 | 上下文蒸发 | 陈旧工具输出按水位线替换为带恢复指令的占位文本，控制上下文增长 | P1 | 大 | |
+| FR-EXT-12 | 压缩护栏 | 压缩触发线可按比例配置；摘要请求体积有上限 | P2 | 大 | |
+| FR-EXT-13 | 频道协作 | 会话之间通过文件频道发布与订阅消息，支持唤醒与防环 | P2 | 大 | |
+| FR-EXT-14 | MCP 配置管理 | 读写全局与项目级 MCP 配置，列出服务器与工具状态，触发重连 | P1 | 中 | |
+| FR-EXT-15 | 社区包管理 | 搜索目录、安装、卸载扩展包，安装后热重载空闲会话 | P2 | 中 | |
+| FR-EXT-16 | 已加载资源查看 | 展示当前会话加载的 skill、扩展、模板及其来源与诊断信息 | P2 | 中 | |
+| FR-EXT-17 | 扩展异常处理 | 扩展回调抛错进入日志与提示，不静默吞掉，不阻断会话 | P1 | 小 | |
+
+# 八、文件与差异（FILES）
+
+| 编号 | 需求 | 行为要点 | 优先级 | 复杂度 | 取舍 |
+|---|---|---|---|---|---|
+| FR-FILES-01 | 文件树 | 按需展开目录（惰性读取）；文件图标按类型；键盘导航 | P1 | 中 | |
+| FR-FILES-02 | 文件查看 | 只读展示，按扩展名决定语法高亮；二进制与超大文件给出明确提示而非乱码 | P1 | 中 | |
+| FR-FILES-03 | 文件编辑保存 | 可编辑模式保存回磁盘；保存前校验路径仍在项目根内；外部改动提示 | P2 | 中 | |
+| FR-FILES-04 | 差异侧栏 | 按轮次展示该轮的改动文件与差异；可折叠文件卡；新改动到达时自动解锁 | P1 | 大 | |
+| FR-FILES-05 | 差异跳转 | 从对话中的轮次收尾行跳到差异侧栏对应轮 | P2 | 小 | |
+| FR-FILES-06 | 路径动作 | 打开文件、在文件管理器中显示、复制路径、用系统程序打开链接 | P1 | 小 | |
+
+# 九、终端（TERM）
+
+| 编号 | 需求 | 行为要点 | 优先级 | 复杂度 | 取舍 |
+|---|---|---|---|---|---|
+| FR-TERM-01 | 终端会话 | 在工作目录下启动 shell，输入输出双向转发，尺寸随面板变化同步 | P1 | 大 | |
+| FR-TERM-02 | 多终端与分屏 | 多个终端分组，组内可横向或纵向分屏，切换与关闭 | P2 | 大 | |
+| FR-TERM-03 | 终端外观 | 字体、字号、行高、光标样式、回滚行数、GPU 加速开关 | P2 | 中 | |
+| FR-TERM-04 | 终端面板 | 底部停靠、可调整高度、可收起；快捷键切换 | P1 | 中 | |
+| FR-TERM-05 | 生命周期 | 面板关闭与会话关闭时释放伪终端；进程退出后展示退出状态 | P1 | 中 | |
+
+# 十、设置（SET）
+
+| 编号 | 需求 | 行为要点 | 优先级 | 复杂度 | 取舍 |
+|---|---|---|---|---|---|
+| FR-SET-01 | 提供方列表 | 内置提供方与自定义提供方；显示授权状态与模型数量 | P0 | 中 | |
+| FR-SET-02 | 凭证管理 | 保存与删除 API key；凭证不写入日志、不进诊断导出 | P0 | 小 | |
+| FR-SET-03 | 交互登录 | 订阅类提供方的 OAuth 流程：跳转授权、粘贴回调、多步提示；可取消 | P1 | 大 | |
+| FR-SET-04 | 自定义提供方 | 名称、接口类型、地址、密钥、模型清单的增删改 | P1 | 中 | |
+| FR-SET-05 | 地址覆写 | 内置提供方可覆写接口地址（网关场景），留空恢复默认 | P2 | 小 | |
+| FR-SET-06 | 连通性测试 | 对单个提供方或模型发起最小请求并回显结果 | P1 | 小 | |
+| FR-SET-07 | 模型可见性 | 逐个或按提供方隐藏模型，只影响选择器展示，不影响已选中会话 | P1 | 中 | |
+| FR-SET-08 | 子代理偏好 | 为子代理指定模型与思考档位，或继承父会话 | P2 | 中 | |
+| FR-SET-09 | 面板分域加载 | 打开设置只加载当前面板所需数据，不一次性读取全部配置 | P1 | 中 | |
+| FR-SET-10 | 关于与更新 | 版本、运行时版本、仓库地址、更新入口与诊断导出 | P1 | 小 | |
+
+# 十一、UI 插件（PLUG）
+
+| 编号 | 需求 | 行为要点 | 优先级 | 复杂度 | 取舍 |
+|---|---|---|---|---|---|
+| FR-PLUG-01 | 槽位替换 | 指定界面位置（工具卡、子代理卡、任务面板等）可由插件替换，未启用时用默认组件 | P2 | 大 | |
+| FR-PLUG-02 | 区域挂载 | 插件可在固定区域新增浮层或角标（桌宠、提示条等） | P2 | 大 | |
+| FR-PLUG-03 | 宿主接口 | 插件可访问宿主提供的组件、状态读取与工具函数，接口清单单一来源 | P2 | 大 | |
+| FR-PLUG-04 | 构建与信任 | 插件源码在宿主侧构建；单个插件需显式启用；构建失败保留旧产物并报错 | P2 | 大 | |
+| FR-PLUG-05 | 崩溃隔离 | 插件渲染异常被错误边界拦截，回退默认界面；连续崩溃后停用该插件 | P2 | 中 | |
+| FR-PLUG-06 | 清单与配置 | 插件目录结构、清单字段、全局总开关、槽位指派持久化 | P2 | 中 | |
+| FR-PLUG-07 | 内置样例 | 至少一个可直接运行的示例插件与类型声明，供编写时参考 | P2 | 小 | |
+
+# 十二、跨设备（LAN）
+
+| 编号 | 需求 | 行为要点 | 优先级 | 复杂度 | 取舍 |
+|---|---|---|---|---|---|
+| FR-LAN-01 | 观察服务 | 在本机开启只读服务，手机或平板浏览器可查看会话列表与对话 | P2 | 大 | |
+| FR-LAN-02 | 访问入口 | 展示访问地址与二维码；可随时停止；重新开启时轮换访问凭证 | P2 | 中 | |
+| FR-LAN-03 | 远程控制 | 独立开关：允许远程发消息、停止生成、应答审批；未开观察时开关无效 | P2 | 大 | |
+| FR-LAN-04 | 出网清洗 | 手机端拿到的数据剥除本地路径、图片原始数据、内部匹配用文本等敏感字段 | P2 | 中 | |
+| FR-LAN-05 | 操作审计 | 远程写操作按条记录时间、来源地址、动作与结果，不含凭证 | P2 | 小 | |
+
+# 十三、数据与持久化（DATA）
+
+| 编号 | 需求 | 行为要点 | 优先级 | 复杂度 | 取舍 |
+|---|---|---|---|---|---|
+| FR-DATA-01 | 会话目录 | 与命令行工具共享同一数据目录；会话文件为追加写记录 | P0 | 中 | |
+| FR-DATA-02 | 界面状态持久化 | 上次模型、思考档位、主题、背景、面板宽度、展开态、最近列表 | P1 | 中 | |
+| FR-DATA-03 | 原子写入 | 配置文件写入使用临时文件加改名，损坏时区分"不存在"与"内容损坏" | P0 | 小 | |
+| FR-DATA-04 | 写入串行化 | 同一文件的并发写入排队执行，避免读改写丢更新 | P0 | 中 | |
+| FR-DATA-05 | 事件序号 | 每个会话事件带递增序号；界面发现跳跃时重新拉取历史 | P1 | 中 | |
+| FR-DATA-06 | 状态重放 | 事件流可离线重放，用于复现问题与回归测试 | P1 | 中 | |
+| FR-DATA-07 | 数据隔离 | 开发与预览实例使用独立数据目录与用户数据后缀 | P1 | 小 | |
+
+# 十四、非功能（NFR）
+
+| 编号 | 需求 | 指标 | 优先级 | 复杂度 | 取舍 |
+|---|---|---|---|---|---|
+| FR-NFR-01 | 会话切换耗时 | 与消息条数无关，2000 条会话切换在中端机器上不超过 200 毫秒 | P0 | 大 | |
+| FR-NFR-02 | 流式帧率 | 高速输出期间界面保持可交互，长任务不连续出现 | P0 | 大 | |
+| FR-NFR-03 | 内存占用 | 长时间使用后闲置会话可释放；无持续增长的泄漏 | P1 | 中 | |
+| FR-NFR-04 | 启动耗时 | 冷启动到窗口可见的时间不超过 2 秒 | P1 | 中 | |
+| FR-NFR-05 | 并发安全 | 异步流程用可控制的完成屏障验证乱序、失败与重开，不用固定等待掩盖竞态 | P0 | 中 | |
+| FR-NFR-06 | 可测性 | 状态机与派生逻辑为纯函数，可脱离界面与 IPC 单测 | P0 | 中 | |
+| FR-NFR-07 | 安全边界 | 渲染进程沙箱开启；路径访问限制在项目根内；凭证与令牌不入日志 | P0 | 中 | |
+| FR-NFR-08 | 打包分发 | macOS（两种架构）、Windows、Linux（rpm 与 AppImage）安装包；应用内更新 | P1 | 大 | |
+
+---
+
+# 附录 A：Percho 组件与需求映射
+
+## 渲染层 `components/chat/`
+
+| 组件 | 对应需求 |
+|---|---|
+| MessageList | FR-CHAT-01、FR-CHAT-17 |
+| MessageItem、AssistantMessage、UserMessage、UserMessageText | FR-CHAT-09、FR-CHAT-22 |
+| Markdown、CodeBlockStatic、MermaidBlock、markdown-registry、markdown-link | FR-CHAT-02、FR-CHAT-04、FR-CHAT-05、FR-FILES-06 |
+| MetaGroup、meta-summary-label | FR-CHAT-07 |
+| ToolCallCard、tool-label | FR-CHAT-06 |
+| TurnDiffChip | FR-CHAT-08、FR-FILES-05 |
+| SubagentRunCard、SubagentBackButton、subagent-back-offset | FR-CHAT-18、FR-SESS-11 |
+| TodoPanel、todo-anchor、use-todo-anchor | FR-CHAT-19 |
+| ChannelSubscriptionPill、channel-pill-presence | FR-CHAT-20 |
+| CenterOrb、center-orb-draw、PreviewTicker、StreamingMarquee、use-shown-working、use-sweep-highlight、WordmarkConstruct | FR-CHAT-21、FR-CHAT-03、FR-SHELL-07 |
+| ErrorNote、RetryNote | FR-CHAT-13、FR-CHAT-14 |
+| SystemMessage | FR-CHAT-15、FR-CHAT-16 |
+| ImagePreview、history-image/*、history-image-layout | FR-CHAT-11 |
+| SelectionToolbar | FR-CHAT-12 |
+| message-actions | FR-CHAT-10 |
+| mount-window、activity-ticker | FR-CHAT-17 |
+| EmptyState、CornerStack、corner-stack-layout | FR-NAV-11、FR-PLUG-02 |
+
+## 渲染层 `components/composer/`
+
+| 组件 | 对应需求 |
+|---|---|
+| Composer、use-composer-send、send-guard | FR-COMPOSE-01、FR-COMPOSE-03 |
+| QueueBar | FR-COMPOSE-02 |
+| AtMenu、use-at-completion、at-files、drop-files | FR-COMPOSE-04、FR-COMPOSE-09 |
+| SlashMenu、use-slash-menu、slash-filter、slash-label | FR-COMPOSE-05 |
+| ModelPicker、model-filter | FR-COMPOSE-06 |
+| ThinkingSlider、thinking | FR-COMPOSE-07 |
+| PermissionPicker | FR-COMPOSE-08 |
+| ImageTray、AttachmentChip、image-attachment、image-fit | FR-COMPOSE-09 |
+| QuoteChip、quote | FR-COMPOSE-10 |
+| ContextRing | FR-COMPOSE-11 |
+| SendErrorBar、send-error | FR-COMPOSE-12 |
+| CommandTracksBar | FR-EXT-01 |
+
+## 渲染层 `components/sidebar/`、`components/session/`
+
+| 组件 | 对应需求 |
+|---|---|
+| Sidebar、SidebarHeader、SidebarFooter、SidebarResizeHandle | FR-NAV-03、FR-NAV-08、FR-NAV-09 |
+| ProjectSection、ProjectRow、ProjectMenu、ProjectBranchPicker | FR-NAV-01、FR-NAV-02 |
+| RecentSection、recent-sessions、recent-session-dwell、use-recent-session-dwell | FR-NAV-04 |
+| SessionRow、SessionMenu、SidebarSessionList、SidebarGroup、useExpandedGroups、useSidebarBatching、sidebar-groups、sidebar-visible-count、session-status | FR-NAV-05、FR-NAV-06、FR-SESS-12 |
+| TopBar | FR-NAV-10 |
+| DockSlot、ApprovalDock | FR-PERM-01、FR-PERM-10 |
+| InteractionDock | FR-EXT-01 |
+| TrustDialog | FR-PERM-09 |
+| RenamePopover、session-menu | FR-SESS-05、FR-SESS-04 |
+
+## 渲染层其余目录
+
+| 目录或组件 | 对应需求 |
+|---|---|
+| `components/files/`（FileTree、FileEditor、FilesPanel、monaco-setup、seti-icons、monaco-metrics） | FR-FILES-01、FR-FILES-02、FR-FILES-03 |
+| `components/diff/`（DiffSidebar、DiffFileCard） | FR-FILES-04 |
+| `components/terminal/`（TerminalDock、TerminalView） | FR-TERM-01、FR-TERM-04、FR-TERM-05 |
+| `components/settings/`（GeneralPanel、AppearancePanel、TerminalPanel、AboutPanel、SkillsPanel、LanObserverPanel、UiPluginsSection、UpdateHelp、providers/*、extensions/*、mcp/*） | FR-SET-01 至 FR-SET-10、FR-EXT-14、FR-EXT-15、FR-EXT-16、FR-LAN-01、FR-PLUG-06、FR-SHELL-09 |
+| `components/ui/`（Button、Switch、Tooltip、Dropdown、ContextMenu、ConfirmDialog、QuitConfirmDialog、FilePathMenu、place-menu） | FR-SHELL-02 及各需求的通用控件 |
+| `plugins/`（Slot、RegionHost、PluginBoundary、host-api、loader、registry、slots、env） | FR-PLUG-01 至 FR-PLUG-07 |
+| `stores/`（sessions、transcript、projects、drafts、files、mcp、settings、terminal、theme、toasts、ui、ui-preferences、ui-plugins、update、catalog、channel-subscriptions、command-tracks、event-conflator、provider-login、session-history、session-loading、session-navigation、session-retry、subagent-return、app-quit） | 贯穿全部界面需求；对应 facet 的 client-core 与界面状态层 |
+| `lib/`（session-gc、session-gc-run、use-session-gc、session-loading、session-navigation、session-visibility、session-page-slide、active-cwd、diagnostics、error-retry、error-text、path-display、code-lang、toggle-in-list、typography、use-edge-fade、daily、sidebar-width 等） | FR-SESS-10、FR-SESS-11、FR-CHAT-17、FR-SHELL-05、FR-SHELL-12、FR-SHELL-11 |
+
+## 主进程 `main/`
+
+| 模块 | 对应需求 |
+|---|---|
+| window、window-bounds | FR-SHELL-01 |
+| updater、update-policy、update-diagnostics、lan-icon | FR-SHELL-09、FR-SHELL-10 |
+| renderer-watchdog、console-dedup | FR-SHELL-08、FR-SHELL-12 |
+| fix-path、dev-agent-dir | FR-SHELL-11、FR-DATA-07 |
+| background、ui-state | FR-SHELL-03、FR-DATA-02 |
+| git、path-target、daily、pi-package-dir | FR-NAV-02、FR-FILES-06、FR-SESS-13、FR-EXT-15 |
+| lan | FR-LAN-01 至 FR-LAN-05 |
+| `terminal/` | FR-TERM-01 至 FR-TERM-05 |
+| `ui-plugins/` | FR-PLUG-04 至 FR-PLUG-07 |
+| `ipc/`（invoke、send、sessions、settings、files、terminal、lan、packages、ui-plugins、extension-dialogs） | 全部跨进程接口 |
+
+## 业务层 `backend/`
+
+| 模块 | 对应需求 |
+|---|---|
+| pi-backend、session/registry、session/single-flight | FR-SESS-01 至 FR-SESS-03 |
+| session/messages、session/event-slim、session/hydration-gate | FR-SESS-02、FR-DATA-05 |
+| session/meta、session/rename、session/naming | FR-SESS-05、FR-NAV-05 |
+| session/shutdown、session/stream-guard、session/rates、session/traces、session/trace | FR-EXT-17、FR-SHELL-12、FR-DATA-06 |
+| session/ui-context、session/extension-dialog-host | FR-EXT-01 至 FR-EXT-04 |
+| permissions/*（gate、pattern、annotations、bash-chain、config、tmp-zone、audit、extension） | FR-PERM-01 至 FR-PERM-08 |
+| project/*（trust、trust-loader、workspace-store、files、builtin-extensions） | FR-PERM-09、FR-FILES-01、FR-COMPOSE-04 |
+| settings/*（settings、model-prefs、login、quota） | FR-SET-01 至 FR-SET-08 |
+| mcp/*、tools/mcp-inventory | FR-EXT-14 |
+| packages/*（catalog、admin） | FR-EXT-15 |
+| tools/todo、todo-reminder | FR-EXT-05、FR-EXT-06 |
+| tools/subagent/* | FR-EXT-09、FR-EXT-10 |
+| tools/show-image | FR-EXT-07 |
+| tools/webfetch/* | FR-EXT-08 |
+| tools/context-evaporation/* | FR-EXT-11 |
+| tools/compaction-guard/* | FR-EXT-12 |
+| tools/channel-watch/* | FR-EXT-13 |
+| lan/*（server、projector、sanitize、config、audit） | FR-LAN-01 至 FR-LAN-05 |
+| json-store、emitter、log、slash-commands、channel-subscriptions | FR-DATA-03、FR-DATA-04、FR-SHELL-12、FR-COMPOSE-05、FR-CHAT-20 |
+
+## 共享层 `shared/`
+
+| 模块 | 对应需求 |
+|---|---|
+| ipc-channels、ipc | 全部跨进程接口 |
+| session、errors、skill-invocation、todo、thinking、subagent | FR-CHAT-13、FR-COMPOSE-05 等 |
+| transcript/*（reducer、mapping、chat-rows、turn-files、turn-timings、meta-summary、parse-patch、pending-user、llm-errors、helpers、types） | FR-CHAT-01 至 FR-CHAT-08、FR-DATA-06、FR-NFR-06 |
+| model-visibility、settings、mcp、terminal、typography、sidebar、recent-sessions、project-files、packages、ui-plugins、lan、extension-dialog、channel-subscriptions、update、update-diagnostics、marquee-motion | 对应各域界面侧规则与常量 |
+
+---
+
+# 附录 B：取舍候选
+
+以下功能在维护成本上占比明显，需要在详细设计前给出保留或移除的结论。
+
+| 候选 | 影响范围 | 保留的收益 | 移除或简化的代价 |
+|---|---|---|---|
+| UI 插件体系 | FR-PLUG-01 至 07，宿主接口、构建链路、内置与示例插件 | 第三方与 agent 可自行扩展界面；桌宠一类轻量增强靠它实现 | 需要放弃整块扩展能力；若只保留区域挂载可保留少量装饰能力 |
+| 跨设备访问 | FR-LAN-01 至 05，第二套前端与出网清洗 | 手机查看会话、远程应答审批 | 少维护一个前端应用与一套清洗规则 |
+| 内建终端 | FR-TERM-01 至 05，伪终端与原生模块 | 不切窗口即可执行命令 | 需要用户自备终端；原生模块的跨平台编译问题一并消失 |
+| 文件面板与编辑器 | FR-FILES-01 至 03，编辑器依赖约 75MB | 应用内查看与小幅修改 | 与对话里的差异视图、路径动作有重叠，可只保留只读查看 |
+| 社区包管理 | FR-EXT-15 | 应用内安装扩展 | 与命令行工具能力重叠，用户可在命令行完成 |
+| 频道协作 | FR-EXT-13 | 多会话自动协作 | 概念抽象、使用者少，占后端代码比例不低 |
+| 日常空间 | FR-SESS-13 | 随手提问的固定工作目录 | 侧栏分组与"最近"规则复杂度的重要来源 |
+| 装饰动画 | FR-CHAT-21、FR-CHAT-03，状态动画与扫光 | 体验质感 | 移除不影响功能，需接受界面观感下降 |
+| 会话导出 | FR-SESS-09 | 归档与分享 | 使用频率待评估 |
+| 多语言 | FR-SHELL-06 | 面向英文用户 | 文案维护成本翻倍 |
+| 自动更新 | FR-SHELL-09、FR-SHELL-10 | 分发闭环 | 用户需手动下载新版本 |
+
+# 附录 C：待讨论清单
+
+详细设计阶段需要逐条定的问题，按优先级排列。
+
+1. **性能路线**（FR-CHAT-17、FR-NFR-01、FR-NFR-02）：消息流采用挂载窗口还是虚拟列表；行模型是否做增量缓存；流式事件合并的粒度。
+2. **事件管道**（FR-DATA-05、FR-DATA-06）：事件序号与补齐策略；是否需要按会话独立的传输端口（高频输出场景）。
+3. **扩展能力边界**（FR-EXT-01 至 04）：图形界面支持到哪一步；无法承载的能力如何明确失败。
+4. **权限模型**（FR-PERM-01 至 10）：规则文件格式；命令链求值规则；完全访问与审计的关系。
+5. **跨进程接口形态**（全部）：通道表的组织方式；运行时校验放在哪一层；事件与调用的比例。
+6. **状态所有权**（FR-DATA-*、FR-SESS-10）：哪份数据是权威、谁负责清理；自动卸载的判定条件。
+7. **界面状态结构**（FR-CHAT-*、FR-COMPOSE-03）：会话级与全局状态的边界；草稿与队列的归属。
+8. **插件体系取舍**（FR-PLUG-*）：保留几个槽位；宿主接口开放到哪一步；是否只支持内置插件。
+9. **文件与差异的深度**（FR-FILES-*）：只读查看与可编辑的界线；差异侧栏的数据来源是工具输出还是真实文件比对。
+10. **多平台差异**（FR-SHELL-09、FR-NFR-08）：更新策略、窗口行为、字体与输入法在各平台的差异处理。

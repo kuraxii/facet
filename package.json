@@ -1,0 +1,32 @@
+{
+	"name": "facet",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"workspaces": [
+		"apps/*",
+		"packages/*"
+	],
+	"scripts": {
+		"dev": "npm run dev -w @facet/desktop",
+		"build": "npm run build --workspaces --if-present",
+		"typecheck": "npm run typecheck --workspaces --if-present",
+		"test": "npm run test --workspaces --if-present",
+		"lint": "biome check ."
+	},
+	"engines": {
+		"node": ">=22.19"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.4.0",
+		"@types/node": "^24.0.0",
+		"typescript": "^5.9.0"
+	},
+	"allowScripts": {
+		"@google/genai@2.21.0": true,
+		"electron-winstaller@5.4.0": true,
+		"esbuild@0.28.2": true,
+		"node-pty@1.1.0": true,
+		"protobufjs@7.6.6": true
+	}
+}

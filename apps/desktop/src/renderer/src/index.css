@@ -1,0 +1,35 @@
+:root {
+	color-scheme: dark;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+	height: 100%;
+	margin: 0;
+}
+
+body {
+	background: #0c0c0d;
+	color: #ededef;
+	font-family: ui-sans-serif, system-ui, "Noto Sans CJK SC", sans-serif;
+	-webkit-font-smoothing: antialiased;
+}
+
+.app {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 100%;
+}
+
+.app h1 {
+	margin: 0;
+	font-size: 32px;
+	font-weight: 600;
+	letter-spacing: -0.02em;
+}

@@ -1,0 +1,37 @@
+{
+	"name": "@facet/desktop",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"main": "./out/main/index.js",
+	"scripts": {
+		"dev": "electron-vite dev",
+		"build": "electron-vite build",
+		"start": "electron-vite preview",
+		"typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+		"dist": "npm run build && electron-builder"
+	},
+	"dependencies": {
+		"@facet/agent": "*",
+		"@facet/client-core": "*",
+		"@facet/protocol": "*",
+		"@facet/services": "*",
+		"@facet/transport": "*",
+		"@facet/ui": "*",
+		"@facet/ui-editor": "*",
+		"@facet/ui-terminal": "*"
+	},
+	"devDependencies": {
+		"@electron/rebuild": "^4.2.1",
+		"@types/react": "^19.2.0",
+		"@types/react-dom": "^19.2.0",
+		"@vitejs/plugin-react": "^5.1.1",
+		"electron": "45.2.3",
+		"electron-builder": "^26.18.1",
+		"electron-vite": "^6.0.0",
+		"react": "^19.2.0",
+		"react-dom": "^19.2.0",
+		"typescript": "^5.9.0",
+		"vite": "^7.0.0"
+	}
+}

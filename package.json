@@ -8,6 +8,7 @@
 		"packages/*"
 	],
 	"scripts": {
+		"postinstall": "node scripts/ensure-electron.mjs",
 		"dev": "npm run dev -w @facet/desktop",
 		"build": "npm run build --workspaces --if-present",
 		"typecheck": "npm run typecheck --workspaces --if-present",

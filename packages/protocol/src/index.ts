@@ -11,3 +11,4 @@ export type * from "./message.ts";
 export type * from "./model.ts";
 export type * from "./request.ts";
 export type * from "./session.ts";
+export * from "./wire.ts";

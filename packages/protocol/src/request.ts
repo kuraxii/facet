@@ -5,7 +5,7 @@
  */
 
 import type { ApprovalDecision } from "./approval.ts";
-import type { InputBlock } from "./content.ts";
+import type { ImageBlock } from "./content.ts";
 import type { ModelRef, ThinkingLevel } from "./model.ts";
 
 /** 会话正在运行时的消息投递方式。steer 插入当前回合之后，followUp 等本轮结束。 */
@@ -16,7 +16,7 @@ export interface PromptRequest {
 	/** 消息正文 */
 	text: string;
 	/** 随消息发送的图片附件 */
-	images?: InputBlock[];
+	images?: ImageBlock[];
 	/** 会话正在运行时必须指定投递方式，缺省时设备侧拒绝 */
 	streamingBehavior?: StreamingBehavior;
 }
@@ -24,7 +24,7 @@ export interface PromptRequest {
 /** 排队一条消息，在当前助手回合的工具调用执行完后插入。 */
 export interface QueuePromptRequest {
 	text: string;
-	images?: InputBlock[];
+	images?: ImageBlock[];
 }
 
 /** 变更模型或思考档位。 */

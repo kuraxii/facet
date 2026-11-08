@@ -15,16 +15,10 @@ import {
 	ModelRuntime,
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
-import { toAgentModelInfo } from "./convert.ts";
+import type { ModelInfo, ModelRef, ProviderInfo, SessionSummary, ThinkingLevel } from "@facet/protocol";
+import { toModelInfo } from "./convert.ts";
 import { type ApprovalHook, createApprovalExtension, PiAgent } from "./pi-agent.ts";
-import type {
-	AgentApprovalHandler,
-	AgentModelInfo,
-	AgentModelRef,
-	AgentProviderInfo,
-	AgentSessionSummary,
-	ThinkingLevel,
-} from "./types.ts";
+import type { ApprovalHandler } from "./types.ts";
 
 /** 运行时的进程级配置。 */
 export interface PiAgentRuntimeOptions {
@@ -45,7 +39,7 @@ export interface PiAgentLaunchOptions {
 	/** 会话文件目录，覆盖运行时的设置 */
 	sessionDir?: string;
 	/** 初始模型，缺省用设置里的值，否则取第一个可用模型 */
-	model?: AgentModelRef;
+	model?: ModelRef;
 	/** 初始思考档位，缺省由模型能力决定 */
 	thinkingLevel?: ThinkingLevel;
 	/** 允许激活的工具，支持通配 */
@@ -55,7 +49,7 @@ export interface PiAgentLaunchOptions {
 	/** 会话展示名 */
 	name?: string;
 	/** 工具审批处理函数 */
-	approvalHandler?: AgentApprovalHandler;
+	approvalHandler?: ApprovalHandler;
 	/** 扩展交互界面，缺省时扩展的对话框不可用 */
 	uiContext?: ExtensionUIContext;
 	/** 跳过文件里的扩展，内联扩展仍然加载 */
@@ -72,7 +66,7 @@ export interface OpenPiAgentOptions {
 	/** 覆盖会话记录的工作目录，目录已不存在时使用 */
 	cwd?: string;
 	sessionDir?: string;
-	approvalHandler?: AgentApprovalHandler;
+	approvalHandler?: ApprovalHandler;
 	uiContext?: ExtensionUIContext;
 	noExtensions?: boolean;
 	extensionFactories?: InlineExtension[];
@@ -114,7 +108,7 @@ export class PiAgentRuntime {
 	}
 
 	/** 提供方清单，附带是否已配置凭证，用于设置面板与模型选择器分组。 */
-	providers(): AgentProviderInfo[] {
+	providers(): ProviderInfo[] {
 		return this.modelRuntime.getProviders().map((provider) => ({
 			id: provider.id,
 			name: provider.name,
@@ -124,23 +118,23 @@ export class PiAgentRuntime {
 	}
 
 	/** 目录里的全部模型，含未配置凭证的模型，是否可用由调用方判断。 */
-	models(providerId?: string): AgentModelInfo[] {
-		return this.modelRuntime.getModels(providerId).map(toAgentModelInfo);
+	models(providerId?: string): ModelInfo[] {
+		return this.modelRuntime.getModels(providerId).map(toModelInfo);
 	}
 
 	/** 已配置凭证的模型，用于模型选择器的可选项。 */
-	async availableModels(): Promise<AgentModelInfo[]> {
+	async availableModels(): Promise<ModelInfo[]> {
 		const models = await this.modelRuntime.getAvailable();
-		return models.map(toAgentModelInfo);
+		return models.map(toModelInfo);
 	}
 
-	findModel(ref: AgentModelRef): AgentModelInfo | undefined {
+	findModel(ref: ModelRef): ModelInfo | undefined {
 		const model = this.modelRuntime.getModel(ref.provider, ref.id);
-		return model ? toAgentModelInfo(model) : undefined;
+		return model ? toModelInfo(model) : undefined;
 	}
 
 	/** 列出会话。指定 cwd 时只列该目录的会话，否则列出全部。 */
-	async listSessions(cwd?: string): Promise<AgentSessionSummary[]> {
+	async listSessions(cwd?: string): Promise<SessionSummary[]> {
 		const infos = cwd
 			? await SessionManager.list(cwd, this.sessionDir)
 			: this.sessionDir
@@ -225,7 +219,7 @@ export class PiAgentRuntime {
 		}
 	}
 
-	private resolveModel(ref: AgentModelRef) {
+	private resolveModel(ref: ModelRef) {
 		const model = this.modelRuntime.getModel(ref.provider, ref.id);
 		if (!model) {
 			throw new Error(`unknown model: ${ref.provider}/${ref.id}`);
@@ -243,7 +237,7 @@ export class PiAgentRuntime {
 		sessionManager: SessionManager,
 		options: PiAgentLaunchOptions | OpenPiAgentOptions,
 		tuning: {
-			model?: AgentModelRef;
+			model?: ModelRef;
 			thinkingLevel?: ThinkingLevel;
 			tools?: string[];
 			excludeTools?: string[];

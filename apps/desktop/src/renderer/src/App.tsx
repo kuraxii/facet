@@ -87,8 +87,8 @@ export function App() {
 		void client.loadOlder();
 	}, []);
 
-	const forkFrom = useCallback((entryId: string) => {
-		void client.fork(entryId).then((forked) => setActiveFile(forked.file));
+	const forkFrom = useCallback((messageId: string) => {
+		void client.fork(messageId).then((forked) => setActiveFile(forked.file));
 	}, []);
 
 	const streamingText = useMemo(() => {
@@ -173,14 +173,11 @@ export function App() {
 									<span className="message-role">{message.message.role}</span>
 									<span className="message-id">{message.id}</span>
 									{message.isStreaming ? <span className="chip is-live">流式</span> : null}
-									{(() => {
-										const entryId = historyEntryId(message.id);
-										return entryId === undefined ? null : (
-											<button type="button" className="fork" onClick={() => forkFrom(entryId)}>
-												从这里分叉
-											</button>
-										);
-									})()}
+									{historyEntryId(message.id) !== undefined || chat?.isRunning !== true ? (
+										<button type="button" className="fork" onClick={() => forkFrom(message.id)}>
+											从这里分叉
+										</button>
+									) : null}
 								</div>
 								<pre className="message-body">{text.length > 0 ? text : "(无文本内容)"}</pre>
 							</article>

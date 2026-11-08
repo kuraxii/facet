@@ -283,13 +283,21 @@ describe("SessionClient", () => {
 	it("分叉后切到新会话", async () => {
 		const { transport, client } = createClient(4, { initialPages: 1, pageSize: 5 });
 		const before = await client.openSession("/tmp/s1.jsonl");
-		const after = await client.fork("e3");
+		const after = await client.fork("e:e3");
 		expect(after.sessionId).toBe("s2");
 		expect(after.file).toBe("/tmp/s2.jsonl");
 		expect(client.current?.sessionId).toBe("s2");
 		const forkCall = transport.calls.find((call) => call.method === "forkSession");
 		expect(forkCall?.params).toEqual({ sessionFile: "/tmp/s1.jsonl", entryId: "e3" });
 		expect(before.sessionId).toBe("s1");
+	});
+
+	it("实时消息的分叉请求带上设备分配的标识", async () => {
+		const { transport, client } = createClient(4, { initialPages: 1, pageSize: 5 });
+		await client.openSession("/tmp/s1.jsonl");
+		await client.fork("m3");
+		const forkCall = transport.calls.find((call) => call.method === "forkSession");
+		expect(forkCall?.params).toEqual({ sessionFile: "/tmp/s1.jsonl", messageId: "m3" });
 	});
 
 	it("流式增量按消息标识累积到视图", async () => {

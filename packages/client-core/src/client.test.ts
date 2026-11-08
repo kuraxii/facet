@@ -70,6 +70,8 @@ class FakeTransport implements SessionTransport {
 	readonly entries: Entry[];
 	private listener: ((frame: ActionFrame) => void) | undefined;
 	private seq = 0;
+	/** 每个通道已发出的最大序号,订阅时作为基线返回 */
+	private readonly lastSeq = new Map<Channel, number>();
 
 	constructor(entryCount: number) {
 		this.entries = Array.from({ length: entryCount }, (_, index) => ({
@@ -131,8 +133,11 @@ class FakeTransport implements SessionTransport {
 
 	/** 按通道推动作,序号自动递增。 */
 	emit(channel: Channel, action: Action, seq?: number): void {
-		this.seq = seq ?? this.seq + 1;
-		this.listener?.({ type: "action", channel, serverSeq: this.seq, origin: undefined, action });
+		const previous = this.lastSeq.get(channel) ?? 0;
+		const next = seq ?? previous + 1;
+		this.seq = next;
+		this.lastSeq.set(channel, next);
+		this.listener?.({ type: "action", channel, serverSeq: next, origin: undefined, action });
 	}
 }
 
@@ -217,6 +222,47 @@ describe("SessionClient", () => {
 		const after = transport.calls.filter((call) => call.method === "entries").length;
 		expect(after).toBeGreaterThan(before);
 		expect(client.chatView()?.messages.length).toBe(5);
+	});
+
+	it("状态通道缺口重取快照,不动历史", async () => {
+		const { transport, client } = createClient(12, { initialPages: 1, pageSize: 5 });
+		await client.openSession("/tmp/s1.jsonl");
+		transport.emit(SESSION, { type: "session/status", status: "running" }, 1);
+		const before = transport.calls.filter((call) => call.method === "entries").length;
+		const snapshots = transport.calls.filter((call) => call.method === "snapshot").length;
+		transport.emit(SESSION, { type: "session/status", status: "idle" }, 6);
+		await new Promise((resolve) => setTimeout(resolve, 10));
+		expect(transport.calls.filter((call) => call.method === "entries").length).toBe(before);
+		expect(transport.calls.filter((call) => call.method === "snapshot").length).toBeGreaterThan(snapshots);
+	});
+
+	it("对话通道缺口只补历史", async () => {
+		const { transport, client } = createClient(12, { initialPages: 1, pageSize: 5 });
+		await client.openSession("/tmp/s1.jsonl");
+		transport.emit(CHAT, { type: "chat/notice", level: "info", message: "第一条" }, 1);
+		const snapshots = transport.calls.filter((call) => call.method === "snapshot").length;
+		transport.emit(CHAT, { type: "chat/turnStarted", text: "x" }, 9);
+		await new Promise((resolve) => setTimeout(resolve, 10));
+		expect(transport.calls.filter((call) => call.method === "snapshot").length).toBe(snapshots);
+	});
+
+	it("重连续订时带上已收到的最后序号", async () => {
+		const { transport, client } = createClient(4, { initialPages: 1, pageSize: 5 });
+		await client.openSession("/tmp/s1.jsonl");
+		transport.emit(SESSION, { type: "session/status", status: "running" }, 2);
+		transport.emit(CHAT, { type: "chat/turnStarted", text: "hi" }, 1);
+		const before = transport.calls.length;
+		await client.resume();
+		const subscriptions = transport.calls.slice(before).filter((call) => call.method === "subscribe");
+		expect(subscriptions.map((call) => (call.params as { since?: number }).since)).toEqual([2, 1]);
+	});
+
+	it("重复 attach 不叠加动作监听", async () => {
+		const { transport, client } = createClient(2, { initialPages: 1, pageSize: 5 });
+		await client.openSession("/tmp/s1.jsonl");
+		client.attach(handshake);
+		transport.emit(CHAT, { type: "chat/notice", level: "info", message: "只一条" }, 1);
+		expect(client.chatView()?.notices).toEqual([{ level: "info", message: "只一条" }]);
 	});
 
 	it("发消息派发到对话通道", async () => {

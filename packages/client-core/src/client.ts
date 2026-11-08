@@ -22,6 +22,7 @@ import type {
 	SessionSummary,
 } from "@facet/protocol";
 import type { ChatView, SessionView } from "./state.ts";
+import type { ChannelGap } from "./store.ts";
 import { SessionStore } from "./store.ts";
 
 /** 握手结果,与 hello 帧去掉判别字段后的形状一致。 */
@@ -38,6 +39,8 @@ export interface SessionTransport {
 	request<M extends RequestMethod>(method: M, params?: RequestParams[M]): Promise<RequestResults[M]>;
 	dispatch(channel: Channel, action: Action): number;
 	onAction(listener: (frame: ActionFrame) => void): () => void;
+	/** 连接状态变化。给出时,重新连上会自动续订并重新对齐。 */
+	onStateChange?(listener: (state: string) => void): () => void;
 }
 
 export interface SessionClientOptions {
@@ -67,6 +70,12 @@ export class SessionClient {
 	private readonly pageSize: number;
 	private readonly state = new SessionStore();
 	private readonly stops: (() => void)[] = [];
+	/** 动作订阅,重连时替换 */
+	private stopActions: (() => void) | undefined;
+	/** 连接状态订阅,只挂一次 */
+	private stopState: (() => void) | undefined;
+	/** 缺口补齐进行中的通道,避免叠加请求 */
+	private readonly resyncing = { session: false, chat: false };
 	private handshake: DeviceHandshake | undefined;
 	private opened: OpenedSession | undefined;
 	/** 是否已经挂了缺口监听,避免重复注册 */
@@ -107,10 +116,19 @@ export class SessionClient {
 		return this.opened ? this.state.chatView(this.opened.chatChannel) : undefined;
 	}
 
-	/** 记录握手结果并开始接收动作。重连后再次调用即可换到新连接。 */
+	/**
+	 * 记录握手结果并开始接收动作。重连之后再次调用即可换到新连接:
+	 * 上一条动作订阅会被替换,断线重连时自动续订并重新对齐。
+	 */
 	attach(handshake: DeviceHandshake): void {
 		this.handshake = handshake;
-		this.stops.push(this.transport.onAction((frame) => this.state.apply(frame)));
+		this.stopActions?.();
+		this.stopActions = this.transport.onAction((frame) => this.state.apply(frame));
+		this.stopState ??= this.transport.onStateChange?.((state) => {
+			if (state === "ready") {
+				void this.resume();
+			}
+		});
 	}
 
 	/** 列出会话。指定 cwd 时只列该目录,设备上的全部会话用空参数。 */
@@ -156,14 +174,7 @@ export class SessionClient {
 
 		if (!this.isGapWatched) {
 			this.isGapWatched = true;
-			this.stops.push(
-				this.state.onGap((gap) => {
-					const current = this.opened;
-					if (current && gap.channel === current.chatChannel) {
-						void this.reloadHistory(current.chatChannel, current.sessionId);
-					}
-				}),
-			);
+			this.stops.push(this.state.onGap((gap) => this.handleGap(gap)));
 		}
 		return this.opened;
 	}
@@ -184,12 +195,48 @@ export class SessionClient {
 		return { loaded: page.entries.length, hasMore: this.hasMore };
 	}
 
-	/** 重取快照与最近一页历史。 */
+	/** 重取会话状态与最近一页历史。 */
 	async refresh(): Promise<void> {
+		await this.refreshSession();
+		const opened = this.requireOpened();
+		await this.reloadHistory(opened.chatChannel, opened.sessionId);
+	}
+
+	/** 只重取会话状态,不动已装载的历史。状态通道漏帧后用它对齐。 */
+	async refreshSession(): Promise<void> {
 		const opened = this.requireOpened();
 		const snapshot = await this.transport.request("snapshot", { sessionId: opened.sessionId });
 		this.state.ensureSession(opened.sessionChannel, snapshot);
-		await this.reloadHistory(opened.chatChannel, opened.sessionId);
+	}
+
+	/**
+	 * 断线重连之后续订。
+	 *
+	 * 新连接是新的一端,设备那边没有任何订阅记录。按已收到的最后序号续订,
+	 * 缓冲能补齐就只补发,补不上就整体重新对齐。
+	 */
+	async resume(): Promise<void> {
+		const opened = this.opened;
+		if (!opened) {
+			return;
+		}
+		const sessionSub = await this.transport.request("subscribe", {
+			channel: opened.sessionChannel,
+			since: this.state.lastSeq(opened.sessionChannel),
+		});
+		this.state.markSeq(opened.sessionChannel, sessionSub.seq);
+		const chatSub = await this.transport.request("subscribe", {
+			channel: opened.chatChannel,
+			since: this.state.lastSeq(opened.chatChannel),
+		});
+		this.state.markSeq(opened.chatChannel, chatSub.seq);
+		if (sessionSub.resync || chatSub.resync) {
+			await this.refresh();
+			return;
+		}
+		if (sessionSub.session) {
+			this.state.ensureSession(opened.sessionChannel, sessionSub.session);
+		}
 	}
 
 	/** 发一条消息。 */
@@ -246,6 +293,36 @@ export class SessionClient {
 			throw new Error("还没有打开会话");
 		}
 		return this.opened;
+	}
+
+	/**
+	 * 序号缺口。对话通道补最近一页历史,状态通道重取快照;
+	 * 同一通道正在补齐时不再叠加请求。
+	 */
+	private handleGap(gap: ChannelGap): void {
+		const opened = this.opened;
+		if (!opened) {
+			return;
+		}
+		if (gap.channel === opened.sessionChannel) {
+			if (this.resyncing.session) {
+				return;
+			}
+			this.resyncing.session = true;
+			void this.refreshSession().finally(() => {
+				this.resyncing.session = false;
+			});
+			return;
+		}
+		if (gap.channel === opened.chatChannel) {
+			if (this.resyncing.chat) {
+				return;
+			}
+			this.resyncing.chat = true;
+			void this.reloadHistory(opened.chatChannel, opened.sessionId).finally(() => {
+				this.resyncing.chat = false;
+			});
+		}
 	}
 
 	/** 连续装载若干页,首次装载时整体替换,其余往更早处补。 */

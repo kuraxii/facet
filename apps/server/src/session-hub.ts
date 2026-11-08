@@ -67,6 +67,26 @@ export class ChannelNotFoundError extends Error {
 	}
 }
 
+/** 分叉时给定的消息找不到对应的会话条目。 */
+export class SessionEntryNotFoundError extends Error {
+	readonly messageId: string;
+
+	constructor(messageId: string) {
+		super(`找不到消息对应的会话条目:${messageId}`);
+		this.messageId = messageId;
+	}
+}
+
+/** 会话正在运行,此时不允许分叉。 */
+export class SessionBusyError extends Error {
+	readonly sessionId: string;
+
+	constructor(sessionId: string) {
+		super(`会话正在运行,不能分叉:${sessionId}`);
+		this.sessionId = sessionId;
+	}
+}
+
 /** 同一会话 id 出现在两个文件上,通常是复制了会话文件。 */
 export class SessionConflictError extends Error {
 	readonly requested: string;
@@ -199,21 +219,66 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		return this.snapshotRow(row);
 	}
 
-	/** 从会话的某条条目分叉出新会话并登记。原会话不受影响。 */
+	/**
+	 * 从会话的某条消息分叉出新会话并登记。原会话不受影响。
+	 *
+	 * 运行中的会话不允许分叉:这一轮还没写盘,分叉点可能找不到对应的条目。
+	 * 历史消息用 entryId 定位;本次连接产生的消息用 messageId,按角色与时间戳在条目里回查。
+	 */
 	async forkSession(options: {
 		sessionFile: string;
-		entryId: string;
+		entryId?: string;
+		messageId?: string;
 		cwd?: string;
 	}): Promise<SessionSnapshot> {
+		const opened = this.sessionIdByFile(options.sessionFile);
+		const source = opened === undefined ? undefined : this.table.get(opened);
+		if (source?.agent?.isBusy === true) {
+			throw new SessionBusyError(source.sessionId);
+		}
+		const entryId = options.entryId ?? this.resolveEntryId(source, options.messageId);
+		if (entryId === undefined) {
+			throw new SessionEntryNotFoundError(options.messageId ?? "");
+		}
 		const approvals = new ApprovalBroker();
 		const agent = await this.factory.fork({
 			sessionFile: options.sessionFile,
-			entryId: options.entryId,
+			entryId,
 			...(options.cwd === undefined ? {} : { cwd: options.cwd }),
 			approvalHandler: approvals.handler,
 		});
 		this.attach(agent, approvals);
 		return this.snapshotRow(this.requireRow(agent.id));
+	}
+
+	/**
+	 * 把实时消息换算成会话条目 id。
+	 *
+	 * 消息写盘晚于事件,所以要按角色与时间戳在条目里从尾部往前找,时间戳是消息自带的,不靠猜。
+	 */
+	private resolveEntryId(
+		source: SessionState<A> | undefined,
+		messageId: string | undefined,
+	): string | undefined {
+		if (!source?.agent || messageId === undefined) {
+			return undefined;
+		}
+		const stamp = source.projector.messageStamp(messageId);
+		if (!stamp) {
+			return undefined;
+		}
+		const entries = source.agent.entries().entries;
+		for (let index = entries.length - 1; index >= 0; index -= 1) {
+			const entry = entries[index];
+			if (!entry || entry.kind !== "message" || entry.message === undefined) {
+				continue;
+			}
+			if (entry.message.role !== stamp.role || entry.message.timestamp !== stamp.timestamp) {
+				continue;
+			}
+			return entry.id;
+		}
+		return undefined;
 	}
 
 	/** 登记一个已建好的会话。同一会话已有另一份状态时保留先登记的,丢弃新的。 */

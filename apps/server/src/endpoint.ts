@@ -27,6 +27,8 @@ import type { ServerConfig } from "./config.ts";
 import {
 	type ActionSink,
 	ChannelNotFoundError,
+	SessionBusyError,
+	SessionEntryNotFoundError,
 	type SessionHub,
 	SessionNotFoundError,
 } from "./session-hub.ts";
@@ -240,9 +242,15 @@ async function handleRequest(
 			return await openSession(context, params);
 		case "forkSession": {
 			const source = asObject(params);
+			const entryId = optionalString(source, "entryId");
+			const messageId = optionalString(source, "messageId");
+			if (entryId === undefined && messageId === undefined) {
+				throw new RequestError("bad_params", "entryId or messageId is required");
+			}
 			return await context.hub.forkSession({
 				sessionFile: requiredString(source, "sessionFile"),
-				entryId: requiredString(source, "entryId"),
+				...(entryId === undefined ? {} : { entryId }),
+				...(messageId === undefined ? {} : { messageId }),
 				cwd: optionalString(source, "cwd"),
 			});
 		}
@@ -299,6 +307,9 @@ function toProtocolError(error: unknown): { code: ErrorCode; message: string } {
 	}
 	if (error instanceof ChannelNotFoundError) {
 		return { code: "unknown_channel", message: error.message };
+	}
+	if (error instanceof SessionEntryNotFoundError || error instanceof SessionBusyError) {
+		return { code: "rejected", message: error.message };
 	}
 	return { code: "internal", message: error instanceof Error ? error.message : String(error) };
 }

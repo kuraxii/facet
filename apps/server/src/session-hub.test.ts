@@ -35,8 +35,11 @@ class FakeAgent implements HubAgent {
 		};
 	}
 
+	/** 已写盘的条目,用例按需填 */
+	readonly stored: Entry[] = [];
+
 	entries(_since?: string): { entries: Entry[]; leafId: string | null } {
-		return { entries: [], leafId: null };
+		return { entries: this.stored, leafId: null };
 	}
 
 	snapshot(): SessionSnapshot {
@@ -185,6 +188,56 @@ describe("会话建立与复用", () => {
 		expect(forked.id).not.toBe(source.id);
 		expect(hub.has(forked.id)).toBe(true);
 		expect(hub.has(source.id)).toBe(true);
+	});
+
+	it("实时消息按角色与时间戳回查条目后分叉", async () => {
+		const source = await hub.openSession("/tmp/s1.jsonl");
+		const agent = hub.agent(source.id);
+		const message = {
+			role: "assistant" as const,
+			content: [{ type: "text" as const, text: "回复" }],
+			provider: "p",
+			model: "m",
+			usage: {
+				input: 0,
+				output: 0,
+				cacheRead: 0,
+				cacheWrite: 0,
+				reasoning: 0,
+				totalTokens: 0,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			stopReason: "stop" as const,
+			timestamp: 1730,
+		};
+		await hub.subscribe(`chat:/${source.id}`, undefined, sink("a"));
+		agent.emit({ type: "message_start", message });
+		agent.emit({ type: "message_end", message });
+		agent.stored.push({
+			id: "e42",
+			parentId: null,
+			kind: "message",
+			timestamp: "2026-11-08T00:00:00Z",
+			message,
+		});
+
+		await hub.forkSession({ sessionFile: "/tmp/s1.jsonl", messageId: "m1" });
+		expect(factory.forked).toEqual(["/tmp/s1.jsonl#e42"]);
+	});
+
+	it("运行中不允许分叉", async () => {
+		const source = await hub.openSession("/tmp/s1.jsonl");
+		hub.agent(source.id).busy = true;
+		await expect(hub.forkSession({ sessionFile: "/tmp/s1.jsonl", entryId: "e1" })).rejects.toThrow(
+			"不能分叉",
+		);
+	});
+
+	it("消息找不到条目时报错", async () => {
+		await hub.openSession("/tmp/s1.jsonl");
+		await expect(hub.forkSession({ sessionFile: "/tmp/s1.jsonl", messageId: "m99" })).rejects.toThrow(
+			"找不到消息对应的会话条目",
+		);
 	});
 
 	it("同一会话已有另一份状态时保留先登记的", () => {

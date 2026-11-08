@@ -56,5 +56,5 @@ export type { ServerConfig } from "./config.ts";
 export { loadServerConfig } from "./config.ts";
 export type { EndpointHandle } from "./endpoint.ts";
 export { EventLog } from "./event-log.ts";
-export type { ActionSink, Subscription } from "./session-hub.ts";
+export type { ActionSink, HubAgent, Subscription } from "./session-hub.ts";
 export { ChannelNotFoundError, SessionHub, SessionNotFoundError } from "./session-hub.ts";

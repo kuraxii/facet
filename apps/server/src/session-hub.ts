@@ -5,12 +5,19 @@
  * 因此只渲染侧栏的端可以只订阅会话通道。多个端可以同时订阅同一通道,
  * 会话释放时统一回收 agent、审批中转与订阅。
  */
+import { resolve } from "node:path";
 import type { PiAgent } from "@facet/agent";
 import type { Action, ActionFrame, Channel, SessionSnapshot } from "@facet/protocol";
 import { makeChannel, parseChannel } from "@facet/protocol";
 import { ActionProjector } from "./action-projector.ts";
 import type { ApprovalBroker } from "./approval-broker.ts";
 import { EventLog } from "./event-log.ts";
+
+/** 会话登记表用到的 agent 能力,收窄成结构类型以便测试注入假实现。 */
+export type HubAgent = Pick<
+	PiAgent,
+	"id" | "file" | "isStreaming" | "isCompacting" | "subscribe" | "entries" | "snapshot" | "dispose"
+>;
 
 /** 动作接收方,通常是某个连接上的转发函数。 */
 export type ActionSink = (frame: ActionFrame) => void;
@@ -50,8 +57,8 @@ interface ChannelState {
 	sinks: Set<ActionSink>;
 }
 
-interface SessionState {
-	readonly agent: PiAgent;
+interface SessionState<A extends HubAgent> {
+	readonly agent: A;
 	readonly approvals: ApprovalBroker;
 	readonly projector: ActionProjector;
 	readonly channels: Map<Channel, ChannelState>;
@@ -67,12 +74,21 @@ export interface SessionHubOptions {
 	maxPageSize: number;
 }
 
+/** 会话文件路径归一化,同一文件的不同写法落到同一个键。 */
+function normalizeFile(file: string): string {
+	return resolve(file);
+}
+
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 500;
 
-export class SessionHub {
+export class SessionHub<A extends HubAgent = PiAgent> {
 	private readonly options: SessionHubOptions;
-	private readonly sessions = new Map<string, SessionState>();
+	private readonly sessions = new Map<string, SessionState<A>>();
+	/** 会话文件到会话 id 的索引,保证一个文件只有一份运行态 */
+	private readonly fileIndex = new Map<string, string>();
+	/** 正在建立中的会话,并发打开同一文件时共用一次建立 */
+	private readonly opening = new Map<string, Promise<string>>();
 
 	constructor(options: Partial<SessionHubOptions> = {}) {
 		this.options = {
@@ -82,14 +98,19 @@ export class SessionHub {
 		};
 	}
 
-	/** 登记一个已建好的会话并开始记录动作。同一个会话重复登记会替换旧记录。 */
-	attach(agent: PiAgent, approvals: ApprovalBroker): void {
+	/** 登记一个已建好的会话并开始记录动作。 */
+	attach(agent: A, approvals: ApprovalBroker): void {
 		const sessionId = agent.id;
 		const existing = this.sessions.get(sessionId);
 		if (existing) {
-			existing.unsubscribe();
+			if (existing.agent === agent) {
+				return;
+			}
+			// 同一会话已经有另一份状态,说明登记表被绕过。保留先登记的订阅者,丢弃新来的。
+			agent.dispose();
+			return;
 		}
-		const state: SessionState = {
+		const state: SessionState<A> = {
 			agent,
 			approvals,
 			projector: new ActionProjector(sessionId),
@@ -105,6 +126,46 @@ export class SessionHub {
 			}
 		});
 		this.sessions.set(sessionId, state);
+		if (agent.file !== undefined) {
+			this.fileIndex.set(normalizeFile(agent.file), sessionId);
+		}
+	}
+
+	/** 会话文件对应的会话 id。 */
+	sessionIdByFile(file: string): string | undefined {
+		return this.fileIndex.get(normalizeFile(file));
+	}
+
+	/**
+	 * 按会话文件取会话,已登记时直接复用。
+	 *
+	 * 一个会话文件在设备上只能有一份运行态:两份会写同一个文件、各自维护条目树,
+	 * 而登记表按会话 id 索引,后来者会覆盖先到的订阅者。
+	 * 并发打开同一文件时共用同一次建立。
+	 */
+	async openSession(
+		file: string,
+		create: () => Promise<{ agent: A; approvals: ApprovalBroker }>,
+	): Promise<SessionSnapshot> {
+		const key = normalizeFile(file);
+		const known = this.fileIndex.get(key);
+		if (known !== undefined && this.sessions.has(known)) {
+			return this.snapshot(known);
+		}
+		const pending = this.opening.get(key);
+		if (pending !== undefined) {
+			return this.snapshot(await pending);
+		}
+		const opening = create()
+			.then(({ agent, approvals }) => {
+				this.attach(agent, approvals);
+				return agent.id;
+			})
+			.finally(() => {
+				this.opening.delete(key);
+			});
+		this.opening.set(key, opening);
+		return this.snapshot(await opening);
 	}
 
 	has(sessionId: string): boolean {
@@ -116,7 +177,7 @@ export class SessionHub {
 	}
 
 	/** 取会话的 agent,供端点执行发消息、中止与读取条目。 */
-	agent(sessionId: string): PiAgent {
+	agent(sessionId: string): A {
 		return this.requireSession(sessionId).agent;
 	}
 
@@ -207,6 +268,9 @@ export class SessionHub {
 			return;
 		}
 		this.sessions.delete(sessionId);
+		if (state.agent.file !== undefined) {
+			this.fileIndex.delete(normalizeFile(state.agent.file));
+		}
 		state.unsubscribe();
 		for (const channel of state.channels.values()) {
 			channel.sinks.clear();
@@ -222,7 +286,7 @@ export class SessionHub {
 		}
 	}
 
-	private publish(state: SessionState, channel: Channel, action: Action): void {
+	private publish(state: SessionState<A>, channel: Channel, action: Action): void {
 		const target = this.ensureChannel(state, channel);
 		const sequenced = target.log.append(action);
 		const frame = this.toFrame(channel, sequenced.action, sequenced.seq);
@@ -231,7 +295,7 @@ export class SessionHub {
 		}
 	}
 
-	private ensureChannel(state: SessionState, channel: Channel): ChannelState {
+	private ensureChannel(state: SessionState<A>, channel: Channel): ChannelState {
 		const existing = state.channels.get(channel);
 		if (existing) {
 			return existing;
@@ -252,7 +316,7 @@ export class SessionHub {
 		return parsed;
 	}
 
-	private requireSession(sessionId: string): SessionState {
+	private requireSession(sessionId: string): SessionState<A> {
 		const state = this.sessions.get(sessionId);
 		if (!state) {
 			throw new SessionNotFoundError(sessionId);

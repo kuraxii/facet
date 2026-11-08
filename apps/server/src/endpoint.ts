@@ -169,14 +169,17 @@ async function createSession(context: EndpointContext, params: unknown): Promise
 /** 打开已有会话,模型与工具集从会话记录恢复。 */
 async function openSession(context: EndpointContext, params: unknown): Promise<SessionSnapshot> {
 	const source = asObject(params);
-	const broker = new ApprovalBroker();
-	const agent = await context.runtime.openAgent({
-		sessionFile: requiredString(source, "sessionFile"),
-		cwd: optionalString(source, "cwd"),
-		approvalHandler: broker.handler,
+	const sessionFile = requiredString(source, "sessionFile");
+	const cwd = optionalString(source, "cwd");
+	return await context.hub.openSession(sessionFile, async () => {
+		const approvals = new ApprovalBroker();
+		const agent = await context.runtime.openAgent({
+			sessionFile,
+			cwd,
+			approvalHandler: approvals.handler,
+		});
+		return { agent, approvals };
 	});
-	context.hub.attach(agent, broker);
-	return agent.snapshot();
 }
 
 /** 应用一条端点派发的动作。返回即表示已受理,设备产生的动作随后从通道推出。 */

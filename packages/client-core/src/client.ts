@@ -21,9 +21,10 @@ import type {
 	SessionSnapshot,
 	SessionSummary,
 } from "@facet/protocol";
+import { historyEntryId } from "./message-id.ts";
 import type { ChatView, SessionView } from "./state.ts";
 import type { ChannelGap } from "./store.ts";
-import { historyEntryId, SessionStore } from "./store.ts";
+import { SessionStore } from "./store.ts";
 
 /** 握手结果,与 hello 帧去掉判别字段后的形状一致。 */
 export interface DeviceHandshake {

@@ -309,7 +309,7 @@ describe("SessionClient", () => {
 		const live = client.chatView()?.messages ?? [];
 		const last = live[live.length - 1];
 		expect(last?.id).toBe("m1");
-		expect(last?.streaming[0]).toBe("你好");
+		expect(last?.streaming[0]?.text).toBe("你好");
 		expect(last?.isStreaming).toBe(true);
 	});
 });

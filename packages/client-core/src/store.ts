@@ -6,6 +6,7 @@
  */
 import type { ActionFrame, Channel, Entry, Message, SessionSnapshot } from "@facet/protocol";
 import { makeChannel, parseChannel } from "@facet/protocol";
+import { historyMessageId } from "./message-id.ts";
 import { reduceChat, reduceSession } from "./reduce.ts";
 import {
 	type ChatView,
@@ -23,9 +24,6 @@ export interface ChannelGap {
 	/** 实际收到的序号 */
 	received: number;
 }
-
-/** 历史消息标识的前缀,与设备分配的 m1、m2 区分 */
-const HISTORY_PREFIX = "e:";
 
 interface SessionSlot {
 	view: SessionView;
@@ -154,7 +152,7 @@ export class SessionStore {
 				continue;
 			}
 			messages.push({
-				id: `${HISTORY_PREFIX}${entry.id}`,
+				id: historyMessageId(entry.id),
 				message: entry.message,
 				streaming: {},
 				isStreaming: false,
@@ -174,7 +172,7 @@ export class SessionStore {
 			if (entry.kind !== "message" || entry.message === undefined) {
 				continue;
 			}
-			const id = `${HISTORY_PREFIX}${entry.id}`;
+			const id = historyMessageId(entry.id);
 			if (known.has(id)) {
 				continue;
 			}
@@ -264,16 +262,6 @@ export class SessionStore {
 	}
 }
 
-/** 历史消息是否是投影出来的。界面据此区分历史与本次连接产生的消息。 */
-export function isHistoryMessageId(id: string): boolean {
-	return id.startsWith(HISTORY_PREFIX);
-}
-
-/** 历史消息对应的会话条目 id,分叉时用它定位。 */
-export function historyEntryId(messageId: string): string | undefined {
-	return messageId.startsWith(HISTORY_PREFIX) ? messageId.slice(HISTORY_PREFIX.length) : undefined;
-}
-
 /** 取消息的纯文本,供列表预览与复制使用。 */
 export function messageText(message: Message): string {
 	switch (message.role) {
@@ -299,7 +287,7 @@ export function messageDisplayText(view: MessageView): string {
 	const streamed = Object.keys(view.streaming)
 		.map(Number)
 		.sort((left, right) => left - right)
-		.map((index) => view.streaming[index] ?? "")
+		.map((index) => view.streaming[index]?.text ?? "")
 		.join("");
 	return streamed.length > 0 ? streamed : messageText(view.message);
 }

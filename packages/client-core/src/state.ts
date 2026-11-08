@@ -8,6 +8,7 @@
 import type {
 	Channel,
 	CompactionReason,
+	DeltaKind,
 	InputRequest,
 	Message,
 	ModelInfo,
@@ -40,14 +41,22 @@ export interface ToolCallView {
 	durationMs: number | undefined;
 }
 
+/** 流式期累积出来的一段内容。 */
+export interface StreamedPart {
+	/** 增量的种类,决定渲染成正文、思考还是工具参数 */
+	kind: DeltaKind;
+	/** 已经累积到的文本 */
+	text: string;
+}
+
 /** 一条消息在客户端的呈现状态。 */
 export interface MessageView {
 	/** 设备分配的标识;历史投影出来的消息用条目 id 加前缀区分 */
 	id: string;
 	/** 最近一次收到的完整消息 */
 	message: Message;
-	/** 按内容块下标累积的流式文本,收到完整消息后清空 */
-	streaming: Readonly<Record<number, string>>;
+	/** 按内容块下标累积的流式片段,收到完整消息后清空 */
+	streaming: Readonly<Record<number, StreamedPart>>;
 	/** 是否仍在流式写入 */
 	isStreaming: boolean;
 }

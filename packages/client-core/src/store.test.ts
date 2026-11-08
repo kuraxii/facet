@@ -1,7 +1,8 @@
 import type { ActionFrame, AssistantMessage, Entry, SessionSnapshot } from "@facet/protocol";
 import { describe, expect, it } from "vitest";
+import { isHistoryMessageId } from "./message-id.ts";
 import type { ChannelGap } from "./store.ts";
-import { isHistoryMessageId, messageDisplayText, messageText, SessionStore } from "./store.ts";
+import { messageDisplayText, messageText, SessionStore } from "./store.ts";
 
 const sessionChannel = "session:/s1" as const;
 const chatChannel = "chat:/s1" as const;
@@ -185,7 +186,12 @@ describe("文本提取", () => {
 	});
 
 	it("流式期间优先用增量", () => {
-		const view = { id: "m1", message: assistant(""), streaming: { 0: "写到一半" }, isStreaming: true };
+		const view = {
+			id: "m1",
+			message: assistant(""),
+			streaming: { 0: { kind: "text" as const, text: "写到一半" } },
+			isStreaming: true,
+		};
 		expect(messageDisplayText(view)).toBe("写到一半");
 		expect(messageDisplayText({ ...view, streaming: {} })).toBe("");
 	});

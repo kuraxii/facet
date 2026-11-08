@@ -121,8 +121,6 @@ export interface RequestParams {
 	};
 	/** 打开已有会话并返回初始快照。 */
 	openSession: { sessionFile: string; cwd?: string };
-	/** 释放会话,停止运行并解除全部订阅。 */
-	closeSession: { sessionId: string };
 	/** 取会话当前状态。 */
 	snapshot: { sessionId: string };
 	/**
@@ -147,7 +145,6 @@ export interface RequestResults {
 	listSessions: { sessions: SessionSummary[] };
 	createSession: SessionSnapshot;
 	openSession: SessionSnapshot;
-	closeSession: Record<string, never>;
 	snapshot: SessionSnapshot;
 	entries: { entries: Entry[]; nextCursor: string | undefined };
 	subscribe: SubscribeResult;

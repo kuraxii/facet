@@ -1,3 +1,9 @@
+/**
+ * pi 的数据结构到 facet 类型的转换。
+ *
+ * 这里是唯一知道 pi 类型形状的地方，转换结果只含 JSON 可序列化的值，
+ * 不携带提供方的不透明字段（签名、provider 专用元数据）。
+ */
 import type { AgentMessage as PiMessage } from "@earendil-works/pi-agent-core";
 import type {
 	ImageContent,
@@ -17,6 +23,12 @@ import type {
 	InputModality,
 } from "./types.ts";
 
+/**
+ * pi 的消息联合。
+ *
+ * 上层 SDK 会通过声明合并补充 coding-agent 的角色，这里显式列出它们，
+ * 避免依赖外部模块的类型增强顺序。
+ */
 type PiMessageLike =
 	| PiMessage
 	| {
@@ -40,6 +52,7 @@ type PiMessageLike =
 	| { role: "branchSummary"; summary: string; fromId: string | null; timestamp: number }
 	| { role: "compactionSummary"; summary: string; tokensBefore: number; timestamp: number };
 
+/** 把混合内容压平成纯文本，图片块与空文本被丢弃。 */
 function textOf(content: string | (TextContent | ImageContent)[]): string {
 	if (typeof content === "string") {
 		return content;
@@ -50,6 +63,7 @@ function textOf(content: string | (TextContent | ImageContent)[]): string {
 		.join("\n");
 }
 
+/** 转成用户可发送的内容块。空字符串不产生空文本块，避免界面上出现空行。 */
 function toInputBlocks(content: string | (TextContent | ImageContent)[]): AgentInputBlock[] {
 	if (typeof content === "string") {
 		return content.length > 0 ? [{ type: "text", text: content }] : [];
@@ -65,6 +79,7 @@ function toInputBlocks(content: string | (TextContent | ImageContent)[]): AgentI
 	return blocks;
 }
 
+/** 转成助手内容块，保留思考块与工具调用块。 */
 function toContentBlocks(
 	content: (TextContent | ImageContent | ThinkingContent | ToolCall)[],
 ): AgentContentBlock[] {
@@ -83,6 +98,7 @@ function toContentBlocks(
 	return blocks;
 }
 
+/** 用量转换。缺少推理 token 时补零，其余字段原样保留。 */
 export function toAgentUsage(usage: Usage): AgentUsage {
 	return {
 		input: usage.input,
@@ -101,6 +117,7 @@ export function toAgentUsage(usage: Usage): AgentUsage {
 	};
 }
 
+/** 模型信息转换。输入模态收敛到文本与图片两种，其余取值丢弃。 */
 export function toAgentModelInfo(model: Model<any>): AgentModelInfo {
 	return {
 		provider: model.provider,
@@ -122,6 +139,7 @@ export function toAgentModelInfo(model: Model<any>): AgentModelInfo {
 	};
 }
 
+/** 助手消息转换。model 优先取提供方回报的实际响应模型，虚拟模型路由时与请求的模型不同。 */
 function toAssistantMessage(message: Extract<PiMessage, { role: "assistant" }>): AgentAssistantMessage {
 	return {
 		role: "assistant",
@@ -135,6 +153,7 @@ function toAssistantMessage(message: Extract<PiMessage, { role: "assistant" }>):
 	};
 }
 
+/** 单条消息转换。未知角色降级为占位消息，保证扩展新增角色时不会中断事件流。 */
 export function toAgentMessage(message: PiMessageLike): AgentMessage {
 	switch (message.role) {
 		case "system":
@@ -200,6 +219,7 @@ export function toAgentMessages(messages: readonly PiMessageLike[]): AgentMessag
 	return messages.map(toAgentMessage);
 }
 
+/** 工具输出转换。内容不是数组时按空内容处理，工具实现可能省略 content 字段。 */
 export function toAgentToolOutput(result: { content?: unknown; details?: unknown; isError?: boolean }): {
 	content: AgentInputBlock[];
 	details?: unknown;

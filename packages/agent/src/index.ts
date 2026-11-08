@@ -1,3 +1,8 @@
+/**
+ * 对外出口。
+ *
+ * 只放出 PiAgent、PiAgentRuntime 与 facet 自有类型，pi SDK 的类型不外露。
+ */
 export { PiAgent } from "./pi-agent.ts";
 export type {
 	ForkPiAgentOptions,

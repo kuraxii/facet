@@ -1,7 +1,14 @@
+/**
+ * pi 的会话事件到 facet 事件的映射。
+ *
+ * 一个 pi 事件可能对应多条对外事件，也可能只用于驱动内部状态变化而对外无输出。
+ * 事件按会话顺序到达，订阅方不需要再排序。
+ */
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import { toAgentMessage, toAgentMessages, toAgentToolOutput } from "./convert.ts";
 import type { AgentEntryKind, AgentEvent } from "./types.ts";
 
+/** 取出流式增量。pi 的 message_update 还包含 start、end 等非增量变体，那些不对外输出。 */
 function deltaFor(
 	event: AgentSessionEvent,
 ): { contentIndex: number; kind: "text" | "thinking" | "toolCall"; delta: string } | undefined {
@@ -21,6 +28,7 @@ function deltaFor(
 	}
 }
 
+/** 转换一条会话事件，返回零到多条对外事件。 */
 export function toAgentEvents(event: AgentSessionEvent): AgentEvent[] {
 	switch (event.type) {
 		case "agent_start":
@@ -98,6 +106,7 @@ export function toAgentEvents(event: AgentSessionEvent): AgentEvent[] {
 				{
 					type: "compaction_end",
 					reason: event.reason,
+					// 压缩被取消时没有结果，两个 token 数值都缺省
 					tokensBefore: event.result?.tokensBefore,
 					estimatedTokensAfter: event.result?.estimatedTokensAfter,
 					aborted: event.aborted,
@@ -105,6 +114,7 @@ export function toAgentEvents(event: AgentSessionEvent): AgentEvent[] {
 					error: event.errorMessage,
 				},
 			];
+		// 单轮重试与摘要重试对界面是同一件事：尝试次数、上限与等待时间
 		case "auto_retry_start":
 		case "summarization_retry_scheduled":
 			return [
@@ -118,6 +128,7 @@ export function toAgentEvents(event: AgentSessionEvent): AgentEvent[] {
 			];
 		case "auto_retry_end":
 			return [{ type: "retry_end", success: event.success, attempt: event.attempt, error: event.finalError }];
+		// 摘要重试结束不带尝试次数，界面只关心重试已停止
 		case "summarization_retry_finished":
 			return [{ type: "retry_end", success: true, attempt: 0, error: undefined }];
 		case "entry_appended":
@@ -135,6 +146,7 @@ export function toAgentEvents(event: AgentSessionEvent): AgentEvent[] {
 			return [{ type: "thinking_level", level: event.level }];
 		case "bash_execution_update":
 			return [{ type: "bash_output", id: event.id, delta: event.delta }];
+		// 摘要重试的中间进度与尚无映射的变体不对外输出
 		default:
 			return [];
 	}

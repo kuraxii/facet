@@ -6,6 +6,7 @@
  */
 import type { ActionFrame, Channel, Entry, Message, SessionSnapshot } from "@facet/protocol";
 import { makeChannel, parseChannel } from "@facet/protocol";
+import { historyMessageId } from "./message-id.ts";
 import { reduceChat, reduceSession } from "./reduce.ts";
 import {
 	type ChatView,
@@ -23,9 +24,6 @@ export interface ChannelGap {
 	/** 实际收到的序号 */
 	received: number;
 }
-
-/** 历史消息标识的前缀,与设备分配的 m1、m2 区分 */
-const HISTORY_PREFIX = "e:";
 
 interface SessionSlot {
 	view: SessionView;
@@ -154,7 +152,7 @@ export class SessionStore {
 				continue;
 			}
 			messages.push({
-				id: `${HISTORY_PREFIX}${entry.id}`,
+				id: historyMessageId(entry.id),
 				message: entry.message,
 				streaming: {},
 				isStreaming: false,
@@ -163,6 +161,34 @@ export class SessionStore {
 		slot.view = { ...slot.view, messages };
 		this.markChanged();
 		return slot.view;
+	}
+
+	/** 往更早的方向补一页历史,已存在的标识跳过。 */
+	prependHistory(channel: Channel, entries: readonly Entry[]): ChatView {
+		const slot = this.chats.get(channel) ?? this.createChatSlot(channel);
+		const known = new Set(slot.view.messages.map((item) => item.id));
+		const older: MessageView[] = [];
+		for (const entry of entries) {
+			if (entry.kind !== "message" || entry.message === undefined) {
+				continue;
+			}
+			const id = historyMessageId(entry.id);
+			if (known.has(id)) {
+				continue;
+			}
+			older.push({ id, message: entry.message, streaming: {}, isStreaming: false });
+		}
+		if (older.length === 0) {
+			return slot.view;
+		}
+		slot.view = { ...slot.view, messages: [...older, ...slot.view.messages] };
+		this.markChanged();
+		return slot.view;
+	}
+
+	/** 通道已应用到的序号,从未收到动作时为 0。 */
+	lastSeq(channel: Channel): number {
+		return this.sessions.get(channel)?.lastSeq ?? this.chats.get(channel)?.lastSeq ?? 0;
 	}
 
 	/** 丢掉一个通道的状态,用于取消订阅或会话释放。 */
@@ -236,11 +262,6 @@ export class SessionStore {
 	}
 }
 
-/** 历史消息是否是投影出来的。界面据此区分历史与本次连接产生的消息。 */
-export function isHistoryMessageId(id: string): boolean {
-	return id.startsWith(HISTORY_PREFIX);
-}
-
 /** 取消息的纯文本,供列表预览与复制使用。 */
 export function messageText(message: Message): string {
 	switch (message.role) {
@@ -266,7 +287,7 @@ export function messageDisplayText(view: MessageView): string {
 	const streamed = Object.keys(view.streaming)
 		.map(Number)
 		.sort((left, right) => left - right)
-		.map((index) => view.streaming[index] ?? "")
+		.map((index) => view.streaming[index]?.text ?? "")
 		.join("");
 	return streamed.length > 0 ? streamed : messageText(view.message);
 }

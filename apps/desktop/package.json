@@ -17,11 +17,13 @@
 		"@facet/agent": "*",
 		"@facet/client-core": "*",
 		"@facet/protocol": "*",
+		"@facet/server": "*",
 		"@facet/services": "*",
 		"@facet/transport": "*",
 		"@facet/ui": "*",
 		"@facet/ui-editor": "*",
-		"@facet/ui-terminal": "*"
+		"@facet/ui-terminal": "*",
+		"ws": "^8.18.0"
 	},
 	"devDependencies": {
 		"@electron/rebuild": "^4.2.1",

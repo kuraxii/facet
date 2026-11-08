@@ -121,8 +121,12 @@ export interface RequestParams {
 	};
 	/** 打开已有会话并返回初始快照。 */
 	openSession: { sessionFile: string; cwd?: string };
-	/** 释放会话,停止运行并解除全部订阅。 */
-	closeSession: { sessionId: string };
+	/**
+	 * 从会话的某条消息分叉出新会话，返回新会话的初始快照。
+	 *
+	 * 历史消息用 entryId 定位；本次连接产生的消息用 messageId，由设备在写盘之后换算成条目。
+	 */
+	forkSession: { sessionFile: string; entryId?: string; messageId?: string; cwd?: string };
 	/** 取会话当前状态。 */
 	snapshot: { sessionId: string };
 	/**
@@ -147,7 +151,7 @@ export interface RequestResults {
 	listSessions: { sessions: SessionSummary[] };
 	createSession: SessionSnapshot;
 	openSession: SessionSnapshot;
-	closeSession: Record<string, never>;
+	forkSession: SessionSnapshot;
 	snapshot: SessionSnapshot;
 	entries: { entries: Entry[]; nextCursor: string | undefined };
 	subscribe: SubscribeResult;

@@ -49,7 +49,7 @@ describe("reduceChat", () => {
 		});
 		view = reduceChat(view, { type: "chat/delta", messageId: "m1", partIndex: 0, kind: "text", delta: "你" });
 		view = reduceChat(view, { type: "chat/delta", messageId: "m1", partIndex: 0, kind: "text", delta: "好" });
-		expect(view.messages[0]?.streaming[0]).toBe("你好");
+		expect(view.messages[0]?.streaming[0]?.text).toBe("你好");
 	});
 
 	it("完成事件替换内容并清空增量", () => {

@@ -127,14 +127,17 @@ export function reduceChat(view: ChatView, action: Action): ChatView {
 			return { ...view, messages: upsertMessage(view.messages, next) };
 		}
 		case "chat/delta": {
-			const messages = patchMessage(view.messages, action.messageId, (current) => ({
-				...current,
-				streaming: {
-					...current.streaming,
-					[action.partIndex]: `${current.streaming[action.partIndex] ?? ""}${action.delta}`,
-				},
-				isStreaming: true,
-			}));
+			const messages = patchMessage(view.messages, action.messageId, (current) => {
+				const previous = current.streaming[action.partIndex];
+				return {
+					...current,
+					streaming: {
+						...current.streaming,
+						[action.partIndex]: { kind: action.kind, text: `${previous?.text ?? ""}${action.delta}` },
+					},
+					isStreaming: true,
+				};
+			});
 			return messages === view.messages ? view : { ...view, messages };
 		}
 		case "chat/toolCallStarted": {

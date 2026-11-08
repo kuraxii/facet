@@ -7,7 +7,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
-import type { PiAgentRuntime } from "@facet/agent";
+import type { PiAgentFactory } from "@facet/agent";
 import {
 	type Action,
 	type ActionFrame,
@@ -23,11 +23,12 @@ import {
 	type SessionSnapshot,
 } from "@facet/protocol";
 import { WebSocket, WebSocketServer } from "ws";
-import { ApprovalBroker } from "./approval-broker.ts";
 import type { ServerConfig } from "./config.ts";
 import {
 	type ActionSink,
 	ChannelNotFoundError,
+	SessionBusyError,
+	SessionEntryNotFoundError,
 	type SessionHub,
 	SessionNotFoundError,
 } from "./session-hub.ts";
@@ -58,7 +59,7 @@ interface Connection {
 
 interface EndpointContext {
 	readonly config: ServerConfig;
-	readonly runtime: PiAgentRuntime;
+	readonly factory: PiAgentFactory;
 	readonly hub: SessionHub;
 	readonly hostId: string;
 	readonly connections: Set<Connection>;
@@ -137,9 +138,7 @@ function send(ws: WebSocket, frame: ServerFrame): void {
 }
 
 function toSink(connection: Connection): ActionSink {
-	return (frame: ActionFrame) => {
-		send(connection.ws, frame);
-	};
+	return { id: connection.clientId, send: (frame) => send(connection.ws, frame) };
 }
 
 /** 建立会话并把审批应答接到该会话的中转上。 */
@@ -150,8 +149,7 @@ async function createSession(context: EndpointContext, params: unknown): Promise
 		throw new RequestError("bad_params", "model must be an object");
 	}
 	const modelRecord = model === undefined ? undefined : asObject(model);
-	const broker = new ApprovalBroker();
-	const agent = await context.runtime.createAgent({
+	return await context.hub.createSession({
 		cwd: optionalString(source, "cwd"),
 		model: modelRecord
 			? { provider: requiredString(modelRecord, "provider"), id: requiredString(modelRecord, "id") }
@@ -160,23 +158,13 @@ async function createSession(context: EndpointContext, params: unknown): Promise
 		tools: optionalStringArray(source, "tools"),
 		excludeTools: optionalStringArray(source, "excludeTools"),
 		name: optionalString(source, "name"),
-		approvalHandler: broker.handler,
 	});
-	context.hub.attach(agent, broker);
-	return agent.snapshot();
 }
 
 /** 打开已有会话,模型与工具集从会话记录恢复。 */
 async function openSession(context: EndpointContext, params: unknown): Promise<SessionSnapshot> {
 	const source = asObject(params);
-	const broker = new ApprovalBroker();
-	const agent = await context.runtime.openAgent({
-		sessionFile: requiredString(source, "sessionFile"),
-		cwd: optionalString(source, "cwd"),
-		approvalHandler: broker.handler,
-	});
-	context.hub.attach(agent, broker);
-	return agent.snapshot();
+	return await context.hub.openSession(requiredString(source, "sessionFile"), optionalString(source, "cwd"));
 }
 
 /** 应用一条端点派发的动作。返回即表示已受理,设备产生的动作随后从通道推出。 */
@@ -214,7 +202,7 @@ async function applyAction(context: EndpointContext, channel: Channel, action: A
 			context.hub.agent(sessionId).clearQueue();
 			return;
 		case "chat/toolCallConfirmed":
-			context.hub.respondApproval(sessionId, action.requestId, action.decision);
+			await context.hub.respondApproval(sessionId, action.requestId, action.decision);
 			return;
 		case "session/titleChanged":
 			context.hub.agent(sessionId).setName(action.title);
@@ -246,24 +234,33 @@ async function handleRequest(
 	switch (method) {
 		case "listSessions": {
 			const source = asObject(params ?? {});
-			return { sessions: await context.runtime.listSessions(optionalString(source, "cwd")) };
+			return { sessions: await context.factory.listSessions(optionalString(source, "cwd")) };
 		}
 		case "createSession":
 			return await createSession(context, params);
 		case "openSession":
 			return await openSession(context, params);
-		case "closeSession": {
+		case "forkSession": {
 			const source = asObject(params);
-			context.hub.release(requiredString(source, "sessionId"));
-			return {};
+			const entryId = optionalString(source, "entryId");
+			const messageId = optionalString(source, "messageId");
+			if (entryId === undefined && messageId === undefined) {
+				throw new RequestError("bad_params", "entryId or messageId is required");
+			}
+			return await context.hub.forkSession({
+				sessionFile: requiredString(source, "sessionFile"),
+				...(entryId === undefined ? {} : { entryId }),
+				...(messageId === undefined ? {} : { messageId }),
+				cwd: optionalString(source, "cwd"),
+			});
 		}
 		case "snapshot": {
 			const source = asObject(params);
-			return context.hub.snapshot(requiredString(source, "sessionId"));
+			return await context.hub.snapshot(requiredString(source, "sessionId"));
 		}
 		case "entries": {
 			const source = asObject(params);
-			return context.hub.entries(
+			return await context.hub.entries(
 				requiredString(source, "sessionId"),
 				optionalString(source, "cursor"),
 				optionalNumber(source, "limit"),
@@ -278,7 +275,7 @@ async function handleRequest(
 			}
 			const sink = toSink(connection);
 			connection.subscriptions.set(channel, sink);
-			return context.hub.subscribe(channel, optionalNumber(source, "since"), sink);
+			return await context.hub.subscribe(channel, optionalNumber(source, "since"), sink);
 		}
 		case "unsubscribe": {
 			const source = asObject(params);
@@ -292,10 +289,10 @@ async function handleRequest(
 		}
 		case "models": {
 			const source = asObject(params ?? {});
-			return { models: context.runtime.models(optionalString(source, "providerId")) };
+			return { models: context.factory.models(optionalString(source, "providerId")) };
 		}
 		case "providers":
-			return { providers: context.runtime.providers() };
+			return { providers: context.factory.providers() };
 		default:
 			throw new RequestError("unknown_method", `unknown method: ${method}`);
 	}
@@ -310,6 +307,9 @@ function toProtocolError(error: unknown): { code: ErrorCode; message: string } {
 	}
 	if (error instanceof ChannelNotFoundError) {
 		return { code: "unknown_channel", message: error.message };
+	}
+	if (error instanceof SessionEntryNotFoundError || error instanceof SessionBusyError) {
+		return { code: "rejected", message: error.message };
 	}
 	return { code: "internal", message: error instanceof Error ? error.message : String(error) };
 }
@@ -382,13 +382,13 @@ async function handleFrame(context: EndpointContext, connection: Connection, tex
 /** 启动端点监听。返回实际端口,供嵌入方写入自己的握手信息。 */
 export async function startEndpoint(options: {
 	config: ServerConfig;
-	runtime: PiAgentRuntime;
+	factory: PiAgentFactory;
 	hub: SessionHub;
 	hostId: string;
 }): Promise<EndpointHandle> {
 	const context: EndpointContext = {
 		config: options.config,
-		runtime: options.runtime,
+		factory: options.factory,
 		hub: options.hub,
 		hostId: options.hostId,
 		connections: new Set(),

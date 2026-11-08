@@ -7,6 +7,9 @@
 import type { Action, Channel, SessionEvent } from "@facet/protocol";
 import { makeChannel } from "@facet/protocol";
 
+/** 消息标识与时间戳保留的条数 */
+const MAX_STAMPS = 500;
+
 /** 一条待分发的动作及其归属通道。 */
 export interface ChannelAction {
 	channel: Channel;
@@ -21,6 +24,8 @@ export class ActionProjector {
 	private messageCounter = 0;
 	/** 正在生成的消息标识,收到 message_end 后清空 */
 	private pendingMessageId: string | undefined;
+	/** 已发过的消息标识与其角色、时间戳,用于在写盘之后回查条目 */
+	private readonly stamps = new Map<string, { role: string; timestamp: number }>();
 
 	constructor(sessionId: string) {
 		this.sessionId = sessionId;
@@ -31,6 +36,23 @@ export class ActionProjector {
 	/** 当前正在生成的消息标识,没有则为空。 */
 	get currentMessageId(): string | undefined {
 		return this.pendingMessageId;
+	}
+
+	/** 取某条消息的角色与时间戳,写盘之后据此在条目里定位。 */
+	messageStamp(messageId: string): { role: string; timestamp: number } | undefined {
+		return this.stamps.get(messageId);
+	}
+
+	/** 记住消息标识与时间戳,只保留最近若干条。 */
+	private remember(messageId: string, role: string, timestamp: number): void {
+		this.stamps.set(messageId, { role, timestamp });
+		while (this.stamps.size > MAX_STAMPS) {
+			const oldest = this.stamps.keys().next();
+			if (oldest.done) {
+				break;
+			}
+			this.stamps.delete(oldest.value);
+		}
 	}
 
 	project(event: SessionEvent): ChannelAction[] {
@@ -81,6 +103,7 @@ export class ActionProjector {
 			case "message_start": {
 				this.messageCounter += 1;
 				this.pendingMessageId = `m${this.messageCounter}`;
+				this.remember(this.pendingMessageId, event.message.role, event.message.timestamp);
 				return [
 					chat({ type: "chat/messageAppended", messageId: this.pendingMessageId, message: event.message }),
 				];

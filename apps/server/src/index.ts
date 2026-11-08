@@ -4,7 +4,7 @@
  * 装配共享的运行时、会话登记与端点监听，供嵌入方（桌面主进程）与独立进程共用。
  */
 import { randomUUID } from "node:crypto";
-import { PiAgentRuntime } from "@facet/agent";
+import { PiAgentFactory } from "@facet/agent";
 import { loadServerConfig, type ServerConfig } from "./config.ts";
 import { type EndpointHandle, startEndpoint } from "./endpoint.ts";
 import { SessionHub } from "./session-hub.ts";
@@ -28,23 +28,27 @@ export interface ServerHandle extends EndpointHandle {
  */
 export async function startServer(options: Partial<ServerConfig> = {}): Promise<ServerHandle> {
 	const config: ServerConfig = { ...loadServerConfig(), ...options };
-	const runtime = await PiAgentRuntime.create({
+	const factory = await PiAgentFactory.create({
 		agentDir: config.agentDir,
 		sessionDir: config.sessionDir,
 	});
-	const hub = new SessionHub({ replayLimit: config.replayLimit });
+	const hub = new SessionHub({
+		factory,
+		replayLimit: config.replayLimit,
+		idleCloseMs: config.sessionIdleMs,
+	});
 	const hostId = randomUUID();
-	const endpoint = await startEndpoint({ config, runtime, hub, hostId });
+	const endpoint = await startEndpoint({ config, factory, hub, hostId });
 
 	return {
 		...endpoint,
 		hostId,
-		agentDir: runtime.agentDir,
+		agentDir: factory.agentDir,
 		hub,
 		close: async () => {
 			await endpoint.close();
 			hub.dispose();
-			runtime.dispose();
+			factory.dispose();
 		},
 	};
 }
@@ -56,5 +60,5 @@ export type { ServerConfig } from "./config.ts";
 export { loadServerConfig } from "./config.ts";
 export type { EndpointHandle } from "./endpoint.ts";
 export { EventLog } from "./event-log.ts";
-export type { ActionSink, Subscription } from "./session-hub.ts";
+export type { ActionSink, HubAgent, Subscription } from "./session-hub.ts";
 export { ChannelNotFoundError, SessionHub, SessionNotFoundError } from "./session-hub.ts";

@@ -136,9 +136,7 @@ function send(ws: WebSocket, frame: ServerFrame): void {
 }
 
 function toSink(connection: Connection): ActionSink {
-	return (frame: ActionFrame) => {
-		send(connection.ws, frame);
-	};
+	return { id: connection.clientId, send: (frame) => send(connection.ws, frame) };
 }
 
 /** 建立会话并把审批应答接到该会话的中转上。 */
@@ -202,7 +200,7 @@ async function applyAction(context: EndpointContext, channel: Channel, action: A
 			context.hub.agent(sessionId).clearQueue();
 			return;
 		case "chat/toolCallConfirmed":
-			context.hub.respondApproval(sessionId, action.requestId, action.decision);
+			await context.hub.respondApproval(sessionId, action.requestId, action.decision);
 			return;
 		case "session/titleChanged":
 			context.hub.agent(sessionId).setName(action.title);
@@ -240,18 +238,13 @@ async function handleRequest(
 			return await createSession(context, params);
 		case "openSession":
 			return await openSession(context, params);
-		case "closeSession": {
-			const source = asObject(params);
-			context.hub.release(requiredString(source, "sessionId"));
-			return {};
-		}
 		case "snapshot": {
 			const source = asObject(params);
-			return context.hub.snapshot(requiredString(source, "sessionId"));
+			return await context.hub.snapshot(requiredString(source, "sessionId"));
 		}
 		case "entries": {
 			const source = asObject(params);
-			return context.hub.entries(
+			return await context.hub.entries(
 				requiredString(source, "sessionId"),
 				optionalString(source, "cursor"),
 				optionalNumber(source, "limit"),
@@ -266,7 +259,7 @@ async function handleRequest(
 			}
 			const sink = toSink(connection);
 			connection.subscriptions.set(channel, sink);
-			return context.hub.subscribe(channel, optionalNumber(source, "since"), sink);
+			return await context.hub.subscribe(channel, optionalNumber(source, "since"), sink);
 		}
 		case "unsubscribe": {
 			const source = asObject(params);

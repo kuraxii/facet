@@ -32,7 +32,11 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 		agentDir: config.agentDir,
 		sessionDir: config.sessionDir,
 	});
-	const hub = new SessionHub({ factory, replayLimit: config.replayLimit });
+	const hub = new SessionHub({
+		factory,
+		replayLimit: config.replayLimit,
+		idleCloseMs: config.sessionIdleMs,
+	});
 	const hostId = randomUUID();
 	const endpoint = await startEndpoint({ config, factory, hub, hostId });
 

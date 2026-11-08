@@ -18,6 +18,8 @@ export interface ServerConfig {
 	sessionDir: string | undefined;
 	/** 每个会话保留的事件条数，超出后丢弃最旧的，端点据此判断是否需要重新同步 */
 	replayLimit: number;
+	/** 没人订阅且不在运行后，等多久回收会话，毫秒 */
+	sessionIdleMs: number;
 	/** 设备展示名 */
 	hostName: string;
 }
@@ -25,6 +27,7 @@ export interface ServerConfig {
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 0;
 const DEFAULT_REPLAY_LIMIT = 512;
+const DEFAULT_SESSION_IDLE_MS = 3000;
 
 function readInt(value: string | undefined, fallback: number): number {
 	if (value === undefined || value.trim() === "") {
@@ -43,6 +46,7 @@ export function loadServerConfig(env: Record<string, string | undefined> = proce
 		agentDir: env.FACET_AGENT_DIR?.trim() || DEFAULT_AGENT_DIR,
 		sessionDir: env.FACET_SESSION_DIR?.trim() || undefined,
 		replayLimit: readInt(env.FACET_REPLAY_LIMIT, DEFAULT_REPLAY_LIMIT) || DEFAULT_REPLAY_LIMIT,
+		sessionIdleMs: readInt(env.FACET_SESSION_IDLE_MS, DEFAULT_SESSION_IDLE_MS),
 		hostName: hostName && hostName.length > 0 ? hostName : "facet",
 	};
 }

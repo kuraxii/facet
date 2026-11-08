@@ -1,20 +1,31 @@
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import type { Entry, SessionEvent, SessionEventListener, SessionSnapshot } from "@facet/protocol";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApprovalBroker } from "./approval-broker.ts";
-import { type AgentFactory, type HubAgent, SessionHub } from "./session-hub.ts";
+import {
+	type ActionSink,
+	type AgentFactory,
+	type HubAgent,
+	SessionConflictError,
+	SessionHub,
+} from "./session-hub.ts";
+
+const IDLE_MS = 1000;
 
 class FakeAgent implements HubAgent {
 	readonly id: string;
 	readonly file: string | undefined;
-	isStreaming = false;
-	isCompacting = false;
+	busy = false;
 	disposed = false;
 	private readonly listeners = new Set<SessionEventListener>();
 
 	constructor(id: string, file?: string) {
 		this.id = id;
 		this.file = file;
+	}
+
+	get isBusy(): boolean {
+		return this.busy;
 	}
 
 	subscribe(listener: SessionEventListener): () => void {
@@ -34,7 +45,7 @@ class FakeAgent implements HubAgent {
 			file: this.file,
 			cwd: "/tmp",
 			name: `会话 ${this.id}`,
-			status: this.isStreaming ? "running" : "idle",
+			status: this.busy ? "running" : "idle",
 			model: undefined,
 			thinkingLevel: "medium",
 			availableThinkingLevels: ["medium"],
@@ -62,7 +73,6 @@ class FakeAgent implements HubAgent {
 		this.disposed = true;
 	}
 
-	/** 推一个事件,用来验证登记表把事件转成了动作。 */
 	emit(event: SessionEvent): void {
 		for (const listener of [...this.listeners]) {
 			listener(event);
@@ -70,38 +80,51 @@ class FakeAgent implements HubAgent {
 	}
 }
 
-/** 假工厂按文件建立假 agent,记录建立次数与收到的参数。 */
+/** 假工厂:会话 id 缺省取文件名去掉扩展名,可用 ids 覆盖以模拟复制出来的会话文件。 */
 class FakeFactory implements AgentFactory<FakeAgent> {
+	readonly ids = new Map<string, string>();
+	readonly opened: string[] = [];
 	created = 0;
-	opened: string[] = [];
-	private readonly agents = new Map<string, FakeAgent>();
+	/** 建立会话时等待的闸门,用来让并发请求真正交错 */
+	gate: Promise<void> | undefined;
+
+	async peekSessionId(file: string): Promise<string> {
+		return this.ids.get(file) ?? basename(file, ".jsonl");
+	}
 
 	async create(): Promise<FakeAgent> {
 		this.created += 1;
-		const agent = new FakeAgent(`new-${this.created}`, `/tmp/new-${this.created}.jsonl`);
-		this.agents.set(agent.id, agent);
-		return agent;
+		return new FakeAgent(`new-${this.created}`, resolve(`/tmp/new-${this.created}.jsonl`));
 	}
 
 	async open(options: { sessionFile: string }): Promise<FakeAgent> {
 		this.opened.push(options.sessionFile);
-		const existing = this.agents.get(`file:${resolve(options.sessionFile)}`);
-		if (existing) {
-			return existing;
+		if (this.gate) {
+			await this.gate;
 		}
-		const agent = new FakeAgent(`file:${resolve(options.sessionFile)}`, resolve(options.sessionFile));
-		this.agents.set(agent.id, agent);
-		return agent;
+		await Promise.resolve();
+		return new FakeAgent(await this.peekSessionId(options.sessionFile), resolve(options.sessionFile));
 	}
 }
 
-function createHub(factory = new FakeFactory()): { hub: SessionHub<FakeAgent>; factory: FakeFactory } {
-	return { hub: new SessionHub<FakeAgent>({ factory, replayLimit: 8 }), factory };
-}
+let factory: FakeFactory;
+let hub: SessionHub<FakeAgent>;
 
-describe("SessionHub 的会话唯一性", () => {
-	it("同一文件重复打开复用同一份运行态", async () => {
-		const { hub, factory } = createHub();
+beforeEach(() => {
+	vi.useFakeTimers();
+	factory = new FakeFactory();
+	hub = new SessionHub<FakeAgent>({ factory, replayLimit: 8, idleCloseMs: IDLE_MS });
+});
+
+afterEach(() => {
+	hub.dispose();
+	vi.useRealTimers();
+});
+
+const sink = (id: string) => ({ id, send: () => {} });
+
+describe("会话建立与复用", () => {
+	it("打开同一文件复用同一份运行态", async () => {
 		const first = await hub.openSession("/tmp/s1.jsonl");
 		const second = await hub.openSession("/tmp/s1.jsonl");
 		expect(factory.opened).toEqual(["/tmp/s1.jsonl"]);
@@ -109,47 +132,46 @@ describe("SessionHub 的会话唯一性", () => {
 	});
 
 	it("并发打开同一文件共用一次建立", async () => {
-		const { hub, factory } = createHub();
-		const [a, b] = await Promise.all([hub.openSession("/tmp/s1.jsonl"), hub.openSession("/tmp/s1.jsonl")]);
+		let open: () => void = () => {};
+		factory.gate = new Promise<void>((resolveGate) => {
+			open = resolveGate;
+		});
+		const first = hub.openSession("/tmp/s1.jsonl");
+		const second = hub.openSession("/tmp/s1.jsonl");
+		await Promise.resolve();
+		open();
+		const [a, b] = await Promise.all([first, second]);
 		expect(factory.opened).toHaveLength(1);
 		expect(a.id).toBe(b.id);
 	});
 
 	it("同一文件的不同写法落到同一个键", async () => {
-		const { hub, factory } = createHub();
 		await hub.openSession("./s1.jsonl");
 		await hub.openSession(resolve("./s1.jsonl"));
 		expect(factory.opened).toHaveLength(1);
 	});
 
 	it("不同文件各自建立", async () => {
-		const { hub, factory } = createHub();
 		await hub.openSession("/tmp/s1.jsonl");
 		await hub.openSession("/tmp/s2.jsonl");
 		expect(factory.opened).toHaveLength(2);
 		expect(hub.sessionIds()).toHaveLength(2);
 	});
 
-	it("会话释放后索引一并清掉,再次打开会重新建立", async () => {
-		const { hub, factory } = createHub();
-		const opened = await hub.openSession("/tmp/s1.jsonl");
-		hub.release(opened.id);
-		expect(hub.sessionIdByFile("/tmp/s1.jsonl")).toBeUndefined();
-		await hub.openSession("/tmp/s1.jsonl");
-		expect(factory.opened).toHaveLength(2);
+	it("同一个会话 id 出现在两个文件时报冲突", async () => {
+		factory.ids.set(resolve("/tmp/a.jsonl"), "same");
+		factory.ids.set(resolve("/tmp/b.jsonl"), "same");
+		await hub.openSession("/tmp/a.jsonl");
+		await expect(hub.openSession("/tmp/b.jsonl")).rejects.toBeInstanceOf(SessionConflictError);
 	});
 
-	it("新建会话走工厂并登记", async () => {
-		const { hub, factory } = createHub();
+	it("新建会话经工厂并登记", async () => {
 		const snapshot = await hub.createSession({ cwd: "/tmp" });
 		expect(factory.created).toBe(1);
 		expect(hub.has(snapshot.id)).toBe(true);
 	});
-});
 
-describe("SessionHub 的登记冲突", () => {
-	it("同一会话已有另一份状态时保留先登记的,丢弃新来的", () => {
-		const { hub } = createHub();
+	it("同一会话已有另一份状态时保留先登记的", () => {
 		const first = new FakeAgent("s1", "/tmp/s1.jsonl");
 		const second = new FakeAgent("s1", "/tmp/s1.jsonl");
 		hub.attach(first, new ApprovalBroker());
@@ -158,14 +180,135 @@ describe("SessionHub 的登记冲突", () => {
 		expect(first.disposed).toBe(false);
 		expect(second.disposed).toBe(true);
 	});
+});
 
-	it("重复登记同一个实例不变更状态", () => {
-		const { hub } = createHub();
-		const agent = new FakeAgent("s1", "/tmp/s1.jsonl");
-		hub.attach(agent, new ApprovalBroker());
-		const subscribed = hub.subscribe("chat:/s1", undefined, () => {});
-		hub.attach(agent, new ApprovalBroker());
-		expect(hub.lastSeq("chat:/s1")).toBe(subscribed.seq);
-		expect(hub.agent("s1")).toBe(agent);
+describe("空闲回收", () => {
+	it("没有订阅者且不在运行时到点回收", async () => {
+		const snapshot = await hub.createSession();
+		const agent = hub.agent(snapshot.id);
+		expect(hub.has(snapshot.id)).toBe(true);
+		await vi.advanceTimersByTimeAsync(IDLE_MS + 1);
+		expect(hub.has(snapshot.id)).toBe(false);
+		expect(agent.disposed).toBe(true);
+	});
+
+	it("有订阅者时不回收", async () => {
+		const snapshot = await hub.openSession("/tmp/s1.jsonl");
+		await hub.subscribe(`chat:/${snapshot.id}`, undefined, sink("a"));
+		await vi.advanceTimersByTimeAsync(IDLE_MS * 3);
+		expect(hub.has(snapshot.id)).toBe(true);
+	});
+
+	it("退订后归零再回收", async () => {
+		const snapshot = await hub.openSession("/tmp/s1.jsonl");
+		const listener = sink("a");
+		await hub.subscribe(`chat:/${snapshot.id}`, undefined, listener);
+		await vi.advanceTimersByTimeAsync(IDLE_MS * 3);
+		hub.unsubscribe(`chat:/${snapshot.id}`, listener);
+		await vi.advanceTimersByTimeAsync(IDLE_MS + 1);
+		expect(hub.has(snapshot.id)).toBe(false);
+	});
+
+	it("订阅两条通道的同一个端只算一个持有者", async () => {
+		const snapshot = await hub.openSession("/tmp/s1.jsonl");
+		const listener = sink("a");
+		await hub.subscribe(`chat:/${snapshot.id}`, undefined, listener);
+		await hub.subscribe(`session:/${snapshot.id}`, undefined, listener);
+		hub.unsubscribe(`chat:/${snapshot.id}`, listener);
+		await vi.advanceTimersByTimeAsync(IDLE_MS * 3);
+		expect(hub.has(snapshot.id)).toBe(true);
+		hub.unsubscribe(`session:/${snapshot.id}`, listener);
+		await vi.advanceTimersByTimeAsync(IDLE_MS + 1);
+		expect(hub.has(snapshot.id)).toBe(false);
+	});
+
+	it("倒计时期间重新订阅则取消回收", async () => {
+		const snapshot = await hub.openSession("/tmp/s1.jsonl");
+		await vi.advanceTimersByTimeAsync(IDLE_MS - 200);
+		await hub.subscribe(`chat:/${snapshot.id}`, undefined, sink("a"));
+		await vi.advanceTimersByTimeAsync(IDLE_MS * 2);
+		expect(hub.has(snapshot.id)).toBe(true);
+	});
+
+	it("运行中不回收,停下后进入倒计时", async () => {
+		const snapshot = await hub.openSession("/tmp/s1.jsonl");
+		const agent = hub.agent(snapshot.id);
+		agent.busy = true;
+		await vi.advanceTimersByTimeAsync(IDLE_MS * 3);
+		expect(hub.has(snapshot.id)).toBe(true);
+		agent.busy = false;
+		agent.emit({ type: "settled", aborted: false });
+		await vi.advanceTimersByTimeAsync(IDLE_MS + 1);
+		expect(hub.has(snapshot.id)).toBe(false);
+	});
+
+	it("读历史或取快照会续期", async () => {
+		const snapshot = await hub.openSession("/tmp/s1.jsonl");
+		await vi.advanceTimersByTimeAsync(IDLE_MS - 400);
+		await hub.entries(snapshot.id, undefined, 5);
+		await vi.advanceTimersByTimeAsync(IDLE_MS - 400);
+		expect(hub.has(snapshot.id)).toBe(true);
+		await hub.snapshot(snapshot.id);
+		await vi.advanceTimersByTimeAsync(IDLE_MS + 1);
+		expect(hub.has(snapshot.id)).toBe(false);
+	});
+});
+
+describe("通道与动作", () => {
+	it("订阅时补发缓冲并对齐序号", async () => {
+		const snapshot = await hub.openSession("/tmp/s1.jsonl");
+		const agent = hub.agent(snapshot.id);
+		const received: number[] = [];
+		const first: ActionSink = {
+			id: "a",
+			send: (frame) => {
+				received.push(frame.serverSeq);
+			},
+		};
+		await hub.subscribe(`chat:/${snapshot.id}`, undefined, first);
+		agent.emit({ type: "turn_start" });
+		agent.emit({ type: "notice", level: "info", message: "hi" });
+
+		const replay: number[] = [];
+		const second: ActionSink = {
+			id: "b",
+			send: (frame) => {
+				replay.push(frame.serverSeq);
+			},
+		};
+		const subscription = await hub.subscribe(`chat:/${snapshot.id}`, 0, second);
+		expect(replay).toHaveLength(received.length);
+		expect(subscription.seq).toBe(hub.lastSeq(`chat:/${snapshot.id}`));
+	});
+
+	it("事件按通道分流", async () => {
+		const snapshot = await hub.openSession("/tmp/s1.jsonl");
+		const agent = hub.agent(snapshot.id);
+		const sessionFrames: string[] = [];
+		const chatFrames: string[] = [];
+		await hub.subscribe(`session:/${snapshot.id}`, undefined, {
+			id: "a",
+			send: (frame) => sessionFrames.push(frame.action.type),
+		});
+		await hub.subscribe(`chat:/${snapshot.id}`, undefined, {
+			id: "b",
+			send: (frame) => chatFrames.push(frame.action.type),
+		});
+		agent.emit({ type: "status", status: "running" });
+		agent.emit({ type: "notice", level: "info", message: "hello" });
+		expect(sessionFrames).toEqual(["session/status"]);
+		expect(chatFrames.includes("chat/notice")).toBe(true);
+	});
+});
+
+describe("查询", () => {
+	it("会话文件能查到对应的会话 id", async () => {
+		const snapshot = await hub.openSession("/tmp/s1.jsonl");
+		expect(hub.sessionIdByFile("/tmp/s1.jsonl")).toBe(snapshot.id);
+		expect(hub.sessionIdByFile("/tmp/other.jsonl")).toBeUndefined();
+	});
+
+	it("未登记的会话取快照报不存在", async () => {
+		await expect(hub.snapshot("nope")).rejects.toThrow("unknown session");
 	});
 });

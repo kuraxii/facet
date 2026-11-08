@@ -189,6 +189,11 @@ export class PiAgent {
 		return this.session.isCompacting;
 	}
 
+	/** 会话仍在推进:运行中、压缩中,或工具在等审批。 */
+	get isBusy(): boolean {
+		return this.status !== "idle";
+	}
+
 	/** 订阅事件，返回取消订阅函数。多个订阅方互不影响。 */
 	subscribe(listener: SessionEventListener): () => void {
 		this.listeners.add(listener);

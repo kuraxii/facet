@@ -5,6 +5,7 @@
  * 每个会话自己的资源加载器按工作目录单独构造。这里不登记建好的会话，
  * 谁活着、何时回收由设备侧决定。
  */
+import { open } from "node:fs/promises";
 import { join } from "node:path";
 import {
 	createAgentSession,
@@ -165,6 +166,29 @@ export class PiAgentFactory {
 			name: options.name,
 		});
 		return agent;
+	}
+
+	/**
+	 * 只读会话文件的第一行,取出会话 id。
+	 *
+	 * 建立会话要先知道它的 id 才能确定登记键,而 id 在文件头部,这里只读一小段。
+	 * 文件不是会话文件时抛错。
+	 */
+	async peekSessionId(file: string): Promise<string> {
+		const handle = await open(file, "r");
+		try {
+			const buffer = Buffer.alloc(4096);
+			const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+			const text = buffer.subarray(0, bytesRead).toString("utf8");
+			const line = text.slice(0, text.indexOf("\n") < 0 ? text.length : text.indexOf("\n"));
+			const header = JSON.parse(line) as { type?: unknown; id?: unknown };
+			if (header.type !== "session" || typeof header.id !== "string") {
+				throw new Error(`不是会话文件:${file}`);
+			}
+			return header.id;
+		} finally {
+			await handle.close();
+		}
 	}
 
 	/** 打开已有会话。模型回退等提示通过 PiAgent 的 fallbackNotice 取得。 */

@@ -1,6 +1,6 @@
 # 功能需求
 
-本文件把现有 Percho 应用（v0.6.5）的功能整理成可讨论的需求清单，作为 facet 重新实现的功能基线。每条需求有稳定编号，后续详细设计按编号逐条展开。
+本文件列出 facet 的功能需求，作为设计与实现的功能基线。每条需求有稳定编号，后续详细设计按编号逐条展开。
 
 ## 阅读方式
 
@@ -22,9 +22,17 @@
 | 终端 | TERM | 伪终端、分屏、终端设置 |
 | 设置 | SET | 提供方、模型、外观、各面板 |
 | UI 插件 | PLUG | 槽位、宿主接口、构建 |
-| 跨设备 | LAN | 局域网观察、远程控制 |
+| 跨设备访问 | XDEV | 多设备接入、项目归属与接管、远程权限与审计 |
 | 数据与持久化 | DATA | 写入磁盘、事件顺序、状态重放 |
 | 非功能 | NFR | 性能、可靠性、安全、可测 |
+
+## 术语
+
+| 术语 | 含义 |
+|---|---|
+| 设备 | 运行 agent、存放项目文件与会话记录的机器，本机和远程机器都算 |
+| 端 | 用户操作用的一个界面实例：一个桌面应用进程（含它的所有窗口）算一个端，一个浏览器标签页算一个端 |
+| 持有 | 某个端对某台设备上某个项目的独占操作权 |
 
 ---
 
@@ -209,15 +217,28 @@
 | FR-PLUG-06 | 清单与配置 | 插件目录结构、清单字段、全局总开关、槽位指派持久化 | P2 | 中 | |
 | FR-PLUG-07 | 内置样例 | 至少一个可直接运行的示例插件与类型声明，供编写时参考 | P2 | 小 | |
 
-# 十二、跨设备（LAN）
+# 十二、跨设备访问（XDEV）
 
 | 编号 | 需求 | 行为要点 | 优先级 | 复杂度 | 取舍 |
 |---|---|---|---|---|---|
-| FR-LAN-01 | 观察服务 | 在本机开启只读服务，手机或平板浏览器可查看会话列表与对话 | P2 | 大 | |
-| FR-LAN-02 | 访问入口 | 展示访问地址与二维码；可随时停止；重新开启时轮换访问凭证 | P2 | 中 | |
-| FR-LAN-03 | 远程控制 | 独立开关：允许远程发消息、停止生成、应答审批；未开观察时开关无效 | P2 | 大 | |
-| FR-LAN-04 | 出网清洗 | 手机端拿到的数据剥除本地路径、图片原始数据、内部匹配用文本等敏感字段 | P2 | 中 | |
-| FR-LAN-05 | 操作审计 | 远程写操作按条记录时间、来源地址、动作与结果，不含凭证 | P2 | 小 | |
+| FR-XDEV-01 | 设备中心 | 项目的运行、会话记录、审批、终端、凭证都留在项目所在设备，端只是操作入口。关闭或断开任何一个端，设备上正在跑的任务不受影响；本机端与远程端行为一致（受权限分级约束） | P1 | 大 | |
+| FR-XDEV-02 | 本机与远程并用 | 一个端可同时打开本机和远程设备上的项目，在同一侧栏并列显示并标明所属设备；远程项目有明显视觉区分，防止误操作。可用范围受 FR-XDEV-10、FR-XDEV-11 约束 | P2 | 大 | |
+| FR-XDEV-03 | 项目独占 | 同一时刻一个项目只能被一个端持有。持有者独占该项目下所有会话的写类操作（发送、停止、审批、撤回、分叉、重试、改名、删除、文件保存、终端输入），其他端不能执行；互相包含的目录视为同一占用范围 | P1 | 大 | |
+| FR-XDEV-04 | 持有的获取与释放 | 打开项目时获取，不是添加到侧栏时；关闭项目或退出应用时释放。释放不终止运行中的会话，agent 继续在设备上运行；存在待审批时，释放前告知数量 | P1 | 中 | |
+| FR-XDEV-05 | 断线容忍 | 短暂断线不丢持有，恢复后无需重新操作；超过容忍时间后，项目显示“持有者离线”。容忍时长详设阶段定 | P1 | 中 | |
+| FR-XDEV-06 | 接管 | 有操作权限的端可接管他端持有的项目，无需原持有者同意。接管前确认并展示影响（运行中会话数、待审批数）；原持有者收到明确通知并转为只读；运行中任务、待审批、排队消息原样交给新持有者；持有者离线时可直接接管；短时间内被接管的一方不能立即反向接管；原持有者在断线期间被接管，重连后转只读并收到通知 | P1 | 大 | |
+| FR-XDEV-07 | 失效操作拒绝 | 被接管或释放后，原持有者仍发出的操作必须被拒绝并明确提示，不产生任何写入；该端界面自动转只读 | P1 | 中 | |
+| FR-XDEV-08 | 占用状态可见 | 未持有的端能看到项目状态（空闲 / 本端持有 / 他端持有 / 持有者离线）和会话摘要（标题、状态、更新时间），看不到会话内容，入口是“接管” | P1 | 小 | |
+| FR-XDEV-09 | 旁观 | 未持有的端可只读查看会话内容，不需要持有，也不影响持有者 | P2 | 中 | |
+| FR-XDEV-10 | 远程接入开关 | 设备可允许远程端接入；默认关闭，只能在本机开启，可随时停止 | P2 | 大 | |
+| FR-XDEV-11 | 配对与授权 | 通过地址或二维码配对；每个远程端单独授权、可单独撤销；停止接入后全部授权失效，重新开启需重新配对 | P2 | 中 | |
+| FR-XDEV-12 | 权限分级 | 本机端为管理级；远程端按设备授予“旁观”或“操作”。操作档可持有项目、发送、停止、答审批、撤回。以下仅限本机：设置与凭证、添加项目与项目信任、开启完全访问、终端、删除会话 | P2 | 大 | |
+| FR-XDEV-13 | 项目开放清单 | 设备的本机用户指定哪些项目允许远程访问，默认为空；远程端只能从清单中选择项目，不能浏览设备的其他目录；取消开放时，远程端已打开的项目收到失效提示 | P2 | 中 | |
+| FR-XDEV-14 | 连接远程设备 | 桌面端可添加、重命名、删除远程设备并配对；显示在线 / 重连中 / 离线；断线自动重连，断线期间相关项目只读并明示 | P2 | 大 | |
+| FR-XDEV-15 | 已连接端管理 | 设备侧列出当前连接的端（名称、来源、权限档、最近活跃、持有的项目），可踢出；踢出即释放其持有 | P2 | 小 | |
+| FR-XDEV-16 | 敏感信息保护 | 远程端拿不到凭证、设备上的本地绝对路径和与远程展示无关的内部信息 | P2 | 中 | |
+| FR-XDEV-17 | 远程操作审计 | 远程写操作按条记录时间、来源端、操作与结果，不含凭证与会话内容 | P2 | 小 | |
+| FR-XDEV-18 | 操作幂等 | 发往设备的写类操作携带端生成的请求标识，设备在短时间内去重；断线重发与接管瞬间的并发操作最多生效一次 | P1 | 中 | |
 
 # 十三、数据与持久化（DATA）
 
@@ -246,143 +267,25 @@
 
 ---
 
-# 附录 A：Percho 组件与需求映射
-
-## 渲染层 `components/chat/`
-
-| 组件 | 对应需求 |
-|---|---|
-| MessageList | FR-CHAT-01、FR-CHAT-17 |
-| MessageItem、AssistantMessage、UserMessage、UserMessageText | FR-CHAT-09、FR-CHAT-22 |
-| Markdown、CodeBlockStatic、MermaidBlock、markdown-registry、markdown-link | FR-CHAT-02、FR-CHAT-04、FR-CHAT-05、FR-FILES-06 |
-| MetaGroup、meta-summary-label | FR-CHAT-07 |
-| ToolCallCard、tool-label | FR-CHAT-06 |
-| TurnDiffChip | FR-CHAT-08、FR-FILES-05 |
-| SubagentRunCard、SubagentBackButton、subagent-back-offset | FR-CHAT-18、FR-SESS-11 |
-| TodoPanel、todo-anchor、use-todo-anchor | FR-CHAT-19 |
-| ChannelSubscriptionPill、channel-pill-presence | FR-CHAT-20 |
-| CenterOrb、center-orb-draw、PreviewTicker、StreamingMarquee、use-shown-working、use-sweep-highlight、WordmarkConstruct | FR-CHAT-21、FR-CHAT-03、FR-SHELL-07 |
-| ErrorNote、RetryNote | FR-CHAT-13、FR-CHAT-14 |
-| SystemMessage | FR-CHAT-15、FR-CHAT-16 |
-| ImagePreview、history-image/*、history-image-layout | FR-CHAT-11 |
-| SelectionToolbar | FR-CHAT-12 |
-| message-actions | FR-CHAT-10 |
-| mount-window、activity-ticker | FR-CHAT-17 |
-| EmptyState、CornerStack、corner-stack-layout | FR-NAV-11、FR-PLUG-02 |
-
-## 渲染层 `components/composer/`
-
-| 组件 | 对应需求 |
-|---|---|
-| Composer、use-composer-send、send-guard | FR-COMPOSE-01、FR-COMPOSE-03 |
-| QueueBar | FR-COMPOSE-02 |
-| AtMenu、use-at-completion、at-files、drop-files | FR-COMPOSE-04、FR-COMPOSE-09 |
-| SlashMenu、use-slash-menu、slash-filter、slash-label | FR-COMPOSE-05 |
-| ModelPicker、model-filter | FR-COMPOSE-06 |
-| ThinkingSlider、thinking | FR-COMPOSE-07 |
-| PermissionPicker | FR-COMPOSE-08 |
-| ImageTray、AttachmentChip、image-attachment、image-fit | FR-COMPOSE-09 |
-| QuoteChip、quote | FR-COMPOSE-10 |
-| ContextRing | FR-COMPOSE-11 |
-| SendErrorBar、send-error | FR-COMPOSE-12 |
-| CommandTracksBar | FR-EXT-01 |
-
-## 渲染层 `components/sidebar/`、`components/session/`
-
-| 组件 | 对应需求 |
-|---|---|
-| Sidebar、SidebarHeader、SidebarFooter、SidebarResizeHandle | FR-NAV-03、FR-NAV-08、FR-NAV-09 |
-| ProjectSection、ProjectRow、ProjectMenu、ProjectBranchPicker | FR-NAV-01、FR-NAV-02 |
-| RecentSection、recent-sessions、recent-session-dwell、use-recent-session-dwell | FR-NAV-04 |
-| SessionRow、SessionMenu、SidebarSessionList、SidebarGroup、useExpandedGroups、useSidebarBatching、sidebar-groups、sidebar-visible-count、session-status | FR-NAV-05、FR-NAV-06、FR-SESS-12 |
-| TopBar | FR-NAV-10 |
-| DockSlot、ApprovalDock | FR-PERM-01、FR-PERM-10 |
-| InteractionDock | FR-EXT-01 |
-| TrustDialog | FR-PERM-09 |
-| RenamePopover、session-menu | FR-SESS-05、FR-SESS-04 |
-
-## 渲染层其余目录
-
-| 目录或组件 | 对应需求 |
-|---|---|
-| `components/files/`（FileTree、FileEditor、FilesPanel、monaco-setup、seti-icons、monaco-metrics） | FR-FILES-01、FR-FILES-02、FR-FILES-03 |
-| `components/diff/`（DiffSidebar、DiffFileCard） | FR-FILES-04 |
-| `components/terminal/`（TerminalDock、TerminalView） | FR-TERM-01、FR-TERM-04、FR-TERM-05 |
-| `components/settings/`（GeneralPanel、AppearancePanel、TerminalPanel、AboutPanel、SkillsPanel、LanObserverPanel、UiPluginsSection、UpdateHelp、providers/*、extensions/*、mcp/*） | FR-SET-01 至 FR-SET-10、FR-EXT-14、FR-EXT-15、FR-EXT-16、FR-LAN-01、FR-PLUG-06、FR-SHELL-09 |
-| `components/ui/`（Button、Switch、Tooltip、Dropdown、ContextMenu、ConfirmDialog、QuitConfirmDialog、FilePathMenu、place-menu） | FR-SHELL-02 及各需求的通用控件 |
-| `plugins/`（Slot、RegionHost、PluginBoundary、host-api、loader、registry、slots、env） | FR-PLUG-01 至 FR-PLUG-07 |
-| `stores/`（sessions、transcript、projects、drafts、files、mcp、settings、terminal、theme、toasts、ui、ui-preferences、ui-plugins、update、catalog、channel-subscriptions、command-tracks、event-conflator、provider-login、session-history、session-loading、session-navigation、session-retry、subagent-return、app-quit） | 贯穿全部界面需求；对应 facet 的 client-core 与界面状态层 |
-| `lib/`（session-gc、session-gc-run、use-session-gc、session-loading、session-navigation、session-visibility、session-page-slide、active-cwd、diagnostics、error-retry、error-text、path-display、code-lang、toggle-in-list、typography、use-edge-fade、daily、sidebar-width 等） | FR-SESS-10、FR-SESS-11、FR-CHAT-17、FR-SHELL-05、FR-SHELL-12、FR-SHELL-11 |
-
-## 主进程 `main/`
-
-| 模块 | 对应需求 |
-|---|---|
-| window、window-bounds | FR-SHELL-01 |
-| updater、update-policy、update-diagnostics、lan-icon | FR-SHELL-09、FR-SHELL-10 |
-| renderer-watchdog、console-dedup | FR-SHELL-08、FR-SHELL-12 |
-| fix-path、dev-agent-dir | FR-SHELL-11、FR-DATA-07 |
-| background、ui-state | FR-SHELL-03、FR-DATA-02 |
-| git、path-target、daily、pi-package-dir | FR-NAV-02、FR-FILES-06、FR-SESS-13、FR-EXT-15 |
-| lan | FR-LAN-01 至 FR-LAN-05 |
-| `terminal/` | FR-TERM-01 至 FR-TERM-05 |
-| `ui-plugins/` | FR-PLUG-04 至 FR-PLUG-07 |
-| `ipc/`（invoke、send、sessions、settings、files、terminal、lan、packages、ui-plugins、extension-dialogs） | 全部跨进程接口 |
-
-## 业务层 `backend/`
-
-| 模块 | 对应需求 |
-|---|---|
-| pi-backend、session/registry、session/single-flight | FR-SESS-01 至 FR-SESS-03 |
-| session/messages、session/event-slim、session/hydration-gate | FR-SESS-02、FR-DATA-05 |
-| session/meta、session/rename、session/naming | FR-SESS-05、FR-NAV-05 |
-| session/shutdown、session/stream-guard、session/rates、session/traces、session/trace | FR-EXT-17、FR-SHELL-12、FR-DATA-06 |
-| session/ui-context、session/extension-dialog-host | FR-EXT-01 至 FR-EXT-04 |
-| permissions/*（gate、pattern、annotations、bash-chain、config、tmp-zone、audit、extension） | FR-PERM-01 至 FR-PERM-08 |
-| project/*（trust、trust-loader、workspace-store、files、builtin-extensions） | FR-PERM-09、FR-FILES-01、FR-COMPOSE-04 |
-| settings/*（settings、model-prefs、login、quota） | FR-SET-01 至 FR-SET-08 |
-| mcp/*、tools/mcp-inventory | FR-EXT-14 |
-| packages/*（catalog、admin） | FR-EXT-15 |
-| tools/todo、todo-reminder | FR-EXT-05、FR-EXT-06 |
-| tools/subagent/* | FR-EXT-09、FR-EXT-10 |
-| tools/show-image | FR-EXT-07 |
-| tools/webfetch/* | FR-EXT-08 |
-| tools/context-evaporation/* | FR-EXT-11 |
-| tools/compaction-guard/* | FR-EXT-12 |
-| tools/channel-watch/* | FR-EXT-13 |
-| lan/*（server、projector、sanitize、config、audit） | FR-LAN-01 至 FR-LAN-05 |
-| json-store、emitter、log、slash-commands、channel-subscriptions | FR-DATA-03、FR-DATA-04、FR-SHELL-12、FR-COMPOSE-05、FR-CHAT-20 |
-
-## 共享层 `shared/`
-
-| 模块 | 对应需求 |
-|---|---|
-| ipc-channels、ipc | 全部跨进程接口 |
-| session、errors、skill-invocation、todo、thinking、subagent | FR-CHAT-13、FR-COMPOSE-05 等 |
-| transcript/*（reducer、mapping、chat-rows、turn-files、turn-timings、meta-summary、parse-patch、pending-user、llm-errors、helpers、types） | FR-CHAT-01 至 FR-CHAT-08、FR-DATA-06、FR-NFR-06 |
-| model-visibility、settings、mcp、terminal、typography、sidebar、recent-sessions、project-files、packages、ui-plugins、lan、extension-dialog、channel-subscriptions、update、update-diagnostics、marquee-motion | 对应各域界面侧规则与常量 |
-
----
-
-# 附录 B：取舍候选
+# 附录 A：取舍候选
 
 以下功能在维护成本上占比明显，需要在详细设计前给出保留或移除的结论。
 
 | 候选 | 影响范围 | 保留的收益 | 移除或简化的代价 |
 |---|---|---|---|
-| UI 插件体系 | FR-PLUG-01 至 07，宿主接口、构建链路、内置与示例插件 | 第三方与 agent 可自行扩展界面；桌宠一类轻量增强靠它实现 | 需要放弃整块扩展能力；若只保留区域挂载可保留少量装饰能力 |
-| 跨设备访问 | FR-LAN-01 至 05，第二套前端与出网清洗 | 手机查看会话、远程应答审批 | 少维护一个前端应用与一套清洗规则 |
+| UI 插件体系 | FR-PLUG-01 至 07，宿主接口、构建链路、内置与示例插件 | 插件可替换界面槽位、在固定区域挂载内容，界面扩展不必改主程序 | 放弃整块界面扩展能力；若只保留区域挂载可保留少量装饰能力 |
+| 跨设备访问 | FR-XDEV-01 至 18，设备侧占用仲裁、端清单与配对授权、出网裁剪与审计 | 手机与另一台电脑能查看并接管设备上的工作，端只是入口 | 放弃多端接入，端与设备合并，会话只能在本机操作；但项目独占与失效拒绝是设备托管架构的前提，移除后 server 的多端模型不成立 |
 | 内建终端 | FR-TERM-01 至 05，伪终端与原生模块 | 不切窗口即可执行命令 | 需要用户自备终端；原生模块的跨平台编译问题一并消失 |
-| 文件面板与编辑器 | FR-FILES-01 至 03，编辑器依赖约 75MB | 应用内查看与小幅修改 | 与对话里的差异视图、路径动作有重叠，可只保留只读查看 |
+| 文件面板与编辑器 | FR-FILES-01 至 03，编辑器依赖体积较大 | 应用内查看与小幅修改 | 与对话里的差异视图、路径动作有重叠，可只保留只读查看 |
 | 社区包管理 | FR-EXT-15 | 应用内安装扩展 | 与命令行工具能力重叠，用户可在命令行完成 |
-| 频道协作 | FR-EXT-13 | 多会话自动协作 | 概念抽象、使用者少，占后端代码比例不低 |
+| 频道协作 | FR-EXT-13 | 多会话自动协作 | 概念抽象、使用者少，实现与文档成本偏高 |
 | 日常空间 | FR-SESS-13 | 随手提问的固定工作目录 | 侧栏分组与"最近"规则复杂度的重要来源 |
 | 装饰动画 | FR-CHAT-21、FR-CHAT-03，状态动画与扫光 | 体验质感 | 移除不影响功能，需接受界面观感下降 |
 | 会话导出 | FR-SESS-09 | 归档与分享 | 使用频率待评估 |
 | 多语言 | FR-SHELL-06 | 面向英文用户 | 文案维护成本翻倍 |
 | 自动更新 | FR-SHELL-09、FR-SHELL-10 | 分发闭环 | 用户需手动下载新版本 |
 
-# 附录 C：待讨论清单
+# 附录 B：待讨论清单
 
 详细设计阶段需要逐条定的问题，按优先级排列。
 
@@ -390,7 +293,7 @@
 2. **事件管道**（FR-DATA-05、FR-DATA-06）：事件序号与补齐策略；是否需要按会话独立的传输端口（高频输出场景）。
 3. **扩展能力边界**（FR-EXT-01 至 04）：图形界面支持到哪一步；无法承载的能力如何明确失败。
 4. **权限模型**（FR-PERM-01 至 10）：规则文件格式；命令链求值规则；完全访问与审计的关系。
-5. **跨进程接口形态**（全部）：通道表的组织方式；运行时校验放在哪一层；事件与调用的比例。
+5. **端与设备之间的接口形态**（全部）：帧格式与二进制通道；请求标识与失效判定的位置；通道表的组织方式；运行时校验放在哪一层；事件与调用的比例。
 6. **状态所有权**（FR-DATA-*、FR-SESS-10）：哪份数据是权威、谁负责清理；自动卸载的判定条件。
 7. **界面状态结构**（FR-CHAT-*、FR-COMPOSE-03）：会话级与全局状态的边界；草稿与队列的归属。
 8. **插件体系取舍**（FR-PLUG-*）：保留几个槽位；宿主接口开放到哪一步；是否只支持内置插件。

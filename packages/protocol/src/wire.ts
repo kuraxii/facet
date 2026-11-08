@@ -121,8 +121,12 @@ export interface RequestParams {
 	};
 	/** 打开已有会话并返回初始快照。 */
 	openSession: { sessionFile: string; cwd?: string };
-	/** 从会话的某条条目分叉出新会话，返回新会话的初始快照。 */
-	forkSession: { sessionFile: string; entryId: string; cwd?: string };
+	/**
+	 * 从会话的某条消息分叉出新会话，返回新会话的初始快照。
+	 *
+	 * 历史消息用 entryId 定位；本次连接产生的消息用 messageId，由设备在写盘之后换算成条目。
+	 */
+	forkSession: { sessionFile: string; entryId?: string; messageId?: string; cwd?: string };
 	/** 取会话当前状态。 */
 	snapshot: { sessionId: string };
 	/**

@@ -12,32 +12,30 @@ import type {
 	ModelRuntime,
 	SessionEntry,
 } from "@earendil-works/pi-coding-agent";
-import { toAgentMessage, toAgentMessages, toAgentModelInfo } from "./convert.ts";
-import { toAgentEvents } from "./events.ts";
 import type {
-	AgentApprovalDecision,
-	AgentApprovalHandler,
-	AgentApprovalRequest,
-	AgentContextUsage,
-	AgentEntry,
-	AgentEntryKind,
-	AgentEvent,
-	AgentEventListener,
-	AgentImageBlock,
-	AgentMessage,
-	AgentModelInfo,
-	AgentModelMutationOptions,
-	AgentModelRef,
-	AgentPromptOptions,
-	AgentQueuedInput,
-	AgentSnapshot,
-	AgentStats,
-	AgentStatus,
-	AgentToolInfo,
+	ApprovalDecision,
+	ApprovalRequest,
+	ContextUsage,
+	Entry,
+	EntryKind,
+	ImageBlock,
+	Message,
+	ModelInfo,
+	ModelRef,
 	PromptDisposition,
 	QueueDisposition,
+	QueuedInput,
+	SessionEvent,
+	SessionEventListener,
+	SessionSnapshot,
+	SessionStats,
+	SessionStatus,
 	ThinkingLevel,
-} from "./types.ts";
+	ToolInfo,
+} from "@facet/protocol";
+import { toMessage, toMessages, toModelInfo } from "./convert.ts";
+import { toSessionEvents } from "./events.ts";
+import type { ApprovalHandler, ModelMutationOptions, PromptOptions } from "./types.ts";
 
 /** 交给审批网关的调用信息，已脱离 pi 的事件类型。 */
 export interface ToolGateCall {
@@ -93,22 +91,22 @@ export interface PiAgentContext {
 	/** 扩展加载期的错误与警告，格式为「路径: 说明」 */
 	extensionIssues?: string[];
 	/** 工具审批处理函数，缺省时放行所有调用 */
-	approvalHandler?: AgentApprovalHandler;
+	approvalHandler?: ApprovalHandler;
 	/** 内部错误上报，主要是事件监听器与审批处理函数抛出的错误 */
 	onError?: (error: unknown) => void;
 }
 
 /** 把持久化条目转成对外条目，只保留界面需要的字段。 */
-function toAgentEntry(entry: SessionEntry): AgentEntry {
-	const base: AgentEntry = {
+function toEntry(entry: SessionEntry): Entry {
+	const base: Entry = {
 		id: entry.id,
 		parentId: entry.parentId,
-		kind: entry.type as AgentEntryKind,
+		kind: entry.type as EntryKind,
 		timestamp: entry.timestamp,
 	};
 	switch (entry.type) {
 		case "message":
-			return { ...base, message: toAgentMessage(entry.message) };
+			return { ...base, message: toMessage(entry.message) };
 		case "compaction":
 		case "branch_summary":
 			return { ...base, summary: entry.summary };
@@ -129,13 +127,13 @@ export class PiAgent {
 	private readonly modelFallbackMessage: string | undefined;
 	private readonly extensionIssues: string[];
 	private readonly onError: ((error: unknown) => void) | undefined;
-	private readonly listeners = new Set<AgentEventListener>();
+	private readonly listeners = new Set<SessionEventListener>();
 	/** 未应答的审批请求，数量参与状态派生 */
-	private readonly pendingApprovals = new Map<string, AgentApprovalRequest>();
+	private readonly pendingApprovals = new Map<string, ApprovalRequest>();
 	private readonly unsubscribeSession: () => void;
-	private approvalHandler: AgentApprovalHandler | undefined;
+	private approvalHandler: ApprovalHandler | undefined;
 	/** 已派生的状态，只在变化时对外发事件 */
-	private status: AgentStatus = "idle";
+	private status: SessionStatus = "idle";
 	private disposed = false;
 
 	/** 构造后立即订阅，保证首次 prompt 之前的运行不会漏事件。 */
@@ -169,7 +167,7 @@ export class PiAgent {
 		return this.session.systemPrompt;
 	}
 
-	get currentStatus(): AgentStatus {
+	get currentStatus(): SessionStatus {
 		return this.status;
 	}
 
@@ -192,7 +190,7 @@ export class PiAgent {
 	}
 
 	/** 订阅事件，返回取消订阅函数。多个订阅方互不影响。 */
-	subscribe(listener: AgentEventListener): () => void {
+	subscribe(listener: SessionEventListener): () => void {
 		this.listeners.add(listener);
 		return () => {
 			this.listeners.delete(listener);
@@ -200,7 +198,7 @@ export class PiAgent {
 	}
 
 	/** 替换审批网关。已在等待的请求不受影响，新调用读取新值。 */
-	setApprovalHandler(handler: AgentApprovalHandler | undefined): void {
+	setApprovalHandler(handler: ApprovalHandler | undefined): void {
 		this.approvalHandler = handler;
 	}
 
@@ -215,7 +213,7 @@ export class PiAgent {
 		if (!handler) {
 			return undefined;
 		}
-		const request: AgentApprovalRequest = {
+		const request: ApprovalRequest = {
 			id: randomUUID(),
 			callId: call.toolCallId,
 			toolName: call.toolName,
@@ -226,7 +224,7 @@ export class PiAgent {
 		this.pendingApprovals.set(request.id, request);
 		this.emit({ type: "approval_request", request });
 		this.refreshStatus();
-		let decision: AgentApprovalDecision;
+		let decision: ApprovalDecision;
 		try {
 			const outcome = await handler(request);
 			decision =
@@ -256,7 +254,7 @@ export class PiAgent {
 	 * 会话正在运行时必须指定投递方式，缺省直接拒绝，避免消息去向不明。
 	 * 返回值说明这次输入是被扩展消费、排队，还是开启了运行。
 	 */
-	async prompt(text: string, options: AgentPromptOptions = {}): Promise<PromptDisposition> {
+	async prompt(text: string, options: PromptOptions = {}): Promise<PromptDisposition> {
 		this.assertAlive();
 		if (this.session.isStreaming && !options.streamingBehavior) {
 			throw new Error("prompt rejected: the session is streaming and no streamingBehavior was given");
@@ -273,12 +271,12 @@ export class PiAgent {
 	}
 
 	/** 排队一条消息，在当前助手回合的工具调用执行完后插入。 */
-	async steer(text: string, images?: AgentImageBlock[]): Promise<QueueDisposition> {
+	async steer(text: string, images?: ImageBlock[]): Promise<QueueDisposition> {
 		return await this.session.steer(text, images);
 	}
 
 	/** 排队一条消息，在本轮全部工作完成后插入。 */
-	async followUp(text: string, images?: AgentImageBlock[]): Promise<QueueDisposition> {
+	async followUp(text: string, images?: ImageBlock[]): Promise<QueueDisposition> {
 		return await this.session.followUp(text, images);
 	}
 
@@ -293,11 +291,11 @@ export class PiAgent {
 	}
 
 	/** 清空排队并返回其中内容，供界面还原到输入框。 */
-	clearQueue(): AgentQueuedInput {
+	clearQueue(): QueuedInput {
 		return this.session.clearQueue();
 	}
 
-	queued(): AgentQueuedInput {
+	queued(): QueuedInput {
 		return {
 			steering: [...this.session.getSteeringMessages()],
 			followUp: [...this.session.getFollowUpMessages()],
@@ -305,13 +303,13 @@ export class PiAgent {
 	}
 
 	/** 切换模型。pi 不发模型变更事件，这里主动补发，保证订阅方只有一个状态来源。 */
-	async setModel(ref: AgentModelRef, options: AgentModelMutationOptions = {}): Promise<AgentModelInfo> {
+	async setModel(ref: ModelRef, options: ModelMutationOptions = {}): Promise<ModelInfo> {
 		const model = this.modelRuntime.getModel(ref.provider, ref.id);
 		if (!model) {
 			throw new Error(`unknown model: ${ref.provider}/${ref.id}`);
 		}
 		await this.session.setModel(model, { persist: options.persist });
-		const info = toAgentModelInfo(model);
+		const info = toModelInfo(model);
 		this.emit({ type: "model", model: info });
 		return info;
 	}
@@ -319,25 +317,25 @@ export class PiAgent {
 	/** 在可用模型间循环切换。只有一个可用模型时返回空，界面据此关闭循环入口。 */
 	async cycleModel(
 		direction: "forward" | "backward" = "forward",
-		options: AgentModelMutationOptions = {},
-	): Promise<AgentModelInfo | undefined> {
+		options: ModelMutationOptions = {},
+	): Promise<ModelInfo | undefined> {
 		const result = await this.session.cycleModel(direction, { persist: options.persist });
 		if (!result) {
 			return undefined;
 		}
-		const info = toAgentModelInfo(result.model);
+		const info = toModelInfo(result.model);
 		this.emit({ type: "model", model: info });
 		return info;
 	}
 
 	/** 设置思考档位，超出模型能力时会被夹紧。档位变化由 pi 的会话事件发出。 */
-	setThinkingLevel(level: ThinkingLevel, options: AgentModelMutationOptions = {}): void {
+	setThinkingLevel(level: ThinkingLevel, options: ModelMutationOptions = {}): void {
 		this.session.setThinkingLevel(level, { persist: options.persist });
 	}
 
-	model(): AgentModelInfo | undefined {
+	model(): ModelInfo | undefined {
 		const model = this.session.model;
-		return model ? toAgentModelInfo(model) : undefined;
+		return model ? toModelInfo(model) : undefined;
 	}
 
 	thinkingLevel(): ThinkingLevel {
@@ -355,7 +353,7 @@ export class PiAgent {
 	}
 
 	/** 全部已注册工具的清单，附带是否激活 */
-	tools(): AgentToolInfo[] {
+	tools(): ToolInfo[] {
 		const active = new Set(this.session.getActiveToolNames());
 		return this.session.getAllTools().map((tool) => ({
 			name: tool.name,
@@ -396,8 +394,8 @@ export class PiAgent {
 	}
 
 	/** 当前活跃分支的消息，已按压缩结果重建。完整历史用 entries 读取。 */
-	messages(): AgentMessage[] {
-		return toAgentMessages(this.session.messages);
+	messages(): Message[] {
+		return toMessages(this.session.messages);
 	}
 
 	/**
@@ -406,25 +404,25 @@ export class PiAgent {
 	 * 条目 id 稳定且只追加，传入上次见过的 id 即可增量拉取，跨进程重启仍然有效。
 	 * leafId 指出活跃分支的末端，用于判断分支是否移动。
 	 */
-	entries(since?: string): { entries: AgentEntry[]; leafId: string | null } {
+	entries(since?: string): { entries: Entry[]; leafId: string | null } {
 		const all = this.session.sessionManager.getEntries();
 		const leafId = this.session.sessionManager.getLeafId();
 		if (since === undefined) {
-			return { entries: all.map(toAgentEntry), leafId };
+			return { entries: all.map(toEntry), leafId };
 		}
 		const index = all.findIndex((entry) => entry.id === since);
 		if (index < 0) {
 			throw new Error(`unknown session entry: ${since}`);
 		}
-		return { entries: all.slice(index + 1).map(toAgentEntry), leafId };
+		return { entries: all.slice(index + 1).map(toEntry), leafId };
 	}
 
-	contextUsage(): AgentContextUsage | undefined {
+	contextUsage(): ContextUsage | undefined {
 		return this.session.getContextUsage();
 	}
 
 	/** 统计覆盖整个会话，含已被压缩掉的历史，因此 token 与成本反映实际计费。 */
-	stats(): AgentStats {
+	stats(): SessionStats {
 		const stats = this.session.getSessionStats();
 		return {
 			sessionId: stats.sessionId,
@@ -441,7 +439,7 @@ export class PiAgent {
 	}
 
 	/** 新接入方一次拿到的完整状态，不含消息体，历史走 entries。 */
-	snapshot(): AgentSnapshot {
+	snapshot(): SessionSnapshot {
 		return {
 			id: this.id,
 			file: this.file,
@@ -491,7 +489,7 @@ export class PiAgent {
 	 *
 	 * 审批优先于压缩与运行：等待审批时运行仍在进行，若先判运行会看不到审批态。
 	 */
-	private computeStatus(): AgentStatus {
+	private computeStatus(): SessionStatus {
 		if (this.pendingApprovals.size > 0) {
 			return "awaiting_approval";
 		}
@@ -516,14 +514,14 @@ export class PiAgent {
 
 	/** 一个 pi 事件可能转成多条对外事件，也可能只用于触发状态刷新。 */
 	private handleSessionEvent(event: AgentSessionEvent): void {
-		for (const mapped of toAgentEvents(event)) {
+		for (const mapped of toSessionEvents(event)) {
 			this.emit(mapped);
 		}
 		this.refreshStatus();
 	}
 
 	/** 逐个通知订阅方。单个订阅方抛错只上报，不影响其余订阅方收到事件。 */
-	private emit(event: AgentEvent): void {
+	private emit(event: SessionEvent): void {
 		for (const listener of [...this.listeners]) {
 			try {
 				listener(event);

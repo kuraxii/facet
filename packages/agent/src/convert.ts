@@ -8,20 +8,20 @@ import type { AgentMessage as PiMessage } from "@earendil-works/pi-agent-core";
 import type {
 	ImageContent,
 	Model,
+	Usage as PiUsage,
 	TextContent,
 	ThinkingContent,
 	ToolCall,
-	Usage,
 } from "@earendil-works/pi-ai";
 import type {
-	AgentAssistantMessage,
-	AgentContentBlock,
-	AgentInputBlock,
-	AgentMessage,
-	AgentModelInfo,
-	AgentUsage,
+	AssistantMessage,
+	ContentBlock,
+	InputBlock,
 	InputModality,
-} from "./types.ts";
+	Message,
+	ModelInfo,
+	Usage,
+} from "@facet/protocol";
 
 /**
  * pi 的消息联合。
@@ -64,11 +64,11 @@ function textOf(content: string | (TextContent | ImageContent)[]): string {
 }
 
 /** 转成用户可发送的内容块。空字符串不产生空文本块，避免界面上出现空行。 */
-function toInputBlocks(content: string | (TextContent | ImageContent)[]): AgentInputBlock[] {
+function toInputBlocks(content: string | (TextContent | ImageContent)[]): InputBlock[] {
 	if (typeof content === "string") {
 		return content.length > 0 ? [{ type: "text", text: content }] : [];
 	}
-	const blocks: AgentInputBlock[] = [];
+	const blocks: InputBlock[] = [];
 	for (const block of content) {
 		if (block.type === "text") {
 			blocks.push({ type: "text", text: block.text });
@@ -82,8 +82,8 @@ function toInputBlocks(content: string | (TextContent | ImageContent)[]): AgentI
 /** 转成助手内容块，保留思考块与工具调用块。 */
 function toContentBlocks(
 	content: (TextContent | ImageContent | ThinkingContent | ToolCall)[],
-): AgentContentBlock[] {
-	const blocks: AgentContentBlock[] = [];
+): ContentBlock[] {
+	const blocks: ContentBlock[] = [];
 	for (const block of content) {
 		if (block.type === "text") {
 			blocks.push({ type: "text", text: block.text });
@@ -99,7 +99,7 @@ function toContentBlocks(
 }
 
 /** 用量转换。缺少推理 token 时补零，其余字段原样保留。 */
-export function toAgentUsage(usage: Usage): AgentUsage {
+export function toUsage(usage: PiUsage): Usage {
 	return {
 		input: usage.input,
 		output: usage.output,
@@ -118,7 +118,7 @@ export function toAgentUsage(usage: Usage): AgentUsage {
 }
 
 /** 模型信息转换。输入模态收敛到文本与图片两种，其余取值丢弃。 */
-export function toAgentModelInfo(model: Model<any>): AgentModelInfo {
+export function toModelInfo(model: Model<any>): ModelInfo {
 	return {
 		provider: model.provider,
 		id: model.id,
@@ -140,13 +140,13 @@ export function toAgentModelInfo(model: Model<any>): AgentModelInfo {
 }
 
 /** 助手消息转换。model 优先取提供方回报的实际响应模型，虚拟模型路由时与请求的模型不同。 */
-function toAssistantMessage(message: Extract<PiMessage, { role: "assistant" }>): AgentAssistantMessage {
+function toAssistantMessage(message: Extract<PiMessage, { role: "assistant" }>): AssistantMessage {
 	return {
 		role: "assistant",
 		content: toContentBlocks(message.content),
 		provider: message.provider,
 		model: message.responseModel ?? message.model,
-		usage: toAgentUsage(message.usage),
+		usage: toUsage(message.usage),
 		stopReason: message.stopReason,
 		errorMessage: message.errorMessage,
 		timestamp: message.timestamp,
@@ -154,7 +154,7 @@ function toAssistantMessage(message: Extract<PiMessage, { role: "assistant" }>):
 }
 
 /** 单条消息转换。未知角色降级为占位消息，保证扩展新增角色时不会中断事件流。 */
-export function toAgentMessage(message: PiMessageLike): AgentMessage {
+export function toMessage(message: PiMessageLike): Message {
 	switch (message.role) {
 		case "system":
 			return { role: "system", content: textOf(message.content), timestamp: message.timestamp };
@@ -215,13 +215,13 @@ export function toAgentMessage(message: PiMessageLike): AgentMessage {
 	}
 }
 
-export function toAgentMessages(messages: readonly PiMessageLike[]): AgentMessage[] {
-	return messages.map(toAgentMessage);
+export function toMessages(messages: readonly PiMessageLike[]): Message[] {
+	return messages.map(toMessage);
 }
 
 /** 工具输出转换。内容不是数组时按空内容处理，工具实现可能省略 content 字段。 */
-export function toAgentToolOutput(result: { content?: unknown; details?: unknown; isError?: boolean }): {
-	content: AgentInputBlock[];
+export function toToolOutput(result: { content?: unknown; details?: unknown; isError?: boolean }): {
+	content: InputBlock[];
 	details?: unknown;
 	isError?: boolean;
 } {

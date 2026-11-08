@@ -5,8 +5,8 @@
  * 事件按会话顺序到达，订阅方不需要再排序。
  */
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
-import { toAgentMessage, toAgentMessages, toAgentToolOutput } from "./convert.ts";
-import type { AgentEntryKind, AgentEvent } from "./types.ts";
+import type { EntryKind, SessionEvent } from "@facet/protocol";
+import { toMessage, toMessages, toToolOutput } from "./convert.ts";
 
 /** 取出流式增量。pi 的 message_update 还包含 start、end 等非增量变体，那些不对外输出。 */
 function deltaFor(
@@ -29,7 +29,7 @@ function deltaFor(
 }
 
 /** 转换一条会话事件，返回零到多条对外事件。 */
-export function toAgentEvents(event: AgentSessionEvent): AgentEvent[] {
+export function toSessionEvents(event: AgentSessionEvent): SessionEvent[] {
 	switch (event.type) {
 		case "agent_start":
 			return [{ type: "run_start" }];
@@ -43,12 +43,12 @@ export function toAgentEvents(event: AgentSessionEvent): AgentEvent[] {
 			return [
 				{
 					type: "turn_end",
-					message: toAgentMessage(event.message),
-					toolResults: toAgentMessages(event.toolResults),
+					message: toMessage(event.message),
+					toolResults: toMessages(event.toolResults),
 				},
 			];
 		case "message_start":
-			return [{ type: "message_start", message: toAgentMessage(event.message) }];
+			return [{ type: "message_start", message: toMessage(event.message) }];
 		case "message_update": {
 			const delta = deltaFor(event);
 			if (!delta) {
@@ -64,7 +64,7 @@ export function toAgentEvents(event: AgentSessionEvent): AgentEvent[] {
 			];
 		}
 		case "message_end":
-			return [{ type: "message_end", message: toAgentMessage(event.message) }];
+			return [{ type: "message_end", message: toMessage(event.message) }];
 		case "tool_execution_start":
 			return [
 				{
@@ -81,7 +81,7 @@ export function toAgentEvents(event: AgentSessionEvent): AgentEvent[] {
 					type: "tool_update",
 					callId: event.toolCallId,
 					toolName: event.toolName,
-					output: toAgentToolOutput(event.partialResult),
+					output: toToolOutput(event.partialResult),
 					parentCallId: event.parentToolCallId,
 				},
 			];
@@ -91,7 +91,7 @@ export function toAgentEvents(event: AgentSessionEvent): AgentEvent[] {
 					type: "tool_end",
 					callId: event.toolCallId,
 					toolName: event.toolName,
-					output: toAgentToolOutput(event.result),
+					output: toToolOutput(event.result),
 					isError: event.isError,
 					durationMs: event.durationMs,
 					parentCallId: event.parentToolCallId,
@@ -137,7 +137,7 @@ export function toAgentEvents(event: AgentSessionEvent): AgentEvent[] {
 					type: "entry",
 					entryId: event.entry.id,
 					parentId: event.entry.parentId ?? null,
-					kind: event.entry.type as AgentEntryKind,
+					kind: event.entry.type as EntryKind,
 				},
 			];
 		case "session_info_changed":

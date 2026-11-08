@@ -9,13 +9,18 @@
 		".": "./src/index.ts"
 	},
 	"scripts": {
-		"typecheck": "tsc --noEmit"
+		"typecheck": "tsc --noEmit",
+		"test": "vitest run",
+		"start": "node --experimental-strip-types src/main.ts"
 	},
 	"dependencies": {
 		"@facet/agent": "*",
-		"@facet/protocol": "*"
+		"@facet/protocol": "*",
+		"ws": "^8.18.0"
 	},
 	"devDependencies": {
-		"typescript": "^5.9.0"
+		"@types/ws": "^8.5.13",
+		"typescript": "^5.9.0",
+		"vitest": "^3.2.0"
 	}
 }

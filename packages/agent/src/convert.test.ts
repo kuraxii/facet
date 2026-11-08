@@ -1,22 +1,16 @@
 import { describe, expect, it } from "vitest";
-import {
-	toAgentMessage,
-	toAgentMessages,
-	toAgentModelInfo,
-	toAgentToolOutput,
-	toAgentUsage,
-} from "./convert.ts";
-import { toAgentEvents } from "./events.ts";
+import { toMessage, toMessages, toModelInfo, toToolOutput, toUsage } from "./convert.ts";
+import { toSessionEvents } from "./events.ts";
 
-type PiMessage = Parameters<typeof toAgentMessage>[0];
+type PiMessage = Parameters<typeof toMessage>[0];
 
 function message(value: unknown): PiMessage {
 	return value as PiMessage;
 }
 
-describe("toAgentMessage", () => {
+describe("toMessage", () => {
 	it("把带图片的用户消息转成输入块", () => {
-		const result = toAgentMessage(
+		const result = toMessage(
 			message({
 				role: "user",
 				content: [
@@ -38,13 +32,13 @@ describe("toAgentMessage", () => {
 	});
 
 	it("把字符串内容展开成单个文本块", () => {
-		const result = toAgentMessage(message({ role: "user", content: "你好", timestamp: 1 }));
+		const result = toMessage(message({ role: "user", content: "你好", timestamp: 1 }));
 
 		expect(result).toEqual({ role: "user", content: [{ type: "text", text: "你好" }], timestamp: 1 });
 	});
 
 	it("保留助手的思考块与工具调用块，并优先使用响应模型名", () => {
-		const result = toAgentMessage(
+		const result = toMessage(
 			message({
 				role: "assistant",
 				content: [
@@ -83,7 +77,7 @@ describe("toAgentMessage", () => {
 	});
 
 	it("把工具结果转成可序列化的形状", () => {
-		const result = toAgentMessage(
+		const result = toMessage(
 			message({
 				role: "toolResult",
 				toolCallId: "call-1",
@@ -107,7 +101,7 @@ describe("toAgentMessage", () => {
 	});
 
 	it("保留命令执行消息的退出码与截断标记", () => {
-		const result = toAgentMessage(
+		const result = toMessage(
 			message({
 				role: "bashExecution",
 				command: "ls",
@@ -133,13 +127,13 @@ describe("toAgentMessage", () => {
 	});
 
 	it("对未知角色返回占位消息，不抛出错误", () => {
-		const result = toAgentMessage(message({ role: "artifact", timestamp: 5 }));
+		const result = toMessage(message({ role: "artifact", timestamp: 5 }));
 
 		expect(result).toEqual({ role: "unknown", rawRole: "artifact", timestamp: 5 });
 	});
 
 	it("批量转换保持顺序", () => {
-		const result = toAgentMessages([
+		const result = toMessages([
 			message({ role: "user", content: "a", timestamp: 1 }),
 			message({ role: "user", content: "b", timestamp: 2 }),
 		]);
@@ -152,9 +146,9 @@ describe("toAgentMessage", () => {
 	});
 });
 
-describe("toAgentModelInfo", () => {
+describe("toModelInfo", () => {
 	it("只保留文本与图片两种输入模态", () => {
-		const model = toAgentModelInfo({
+		const model = toModelInfo({
 			id: "claude-sonnet-4",
 			name: "Claude Sonnet 4",
 			api: "anthropic-messages",
@@ -181,9 +175,9 @@ describe("toAgentModelInfo", () => {
 	});
 });
 
-describe("toAgentUsage", () => {
+describe("toUsage", () => {
 	it("缺少推理用量时补零", () => {
-		const usage = toAgentUsage({
+		const usage = toUsage({
 			input: 1,
 			output: 2,
 			cacheRead: 3,
@@ -198,9 +192,9 @@ describe("toAgentUsage", () => {
 	});
 });
 
-describe("toAgentToolOutput", () => {
+describe("toToolOutput", () => {
 	it("过滤掉非文本图片内容", () => {
-		const output = toAgentToolOutput({
+		const output = toToolOutput({
 			content: [
 				{ type: "text", text: "ok" },
 				{ type: "image", data: "BBBB", mimeType: "image/jpeg" },
@@ -219,9 +213,9 @@ describe("toAgentToolOutput", () => {
 	});
 });
 
-describe("toAgentEvents", () => {
+describe("toSessionEvents", () => {
 	it("把文本增量转成消息增量事件", () => {
-		const events = toAgentEvents({
+		const events = toSessionEvents({
 			type: "message_update",
 			message: { role: "assistant", timestamp: 1 },
 			assistantMessageEvent: { type: "text_delta", contentIndex: 2, delta: "hi", partial: {} },
@@ -231,7 +225,7 @@ describe("toAgentEvents", () => {
 	});
 
 	it("忽略不携带增量的消息更新", () => {
-		const events = toAgentEvents({
+		const events = toSessionEvents({
 			type: "message_update",
 			message: { role: "assistant", timestamp: 1 },
 			assistantMessageEvent: { type: "start", partial: {} },
@@ -241,7 +235,7 @@ describe("toAgentEvents", () => {
 	});
 
 	it("把队列变化转成队列事件", () => {
-		const events = toAgentEvents({
+		const events = toSessionEvents({
 			type: "queue_update",
 			steering: ["先停下"],
 			followUp: ["再说这个"],
@@ -251,7 +245,7 @@ describe("toAgentEvents", () => {
 	});
 
 	it("把条目追加转成游标事件", () => {
-		const events = toAgentEvents({
+		const events = toSessionEvents({
 			type: "entry_appended",
 			entry: { type: "message", id: "entry-1", parentId: null, timestamp: "2024-01-01T00:00:00.000Z" },
 		} as never);

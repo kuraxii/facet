@@ -270,7 +270,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		const entries = source.agent.entries().entries;
 		for (let index = entries.length - 1; index >= 0; index -= 1) {
 			const entry = entries[index];
-			if (!entry || entry.kind !== "message" || entry.message === undefined) {
+			if (entry?.kind !== "message" || entry.message === undefined) {
 				continue;
 			}
 			if (entry.message.role !== stamp.role || entry.message.timestamp !== stamp.timestamp) {

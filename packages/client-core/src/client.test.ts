@@ -103,7 +103,7 @@ class FakeTransport implements SessionTransport {
 					let end = this.entries.length;
 					if (cursor !== undefined) {
 						const index = this.entries.findIndex((entry) => entry.id === cursor);
-						end = index < 0 ? 0 : index;
+						end = Math.max(index, 0);
 					}
 					const start = Math.max(0, end - size);
 					const window = this.entries.slice(start, end);

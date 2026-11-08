@@ -348,3 +348,97 @@ body {
 	color: #d7d7db;
 	border-color: #3a3a42;
 }
+
+.part-text {
+	margin: 0 0 6px;
+	font: inherit;
+	font-size: 13px;
+	line-height: 1.55;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.part-text:last-child {
+	margin-bottom: 0;
+}
+
+.part-thinking {
+	margin: 0 0 6px;
+	color: #7a7a84;
+	font-size: 12px;
+}
+
+.part-thinking summary {
+	cursor: pointer;
+	color: #55555d;
+}
+
+.part-thinking pre {
+	margin: 4px 0 0;
+	padding-left: 8px;
+	border-left: 2px solid #24242a;
+	white-space: pre-wrap;
+	font: inherit;
+}
+
+.part-tool {
+	margin: 0 0 6px;
+	border: 1px solid #22222a;
+	border-radius: 6px;
+	background: #0f0f12;
+	font-size: 12px;
+}
+
+.part-tool summary {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	padding: 5px 8px;
+	cursor: pointer;
+}
+
+.part-tool .tool-name {
+	color: #b9b9c2;
+	font-family: ui-monospace, monospace;
+}
+
+.part-tool .tool-status {
+	color: #6c6c74;
+}
+
+.part-tool.status-failed .tool-status {
+	color: #f08a8a;
+}
+
+.part-tool.status-running .tool-status {
+	color: #6ee7a8;
+}
+
+.part-tool .tool-time {
+	margin-left: auto;
+	color: #46464e;
+}
+
+.part-tool pre {
+	margin: 0;
+	padding: 6px 8px;
+	border-top: 1px solid #1d1d21;
+	white-space: pre-wrap;
+	word-break: break-word;
+	font: inherit;
+	font-family: ui-monospace, monospace;
+	color: #9a9aa3;
+}
+
+.divider {
+	margin: 4px 0;
+	padding: 4px 10px;
+	border-left: 2px solid #2a2a30;
+	color: #55555d;
+	font-size: 11px;
+}
+
+.message.kind-error {
+	border-color: #3a2222;
+	background: #1a1214;
+}

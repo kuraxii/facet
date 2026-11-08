@@ -1,4 +1,4 @@
-import { historyEntryId, messageDisplayText, SessionClient } from "@facet/client-core";
+import { type Part, SessionClient, type TranscriptItem, toTranscript } from "@facet/client-core";
 import type { SessionSummary } from "@facet/protocol";
 import { WsTransport } from "@facet/transport/ws";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -25,6 +25,74 @@ type Phase = "connecting" | "ready" | "failed";
 
 function formatTime(value: number): string {
 	return new Date(value).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+}
+
+/** 一段内容。工具调用与思考可以折叠。 */
+function PartBlock({ part }: { part: Part }) {
+	if (part.kind === "text") {
+		return <pre className="part-text">{part.text}</pre>;
+	}
+	if (part.kind === "thinking") {
+		return (
+			<details className="part-thinking">
+				<summary>思考</summary>
+				<pre>{part.text}</pre>
+			</details>
+		);
+	}
+	const summary = part.input === undefined ? "" : JSON.stringify(part.input).slice(0, 200);
+	return (
+		<details className={`part-tool status-${part.status}`} open={part.status === "running"}>
+			<summary>
+				<span className="tool-name">{part.name}</span>
+				<span className="tool-status">
+					{part.status === "running" ? "执行中" : part.status === "failed" ? "失败" : "完成"}
+				</span>
+				{part.durationMs === undefined ? null : <span className="tool-time">{part.durationMs}ms</span>}
+			</summary>
+			{summary.length > 0 ? <pre className="tool-input">{summary}</pre> : null}
+			{part.output === undefined ? null : <pre className="tool-output">{part.output}</pre>}
+		</details>
+	);
+}
+
+/** 一项渲染单元。分界项用一行文字,消息项按内容段排布。 */
+function TranscriptRow({
+	item,
+	canFork,
+	onFork,
+}: {
+	item: TranscriptItem;
+	canFork: boolean;
+	onFork: (messageId: string) => void;
+}) {
+	if (item.kind === "compaction" || item.kind === "branch") {
+		const text = item.parts.map((part) => (part.kind === "text" ? part.text : "")).join("");
+		return (
+			<div className="divider">
+				{item.kind === "compaction" ? "上下文已压缩" : "分支摘要"}：{text.slice(0, 80)}
+			</div>
+		);
+	}
+	return (
+		<article className={`message role-${item.role ?? "tool"} kind-${item.kind}`}>
+			<div className="message-head">
+				<span className="message-role">{item.kind === "error" ? "error" : (item.role ?? "tool")}</span>
+				<span className="message-id">{item.id}</span>
+				{item.isStreaming ? <span className="chip is-live">流式</span> : null}
+				{item.entryId !== undefined || canFork ? (
+					<button type="button" className="fork" onClick={() => onFork(item.id)}>
+						从这里分叉
+					</button>
+				) : null}
+			</div>
+			{item.parts.length === 0 ? (
+				<pre className="part-text">(无内容)</pre>
+			) : (
+				item.parts.map((part) => <PartBlock key={`${item.id}-${part.partId}`} part={part} />)
+			)}
+		</article>
+	);
 }
 
 export function App() {
@@ -91,10 +159,7 @@ export function App() {
 		void client.fork(messageId).then((forked) => setActiveFile(forked.file));
 	}, []);
 
-	const streamingText = useMemo(() => {
-		const last = messages[messages.length - 1];
-		return last?.isStreaming === true ? messageDisplayText(last) : undefined;
-	}, [messages]);
+	const transcript = useMemo(() => (chat ? toTranscript(chat) : []), [chat]);
 
 	void version;
 
@@ -165,28 +230,9 @@ export function App() {
 						</button>
 					) : null}
 
-					{messages.map((message) => {
-						const text = messageDisplayText(message);
-						return (
-							<article key={message.id} className={`message role-${message.message.role}`}>
-								<div className="message-head">
-									<span className="message-role">{message.message.role}</span>
-									<span className="message-id">{message.id}</span>
-									{message.isStreaming ? <span className="chip is-live">流式</span> : null}
-									{historyEntryId(message.id) !== undefined || chat?.isRunning !== true ? (
-										<button type="button" className="fork" onClick={() => forkFrom(message.id)}>
-											从这里分叉
-										</button>
-									) : null}
-								</div>
-								<pre className="message-body">{text.length > 0 ? text : "(无文本内容)"}</pre>
-							</article>
-						);
-					})}
-
-					{streamingText !== undefined ? (
-						<div className="streaming-hint">正在接收:第 {messages.length} 条</div>
-					) : null}
+					{transcript.map((item) => (
+						<TranscriptRow key={item.id} item={item} canFork={chat?.isRunning !== true} onFork={forkFrom} />
+					))}
 				</section>
 
 				{pending.length > 0 ? (

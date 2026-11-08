@@ -12,6 +12,8 @@ import { SessionHub } from "./session-hub.ts";
 /** 设备启动后的句柄。port 为实际监听端口，hostId 是本进程的设备标识。 */
 export interface ServerHandle extends EndpointHandle {
 	readonly hostId: string;
+	/** 实际生效的数据目录 */
+	readonly agentDir: string;
 	/** 会话登记，嵌入方可直接使用 */
 	readonly hub: SessionHub;
 	/** 关闭端点并释放全部会话与运行时 */
@@ -37,6 +39,7 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 	return {
 		...endpoint,
 		hostId,
+		agentDir: runtime.agentDir,
 		hub,
 		close: async () => {
 			await endpoint.close();

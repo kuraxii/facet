@@ -8,6 +8,7 @@ import { startServer } from "./index.ts";
 const server = await startServer();
 const url = `ws://${server.host}:${server.port}/endpoint`;
 console.log(`facet device ${server.hostId} listening on ${url}`);
+console.log(`数据目录 ${server.agentDir}`);
 console.log("按 Ctrl+C 结束");
 
 let closing = false;

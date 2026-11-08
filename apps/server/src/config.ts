@@ -1,8 +1,10 @@
 /**
  * 设备侧配置。
  *
- * 全部来自环境变量，缺省值面向本机嵌入运行：只监听回环地址，端口由系统分配。
+ * 全部来自环境变量，缺省值面向本机嵌入运行：只监听回环地址，端口由系统分配，
+ * 数据写在 facet 自己的目录，与命令行工具的数据目录分开。
  */
+import { DEFAULT_AGENT_DIR } from "@facet/agent";
 
 /** 设备的运行配置。 */
 export interface ServerConfig {
@@ -10,7 +12,7 @@ export interface ServerConfig {
 	host: string;
 	/** 监听端口，0 表示由系统分配 */
 	port: number;
-	/** 全局配置目录，内含凭证与模型配置 */
+	/** 数据目录，内含凭证、模型配置与会话文件；缺省为 facet 的开发目录 */
 	agentDir: string | undefined;
 	/** 会话文件目录，缺省按工作目录分组存放 */
 	sessionDir: string | undefined;
@@ -38,7 +40,7 @@ export function loadServerConfig(env: Record<string, string | undefined> = proce
 	return {
 		host: env.FACET_HOST?.trim() || DEFAULT_HOST,
 		port: readInt(env.FACET_PORT, DEFAULT_PORT),
-		agentDir: env.FACET_AGENT_DIR?.trim() || undefined,
+		agentDir: env.FACET_AGENT_DIR?.trim() || DEFAULT_AGENT_DIR,
 		sessionDir: env.FACET_SESSION_DIR?.trim() || undefined,
 		replayLimit: readInt(env.FACET_REPLAY_LIMIT, DEFAULT_REPLAY_LIMIT) || DEFAULT_REPLAY_LIMIT,
 		hostName: hostName && hostName.length > 0 ? hostName : "facet",

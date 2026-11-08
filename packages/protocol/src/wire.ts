@@ -121,6 +121,8 @@ export interface RequestParams {
 	};
 	/** 打开已有会话并返回初始快照。 */
 	openSession: { sessionFile: string; cwd?: string };
+	/** 从会话的某条条目分叉出新会话，返回新会话的初始快照。 */
+	forkSession: { sessionFile: string; entryId: string; cwd?: string };
 	/** 取会话当前状态。 */
 	snapshot: { sessionId: string };
 	/**
@@ -145,6 +147,7 @@ export interface RequestResults {
 	listSessions: { sessions: SessionSummary[] };
 	createSession: SessionSnapshot;
 	openSession: SessionSnapshot;
+	forkSession: SessionSnapshot;
 	snapshot: SessionSnapshot;
 	entries: { entries: Entry[]; nextCursor: string | undefined };
 	subscribe: SubscribeResult;

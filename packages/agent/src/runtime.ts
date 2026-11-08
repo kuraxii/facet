@@ -10,19 +10,19 @@ import {
 	createAgentSession,
 	DefaultResourceLoader,
 	type ExtensionUIContext,
-	getAgentDir,
 	type InlineExtension,
 	ModelRuntime,
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import type { ModelInfo, ModelRef, ProviderInfo, SessionSummary, ThinkingLevel } from "@facet/protocol";
 import { toModelInfo } from "./convert.ts";
+import { applyAgentDir } from "./paths.ts";
 import { type ApprovalHook, createApprovalExtension, PiAgent } from "./pi-agent.ts";
 import type { ApprovalHandler } from "./types.ts";
 
 /** 运行时的进程级配置。 */
 export interface PiAgentRuntimeOptions {
-	/** 全局配置目录，凭证与模型配置从这里读，缺省为用户目录下的 agent 目录 */
+	/** 全局配置目录，凭证、模型配置与会话文件都放在它下面；缺省为 facet 的开发目录 */
 	agentDir?: string;
 	/** 会话文件目录，缺省按工作目录分组存放 */
 	sessionDir?: string;
@@ -98,7 +98,7 @@ export class PiAgentRuntime {
 
 	/** 建立共享资源。凭证与模型配置的路径由 agentDir 推出。 */
 	static async create(options: PiAgentRuntimeOptions = {}): Promise<PiAgentRuntime> {
-		const agentDir = options.agentDir ?? getAgentDir();
+		const agentDir = applyAgentDir(options.agentDir);
 		const modelRuntime = await ModelRuntime.create({
 			authPath: join(agentDir, "auth.json"),
 			modelsPath: join(agentDir, "models.json"),

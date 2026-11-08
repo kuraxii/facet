@@ -244,6 +244,28 @@ export class SessionClient {
 		return this.transport.dispatch(this.requireOpened().chatChannel, { type: "chat/turnStarted", text });
 	}
 
+	/**
+	 * 从某条历史条目分叉出新会话,并切过去。
+	 *
+	 * 分叉会在设备侧建出一个新会话文件,原会话保持不动。新会话紧接着被打开订阅,
+	 * 否则它会因为没有持有者而在空闲回收的宽限期后关闭。
+	 */
+	async fork(entryId: string): Promise<OpenedSession> {
+		const opened = this.requireOpened();
+		if (opened.file === undefined) {
+			throw new Error("当前会话没有文件,无法分叉");
+		}
+		const forked = await this.transport.request("forkSession", {
+			sessionFile: opened.file,
+			entryId,
+		});
+		if (forked.file === undefined) {
+			throw new Error("分叉出的会话没有文件");
+		}
+		await this.release();
+		return await this.openSession(forked.file);
+	}
+
 	/** 中止当前运行。 */
 	cancel(): number {
 		return this.transport.dispatch(this.requireOpened().chatChannel, { type: "chat/turnCancelled" });

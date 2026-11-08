@@ -269,6 +269,11 @@ export function isHistoryMessageId(id: string): boolean {
 	return id.startsWith(HISTORY_PREFIX);
 }
 
+/** 历史消息对应的会话条目 id,分叉时用它定位。 */
+export function historyEntryId(messageId: string): string | undefined {
+	return messageId.startsWith(HISTORY_PREFIX) ? messageId.slice(HISTORY_PREFIX.length) : undefined;
+}
+
 /** 取消息的纯文本,供列表预览与复制使用。 */
 export function messageText(message: Message): string {
 	switch (message.role) {

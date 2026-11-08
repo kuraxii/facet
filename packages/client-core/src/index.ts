@@ -17,4 +17,10 @@ export type {
 } from "./state.ts";
 export { appendNotice, createChatView, createSessionView } from "./state.ts";
 export type { ChannelGap } from "./store.ts";
-export { isHistoryMessageId, messageDisplayText, messageText, SessionStore } from "./store.ts";
+export {
+	historyEntryId,
+	isHistoryMessageId,
+	messageDisplayText,
+	messageText,
+	SessionStore,
+} from "./store.ts";

@@ -1,4 +1,4 @@
-import { messageDisplayText, SessionClient } from "@facet/client-core";
+import { historyEntryId, messageDisplayText, SessionClient } from "@facet/client-core";
 import type { SessionSummary } from "@facet/protocol";
 import { WsTransport } from "@facet/transport/ws";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -87,6 +87,10 @@ export function App() {
 		void client.loadOlder();
 	}, []);
 
+	const forkFrom = useCallback((entryId: string) => {
+		void client.fork(entryId).then((forked) => setActiveFile(forked.file));
+	}, []);
+
 	const streamingText = useMemo(() => {
 		const last = messages[messages.length - 1];
 		return last?.isStreaming === true ? messageDisplayText(last) : undefined;
@@ -169,6 +173,14 @@ export function App() {
 									<span className="message-role">{message.message.role}</span>
 									<span className="message-id">{message.id}</span>
 									{message.isStreaming ? <span className="chip is-live">流式</span> : null}
+									{(() => {
+										const entryId = historyEntryId(message.id);
+										return entryId === undefined ? null : (
+											<button type="button" className="fork" onClick={() => forkFrom(entryId)}>
+												从这里分叉
+											</button>
+										);
+									})()}
 								</div>
 								<pre className="message-body">{text.length > 0 ? text : "(无文本内容)"}</pre>
 							</article>

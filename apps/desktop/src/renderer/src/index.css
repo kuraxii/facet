@@ -332,3 +332,19 @@ body {
 .notice.level-info {
 	color: #6c6c74;
 }
+
+.message-head .fork {
+	margin-left: auto;
+	padding: 1px 6px;
+	border: 1px solid #2a2a30;
+	border-radius: 999px;
+	background: transparent;
+	color: #6c6c74;
+	font-size: 10px;
+	cursor: pointer;
+}
+
+.message-head .fork:hover {
+	color: #d7d7db;
+	border-color: #3a3a42;
+}

@@ -7,7 +7,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
-import type { PiAgentRuntime } from "@facet/agent";
+import type { PiAgentFactory } from "@facet/agent";
 import {
 	type Action,
 	type ActionFrame,
@@ -23,7 +23,6 @@ import {
 	type SessionSnapshot,
 } from "@facet/protocol";
 import { WebSocket, WebSocketServer } from "ws";
-import { ApprovalBroker } from "./approval-broker.ts";
 import type { ServerConfig } from "./config.ts";
 import {
 	type ActionSink,
@@ -58,7 +57,7 @@ interface Connection {
 
 interface EndpointContext {
 	readonly config: ServerConfig;
-	readonly runtime: PiAgentRuntime;
+	readonly factory: PiAgentFactory;
 	readonly hub: SessionHub;
 	readonly hostId: string;
 	readonly connections: Set<Connection>;
@@ -150,8 +149,7 @@ async function createSession(context: EndpointContext, params: unknown): Promise
 		throw new RequestError("bad_params", "model must be an object");
 	}
 	const modelRecord = model === undefined ? undefined : asObject(model);
-	const broker = new ApprovalBroker();
-	const agent = await context.runtime.createAgent({
+	return await context.hub.createSession({
 		cwd: optionalString(source, "cwd"),
 		model: modelRecord
 			? { provider: requiredString(modelRecord, "provider"), id: requiredString(modelRecord, "id") }
@@ -160,26 +158,13 @@ async function createSession(context: EndpointContext, params: unknown): Promise
 		tools: optionalStringArray(source, "tools"),
 		excludeTools: optionalStringArray(source, "excludeTools"),
 		name: optionalString(source, "name"),
-		approvalHandler: broker.handler,
 	});
-	context.hub.attach(agent, broker);
-	return agent.snapshot();
 }
 
 /** 打开已有会话,模型与工具集从会话记录恢复。 */
 async function openSession(context: EndpointContext, params: unknown): Promise<SessionSnapshot> {
 	const source = asObject(params);
-	const sessionFile = requiredString(source, "sessionFile");
-	const cwd = optionalString(source, "cwd");
-	return await context.hub.openSession(sessionFile, async () => {
-		const approvals = new ApprovalBroker();
-		const agent = await context.runtime.openAgent({
-			sessionFile,
-			cwd,
-			approvalHandler: approvals.handler,
-		});
-		return { agent, approvals };
-	});
+	return await context.hub.openSession(requiredString(source, "sessionFile"), optionalString(source, "cwd"));
 }
 
 /** 应用一条端点派发的动作。返回即表示已受理,设备产生的动作随后从通道推出。 */
@@ -249,7 +234,7 @@ async function handleRequest(
 	switch (method) {
 		case "listSessions": {
 			const source = asObject(params ?? {});
-			return { sessions: await context.runtime.listSessions(optionalString(source, "cwd")) };
+			return { sessions: await context.factory.listSessions(optionalString(source, "cwd")) };
 		}
 		case "createSession":
 			return await createSession(context, params);
@@ -295,10 +280,10 @@ async function handleRequest(
 		}
 		case "models": {
 			const source = asObject(params ?? {});
-			return { models: context.runtime.models(optionalString(source, "providerId")) };
+			return { models: context.factory.models(optionalString(source, "providerId")) };
 		}
 		case "providers":
-			return { providers: context.runtime.providers() };
+			return { providers: context.factory.providers() };
 		default:
 			throw new RequestError("unknown_method", `unknown method: ${method}`);
 	}
@@ -385,13 +370,13 @@ async function handleFrame(context: EndpointContext, connection: Connection, tex
 /** 启动端点监听。返回实际端口,供嵌入方写入自己的握手信息。 */
 export async function startEndpoint(options: {
 	config: ServerConfig;
-	runtime: PiAgentRuntime;
+	factory: PiAgentFactory;
 	hub: SessionHub;
 	hostId: string;
 }): Promise<EndpointHandle> {
 	const context: EndpointContext = {
 		config: options.config,
-		runtime: options.runtime,
+		factory: options.factory,
 		hub: options.hub,
 		hostId: options.hostId,
 		connections: new Set(),

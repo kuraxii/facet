@@ -1,16 +1,16 @@
 /**
  * 会话登记、通道与动作扇出。
  *
- * 一个会话对应一个 PiAgent、一条会话通道与一条对话通道。通道各自定序、各自订阅,
- * 因此只渲染侧栏的端可以只订阅会话通道。多个端可以同时订阅同一通道,
- * 会话释放时统一回收 agent、审批中转与订阅。
+ * 一个会话对应一个 PiAgent、一条会话通道与一条对话通道,这里也是会话的唯一登记处:
+ * 建、开、复用、释放都由它决定。通道各自定序、各自订阅,因此只渲染侧栏的端可以只订阅会话通道;
+ * 多个端可以同时订阅同一通道,会话释放时统一回收 agent、审批中转与订阅。
  */
 import { resolve } from "node:path";
-import type { PiAgent } from "@facet/agent";
+import type { OpenPiAgentOptions, PiAgent, PiAgentLaunchOptions } from "@facet/agent";
 import type { Action, ActionFrame, Channel, SessionSnapshot } from "@facet/protocol";
 import { makeChannel, parseChannel } from "@facet/protocol";
 import { ActionProjector } from "./action-projector.ts";
-import type { ApprovalBroker } from "./approval-broker.ts";
+import { ApprovalBroker } from "./approval-broker.ts";
 import { EventLog } from "./event-log.ts";
 
 /** 会话登记表用到的 agent 能力,收窄成结构类型以便测试注入假实现。 */
@@ -65,13 +65,21 @@ interface SessionState<A extends HubAgent> {
 	unsubscribe: () => void;
 }
 
-export interface SessionHubOptions {
+/** 建会话用的工厂,收窄成登记表需要的两个入口,便于测试注入假实现。 */
+export interface AgentFactory<A extends HubAgent> {
+	create(options?: PiAgentLaunchOptions): Promise<A>;
+	open(options: OpenPiAgentOptions): Promise<A>;
+}
+
+export interface SessionHubOptions<A extends HubAgent> {
+	/** 建会话用的工厂 */
+	readonly factory: AgentFactory<A>;
 	/** 每个通道保留的动作条数 */
-	replayLimit: number;
+	readonly replayLimit?: number;
 	/** entries 未指定条数时的默认页大小 */
-	defaultPageSize: number;
+	readonly defaultPageSize?: number;
 	/** entries 允许的最大页大小 */
-	maxPageSize: number;
+	readonly maxPageSize?: number;
 }
 
 /** 会话文件路径归一化,同一文件的不同写法落到同一个键。 */
@@ -83,19 +91,30 @@ const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 500;
 
 export class SessionHub<A extends HubAgent = PiAgent> {
-	private readonly options: SessionHubOptions;
+	private readonly factory: AgentFactory<A>;
+	private readonly pageSize: { default: number; max: number };
+	private readonly replayLimit: number;
 	private readonly sessions = new Map<string, SessionState<A>>();
 	/** 会话文件到会话 id 的索引,保证一个文件只有一份运行态 */
 	private readonly fileIndex = new Map<string, string>();
 	/** 正在建立中的会话,并发打开同一文件时共用一次建立 */
 	private readonly opening = new Map<string, Promise<string>>();
 
-	constructor(options: Partial<SessionHubOptions> = {}) {
-		this.options = {
-			replayLimit: options.replayLimit ?? 512,
-			defaultPageSize: options.defaultPageSize ?? DEFAULT_PAGE_SIZE,
-			maxPageSize: options.maxPageSize ?? MAX_PAGE_SIZE,
+	constructor(options: SessionHubOptions<A>) {
+		this.factory = options.factory;
+		this.replayLimit = options.replayLimit ?? 512;
+		this.pageSize = {
+			default: options.defaultPageSize ?? DEFAULT_PAGE_SIZE,
+			max: options.maxPageSize ?? MAX_PAGE_SIZE,
 		};
+	}
+
+	/** 建一个新会话并登记。会话文件立即建立，之后每条完成的消息追加写盘。 */
+	async createSession(options: PiAgentLaunchOptions = {}): Promise<SessionSnapshot> {
+		const approvals = new ApprovalBroker();
+		const agent = await this.factory.create({ ...options, approvalHandler: approvals.handler });
+		this.attach(agent, approvals);
+		return agent.snapshot();
 	}
 
 	/** 登记一个已建好的会话并开始记录动作。 */
@@ -143,10 +162,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 	 * 而登记表按会话 id 索引,后来者会覆盖先到的订阅者。
 	 * 并发打开同一文件时共用同一次建立。
 	 */
-	async openSession(
-		file: string,
-		create: () => Promise<{ agent: A; approvals: ApprovalBroker }>,
-	): Promise<SessionSnapshot> {
+	async openSession(file: string, cwd?: string): Promise<SessionSnapshot> {
 		const key = normalizeFile(file);
 		const known = this.fileIndex.get(key);
 		if (known !== undefined && this.sessions.has(known)) {
@@ -156,16 +172,25 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		if (pending !== undefined) {
 			return this.snapshot(await pending);
 		}
-		const opening = create()
-			.then(({ agent, approvals }) => {
-				this.attach(agent, approvals);
-				return agent.id;
-			})
-			.finally(() => {
-				this.opening.delete(key);
-			});
+		const opening = this.buildOpen(file, cwd);
 		this.opening.set(key, opening);
-		return this.snapshot(await opening);
+		try {
+			return this.snapshot(await opening);
+		} finally {
+			this.opening.delete(key);
+		}
+	}
+
+	/** 打开并登记,返回会话 id。建立失败时由调用方共用这次失败。 */
+	private async buildOpen(file: string, cwd: string | undefined): Promise<string> {
+		const approvals = new ApprovalBroker();
+		const agent = await this.factory.open({
+			sessionFile: file,
+			...(cwd === undefined ? {} : { cwd }),
+			approvalHandler: approvals.handler,
+		});
+		this.attach(agent, approvals);
+		return agent.id;
 	}
 
 	has(sessionId: string): boolean {
@@ -206,7 +231,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		limit: number | undefined,
 	): { entries: ReturnType<PiAgent["entries"]>["entries"]; nextCursor: string | undefined } {
 		const all = this.requireSession(sessionId).agent.entries().entries;
-		const size = Math.min(Math.max(limit ?? this.options.defaultPageSize, 1), this.options.maxPageSize);
+		const size = Math.min(Math.max(limit ?? this.pageSize.default, 1), this.pageSize.max);
 		let end = all.length;
 		if (cursor !== undefined) {
 			const index = all.findIndex((entry) => entry.id === cursor);
@@ -300,7 +325,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		if (existing) {
 			return existing;
 		}
-		const created: ChannelState = { log: new EventLog(this.options.replayLimit), sinks: new Set() };
+		const created: ChannelState = { log: new EventLog(this.replayLimit), sinks: new Set() };
 		state.channels.set(channel, created);
 		return created;
 	}

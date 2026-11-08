@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import type { Entry, SessionEvent, SessionEventListener, SessionSnapshot } from "@facet/protocol";
 import { describe, expect, it } from "vitest";
 import { ApprovalBroker } from "./approval-broker.ts";
-import { type HubAgent, SessionHub } from "./session-hub.ts";
+import { type AgentFactory, type HubAgent, SessionHub } from "./session-hub.ts";
 
 class FakeAgent implements HubAgent {
 	readonly id: string;
@@ -70,75 +70,86 @@ class FakeAgent implements HubAgent {
 	}
 }
 
-function createHub(): SessionHub<FakeAgent> {
-	return new SessionHub<FakeAgent>({ replayLimit: 8 });
+/** 假工厂按文件建立假 agent,记录建立次数与收到的参数。 */
+class FakeFactory implements AgentFactory<FakeAgent> {
+	created = 0;
+	opened: string[] = [];
+	private readonly agents = new Map<string, FakeAgent>();
+
+	async create(): Promise<FakeAgent> {
+		this.created += 1;
+		const agent = new FakeAgent(`new-${this.created}`, `/tmp/new-${this.created}.jsonl`);
+		this.agents.set(agent.id, agent);
+		return agent;
+	}
+
+	async open(options: { sessionFile: string }): Promise<FakeAgent> {
+		this.opened.push(options.sessionFile);
+		const existing = this.agents.get(`file:${resolve(options.sessionFile)}`);
+		if (existing) {
+			return existing;
+		}
+		const agent = new FakeAgent(`file:${resolve(options.sessionFile)}`, resolve(options.sessionFile));
+		this.agents.set(agent.id, agent);
+		return agent;
+	}
 }
 
-/** 假 agent 的文件路径按 pi 的行为归一化,登记表才能和请求路径对上。 */
-function agentFactory(counter: { count: number }, file = "/tmp/s1.jsonl") {
-	return async () => {
-		counter.count += 1;
-		const agent = new FakeAgent(`s1-${counter.count}`, resolve(file));
-		return { agent, approvals: new ApprovalBroker() };
-	};
+function createHub(factory = new FakeFactory()): { hub: SessionHub<FakeAgent>; factory: FakeFactory } {
+	return { hub: new SessionHub<FakeAgent>({ factory, replayLimit: 8 }), factory };
 }
 
 describe("SessionHub 的会话唯一性", () => {
 	it("同一文件重复打开复用同一份运行态", async () => {
-		const hub = createHub();
-		const counter = { count: 0 };
-		const first = await hub.openSession("/tmp/s1.jsonl", agentFactory(counter));
-		const second = await hub.openSession("/tmp/s1.jsonl", agentFactory(counter));
-		expect(counter.count).toBe(1);
+		const { hub, factory } = createHub();
+		const first = await hub.openSession("/tmp/s1.jsonl");
+		const second = await hub.openSession("/tmp/s1.jsonl");
+		expect(factory.opened).toEqual(["/tmp/s1.jsonl"]);
 		expect(second.id).toBe(first.id);
 	});
 
 	it("并发打开同一文件共用一次建立", async () => {
-		const hub = createHub();
-		const counter = { count: 0 };
-		const [a, b] = await Promise.all([
-			hub.openSession("/tmp/s1.jsonl", agentFactory(counter)),
-			hub.openSession("/tmp/s1.jsonl", agentFactory(counter)),
-		]);
-		expect(counter.count).toBe(1);
+		const { hub, factory } = createHub();
+		const [a, b] = await Promise.all([hub.openSession("/tmp/s1.jsonl"), hub.openSession("/tmp/s1.jsonl")]);
+		expect(factory.opened).toHaveLength(1);
 		expect(a.id).toBe(b.id);
 	});
 
 	it("同一文件的不同写法落到同一个键", async () => {
-		const hub = createHub();
-		const counter = { count: 0 };
-		await hub.openSession("./s1.jsonl", agentFactory(counter, "./s1.jsonl"));
-		await hub.openSession(resolve("./s1.jsonl"), agentFactory(counter, "./s1.jsonl"));
-		expect(counter.count).toBe(1);
+		const { hub, factory } = createHub();
+		await hub.openSession("./s1.jsonl");
+		await hub.openSession(resolve("./s1.jsonl"));
+		expect(factory.opened).toHaveLength(1);
 	});
 
 	it("不同文件各自建立", async () => {
-		const hub = createHub();
-		const counter = { count: 0 };
-		const other = async () => {
-			counter.count += 1;
-			return { agent: new FakeAgent("s2", "/tmp/s2.jsonl"), approvals: new ApprovalBroker() };
-		};
-		await hub.openSession("/tmp/s1.jsonl", agentFactory(counter));
-		await hub.openSession("/tmp/s2.jsonl", other);
-		expect(counter.count).toBe(2);
+		const { hub, factory } = createHub();
+		await hub.openSession("/tmp/s1.jsonl");
+		await hub.openSession("/tmp/s2.jsonl");
+		expect(factory.opened).toHaveLength(2);
 		expect(hub.sessionIds()).toHaveLength(2);
 	});
 
 	it("会话释放后索引一并清掉,再次打开会重新建立", async () => {
-		const hub = createHub();
-		const counter = { count: 0 };
-		const opened = await hub.openSession("/tmp/s1.jsonl", agentFactory(counter));
+		const { hub, factory } = createHub();
+		const opened = await hub.openSession("/tmp/s1.jsonl");
 		hub.release(opened.id);
 		expect(hub.sessionIdByFile("/tmp/s1.jsonl")).toBeUndefined();
-		await hub.openSession("/tmp/s1.jsonl", agentFactory(counter));
-		expect(counter.count).toBe(2);
+		await hub.openSession("/tmp/s1.jsonl");
+		expect(factory.opened).toHaveLength(2);
+	});
+
+	it("新建会话走工厂并登记", async () => {
+		const { hub, factory } = createHub();
+		const snapshot = await hub.createSession({ cwd: "/tmp" });
+		expect(factory.created).toBe(1);
+		expect(hub.has(snapshot.id)).toBe(true);
 	});
 });
 
 describe("SessionHub 的登记冲突", () => {
 	it("同一会话已有另一份状态时保留先登记的,丢弃新来的", () => {
-		const hub = createHub();
+		const { hub } = createHub();
 		const first = new FakeAgent("s1", "/tmp/s1.jsonl");
 		const second = new FakeAgent("s1", "/tmp/s1.jsonl");
 		hub.attach(first, new ApprovalBroker());
@@ -149,7 +160,7 @@ describe("SessionHub 的登记冲突", () => {
 	});
 
 	it("重复登记同一个实例不变更状态", () => {
-		const hub = createHub();
+		const { hub } = createHub();
 		const agent = new FakeAgent("s1", "/tmp/s1.jsonl");
 		hub.attach(agent, new ApprovalBroker());
 		const subscribed = hub.subscribe("chat:/s1", undefined, () => {});

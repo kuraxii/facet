@@ -1,9 +1,9 @@
 /**
- * 会话的创建入口与共享资源。
+ * 会话工厂与共享资源。
  *
  * 进程内只建一份 ModelRuntime，凭证、模型目录与可用性检查由所有会话共用；
- * 每个会话自己的资源加载器按工作目录单独构造。会话登记表只用于统一回收，
- * 调度与并发策略由上层决定。
+ * 每个会话自己的资源加载器按工作目录单独构造。这里不登记建好的会话，
+ * 谁活着、何时回收由设备侧决定。
  */
 import { join } from "node:path";
 import {
@@ -20,8 +20,8 @@ import { applyAgentDir } from "./paths.ts";
 import { type ApprovalHook, createApprovalExtension, PiAgent } from "./pi-agent.ts";
 import type { ApprovalHandler } from "./types.ts";
 
-/** 运行时的进程级配置。 */
-export interface PiAgentRuntimeOptions {
+/** 工厂的进程级配置。 */
+export interface PiAgentFactoryOptions {
 	/** 全局配置目录，凭证、模型配置与会话文件都放在它下面；缺省为 facet 的开发目录 */
 	agentDir?: string;
 	/** 会话文件目录，缺省按工作目录分组存放 */
@@ -78,18 +78,16 @@ export interface ForkPiAgentOptions extends OpenPiAgentOptions {
 	entryId: string;
 }
 
-export class PiAgentRuntime {
+export class PiAgentFactory {
 	/** 全局配置目录 */
 	readonly agentDir: string;
 	/** 会话文件目录，未指定时按工作目录分组 */
 	readonly sessionDir: string | undefined;
 	private readonly modelRuntime: ModelRuntime;
 	private readonly onError: ((error: unknown) => void) | undefined;
-	/** 已创建的会话，仅用于统一回收 */
-	private readonly agents = new Map<string, PiAgent>();
 	private disposed = false;
 
-	private constructor(modelRuntime: ModelRuntime, options: PiAgentRuntimeOptions, agentDir: string) {
+	private constructor(modelRuntime: ModelRuntime, options: PiAgentFactoryOptions, agentDir: string) {
 		this.modelRuntime = modelRuntime;
 		this.agentDir = agentDir;
 		this.sessionDir = options.sessionDir;
@@ -97,14 +95,14 @@ export class PiAgentRuntime {
 	}
 
 	/** 建立共享资源。凭证与模型配置的路径由 agentDir 推出。 */
-	static async create(options: PiAgentRuntimeOptions = {}): Promise<PiAgentRuntime> {
+	static async create(options: PiAgentFactoryOptions = {}): Promise<PiAgentFactory> {
 		const agentDir = applyAgentDir(options.agentDir);
 		const modelRuntime = await ModelRuntime.create({
 			authPath: join(agentDir, "auth.json"),
 			modelsPath: join(agentDir, "models.json"),
 			allowModelNetwork: options.allowModelNetwork,
 		});
-		return new PiAgentRuntime(modelRuntime, options, agentDir);
+		return new PiAgentFactory(modelRuntime, options, agentDir);
 	}
 
 	/** 提供方清单，附带是否已配置凭证，用于设置面板与模型选择器分组。 */
@@ -154,7 +152,7 @@ export class PiAgentRuntime {
 	}
 
 	/** 新建会话。会话文件立即建立，后续每条完成的消息追加写盘。 */
-	async createAgent(options: PiAgentLaunchOptions = {}): Promise<PiAgent> {
+	async create(options: PiAgentLaunchOptions = {}): Promise<PiAgent> {
 		this.assertAlive();
 		const cwd = options.cwd ?? process.cwd();
 		const sessionDir = options.sessionDir ?? this.sessionDir;
@@ -170,52 +168,31 @@ export class PiAgentRuntime {
 	}
 
 	/** 打开已有会话。模型回退等提示通过 PiAgent 的 fallbackNotice 取得。 */
-	async openAgent(options: OpenPiAgentOptions): Promise<PiAgent> {
+	async open(options: OpenPiAgentOptions): Promise<PiAgent> {
 		this.assertAlive();
 		const sessionManager = SessionManager.open(options.sessionFile, options.sessionDir, options.cwd);
 		return await this.launch(sessionManager, options, {});
 	}
 
 	/** 从指定条目分叉出新会话，原会话不受影响。 */
-	async forkAgent(options: ForkPiAgentOptions): Promise<PiAgent> {
+	async fork(options: ForkPiAgentOptions): Promise<PiAgent> {
 		this.assertAlive();
 		const source = SessionManager.open(options.sessionFile, options.sessionDir, options.cwd);
 		const forked = source.createBranchedSession(options.entryId);
 		if (!forked) {
 			throw new Error(`cannot fork session ${options.sessionFile} at entry ${options.entryId}`);
 		}
-		return await this.openAgent({ ...options, sessionFile: forked });
+		return await this.open({ ...options, sessionFile: forked });
 	}
 
-	/** 回收会话并从登记表移除。 */
-	releaseAgent(agent: PiAgent): void {
-		this.agents.delete(agent.id);
-		agent.dispose();
-	}
-
-	hasAgent(id: string): boolean {
-		return this.agents.has(id);
-	}
-
-	agentIds(): string[] {
-		return [...this.agents.keys()];
-	}
-
-	/** 回收全部会话，可重复调用。 */
+	/** 关闭工厂，之后不再建会话。已建会话的回收由调用方负责。 */
 	dispose(): void {
-		if (this.disposed) {
-			return;
-		}
 		this.disposed = true;
-		for (const agent of [...this.agents.values()]) {
-			agent.dispose();
-		}
-		this.agents.clear();
 	}
 
 	private assertAlive(): void {
 		if (this.disposed) {
-			throw new Error("runtime has been disposed");
+			throw new Error("会话工厂已关闭");
 		}
 	}
 
@@ -297,7 +274,6 @@ export class PiAgentRuntime {
 			session.setSessionName(tuning.name);
 		}
 
-		this.agents.set(agent.id, agent);
 		return agent;
 	}
 }

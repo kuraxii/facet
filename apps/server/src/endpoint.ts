@@ -238,6 +238,14 @@ async function handleRequest(
 			return await createSession(context, params);
 		case "openSession":
 			return await openSession(context, params);
+		case "forkSession": {
+			const source = asObject(params);
+			return await context.hub.forkSession({
+				sessionFile: requiredString(source, "sessionFile"),
+				entryId: requiredString(source, "entryId"),
+				cwd: optionalString(source, "cwd"),
+			});
+		}
 		case "snapshot": {
 			const source = asObject(params);
 			return await context.hub.snapshot(requiredString(source, "sessionId"));

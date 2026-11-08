@@ -9,7 +9,7 @@
  * 还在推进就等它停下。运行状态本身只由 PiAgent 维护,这里不复制。
  */
 import { resolve } from "node:path";
-import type { OpenPiAgentOptions, PiAgent, PiAgentLaunchOptions } from "@facet/agent";
+import type { ForkPiAgentOptions, OpenPiAgentOptions, PiAgent, PiAgentLaunchOptions } from "@facet/agent";
 import type { Action, ActionFrame, Channel, SessionSnapshot } from "@facet/protocol";
 import { makeChannel, parseChannel } from "@facet/protocol";
 import { ActionProjector } from "./action-projector.ts";
@@ -26,6 +26,7 @@ export type HubAgent = Pick<
 export interface AgentFactory<A extends HubAgent> {
 	create(options?: PiAgentLaunchOptions): Promise<A>;
 	open(options: OpenPiAgentOptions): Promise<A>;
+	fork(options: ForkPiAgentOptions): Promise<A>;
 	/** 只读会话文件头部,取出会话 id */
 	peekSessionId(file: string): Promise<string>;
 }
@@ -196,6 +197,23 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 			row.opening = undefined;
 		}
 		return this.snapshotRow(row);
+	}
+
+	/** 从会话的某条条目分叉出新会话并登记。原会话不受影响。 */
+	async forkSession(options: {
+		sessionFile: string;
+		entryId: string;
+		cwd?: string;
+	}): Promise<SessionSnapshot> {
+		const approvals = new ApprovalBroker();
+		const agent = await this.factory.fork({
+			sessionFile: options.sessionFile,
+			entryId: options.entryId,
+			...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+			approvalHandler: approvals.handler,
+		});
+		this.attach(agent, approvals);
+		return this.snapshotRow(this.requireRow(agent.id));
 	}
 
 	/** 登记一个已建好的会话。同一会话已有另一份状态时保留先登记的,丢弃新的。 */

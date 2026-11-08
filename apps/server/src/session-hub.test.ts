@@ -84,6 +84,7 @@ class FakeAgent implements HubAgent {
 class FakeFactory implements AgentFactory<FakeAgent> {
 	readonly ids = new Map<string, string>();
 	readonly opened: string[] = [];
+	readonly forked: string[] = [];
 	created = 0;
 	/** 建立会话时等待的闸门,用来让并发请求真正交错 */
 	gate: Promise<void> | undefined;
@@ -95,6 +96,12 @@ class FakeFactory implements AgentFactory<FakeAgent> {
 	async create(): Promise<FakeAgent> {
 		this.created += 1;
 		return new FakeAgent(`new-${this.created}`, resolve(`/tmp/new-${this.created}.jsonl`));
+	}
+
+	async fork(options: { sessionFile: string; entryId: string }): Promise<FakeAgent> {
+		this.forked.push(`${options.sessionFile}#${options.entryId}`);
+		await Promise.resolve();
+		return new FakeAgent(`fork-${this.forked.length}`, resolve(`/tmp/fork-${this.forked.length}.jsonl`));
 	}
 
 	async open(options: { sessionFile: string }): Promise<FakeAgent> {
@@ -169,6 +176,15 @@ describe("会话建立与复用", () => {
 		const snapshot = await hub.createSession({ cwd: "/tmp" });
 		expect(factory.created).toBe(1);
 		expect(hub.has(snapshot.id)).toBe(true);
+	});
+
+	it("分叉出新会话并登记", async () => {
+		const source = await hub.openSession("/tmp/s1.jsonl");
+		const forked = await hub.forkSession({ sessionFile: "/tmp/s1.jsonl", entryId: "e3" });
+		expect(factory.forked).toEqual(["/tmp/s1.jsonl#e3"]);
+		expect(forked.id).not.toBe(source.id);
+		expect(hub.has(forked.id)).toBe(true);
+		expect(hub.has(source.id)).toBe(true);
 	});
 
 	it("同一会话已有另一份状态时保留先登记的", () => {

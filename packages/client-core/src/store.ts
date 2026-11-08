@@ -165,6 +165,34 @@ export class SessionStore {
 		return slot.view;
 	}
 
+	/** 往更早的方向补一页历史,已存在的标识跳过。 */
+	prependHistory(channel: Channel, entries: readonly Entry[]): ChatView {
+		const slot = this.chats.get(channel) ?? this.createChatSlot(channel);
+		const known = new Set(slot.view.messages.map((item) => item.id));
+		const older: MessageView[] = [];
+		for (const entry of entries) {
+			if (entry.kind !== "message" || entry.message === undefined) {
+				continue;
+			}
+			const id = `${HISTORY_PREFIX}${entry.id}`;
+			if (known.has(id)) {
+				continue;
+			}
+			older.push({ id, message: entry.message, streaming: {}, isStreaming: false });
+		}
+		if (older.length === 0) {
+			return slot.view;
+		}
+		slot.view = { ...slot.view, messages: [...older, ...slot.view.messages] };
+		this.markChanged();
+		return slot.view;
+	}
+
+	/** 通道已应用到的序号,从未收到动作时为 0。 */
+	lastSeq(channel: Channel): number {
+		return this.sessions.get(channel)?.lastSeq ?? this.chats.get(channel)?.lastSeq ?? 0;
+	}
+
 	/** 丢掉一个通道的状态,用于取消订阅或会话释放。 */
 	drop(channel: Channel): void {
 		const removed = this.sessions.delete(channel) || this.chats.delete(channel);

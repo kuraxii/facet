@@ -17,6 +17,7 @@
 		"@facet/agent": "*",
 		"@facet/client-core": "*",
 		"@facet/protocol": "*",
+		"@facet/server": "*",
 		"@facet/services": "*",
 		"@facet/transport": "*",
 		"@facet/ui": "*",

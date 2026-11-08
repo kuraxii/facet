@@ -3,7 +3,12 @@ import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 
 export default defineConfig({
 	main: {
-		plugins: [externalizeDepsPlugin()],
+		// facet 自己的包是 TS 源码，必须一起打包；node_modules 里的实现保持外置
+		plugins: [
+			externalizeDepsPlugin({
+				exclude: ["@facet/agent", "@facet/protocol", "@facet/server", "@facet/services"],
+			}),
+		],
 	},
 	preload: {
 		plugins: [externalizeDepsPlugin()],

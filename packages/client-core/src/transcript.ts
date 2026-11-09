@@ -180,6 +180,8 @@ function mergeToolResult(item: TranscriptItem, message: Message): TranscriptItem
 		status: message.isError ? "failed" : "done",
 		output: toolOutputText({ content: message.content, details: message.details, isError: message.isError }),
 		details: message.details,
+		// 历史记录里带工具耗时,补进来才能在卡片上显示
+		durationMs: message.durationMs ?? part.durationMs,
 	};
 	const parts = [...item.parts];
 	parts[index] = next;
@@ -316,7 +318,7 @@ function orphanToolPart(message: Message & { role: "toolResult" }): ToolCallPart
 		input: undefined,
 		status: message.isError ? "failed" : "done",
 		output: toolOutputText({ content: message.content, details: message.details, isError: message.isError }),
-		durationMs: undefined,
+		durationMs: message.durationMs,
 		details: message.details,
 	};
 }

@@ -149,6 +149,7 @@ function toAssistantMessage(message: Extract<PiMessage, { role: "assistant" }>):
 		usage: toUsage(message.usage),
 		stopReason: message.stopReason,
 		errorMessage: message.errorMessage,
+		durationMs: message.durationMs,
 		timestamp: message.timestamp,
 	};
 }
@@ -170,6 +171,7 @@ export function toMessage(message: PiMessageLike): Message {
 				content: toInputBlocks(message.content),
 				details: message.details,
 				isError: message.isError,
+				durationMs: message.durationMs,
 				timestamp: message.timestamp,
 			};
 		case "bashExecution":

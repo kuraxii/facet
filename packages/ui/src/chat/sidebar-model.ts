@@ -4,7 +4,7 @@
  * 把会话列表与主机清单整理成展示用的分组与排序，组件只负责渲染。
  * 纯函数，不依赖 React，可单独测。
  */
-import type { SessionSummary } from "@facet/protocol";
+import type { ProjectInfo, SessionSummary } from "@facet/protocol";
 
 /** 主机的连接状态。 */
 export type HostState = "connected" | "connecting" | "offline";
@@ -69,10 +69,10 @@ export interface SidebarInput {
 	sessions: readonly SessionSummary[];
 	/** 当前设备之后的全部主机，第一项为本机 */
 	hosts: readonly SidebarHost[];
+	/** 用户添加的项目，只有这些会出现在项目段 */
+	projects: readonly ProjectInfo[];
 	/** 当前会话的文件路径 */
 	activeFile: string | undefined;
-	/** 新建会话落在的目录 */
-	activeCwd: string;
 	/** 正在运行的会话文件路径 */
 	runningFile: string | undefined;
 }
@@ -154,7 +154,11 @@ function toSession(
 	};
 }
 
-/** 组装侧栏数据：本机项目按目录分组，最近会话跨项目汇总。 */
+/**
+ * 组装侧栏数据。
+ *
+ * 项目段只列用户添加的项目，与会话按目录对上；没有对应项目的会话只出现在最近里。
+ */
 export function buildSidebar(input: SidebarInput): SidebarData {
 	const groups = new Map<string, SidebarSession[]>();
 	for (const summary of input.sessions) {
@@ -166,31 +170,16 @@ export function buildSidebar(input: SidebarInput): SidebarData {
 			groups.set(summary.cwd, [entry]);
 		}
 	}
-	// 当前目录即使还没有会话也列出来，新建的会话会落在它下面
-	if (input.activeCwd.length > 0 && !groups.has(input.activeCwd)) {
-		groups.set(input.activeCwd, []);
-	}
 
-	const projects: SidebarProject[] = [...groups].map(([cwd, sessions]) => ({
-		cwd,
-		name: baseName(cwd),
-		sessions: newestFirst(sessions),
+	const projects: SidebarProject[] = input.projects.map((project) => ({
+		cwd: project.cwd,
+		name: project.name ?? baseName(project.cwd),
+		sessions: newestFirst(groups.get(project.cwd) ?? []),
 	}));
-	projects.sort((left, right) => {
-		if (left.cwd === input.activeCwd) {
-			return -1;
-		}
-		if (right.cwd === input.activeCwd) {
-			return 1;
-		}
-		const leftLatest = left.sessions[0]?.modified ?? 0;
-		const rightLatest = right.sessions[0]?.modified ?? 0;
-		return rightLatest - leftLatest;
-	});
 
 	const remotes = input.hosts.filter((host) => !host.isLocal);
 	const recents = [
-		...projects.flatMap((project) => project.sessions),
+		...[...groups.values()].flat(),
 		...remotes.flatMap((host) => host.projects.flatMap((project) => project.sessions)),
 	].sort((left, right) => right.modified - left.modified);
 

@@ -8,6 +8,7 @@
 import type { Action, ActionOrigin } from "./action.ts";
 import type { Channel } from "./channel.ts";
 import type { ModelInfo, ModelRef, ProviderInfo, ThinkingLevel } from "./model.ts";
+import type { ProjectInfo } from "./project.ts";
 import type { Entry, SessionSnapshot, SessionSummary } from "./session.ts";
 
 /** 线格式版本。不兼容的改动递增此值,端点据此拒绝握手。 */
@@ -144,6 +145,14 @@ export interface RequestParams {
 	models: { providerId?: string };
 	/** 列出提供方及其凭证状态。 */
 	providers: Record<string, never>;
+	/** 列出用户添加的项目。 */
+	listProjects: Record<string, never>;
+	/** 添加项目，目录重复时设备侧拒绝。 */
+	addProject: { cwd: string; name?: string };
+	/** 重命名项目，名称为空时恢复目录名。 */
+	renameProject: { id: string; name?: string };
+	/** 移除项目。 */
+	removeProject: { id: string };
 }
 
 /** 每条请求的应答数据。 */
@@ -158,6 +167,10 @@ export interface RequestResults {
 	unsubscribe: Record<string, never>;
 	models: { models: ModelInfo[] };
 	providers: { providers: ProviderInfo[] };
+	listProjects: { projects: ProjectInfo[] };
+	addProject: ProjectInfo;
+	renameProject: ProjectInfo;
+	removeProject: Record<string, never>;
 }
 
 /** 请求方法名。 */

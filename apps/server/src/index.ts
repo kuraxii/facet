@@ -50,7 +50,7 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 	});
 	const projectStore = await ProjectStore.open({ file: join(config.dataDir, "projects.json") });
 	const hostId = randomUUID();
-	const endpoint = await startEndpoint({ config, factory, hub, hostId });
+	const endpoint = await startEndpoint({ config, factory, hub, projectStore, hostId });
 
 	return {
 		...endpoint,

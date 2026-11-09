@@ -1,0 +1,216 @@
+/* 对话面板的样式。变量由宿主提供，缺省值与深色主题一致。 */
+
+.t-transcript {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 4px 0 12px;
+}
+
+.t-empty {
+	padding: 24px 0;
+	color: #55555d;
+	font-size: 13px;
+}
+
+.t-row {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	max-width: 860px;
+	padding: 8px 12px;
+	border: 1px solid #1d1d21;
+	border-radius: 8px;
+	background: #121214;
+}
+
+/* 过程行让位一层，靠左缩进与更淡的底色区分 */
+.t-row.kind-meta,
+.t-row.kind-diff {
+	margin-left: 20px;
+	border-style: dashed;
+	background: #0f0f11;
+}
+
+.t-row.kind-user {
+	background: #15171c;
+	border-color: #23262e;
+}
+
+.t-row.kind-assistant {
+	background: #101214;
+}
+
+.t-row.kind-error {
+	border-color: #3a1f22;
+	background: #16100f;
+}
+
+.t-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 20px;
+	font-size: 11px;
+	color: #6c6c74;
+}
+
+.t-toggle {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	padding: 0;
+	border: none;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.t-caret {
+	width: 10px;
+	color: #46464e;
+}
+
+.t-label {
+	color: #9a9aa3;
+	font-weight: 600;
+}
+
+.t-summary {
+	overflow: hidden;
+	color: #55555d;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.t-live {
+	padding: 1px 6px;
+	border-radius: 999px;
+	background: #1d2b1f;
+	color: #6fb37a;
+}
+
+.t-fork {
+	margin-left: auto;
+	padding: 2px 8px;
+	border: 1px solid #26262c;
+	border-radius: 6px;
+	background: transparent;
+	color: #8a8a93;
+	font-size: 11px;
+	cursor: pointer;
+}
+
+.t-fork:hover {
+	border-color: #35353d;
+	color: #c9c9d1;
+}
+
+.t-body {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.t-text {
+	margin: 0;
+	font: inherit;
+	font-size: 13px;
+	line-height: 1.55;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.t-thinking,
+.t-tool {
+	border-left: 2px solid #1f1f24;
+	padding-left: 8px;
+}
+
+.t-thinking summary,
+.t-tool summary {
+	color: #6c6c74;
+	font-size: 11px;
+	cursor: pointer;
+}
+
+.t-thinking pre,
+.t-tool pre {
+	margin: 6px 0 0;
+	font-family: ui-monospace, monospace;
+	font-size: 11px;
+	line-height: 1.5;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.t-thinking pre {
+	color: #7d7d86;
+}
+
+.t-tool-input {
+	color: #6a6a73;
+}
+
+.t-tool-output {
+	color: #9aa0a6;
+}
+
+.t-tool-name {
+	color: #9a9aa3;
+	font-weight: 600;
+}
+
+.t-tool-status {
+	margin-left: 6px;
+	color: #55555d;
+}
+
+.t-tool.status-failed .t-tool-status {
+	color: #b4545b;
+}
+
+.t-tool.status-running .t-tool-status {
+	color: #b39a54;
+}
+
+.t-tool-time {
+	margin-left: 6px;
+	color: #46464e;
+}
+
+.t-diff-patch {
+	margin: 6px 0 0;
+	font-family: ui-monospace, monospace;
+	font-size: 11px;
+	line-height: 1.45;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.t-diff-line.is-added {
+	color: #5f9e6a;
+}
+
+.t-diff-line.is-removed {
+	color: #b4545b;
+}
+
+.t-diff-line.is-meta {
+	color: #46464e;
+}
+
+.t-diff-line.is-plain {
+	color: #8a8a93;
+}
+
+.t-divider {
+	max-width: 860px;
+	padding: 2px 0;
+	color: #4a4a52;
+	font-size: 11px;
+	text-align: center;
+}

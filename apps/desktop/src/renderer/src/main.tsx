@@ -1,5 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import "@facet/ui/styles";
 import { App } from "./App";
 import "./index.css";
 

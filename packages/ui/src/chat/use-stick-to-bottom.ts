@@ -69,17 +69,19 @@ export function useStickToBottom(contentKey: unknown, resetKey: unknown): StickT
 	);
 
 	// 切换会话时回到贴底
+	// biome-ignore lint/correctness/useExhaustiveDependencies: 会话标识只作重置信号,不参与计算
 	useLayoutEffect(() => {
 		applyPinned(true);
 		jumpToBottom();
-	}, [resetKey, element, applyPinned, jumpToBottom]);
+	}, [resetKey, applyPinned, jumpToBottom]);
 
 	// 内容变化时跟随
+	// biome-ignore lint/correctness/useExhaustiveDependencies: 内容标识只作跟随信号,不参与计算
 	useLayoutEffect(() => {
 		if (pinnedRef.current) {
 			jumpToBottom();
 		}
-	}, [contentKey, element, jumpToBottom]);
+	}, [contentKey, jumpToBottom]);
 
 	useEffect(() => {
 		if (!element) {

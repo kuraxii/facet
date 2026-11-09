@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import { PiAgentFactory } from "@facet/agent";
 import { loadServerConfig, type ServerConfig } from "./config.ts";
 import { type EndpointHandle, startEndpoint } from "./endpoint.ts";
+import { ProjectCatalog } from "./project-catalog.ts";
 import { SessionHub } from "./session-hub.ts";
 
 /** 设备启动后的句柄。port 为实际监听端口，hostId 是本进程的设备标识。 */
@@ -16,6 +17,8 @@ export interface ServerHandle extends EndpointHandle {
 	readonly agentDir: string;
 	/** 会话登记，嵌入方可直接使用 */
 	readonly hub: SessionHub;
+	/** 会话目录里提取出的项目，启动时扫描一次 */
+	readonly projects: ProjectCatalog;
 	/** 关闭端点并释放全部会话与运行时 */
 	close(): Promise<void>;
 }
@@ -37,6 +40,10 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 		replayLimit: config.replayLimit,
 		idleCloseMs: config.sessionIdleMs,
 	});
+	const projects = new ProjectCatalog(factory);
+	await projects.refresh().catch((error: unknown) => {
+		console.error("项目扫描失败", error);
+	});
 	const hostId = randomUUID();
 	const endpoint = await startEndpoint({ config, factory, hub, hostId });
 
@@ -45,6 +52,7 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 		hostId,
 		agentDir: factory.agentDir,
 		hub,
+		projects,
 		close: async () => {
 			await endpoint.close();
 			hub.dispose();
@@ -59,5 +67,7 @@ export type { ServerConfig } from "./config.ts";
 export { loadServerConfig } from "./config.ts";
 export type { EndpointHandle } from "./endpoint.ts";
 export { EventLog } from "./event-log.ts";
+export type { ProjectSource } from "./project-catalog.ts";
+export { ProjectCatalog } from "./project-catalog.ts";
 export type { ActionSink, HubAgent, Subscription } from "./session-hub.ts";
 export { ChannelNotFoundError, SessionHub, SessionNotFoundError } from "./session-hub.ts";

@@ -19,6 +19,7 @@ import type { ModelInfo, ModelRef, ProviderInfo, SessionSummary, ThinkingLevel }
 import { toModelInfo } from "./convert.ts";
 import { applyAgentDir } from "./paths.ts";
 import { PiAgent } from "./pi-agent.ts";
+import { type SessionProject, scanSessionProjects } from "./projects.ts";
 
 /** 工厂的进程级配置。 */
 export interface PiAgentFactoryOptions {
@@ -126,6 +127,17 @@ export class PiAgentFactory {
 	findModel(ref: ModelRef): ModelInfo | undefined {
 		const model = this.modelRuntime.getModel(ref.provider, ref.id);
 		return model ? toModelInfo(model) : undefined;
+	}
+
+	/**
+	 * 扫描会话目录，取出含会话的工作目录。
+	 *
+	 * 只读每个会话文件的第一行，不校验目录是否存在，坏文件跳过。
+	 */
+	async scanProjects(): Promise<SessionProject[]> {
+		return await scanSessionProjects({
+			sessionsDir: this.sessionDir ?? join(this.agentDir, "sessions"),
+		});
 	}
 
 	/** 列出会话。指定 cwd 时只列该目录的会话，否则列出全部。 */

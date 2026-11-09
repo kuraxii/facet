@@ -72,15 +72,18 @@ describe("组装侧栏", () => {
 		summary({ id: "c", path: "/s/c.jsonl", cwd: "/work/linx-icp", modified: 200 }),
 	];
 
-	it("按目录分组，组内组外都按时间倒序", () => {
+	it("只列添加过的项目，会话按目录归到项目下", () => {
 		const data = buildSidebar({
 			sessions,
 			hosts: [host({ id: "local", name: "facet", isLocal: true })],
+			projects: [
+				{ id: "p1", cwd: "/work/facet", name: undefined, createdAt: 1 },
+				{ id: "p2", cwd: "/work/linx-icp", name: "icp 项目", createdAt: 2 },
+			],
 			activeFile: "/s/a.jsonl",
-			activeCwd: "/work/facet",
 			runningFile: "/s/a.jsonl",
 		});
-		expect(data.projects.map((project) => project.name)).toEqual(["facet", "linx-icp"]);
+		expect(data.projects.map((project) => project.name)).toEqual(["facet", "icp 项目"]);
 		expect(data.projects[0]?.sessions.map((session) => session.title)).toEqual([
 			"压测脚本调整",
 			"重构审批流程",
@@ -90,16 +93,17 @@ describe("组装侧栏", () => {
 		expect(data.remotes).toEqual([]);
 	});
 
-	it("当前目录没有会话时也列出来", () => {
+	it("没有会话的项目也列出来，未添加目录的会话只进最近", () => {
 		const data = buildSidebar({
-			sessions: [],
+			sessions,
 			hosts: [],
+			projects: [{ id: "p1", cwd: "/work/docs-site", name: undefined, createdAt: 1 }],
 			activeFile: undefined,
-			activeCwd: "/work/docs-site",
 			runningFile: undefined,
 		});
 		expect(data.projects.map((project) => project.cwd)).toEqual(["/work/docs-site"]);
 		expect(data.projects[0]?.sessions).toEqual([]);
+		expect(data.recents).toHaveLength(3);
 	});
 
 	it("最近会话包含远端主机的会话，带主机名", () => {
@@ -128,8 +132,8 @@ describe("组装侧栏", () => {
 		const data = buildSidebar({
 			sessions,
 			hosts: [host({ id: "local", name: "facet", isLocal: true }), remote],
+			projects: [],
 			activeFile: undefined,
-			activeCwd: "/work/facet",
 			runningFile: undefined,
 		});
 		expect(data.remotes.map((item) => item.id)).toEqual(["dev-box"]);

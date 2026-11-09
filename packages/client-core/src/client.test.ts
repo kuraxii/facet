@@ -95,6 +95,20 @@ class FakeTransport implements SessionTransport {
 					return { ...snapshot(), id: "s2", file: "/tmp/s2.jsonl" };
 				case "snapshot":
 					return snapshot();
+				case "listProjects":
+					return {
+						projects: [{ id: "p1", cwd: "/work/a", name: "A", createdAt: 1 }],
+					};
+				case "addProject": {
+					const { cwd, name } = params as { cwd: string; name?: string };
+					return { id: "p1", cwd, ...(name === undefined ? {} : { name }), createdAt: 1 };
+				}
+				case "renameProject": {
+					const { id, name } = params as { id: string; name?: string };
+					return { id, cwd: "/work/a", ...(name === undefined ? {} : { name }), createdAt: 1 };
+				}
+				case "removeProject":
+					return {};
 				case "subscribe":
 					return {
 						seq: 0,
@@ -170,6 +184,28 @@ describe("SessionClient", () => {
 			CHAT,
 		]);
 		expect(client.current?.sessionId).toBe("s1");
+	});
+
+	it("项目请求带上参数", async () => {
+		const { transport, client } = createClient(0);
+		expect(await client.listProjects()).toEqual([{ id: "p1", cwd: "/work/a", name: "A", createdAt: 1 }]);
+		expect(await client.addProject({ cwd: "/work/b", name: "B" })).toEqual({
+			id: "p1",
+			cwd: "/work/b",
+			name: "B",
+			createdAt: 1,
+		});
+		expect(await client.renameProject("p1")).toEqual({ id: "p1", cwd: "/work/a", createdAt: 1 });
+		await client.removeProject("p1");
+		const calls = transport.calls
+			.filter((call) => call.method.endsWith("Project") || call.method === "listProjects")
+			.map((call) => [call.method, call.params]);
+		expect(calls).toEqual([
+			["listProjects", {}],
+			["addProject", { cwd: "/work/b", name: "B" }],
+			["renameProject", { id: "p1" }],
+			["removeProject", { id: "p1" }],
+		]);
 	});
 
 	it("首次装载按页取最近历史且顺序为时间升序", async () => {

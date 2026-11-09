@@ -1550,3 +1550,197 @@ svg.fl {
 		transition: none;
 	}
 }
+
+/* 对话框 */
+
+.dialog-backdrop {
+	position: fixed;
+	inset: 0;
+	z-index: 100;
+	display: grid;
+	place-items: center;
+	padding: 24px;
+	background: rgba(0, 0, 0, 0.55);
+}
+
+.dialog {
+	width: 480px;
+	max-width: 100%;
+	padding: 22px 24px 20px;
+	border: 1px solid var(--line2);
+	border-radius: 20px;
+	background: var(--card);
+	box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+}
+
+.dialog-head {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 18px;
+}
+
+.dialog-title {
+	margin: 0;
+	font-size: 20px;
+	font-weight: 600;
+}
+
+.dialog-close {
+	display: grid;
+	place-items: center;
+	width: 28px;
+	height: 28px;
+	margin: -4px -6px 0 0;
+	padding: 0;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--t3);
+}
+
+.dialog-close:hover {
+	background: var(--card2);
+	color: var(--t1);
+}
+
+.project-field {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	height: 48px;
+	padding: 0 14px;
+	border: 1.5px solid var(--line2);
+	border-radius: 10px;
+	background: var(--card2);
+	color: var(--t2);
+}
+
+.project-field.is-focused {
+	border-color: var(--acc);
+}
+
+.project-name {
+	flex: 1;
+	min-width: 0;
+	border: 0;
+	outline: 0;
+	background: transparent;
+	color: var(--t1);
+	font: inherit;
+	font-size: 14px;
+}
+
+.project-name::placeholder {
+	color: var(--t3);
+}
+
+.name-divider {
+	flex: none;
+	width: 1px;
+	height: 20px;
+	background: var(--line2);
+}
+
+.dialog-label {
+	margin: 16px 0 8px;
+	color: var(--t2);
+	font-size: 13px;
+	font-weight: 500;
+}
+
+.source-box {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 10px;
+	padding: 22px 16px;
+	border: 1px solid var(--line2);
+	border-radius: 12px;
+	background: var(--card2);
+	text-align: center;
+}
+
+.source-hint {
+	color: var(--t2);
+	font-size: 13px;
+}
+
+.source-path {
+	max-width: 100%;
+	overflow: hidden;
+	color: var(--t1);
+	font-size: 12.5px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.source-add {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 30px;
+	padding: 0 12px;
+	border: 0;
+	border-radius: 8px;
+	background: var(--line);
+	color: var(--t1);
+	font-size: 12.5px;
+}
+
+.source-add:hover:not(:disabled) {
+	background: var(--line2);
+}
+
+.source-add:disabled {
+	cursor: default;
+}
+
+.dialog-error {
+	margin: 10px 2px 0;
+	color: var(--err);
+	font-size: 12px;
+}
+
+.dialog-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 10px;
+	margin-top: 22px;
+}
+
+.dialog-cancel {
+	height: 34px;
+	padding: 0 12px;
+	border: 0;
+	border-radius: 8px;
+	background: transparent;
+	color: var(--t2);
+	font-size: 13px;
+}
+
+.dialog-cancel:hover {
+	background: var(--card2);
+	color: var(--t1);
+}
+
+.dialog-primary {
+	height: 34px;
+	padding: 0 16px;
+	border: 0;
+	border-radius: 8px;
+	background: var(--t1);
+	color: var(--bg);
+	font-size: 13px;
+	font-weight: 500;
+}
+
+.dialog-primary:hover:not(:disabled) {
+	opacity: 0.9;
+}
+
+.dialog-primary:disabled {
+	cursor: default;
+	opacity: 0.4;
+}

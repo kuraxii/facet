@@ -7,6 +7,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
+import { isAbsolute } from "node:path";
 import type { PiAgentFactory } from "@facet/agent";
 import {
 	type Action,
@@ -24,6 +25,7 @@ import {
 } from "@facet/protocol";
 import { WebSocket, WebSocketServer } from "ws";
 import type { ServerConfig } from "./config.ts";
+import { ProjectExistsError, ProjectNotFoundError, type ProjectStore } from "./project-store.ts";
 import {
 	type ActionSink,
 	ChannelNotFoundError,
@@ -61,6 +63,7 @@ interface EndpointContext {
 	readonly config: ServerConfig;
 	readonly factory: PiAgentFactory;
 	readonly hub: SessionHub;
+	readonly projectStore: ProjectStore;
 	readonly hostId: string;
 	readonly connections: Set<Connection>;
 }
@@ -290,6 +293,25 @@ async function handleRequest(
 		}
 		case "providers":
 			return { providers: context.factory.providers() };
+		case "listProjects":
+			return { projects: [...context.projectStore.list()] };
+		case "addProject": {
+			const source = asObject(params);
+			const cwd = requiredString(source, "cwd");
+			if (!isAbsolute(cwd)) {
+				throw new RequestError("bad_params", "cwd must be an absolute path");
+			}
+			return await context.projectStore.add({ cwd, name: optionalString(source, "name") });
+		}
+		case "renameProject": {
+			const source = asObject(params);
+			return await context.projectStore.rename(requiredString(source, "id"), optionalString(source, "name"));
+		}
+		case "removeProject": {
+			const source = asObject(params);
+			await context.projectStore.remove(requiredString(source, "id"));
+			return {};
+		}
 		default:
 			throw new RequestError("unknown_method", `unknown method: ${method}`);
 	}
@@ -304,6 +326,9 @@ function toProtocolError(error: unknown): { code: ErrorCode; message: string } {
 	}
 	if (error instanceof ChannelNotFoundError) {
 		return { code: "unknown_channel", message: error.message };
+	}
+	if (error instanceof ProjectExistsError || error instanceof ProjectNotFoundError) {
+		return { code: "rejected", message: error.message };
 	}
 	if (error instanceof SessionEntryNotFoundError || error instanceof SessionBusyError) {
 		return { code: "rejected", message: error.message };
@@ -381,12 +406,14 @@ export async function startEndpoint(options: {
 	config: ServerConfig;
 	factory: PiAgentFactory;
 	hub: SessionHub;
+	projectStore: ProjectStore;
 	hostId: string;
 }): Promise<EndpointHandle> {
 	const context: EndpointContext = {
 		config: options.config,
 		factory: options.factory,
 		hub: options.hub,
+		projectStore: options.projectStore,
 		hostId: options.hostId,
 		connections: new Set(),
 	};

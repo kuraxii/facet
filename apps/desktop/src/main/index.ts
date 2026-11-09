@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { type ServerHandle, startServer } from "@facet/server";
-import { app, BrowserWindow, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 
 const isDev = !app.isPackaged;
 
@@ -62,6 +62,18 @@ function createWindow(endpoint: string): BrowserWindow {
 
 	return window;
 }
+
+ipcMain.handle("facet:pick-directory", async (event) => {
+	const window = BrowserWindow.fromWebContents(event.sender);
+	const options = {
+		title: "选择项目文件夹",
+		properties: ["openDirectory", "createDirectory"],
+	} as const;
+	const result = window
+		? await dialog.showOpenDialog(window, { ...options, properties: [...options.properties] })
+		: await dialog.showOpenDialog({ ...options, properties: [...options.properties] });
+	return result.canceled ? undefined : result.filePaths[0];
+});
 
 app.whenReady().then(async () => {
 	server = await startServer({ port: 0, host: "127.0.0.1" });

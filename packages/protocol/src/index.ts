@@ -10,6 +10,7 @@ export type * from "./content.ts";
 export type * from "./event.ts";
 export type * from "./message.ts";
 export type * from "./model.ts";
+export type * from "./project.ts";
 export type * from "./request.ts";
 export type * from "./session.ts";
 export * from "./wire.ts";

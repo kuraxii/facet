@@ -14,6 +14,7 @@ import type {
 	Channel,
 	Entry,
 	ModelRef,
+	ProjectInfo,
 	RequestMethod,
 	RequestParams,
 	RequestResults,
@@ -134,6 +135,27 @@ export class SessionClient {
 	async listSessions(cwd?: string): Promise<SessionSummary[]> {
 		const result = await this.transport.request("listSessions", cwd === undefined ? {} : { cwd });
 		return result.sessions;
+	}
+
+	/** 列出用户添加的项目。 */
+	async listProjects(): Promise<ProjectInfo[]> {
+		const result = await this.transport.request("listProjects", {});
+		return result.projects;
+	}
+
+	/** 添加项目，目录重复时设备侧拒绝。 */
+	async addProject(input: { cwd: string; name?: string }): Promise<ProjectInfo> {
+		return await this.transport.request("addProject", input);
+	}
+
+	/** 重命名项目，名称为空时恢复目录名。 */
+	async renameProject(id: string, name?: string): Promise<ProjectInfo> {
+		return await this.transport.request("renameProject", name === undefined ? { id } : { id, name });
+	}
+
+	/** 移除项目。 */
+	async removeProject(id: string): Promise<void> {
+		await this.transport.request("removeProject", { id });
 	}
 
 	/**

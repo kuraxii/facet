@@ -19,7 +19,7 @@ import type { ModelInfo, ModelRef, ProviderInfo, SessionSummary, ThinkingLevel }
 import { toModelInfo } from "./convert.ts";
 import { applyAgentDir } from "./paths.ts";
 import { PiAgent } from "./pi-agent.ts";
-import { type SessionProject, scanSessionProjects } from "./projects.ts";
+import { normalizeProjectPath, type SessionProject, scanSessionProjects } from "./projects.ts";
 
 /** 工厂的进程级配置。 */
 export interface PiAgentFactoryOptions {
@@ -150,7 +150,7 @@ export class PiAgentFactory {
 		return infos.map((info) => ({
 			id: info.id,
 			path: info.path,
-			cwd: info.cwd,
+			cwd: normalizeProjectPath(info.cwd),
 			name: info.name,
 			parentSessionPath: info.parentSessionPath,
 			created: info.created.getTime(),

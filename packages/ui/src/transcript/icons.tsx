@@ -70,6 +70,25 @@ export function SendIcon({ size, ...rest }: IconProps) {
 	);
 }
 
+/** 关闭。 */
+export function CloseIcon({ size, ...rest }: IconProps) {
+	return (
+		<Icon size={size} {...rest}>
+			<path d="M6 6l12 12M18 6L6 18" />
+		</Icon>
+	);
+}
+
+/** 添加文件夹。 */
+export function FolderPlusIcon({ size, ...rest }: IconProps) {
+	return (
+		<Icon size={size} {...rest}>
+			<path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+			<path d="M12 11v6M9 14h6" />
+		</Icon>
+	);
+}
+
 /** 回到底部。 */
 export function ArrowDownIcon({ size, ...rest }: IconProps) {
 	return (

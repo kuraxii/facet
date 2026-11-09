@@ -4,7 +4,7 @@
  * 三段内容：最近会话、本机项目、远程主机。会话按项目目录分组，项目与主机都能折叠。
  * 主机清单、项目位置选择只提供界面，远端读写接入前以占位数据呈现。
  */
-import type { SessionSummary } from "@facet/protocol";
+import type { ProjectInfo, SessionSummary } from "@facet/protocol";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FolderIcon, MonitorIcon, PlusIcon, SearchIcon } from "../transcript/icons.tsx";
 import {
@@ -24,6 +24,8 @@ export interface SessionSidebarProps {
 	sessions: readonly SessionSummary[];
 	/** 可连接的主机，第一项为当前设备 */
 	hosts: readonly SidebarHost[];
+	/** 用户添加的项目，只有这些会出现在项目段 */
+	projects: readonly ProjectInfo[];
 	/** 当前会话的文件路径，没有打开会话时为空 */
 	activeFile: string | undefined;
 	/** 正在运行的会话文件路径 */
@@ -36,6 +38,8 @@ export interface SessionSidebarProps {
 	onCreate: (cwd: string) => void;
 	/** 新建是否可用，连接未就绪时不可用 */
 	canCreate: boolean;
+	/** 打开添加项目 */
+	onAddProject: () => void;
 }
 
 /** 最近会话最多显示的条数，点「全部」后放开。 */
@@ -106,16 +110,18 @@ function hostStatus(host: SidebarHost): string {
 export function SessionSidebar({
 	sessions,
 	hosts,
+	projects: storedProjects,
 	activeFile,
 	runningFile,
 	createCwd,
 	onSelect,
 	onCreate,
 	canCreate,
+	onAddProject,
 }: SessionSidebarProps) {
 	const data = useMemo(
-		() => buildSidebar({ sessions, hosts, activeFile, activeCwd: createCwd, runningFile }),
-		[sessions, hosts, activeFile, createCwd, runningFile],
+		() => buildSidebar({ sessions, hosts, projects: storedProjects, activeFile, runningFile }),
+		[sessions, hosts, storedProjects, activeFile, runningFile],
 	);
 
 	const [keyword, setKeyword] = useState("");
@@ -276,20 +282,28 @@ export function SessionSidebar({
 								本机
 							</span>
 						</p>
-						{filterProjects(data.projects, locationKeyword).map((project) => (
-							<button
-								type="button"
-								key={project.cwd}
-								className={samePath(project.cwd, createCwd) ? "ps is-current" : "ps"}
-								onClick={() => {
-									onCreate(project.cwd);
-									setIsLocationOpen(false);
-								}}
-							>
-								<span className="ell">{project.name}</span>
-								{samePath(project.cwd, createCwd) ? <span>当前</span> : <span />}
-							</button>
-						))}
+						{filterProjects(data.projects, locationKeyword).length === 0 ? (
+							<div className="ps t3">
+								<span className="ell">
+									{locationKeyword.trim().length > 0 ? "没有匹配的项目" : "还没有项目"}
+								</span>
+							</div>
+						) : (
+							filterProjects(data.projects, locationKeyword).map((project) => (
+								<button
+									type="button"
+									key={project.cwd}
+									className={samePath(project.cwd, createCwd) ? "ps is-current" : "ps"}
+									onClick={() => {
+										onCreate(project.cwd);
+										setIsLocationOpen(false);
+									}}
+								>
+									<span className="ell">{project.name}</span>
+									{samePath(project.cwd, createCwd) ? <span>当前</span> : <span />}
+								</button>
+							))
+						)}
 						{data.remotes.map((host) => (
 							<div key={host.id}>
 								<p className="sec is-tight">
@@ -361,19 +375,15 @@ export function SessionSidebar({
 			<div className="sb-body">
 				<div className="sec">
 					<span>项目</span>
-					<button
-						type="button"
-						className="sec-icon"
-						aria-label="添加项目"
-						onClick={() => setIsLocationOpen(true)}
-						disabled
-					>
+					<button type="button" className="sec-icon" aria-label="添加项目" onClick={onAddProject}>
 						<PlusIcon size={14} />
 					</button>
 				</div>
 
 				<div className="projects">
-					{projects.length === 0 ? <p className="ps t3">没有匹配的项目</p> : null}
+					{projects.length === 0 ? (
+						<p className="ps t3">{isSearching ? "没有匹配的项目" : "还没有项目"}</p>
+					) : null}
 					{projects.map(projectRow)}
 				</div>
 

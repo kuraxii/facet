@@ -7,7 +7,7 @@
 import { createHash } from "node:crypto";
 import type { Dirent } from "node:fs";
 import { type FileHandle, open, readdir, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { join, normalize } from "node:path";
 
 /** 会话头最大读取字节数，头部只有少量字段。 */
 const HEADER_BYTES = 4096;
@@ -35,7 +35,16 @@ export interface ScanSessionProjectsOptions {
 	concurrency?: number;
 }
 
-/** 由 cwd 得到稳定标识。 */
+/** 清理目录路径:收拢重复斜杠以及 `.`、`..`,去掉末尾斜杠。空串原样返回。 */
+export function normalizeProjectPath(cwd: string): string {
+	if (cwd.length === 0) {
+		return "";
+	}
+	const normalized = normalize(cwd);
+	return normalized.length > 1 && normalized.endsWith("/") ? normalized.slice(0, -1) : normalized;
+}
+
+/** 由 cwd 得到稳定标识,调用方传入已清理的路径。 */
 export function projectIdOf(cwd: string): string {
 	return createHash("sha1").update(cwd).digest("hex").slice(0, 16);
 }
@@ -117,10 +126,11 @@ export async function scanSessionProjects(options: ScanSessionProjectsOptions): 
 	const files = await listSessionFiles(options.sessionsDir);
 	const limit = options.concurrency ?? DEFAULT_CONCURRENCY;
 	const scanned = await mapLimit(files, limit, async (file) => {
-		const cwd = await readSessionCwd(file);
-		if (cwd === undefined) {
+		const headerCwd = await readSessionCwd(file);
+		if (headerCwd === undefined) {
 			return undefined;
 		}
+		const cwd = normalizeProjectPath(headerCwd);
 		let lastUsed: number;
 		try {
 			lastUsed = (await stat(file)).mtimeMs;

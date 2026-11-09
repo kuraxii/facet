@@ -1,10 +1,11 @@
 import { type DeviceHandshake, SessionClient, toTranscript } from "@facet/client-core";
-import type { SessionSummary } from "@facet/protocol";
+import type { ProjectInfo, SessionSummary } from "@facet/protocol";
 import { WsTransport } from "@facet/transport/ws";
 import {
 	ArrowDownIcon,
 	ChatTranscript,
 	Composer,
+	CreateProjectDialog,
 	SessionSidebar,
 	type SidebarHost,
 	useStickToBottom,
@@ -17,6 +18,8 @@ interface FacetBridge {
 	endpoint: string;
 	projectDir: string;
 	platform: string;
+	/** 打开系统的目录选择窗口,取消时返回空 */
+	pickDirectory: () => Promise<string | undefined>;
 }
 
 declare global {
@@ -42,6 +45,8 @@ export function App() {
 	const [sessions, setSessions] = useState<readonly SessionSummary[]>([]);
 	const [activeFile, setActiveFile] = useState<string | undefined>(undefined);
 	const [device, setDevice] = useState<DeviceHandshake | undefined>(undefined);
+	const [projects, setProjects] = useState<readonly ProjectInfo[]>([]);
+	const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
 	const [createCwd, setCreateCwd] = useState(bridge.projectDir);
 	const [draft, setDraft] = useState("");
 	const started = useRef(false);
@@ -69,6 +74,7 @@ export function App() {
 			const handshake = await transport.connect();
 			client.attach(handshake);
 			setDevice(handshake);
+			setProjects(await client.listProjects());
 			const pool = await refreshSessions();
 			const newest = pool[0];
 			if (newest) {
@@ -111,6 +117,15 @@ export function App() {
 		setDraft("");
 		client.send(text);
 	}, [draft]);
+
+	const createProject = useCallback(async (input: { cwd: string; name: string | undefined }) => {
+		const created = await client.addProject({
+			cwd: input.cwd,
+			...(input.name === undefined ? {} : { name: input.name }),
+		});
+		setProjects(await client.listProjects());
+		setCreateCwd(created.cwd);
+	}, []);
 
 	const forkFrom = useCallback(
 		(messageId: string) => {
@@ -161,6 +176,7 @@ export function App() {
 			<SessionSidebar
 				sessions={sessions}
 				hosts={hosts}
+				projects={projects}
 				activeFile={activeFile}
 				runningFile={chat?.isRunning === true ? activeFile : undefined}
 				createCwd={createCwd}
@@ -170,6 +186,7 @@ export function App() {
 					void createSession(cwd);
 				}}
 				canCreate={phase === "ready"}
+				onAddProject={() => setIsProjectDialogOpen(true)}
 			/>
 
 			<main className="main">
@@ -219,6 +236,13 @@ export function App() {
 					</div>
 				</div>
 			</main>
+
+			<CreateProjectDialog
+				isOpen={isProjectDialogOpen}
+				onPickFolder={() => window.facet.pickDirectory()}
+				onCreate={createProject}
+				onClose={() => setIsProjectDialogOpen(false)}
+			/>
 		</div>
 	);
 }

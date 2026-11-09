@@ -7,7 +7,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute } from "node:path";
-import { projectIdOf } from "@facet/agent";
+import { normalizeProjectPath, projectIdOf } from "@facet/agent";
 
 /** 清单文件格式版本，读取时按它判断能否兼容。 */
 const FILE_VERSION = 1;
@@ -52,12 +52,6 @@ export class ProjectNotFoundError extends Error {
 	}
 }
 
-/** 去掉末尾斜杠，根目录保留一个斜杠。 */
-function normalizeCwd(cwd: string): string {
-	const trimmed = cwd.replace(/\/+$/, "");
-	return trimmed.length === 0 ? "/" : trimmed;
-}
-
 /** 显示名去掉首尾空白，空串按未设置处理。 */
 function normalizeName(name: string | undefined): string | undefined {
 	const trimmed = name?.trim();
@@ -70,14 +64,13 @@ function parseProject(value: unknown): StoredProject | undefined {
 		return undefined;
 	}
 	const record = value as Record<string, unknown>;
-	const cwd = typeof record.cwd === "string" ? normalizeCwd(record.cwd) : "";
+	const cwd = typeof record.cwd === "string" ? normalizeProjectPath(record.cwd) : "";
 	if (cwd.length === 0) {
 		return undefined;
 	}
-	const id = typeof record.id === "string" && record.id.length > 0 ? record.id : projectIdOf(cwd);
 	const name = typeof record.name === "string" ? normalizeName(record.name) : undefined;
 	const createdAt = typeof record.createdAt === "number" ? record.createdAt : 0;
-	return { id, cwd, name, createdAt };
+	return { id: projectIdOf(cwd), cwd, name, createdAt };
 }
 
 export class ProjectStore {
@@ -117,7 +110,7 @@ export class ProjectStore {
 		if (!isAbsolute(input.cwd)) {
 			throw new Error(`项目目录必须是绝对路径:${input.cwd}`);
 		}
-		const cwd = normalizeCwd(input.cwd);
+		const cwd = normalizeProjectPath(input.cwd);
 		if ([...this.projects.values()].some((project) => project.cwd === cwd)) {
 			throw new ProjectExistsError(cwd);
 		}

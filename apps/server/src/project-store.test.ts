@@ -37,6 +37,29 @@ describe("项目清单", () => {
 		await expect(store.add({ cwd: "/work/a/" })).rejects.toBeInstanceOf(ProjectExistsError);
 	});
 
+	it("存进去的目录是清理过的", async () => {
+		const store = await ProjectStore.open({ file });
+		const project = await store.add({ cwd: "/work//a/./" });
+		expect(project.cwd).toBe("/work/a");
+		expect(project.id).toBe(projectIdOf("/work/a"));
+		await expect(store.add({ cwd: "/work/b/../a" })).rejects.toBeInstanceOf(ProjectExistsError);
+	});
+
+	it("读取时按目录重算标识", async () => {
+		await writeFile(
+			file,
+			JSON.stringify({
+				version: 1,
+				projects: [{ id: "写错了的标识", cwd: "/work//a/./", name: "旧名字", createdAt: 2 }],
+			}),
+			"utf8",
+		);
+		const store = await ProjectStore.open({ file });
+		expect(store.list()).toEqual([
+			{ id: projectIdOf("/work/a"), cwd: "/work/a", name: "旧名字", createdAt: 2 },
+		]);
+	});
+
 	it("拒绝相对路径", async () => {
 		const store = await ProjectStore.open({ file });
 		await expect(store.add({ cwd: "work/a" })).rejects.toThrow("绝对路径");

@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { projectIdOf, scanSessionProjects } from "./projects.ts";
+import { normalizeProjectPath, projectIdOf, scanSessionProjects } from "./projects.ts";
 
 let root: string;
 let sessionsDir: string;
@@ -71,6 +71,22 @@ describe("扫描会话目录", () => {
 	it("会话根目录不存在时返回空", async () => {
 		const projects = await scanSessionProjects({ sessionsDir: join(root, "missing") });
 		expect(projects).toEqual([]);
+	});
+
+	it("不同写法的同一目录合并成一条", async () => {
+		await writeSession("--a--", "s1.jsonl", "/work/a/");
+		await writeSession("--b--", "s2.jsonl", "/work/./a");
+		const projects = await scanSessionProjects({ sessionsDir });
+		expect(projects).toHaveLength(1);
+		expect(projects[0]?.cwd).toBe("/work/a");
+		expect(projects[0]?.sessionCount).toBe(2);
+	});
+
+	it("路径清理收拢重复斜杠与点段", () => {
+		expect(normalizeProjectPath("/work//a/./")).toBe("/work/a");
+		expect(normalizeProjectPath("/work/a/../b")).toBe("/work/b");
+		expect(normalizeProjectPath("/")).toBe("/");
+		expect(normalizeProjectPath("")).toBe("");
 	});
 
 	it("标识由路径派生，同一路径稳定", () => {

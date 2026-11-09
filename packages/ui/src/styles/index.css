@@ -379,26 +379,7 @@ svg.fl {
 	border-color: var(--line2);
 }
 
-.assistant-line {
-	display: flex;
-	align-items: flex-start;
-	gap: 12px;
-}
-
-.avatar {
-	display: grid;
-	place-items: center;
-	flex: none;
-	width: 24px;
-	height: 24px;
-	margin-top: 2px;
-	border-radius: 8px;
-	background: var(--accbg);
-	color: var(--acc);
-}
-
 .assistant-body {
-	flex: 1;
 	min-width: 0;
 }
 

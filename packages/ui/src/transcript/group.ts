@@ -130,6 +130,20 @@ function diffOf(part: ToolCallPart): DiffChunk | undefined {
 	return { callId: part.callId, toolName: part.name, files: filesOfPatch(patch), patch, added, removed };
 }
 
+/** 只取出思考段的那一项,其余段留在原来的行里。 */
+function thinkingOnly(item: TranscriptItem): TranscriptItem | undefined {
+	const parts = item.parts.filter((part) => part.kind === "thinking");
+	if (parts.length === 0) {
+		return undefined;
+	}
+	return { ...item, parts };
+}
+
+/** 去掉思考段之后的那一项。 */
+function withoutThinking(item: TranscriptItem): TranscriptItem {
+	return { ...item, parts: item.parts.filter((part) => part.kind !== "thinking") };
+}
+
 /** 把一项的内容累计进过程行。 */
 function absorb(draft: GroupDraft, item: TranscriptItem): void {
 	draft.items.push(item);
@@ -257,8 +271,14 @@ export function groupRows(items: readonly TranscriptItem[]): DisplayRow[] {
 			continue;
 		}
 		if (item.role === "assistant" && hasText(item.parts)) {
+			// 这一轮已经有过程内容时,答复消息里的思考也归过程,答复行只留正文;
+			// 只有思考加正文的回合没有过程可言,思考仍留在答复行里。
+			const moved = group ? thinkingOnly(item) : undefined;
+			if (moved && group) {
+				absorb(group, moved);
+			}
 			flush();
-			const row = singleton(item, "assistant");
+			const row = singleton(moved ? withoutThinking(item) : item, "assistant");
 			rows.push({ ...row, diffs: [] });
 			pending.push(...row.diffs);
 			flushDiffs();

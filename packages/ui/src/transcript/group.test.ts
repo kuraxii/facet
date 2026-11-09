@@ -142,3 +142,60 @@ describe("分行", () => {
 		expect(rows).toEqual([]);
 	});
 });
+
+describe("思考段的归属", () => {
+	it("这一轮没有过程时,思考留在答复行里", () => {
+		const rows = groupRows([
+			item({ id: "m1", role: "user", parts: [text("text:0", "问")] }),
+			item({ id: "m2", role: "assistant", parts: [thinking("thinking:0", "想"), text("text:1", "答")] }),
+		]);
+		expect(rows.map((row) => row.kind)).toEqual(["user", "assistant"]);
+		expect(rows[1]?.items[0]?.parts.map((part) => part.kind)).toEqual(["thinking", "text"]);
+		expect(rows[1]?.thinkingCount).toBe(1);
+	});
+
+	it("这一轮有过程时,答复行里的思考并进过程行", () => {
+		const rows = groupRows([
+			item({ id: "m1", role: "user", parts: [text("text:0", "改一下")] }),
+			item({
+				id: "m2",
+				role: "assistant",
+				parts: [thinking("thinking:0", "先看看"), tool("tool:c1", "c1", 20)],
+			}),
+			item({
+				id: "m3",
+				role: "assistant",
+				parts: [thinking("thinking:0", "改好了"), text("text:1", "完成")],
+			}),
+		]);
+		expect(rows.map((row) => row.kind)).toEqual(["user", "meta", "assistant"]);
+		expect(rows[1]?.thinkingCount).toBe(2);
+		expect(rows[1]?.toolCount).toBe(1);
+		expect(rows[2]?.items[0]?.parts.map((part) => part.kind)).toEqual(["text"]);
+		expect(rows[2]?.thinkingCount).toBe(0);
+	});
+
+	it("并入过程后答复行的工具调用仍留在答复行", () => {
+		const rows = groupRows([
+			item({ id: "m1", role: "assistant", parts: [thinking("thinking:0", "想")] }),
+			item({
+				id: "m2",
+				role: "assistant",
+				parts: [thinking("thinking:0", "再想"), text("text:1", "答"), tool("tool:c2", "c2", 5)],
+			}),
+		]);
+		expect(rows.map((row) => row.kind)).toEqual(["meta", "assistant"]);
+		expect(rows[1]?.items[0]?.parts.map((part) => part.kind)).toEqual(["text", "toolCall"]);
+	});
+
+	it("下一轮重新判断,不受上一轮影响", () => {
+		const rows = groupRows([
+			item({ id: "m1", role: "assistant", parts: [tool("tool:c1", "c1", 5)] }),
+			item({ id: "m2", role: "assistant", parts: [text("text:0", "答")] }),
+			item({ id: "m3", role: "user", parts: [text("text:0", "再问")] }),
+			item({ id: "m4", role: "assistant", parts: [thinking("thinking:0", "想"), text("text:1", "再答")] }),
+		]);
+		expect(rows.map((row) => row.kind)).toEqual(["meta", "assistant", "user", "assistant"]);
+		expect(rows[3]?.thinkingCount).toBe(1);
+	});
+});

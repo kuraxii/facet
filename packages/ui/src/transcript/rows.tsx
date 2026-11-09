@@ -385,12 +385,7 @@ export function ChatTranscript({ items, canFork, onFork, retry, emptyHint }: Cha
 
 				return (
 					<Shell key={row.id} className="is-assistant">
-						<div className="assistant-line">
-							<span className="avatar">
-								<SparkIcon className="fl" size={13} />
-							</span>
-							<div className="assistant-body">{bodyOf(row)}</div>
-						</div>
+						<div className="assistant-body">{bodyOf(row)}</div>
 					</Shell>
 				);
 			})}

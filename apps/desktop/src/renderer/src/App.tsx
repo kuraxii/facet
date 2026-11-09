@@ -1,7 +1,7 @@
 import { SessionClient, toTranscript } from "@facet/client-core";
-import type { SessionSummary } from "@facet/protocol";
+import type { InputRequest, SessionSummary } from "@facet/protocol";
 import { WsTransport } from "@facet/transport/ws";
-import { ChatTranscript } from "@facet/ui";
+import { ChatTranscript, Composer, SessionSidebar, toolTarget } from "@facet/ui";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 /** 预加载脚本注入的启动参数 */
@@ -24,8 +24,13 @@ const client = new SessionClient({ transport, initialPages: 2, pageSize: 40 });
 
 type Phase = "connecting" | "ready" | "failed";
 
-function formatTime(value: number): string {
-	return new Date(value).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+/** 审批条上的一句话说明:工具名加参数摘要。 */
+function approvalLabel(request: InputRequest | undefined): string {
+	if (!request) {
+		return "";
+	}
+	const target = toolTarget(request.input);
+	return target.length > 0 ? `${request.toolName} ${target}` : request.toolName;
 }
 
 export function App() {
@@ -40,6 +45,13 @@ export function App() {
 	const [draft, setDraft] = useState("");
 	const started = useRef(false);
 
+	const refreshSessions = useCallback(async () => {
+		const scoped = await client.listSessions(bridge.projectDir);
+		const pool = scoped.length > 0 ? scoped : await client.listSessions();
+		setSessions(pool);
+		return pool;
+	}, []);
+
 	useEffect(() => {
 		if (started.current) {
 			return;
@@ -48,25 +60,23 @@ export function App() {
 		void (async () => {
 			const handshake = await transport.connect();
 			client.attach(handshake);
-			const scoped = await client.listSessions(bridge.projectDir);
-			const pool = scoped.length > 0 ? scoped : await client.listSessions();
-			setSessions(pool);
+			const pool = await refreshSessions();
 			const newest = pool[0];
 			if (newest) {
 				await client.openSession(newest.path);
 				setActiveFile(newest.path);
 			}
-			console.log(`已打开 ${newest?.path ?? "无会话"},装载 ${client.chatView()?.messages.length ?? 0} 条`);
 			setPhase("ready");
 		})().catch((error: unknown) => {
 			setFailure(error instanceof Error ? error.message : String(error));
 			setPhase("failed");
 		});
-	}, []);
+	}, [refreshSessions]);
+
+	void version;
 
 	const session = client.sessionView();
 	const chat = client.chatView();
-	const messages = chat?.messages ?? [];
 	const pending = session?.inputNeeded ?? [];
 
 	const openSession = useCallback(async (summary: SessionSummary) => {
@@ -74,6 +84,15 @@ export function App() {
 		await client.openSession(summary.path);
 		setActiveFile(summary.path);
 	}, []);
+
+	const createSession = useCallback(async () => {
+		await client.release();
+		const opened = await client.createSession({
+			...(bridge.projectDir.length > 0 ? { cwd: bridge.projectDir } : {}),
+		});
+		setActiveFile(opened.file);
+		await refreshSessions();
+	}, [refreshSessions]);
 
 	const send = useCallback(() => {
 		const text = draft.trim();
@@ -88,20 +107,24 @@ export function App() {
 		void client.loadOlder();
 	}, []);
 
-	const forkFrom = useCallback((messageId: string) => {
-		void client.fork(messageId).then((forked) => setActiveFile(forked.file));
-	}, []);
+	const forkFrom = useCallback(
+		(messageId: string) => {
+			void client.fork(messageId).then(async (forked) => {
+				setActiveFile(forked.file);
+				await refreshSessions();
+			});
+		},
+		[refreshSessions],
+	);
 
 	const transcript = useMemo(() => (chat ? toTranscript(chat) : []), [chat]);
-
-	void version;
 
 	if (phase === "failed") {
 		return (
 			<main className="boot">
 				<h1>连不上设备</h1>
 				<p>{failure}</p>
-				<p className="boot-hint">端点 {bridge.endpoint}</p>
+				<p>{bridge.endpoint}</p>
 			</main>
 		);
 	}
@@ -110,118 +133,96 @@ export function App() {
 		return (
 			<main className="boot">
 				<h1>正在连接设备</h1>
-				<p className="boot-hint">端点 {bridge.endpoint}</p>
+				<p>{bridge.endpoint}</p>
 			</main>
 		);
 	}
 
 	return (
 		<div className="shell">
-			<aside className="sidebar">
-				<div className="sidebar-head">
-					<span className="sidebar-title">会话</span>
-					<span className="sidebar-count">{sessions.length}</span>
-				</div>
-				<ul className="session-list">
-					{sessions.map((summary) => (
-						<li key={summary.path}>
-							<button
-								type="button"
-								className={summary.path === activeFile ? "session is-active" : "session"}
-								onClick={() => void openSession(summary)}
-							>
-								<span className="session-name">
-									{summary.name ?? summary.firstMessage.slice(0, 24) ?? "未命名"}
-								</span>
-								<span className="session-meta">
-									{summary.messageCount} 条 · {formatTime(summary.modified)}
-								</span>
-							</button>
-						</li>
-					))}
-				</ul>
-				<div className="sidebar-foot">{bridge.projectDir}</div>
-			</aside>
+			<SessionSidebar
+				sessions={sessions}
+				activeFile={activeFile}
+				runningFile={chat?.isRunning === true ? activeFile : undefined}
+				projectDir={bridge.projectDir}
+				onSelect={(summary) => void openSession(summary)}
+				onCreate={() => void createSession()}
+				canCreate={phase === "ready"}
+			/>
 
-			<main className="chat">
-				<header className="chat-head">
-					<div className="chat-title">
-						{session?.title ?? "未命名会话"}
-						{session?.status === "running" ? <span className="chip is-live">运行中</span> : null}
-					</div>
-					<div className="chat-meta">
-						<span>{session?.model?.id ?? "无模型"}</span>
-						<span>{session?.thinkingLevel ?? "—"}</span>
-						<span>{messages.length} 条已装载</span>
-					</div>
-				</header>
-
-				<section className="stream">
-					{client.hasMore ? (
-						<button type="button" className="load-older" onClick={loadOlder}>
-							加载更早的历史
-						</button>
-					) : null}
-
-					<ChatTranscript
-						items={transcript}
-						canFork={chat?.isRunning !== true}
-						onFork={forkFrom}
-						emptyHint="还没有消息"
-					/>
-				</section>
-
-				{pending.length > 0 ? (
-					<div className="approvals">
-						{pending.map((request) => (
-							<div key={request.id} className="approval">
-								<span>
-									需要确认:{request.toolName} {request.id}
-								</span>
-								<button type="button" onClick={() => client.respondTool(request.id, { action: "allow" })}>
-									允许
-								</button>
-								<button type="button" onClick={() => client.respondTool(request.id, { action: "deny" })}>
-									拒绝
-								</button>
-							</div>
-						))}
-					</div>
-				) : null}
-
-				<footer className="composer">
-					<textarea
-						value={draft}
-						placeholder="输入消息,回车发送"
-						onChange={(event) => setDraft(event.target.value)}
-						onKeyDown={(event) => {
-							if (event.key === "Enter" && !event.shiftKey) {
-								event.preventDefault();
-								send();
-							}
-						}}
-					/>
-					<div className="composer-actions">
-						{chat?.isRunning === true ? (
-							<button type="button" onClick={() => client.cancel()}>
-								停止
+			<main className="main">
+				<section className="scroll">
+					<div className="column">
+						{client.hasMore ? (
+							<button type="button" className="load-older" onClick={loadOlder}>
+								加载更早的历史
 							</button>
 						) : null}
-						<button type="button" className="primary" onClick={send} disabled={draft.trim().length === 0}>
-							发送
-						</button>
+						<ChatTranscript
+							items={transcript}
+							canFork={chat?.isRunning !== true}
+							onFork={forkFrom}
+							retry={chat?.retry}
+							emptyHint="还没有消息,输入内容开始"
+						/>
 					</div>
-				</footer>
+				</section>
 
-				{chat && chat.notices.length > 0 ? (
-					<div className="notices">
-						{chat.notices.map((notice) => (
-							<span key={`${notice.level}:${notice.message}`} className={`notice level-${notice.level}`}>
-								{notice.message}
-							</span>
-						))}
+				<div className="footer">
+					<div className="footer-column">
+						{pending.length > 0 ? (
+							<div className="approval">
+								<b>需要确认</b>
+								<span className="cmd">{approvalLabel(pending[0])}</span>
+								{pending.length > 1 ? <span className="stat">共 {pending.length} 项</span> : null}
+								<span className="actions">
+									<button
+										type="button"
+										className="btn"
+										onClick={() => {
+											for (const request of pending) {
+												client.respondTool(request.id, { action: "deny" });
+											}
+										}}
+									>
+										拒绝
+									</button>
+									<button
+										type="button"
+										className="btn pri"
+										onClick={() => {
+											for (const request of pending) {
+												client.respondTool(request.id, { action: "allow" });
+											}
+										}}
+									>
+										允许
+									</button>
+								</span>
+							</div>
+						) : null}
+
+						<Composer
+							value={draft}
+							onChange={setDraft}
+							onSend={send}
+							onStop={() => client.cancel()}
+							isRunning={chat?.isRunning === true}
+							model={session?.model}
+							thinkingLevel={session?.thinkingLevel}
+						/>
+
+						{chat && chat.notices.length > 0 ? (
+							<div className="notices">
+								{chat.notices.map((notice) => (
+									<span key={`${notice.level}:${notice.message}`} className="chip">
+										{notice.message}
+									</span>
+								))}
+							</div>
+						) : null}
 					</div>
-				) : null}
+				</div>
 			</main>
 		</div>
 	);

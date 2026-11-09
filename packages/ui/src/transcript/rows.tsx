@@ -5,8 +5,11 @@
  * 默认只有过程行与文件改动行收起,其余行展开。
  */
 import type { Part, ToolCallPart, TranscriptItem } from "@facet/client-core";
-import { type CSSProperties, type ReactNode, useCallback, useMemo, useState } from "react";
-import { type DiffChunk, type DisplayRow, formatDuration, groupRows, metaSummary } from "./group.ts";
+import { type ReactNode, useCallback, useMemo, useState } from "react";
+import { type DiffChunk, type DisplayRow, groupRows, metaSummary } from "./group.ts";
+import { ForkIcon, SparkIcon } from "./icons.tsx";
+import { Markdown } from "./Markdown.tsx";
+import { foldOutput, toolStatusText, toolTarget } from "./tool-text.ts";
 
 /** 面板参数。 */
 export interface ChatTranscriptProps {
@@ -16,6 +19,8 @@ export interface ChatTranscriptProps {
 	canFork: boolean;
 	/** 从某条消息分叉,传入消息标识 */
 	onFork: (messageId: string) => void;
+	/** 正在进行的自动重试,没有则为空 */
+	retry?: { attempt: number; maxAttempts: number } | undefined;
 	/** 没有任何内容时显示的提示 */
 	emptyHint?: string;
 }
@@ -25,7 +30,7 @@ function isCollapsedByDefault(kind: DisplayRow["kind"]): boolean {
 	return kind === "meta" || kind === "diff";
 }
 
-function partText(parts: readonly Part[]): string {
+function textOf(parts: readonly Part[]): string {
 	return parts
 		.map((part) => (part.kind === "text" ? part.text : ""))
 		.join("")
@@ -33,140 +38,236 @@ function partText(parts: readonly Part[]): string {
 }
 
 /** 收起时显示的一行预览。 */
-function preview(text: string, limit = 60): string {
+function preview(text: string, limit = 48): string {
 	const flat = text.replace(/\s+/g, " ").trim();
 	return flat.length > limit ? `${flat.slice(0, limit)}…` : flat;
 }
 
-function roleLabel(row: DisplayRow): string {
-	if (row.kind === "user") {
-		return "我";
+/** 过程中最近一次工具调用,运行中时显示在过程行右侧。 */
+function activeTool(row: DisplayRow): string {
+	let name = "";
+	for (const item of row.items) {
+		for (const part of item.parts) {
+			if (part.kind === "toolCall") {
+				name = part.name;
+			}
+		}
 	}
-	if (row.kind === "error") {
-		return "出错";
-	}
-	return "助手";
+	return name;
 }
 
-/** 一段内容。思考与工具调用各自可折叠。 */
-function PartView({ part }: { part: Part }) {
-	if (part.kind === "text") {
-		return <pre className="t-text">{part.text}</pre>;
-	}
-	if (part.kind === "thinking") {
-		return (
-			<details className="t-thinking">
-				<summary>思考</summary>
-				<pre>{part.text}</pre>
-			</details>
-		);
-	}
-	const input = part.input === undefined ? "" : JSON.stringify(part.input, null, 1).slice(0, 400);
-	const status = part.status === "running" ? "执行中" : part.status === "failed" ? "失败" : "完成";
-	return (
-		<details className={`t-tool status-${part.status}`} open={part.status === "running"}>
-			<summary>
-				<span className="t-tool-name">{part.name}</span>
-				<span className="t-tool-status">{status}</span>
-				{part.durationMs === undefined ? null : (
-					<span className="t-tool-time">{formatDuration(part.durationMs)}</span>
-				)}
-			</summary>
-			{input.length > 0 ? <pre className="t-tool-input">{input}</pre> : null}
-			{part.output === undefined ? null : <pre className="t-tool-output">{part.output}</pre>}
-		</details>
-	);
-}
-
-/** 文件改动的摘要,放在行头部。 */
-function diffSummary(diff: DiffChunk): string {
-	const files = diff.files.length === 0 ? "未命名文件" : diff.files.map(shortPath).join("、");
-	return `${files} +${diff.added} −${diff.removed}`;
-}
-
-/** 文件改动的补丁正文。 */
-function DiffPatch({ diff }: { diff: DiffChunk }) {
-	return (
-		<pre className="t-diff-patch">
-			{patchLines(diff.patch).map(({ key, line }) => (
-				<span key={key} className={`t-diff-line ${lineClass(line)}`}>
-					{line}
-					{"\n"}
-				</span>
-			))}
-		</pre>
-	);
-}
-
-/** 补丁里的路径是绝对路径,展示时只留末尾两段。 */
 function shortPath(path: string): string {
 	const parts = path.split("/").filter((segment) => segment.length > 0);
 	return parts.length <= 2 ? parts.join("/") : parts.slice(-2).join("/");
 }
 
-/** 补丁按行拆开,行的键用累计偏移,补丁刷新时不会错位。 */
-function patchLines(patch: string): readonly { key: string; line: string }[] {
-	const lines: { key: string; line: string }[] = [];
+function lineClass(line: string): string {
+	if (line.startsWith("@@") || line.startsWith("+++ ") || line.startsWith("--- ")) {
+		return "is-meta";
+	}
+	if (line.startsWith("+")) {
+		return "is-add";
+	}
+	if (line.startsWith("-")) {
+		return "is-del";
+	}
+	return "";
+}
+
+/** 补丁按行拆开并带上行号,键用累计偏移,刷新时不会错位。 */
+function patchLines(patch: string): readonly { key: string; line: string; number: string }[] {
+	const lines: { key: string; line: string; number: string }[] = [];
 	let offset = 0;
+	let oldLine = 0;
+	let newLine = 0;
 	for (const line of patch.split("\n")) {
-		lines.push({ key: `at-${offset}`, line });
+		const header = /^@@ -(\d+)(?:,\d+)? \+(\d+)/.exec(line);
+		if (header) {
+			oldLine = Number(header[1]);
+			newLine = Number(header[2]);
+		}
+		let number = "";
+		if (!header && !line.startsWith("+++ ") && !line.startsWith("--- ") && !line.startsWith("diff ")) {
+			if (line.startsWith("-")) {
+				number = String(oldLine);
+				oldLine += 1;
+			} else if (line.startsWith("+")) {
+				number = String(newLine);
+				newLine += 1;
+			} else {
+				number = String(newLine);
+				oldLine += 1;
+				newLine += 1;
+			}
+		}
+		lines.push({ key: `at-${offset}`, line, number });
 		offset += line.length + 1;
 	}
 	return lines;
 }
 
-function lineClass(line: string): string {
-	if (line.startsWith("+++ ") || line.startsWith("--- ") || line.startsWith("@@")) {
-		return "is-meta";
-	}
-	if (line.startsWith("+")) {
-		return "is-added";
-	}
-	if (line.startsWith("-")) {
-		return "is-removed";
-	}
-	return "is-plain";
+/** 一次工具调用卡。 */
+function ToolCard({ part }: { part: ToolCallPart }) {
+	const [isOpen, setOpen] = useState(part.status === "running");
+	const [isExpanded, setExpanded] = useState(false);
+	const output = part.output ?? "";
+	const folded = foldOutput(output);
+	const isLong = folded.hiddenLines > 0;
+	const shown = isLong && !isExpanded ? folded.preview : output;
+	const target = toolTarget(part.input);
+
+	return (
+		<div className={`tool is-${part.status}`}>
+			<button type="button" className="tool-head" onClick={() => setOpen((open) => !open)}>
+				<i className={isOpen ? "chev is-open" : "chev"} />
+				<span className="tool-name">{part.name}</span>
+				{target.length > 0 ? <span className="tool-arg">{target}</span> : null}
+				<span className="tool-status">
+					{part.status === "running" ? <i className="dot is-warn pulse" /> : null}
+					{toolStatusText(part.status, part.durationMs)}
+				</span>
+			</button>
+			{isOpen && output.length > 0 ? <pre className="tool-out">{shown}</pre> : null}
+			{isOpen && isLong && !isExpanded ? (
+				<button type="button" className="tool-more" onClick={() => setExpanded(true)}>
+					已折叠 {folded.hiddenLines} 行 · 显示全部
+				</button>
+			) : null}
+		</div>
+	);
 }
 
-/** 行外壳:头部可点开收起,正文按需渲染。 */
-function RowShell({
-	row,
-	label,
-	summary,
-	isCollapsed,
-	onToggle,
-	action,
-	children,
-}: {
-	row: DisplayRow;
-	label: string;
-	summary: string;
-	isCollapsed: boolean;
-	onToggle: () => void;
-	action?: ReactNode;
-	children: ReactNode;
-}) {
-	const style = { "--row-depth": row.kind === "meta" || row.kind === "diff" ? "1" : "0" } as CSSProperties;
+/** 一段思考。收起时只留一句预览。 */
+function ThinkingLine({ text }: { text: string }) {
+	const [isOpen, setOpen] = useState(false);
 	return (
-		<article className={`t-row kind-${row.kind}${isCollapsed ? " is-collapsed" : ""}`} style={style}>
-			<div className="t-head">
-				<button type="button" className="t-toggle" onClick={onToggle} aria-expanded={!isCollapsed}>
-					<span className="t-caret">{isCollapsed ? "▸" : "▾"}</span>
-					<span className="t-label">{label}</span>
-					{summary.length > 0 ? <span className="t-summary">{summary}</span> : null}
-					{row.isStreaming ? <span className="t-live">运行中</span> : null}
-				</button>
-				{action}
-			</div>
-			{isCollapsed ? null : <div className="t-body">{children}</div>}
-		</article>
+		<>
+			<button type="button" className="think" onClick={() => setOpen((open) => !open)}>
+				<i className={isOpen ? "chev is-open" : "chev"} />
+				<em>思考</em>
+				{isOpen ? null : <span className="preview">{preview(text, 60)}</span>}
+			</button>
+			{isOpen ? <pre className="think-text">{text}</pre> : null}
+		</>
 	);
+}
+
+/** 一段内容。正文走 Markdown,思考与工具各自成块。 */
+function PartView({ part, isStreaming }: { part: Part; isStreaming: boolean }) {
+	if (part.kind === "text") {
+		return <Markdown text={part.text} isStreaming={isStreaming} />;
+	}
+	if (part.kind === "thinking") {
+		return <ThinkingLine text={part.text} />;
+	}
+	return <ToolCard part={part} />;
+}
+
+/** 一轮的文件改动。文件是按钮,点开看这一段补丁。 */
+function FilesRow({ diffs }: { diffs: readonly DiffChunk[] }) {
+	const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set());
+	const toggle = useCallback((callId: string) => {
+		setOpened((previous) => {
+			const next = new Set(previous);
+			if (next.has(callId)) {
+				next.delete(callId);
+			} else {
+				next.add(callId);
+			}
+			return next;
+		});
+	}, []);
+	const totalAdded = diffs.reduce((sum, diff) => sum + diff.added, 0);
+	const totalRemoved = diffs.reduce((sum, diff) => sum + diff.removed, 0);
+
+	return (
+		<>
+			<div className="files">
+				{diffs.map((diff) => {
+					const file = diff.files[0];
+					const isOpen = opened.has(diff.callId);
+					return (
+						<button key={diff.callId} type="button" className="fc" onClick={() => toggle(diff.callId)}>
+							<i className={isOpen ? "chev is-open" : "chev"} />
+							<span className="path" title={file ?? ""}>
+								{file === undefined ? "未命名文件" : shortPath(file)}
+							</span>
+							<b className="add">+{diff.added}</b>
+							<b className="del">−{diff.removed}</b>
+						</button>
+					);
+				})}
+				<span className="files-meta">
+					{diffs.length} 个文件 · <b className="add">+{totalAdded}</b> <b className="del">−{totalRemoved}</b>
+				</span>
+			</div>
+			{diffs
+				.filter((diff) => opened.has(diff.callId))
+				.map((diff) => (
+					<div key={`patch:${diff.callId}`} className="diff-body">
+						{patchLines(diff.patch).map(({ key, line, number }) => (
+							<div key={key} className={`diff-line ${lineClass(line)}`}>
+								<i>{number}</i>
+								<span>{line}</span>
+							</div>
+						))}
+					</div>
+				))}
+		</>
+	);
+}
+
+/** 答复行的正文:相邻的正文段合成一块 Markdown,思考与工具按原位置插入。 */
+function bodyOf(row: DisplayRow): ReactNode[] {
+	const nodes: ReactNode[] = [];
+	let buffer: string[] = [];
+	let index = 0;
+	const flush = (isStreaming: boolean): void => {
+		const text = buffer.join("\n\n").trim();
+		buffer = [];
+		if (text.length === 0) {
+			return;
+		}
+		index += 1;
+		nodes.push(
+			<Markdown
+				key={`md:${row.id}:${index}`}
+				text={text}
+				isStreaming={isStreaming}
+				indexKey={`${row.id}:${index}`}
+			/>,
+		);
+	};
+	for (const item of row.items) {
+		for (const part of item.parts) {
+			if (part.kind === "text") {
+				buffer.push(part.text);
+				continue;
+			}
+			flush(item.isStreaming);
+			nodes.push(<PartView key={`${item.id}-${part.partId}`} part={part} isStreaming={item.isStreaming} />);
+		}
+		flush(item.isStreaming);
+	}
+	if (nodes.length === 0) {
+		nodes.push(
+			<div key="empty" className="t3">
+				(无正文)
+			</div>,
+		);
+	}
+	return nodes;
+}
+
+/** 一行外壳。 */
+function Shell({ className, children }: { className: string; children: ReactNode }) {
+	return <div className={`row ${className}`}>{children}</div>;
 }
 
 /**
  * 对话面板。把渲染单元聚合成分行,并维护每行的收起状态。
  */
-export function ChatTranscript({ items, canFork, onFork, emptyHint }: ChatTranscriptProps) {
+export function ChatTranscript({ items, canFork, onFork, retry, emptyHint }: ChatTranscriptProps) {
 	const rows = useMemo(() => groupRows(items), [items]);
 	const [overrides, setOverrides] = useState<ReadonlyMap<string, boolean>>(() => new Map());
 
@@ -180,77 +281,129 @@ export function ChatTranscript({ items, canFork, onFork, emptyHint }: ChatTransc
 	}, []);
 
 	if (rows.length === 0) {
-		return <div className="t-empty">{emptyHint ?? "还没有消息"}</div>;
+		return <div className="empty">{emptyHint ?? "还没有消息"}</div>;
 	}
 
 	return (
-		<div className="t-transcript">
+		<>
 			{rows.map((row) => {
 				const isCollapsed = overrides.get(row.id) ?? isCollapsedByDefault(row.kind);
 
 				if (row.kind === "diff") {
-					const diff = row.diffs[0];
-					if (!diff) {
-						return null;
-					}
 					return (
-						<RowShell
-							key={row.id}
-							row={row}
-							label="文件改动"
-							summary={diffSummary(diff)}
-							isCollapsed={isCollapsed}
-							onToggle={() => toggle(row)}
-						>
-							<DiffPatch diff={diff} />
-						</RowShell>
+						<Shell key={row.id} className="is-files">
+							<FilesRow diffs={row.diffs} />
+						</Shell>
 					);
 				}
 
 				if (row.kind === "divider") {
 					const text = row.items
 						.flatMap((item) => item.parts)
-						.map((part) => (part.kind === "text" ? part.text : ""));
+						.map((part) => (part.kind === "text" ? part.text : ""))
+						.join("");
+					const label = row.items[0]?.kind === "compaction" ? "上下文已压缩" : "分支摘要";
 					return (
-						<div key={row.id} className="t-divider">
-							{row.items[0]?.kind === "compaction" ? "上下文已压缩" : "分支摘要"}:{preview(text.join(""), 80)}
-						</div>
+						<Shell key={row.id} className="is-divider">
+							<div className="divider">
+								<span className="line" />
+								{label}
+								{text.length > 0 ? ` · ${preview(text, 40)}` : ""}
+								<span className="line" />
+							</div>
+						</Shell>
 					);
 				}
 
-				const text = partText(row.items.flatMap((item) => item.parts));
-				const partViews = row.items.flatMap((item) =>
-					item.parts.map((part) => <PartView key={`${item.id}-${part.partId}`} part={part} />),
-				);
+				if (row.kind === "error") {
+					const text = textOf(row.items.flatMap((item) => item.parts));
+					return (
+						<Shell key={row.id} className="is-error">
+							<div className="error-line">
+								<b>出错</b>
+								<span className="t2">{text.length > 0 ? text : "运行出错"}</span>
+							</div>
+						</Shell>
+					);
+				}
+
+				if (row.kind === "user") {
+					const text = textOf(row.items.flatMap((item) => item.parts));
+					return (
+						<Shell key={row.id} className="is-user">
+							<div className="user-line">
+								{row.forkTarget !== undefined && canFork ? (
+									<button
+										type="button"
+										className="row-action"
+										aria-label="从这里分叉"
+										onClick={() => onFork(row.forkTarget as string)}
+									>
+										<ForkIcon size={14} />
+									</button>
+								) : null}
+								<div className="bub">{text}</div>
+							</div>
+						</Shell>
+					);
+				}
+
+				if (row.kind === "meta") {
+					const active = activeTool(row);
+					return (
+						<Shell key={row.id} className="is-process">
+							<div className="proc-box">
+								<button type="button" className="proc" onClick={() => toggle(row)}>
+									<i className={isCollapsed ? "chev" : "chev is-open"} />
+									<SparkIcon className="fl" size={13} style={{ color: "var(--t3)" }} />
+									<span className="label">过程</span>
+									<span className="summary">{metaSummary(row)}</span>
+									{row.isStreaming ? (
+										<span className="live">
+											<i className="dot pulse" />
+											{active.length > 0 ? `第 ${row.toolCount} 次 · ${active}` : "进行中"}
+										</span>
+									) : null}
+								</button>
+								{isCollapsed ? null : (
+									<div className="proc-body">
+										{row.items.flatMap((item) =>
+											item.parts.map((part) => (
+												<PartView
+													key={`${item.id}-${part.partId}`}
+													part={part}
+													isStreaming={item.isStreaming}
+												/>
+											)),
+										)}
+									</div>
+								)}
+							</div>
+						</Shell>
+					);
+				}
 
 				return (
-					<RowShell
-						key={row.id}
-						row={row}
-						label={row.kind === "meta" ? "" : roleLabel(row)}
-						summary={row.kind === "meta" ? metaSummary(row) : isCollapsed ? preview(text, 48) : ""}
-						isCollapsed={isCollapsed}
-						onToggle={() => toggle(row)}
-						action={
-							row.forkTarget !== undefined && canFork ? (
-								<button type="button" className="t-fork" onClick={() => onFork(row.forkTarget as string)}>
-									从这里分叉
-								</button>
-							) : null
-						}
-					>
-						{partViews.length === 0 ? <pre className="t-text">(无内容)</pre> : partViews}
-					</RowShell>
+					<Shell key={row.id} className="is-assistant">
+						<div className="assistant-line">
+							<span className="avatar">
+								<SparkIcon className="fl" size={13} />
+							</span>
+							<div className="assistant-body">{bodyOf(row)}</div>
+						</div>
+					</Shell>
 				);
 			})}
-		</div>
-	);
-}
 
-/** 工具段的摘要,供外部列表复用。 */
-export function toolSummary(part: ToolCallPart): string {
-	const status = part.status === "running" ? "执行中" : part.status === "failed" ? "失败" : "完成";
-	return part.durationMs === undefined
-		? `${part.name} ${status}`
-		: `${part.name} ${status} ${formatDuration(part.durationMs)}`;
+			{retry ? (
+				<Shell className="is-retry" key="retry">
+					<div className="retry-line">
+						<span className="chip is-warn">
+							<i className="dot is-warn pulse" />第 {retry.attempt}/{retry.maxAttempts} 次重试
+						</span>
+					</div>
+				</Shell>
+			) : null}
+		</>
+	);
 }

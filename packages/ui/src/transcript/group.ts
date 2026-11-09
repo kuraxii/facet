@@ -168,17 +168,21 @@ function metaRow(draft: GroupDraft): DisplayRow | undefined {
 	};
 }
 
-/** 一次文件改动单独成行。 */
-function diffRow(diff: DiffChunk): DisplayRow {
+/** 一轮的文件改动合成一行,标识取第一条改动,后续追加不改标识。 */
+function diffRow(diffs: readonly DiffChunk[]): DisplayRow | undefined {
+	const first = diffs[0];
+	if (!first) {
+		return undefined;
+	}
 	return {
 		kind: "diff",
-		id: `diff:${diff.callId}`,
+		id: `diff:${first.callId}`,
 		items: [],
 		forkTarget: undefined,
 		toolCount: 0,
 		thinkingCount: 0,
 		durationMs: undefined,
-		diffs: [diff],
+		diffs,
 		isStreaming: false,
 	};
 }
@@ -226,7 +230,10 @@ export function groupRows(items: readonly TranscriptItem[]): DisplayRow[] {
 	};
 
 	const flushDiffs = (): void => {
-		rows.push(...pending.map(diffRow));
+		const row = diffRow(pending);
+		if (row) {
+			rows.push(row);
+		}
 		pending = [];
 	};
 
@@ -252,9 +259,9 @@ export function groupRows(items: readonly TranscriptItem[]): DisplayRow[] {
 		if (item.role === "assistant" && hasText(item.parts)) {
 			flush();
 			const row = singleton(item, "assistant");
-			const own = row.diffs;
-			rows.push({ ...row, diffs: [] }, ...pending.map(diffRow), ...own.map(diffRow));
-			pending = [];
+			rows.push({ ...row, diffs: [] });
+			pending.push(...row.diffs);
+			flushDiffs();
 			continue;
 		}
 		group ??= createGroup();

@@ -13,7 +13,6 @@ import type { ForkPiAgentOptions, OpenPiAgentOptions, PiAgent, PiAgentLaunchOpti
 import type { Action, ActionFrame, Channel, SessionSnapshot } from "@facet/protocol";
 import { makeChannel, parseChannel } from "@facet/protocol";
 import { ActionProjector } from "./action-projector.ts";
-import { ApprovalBroker } from "./approval-broker.ts";
 import { EventLog } from "./event-log.ts";
 
 /** 会话登记表用到的 agent 能力,收窄成结构类型以便测试注入假实现。 */
@@ -122,7 +121,6 @@ interface SessionState<A extends HubAgent> {
 	/** 待关闭的倒计时 */
 	closeTimer: ReturnType<typeof setTimeout> | undefined;
 	readonly channels: Map<Channel, ChannelState>;
-	readonly approvals: ApprovalBroker;
 	readonly projector: ActionProjector;
 }
 
@@ -167,9 +165,8 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 
 	/** 建一个新会话并登记。会话文件立即建立,之后每条完成的消息追加写盘。 */
 	async createSession(options: PiAgentLaunchOptions = {}): Promise<SessionSnapshot> {
-		const approvals = new ApprovalBroker();
-		const agent = await this.factory.create({ ...options, approvalHandler: approvals.handler });
-		this.attach(agent, approvals);
+		const agent = await this.factory.create(options);
+		this.attach(agent);
 		return this.snapshotRow(this.requireRow(agent.id));
 	}
 
@@ -203,7 +200,6 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 			opening: undefined,
 			closeTimer: undefined,
 			channels: new Map(),
-			approvals: new ApprovalBroker(),
 			projector: new ActionProjector(sessionId),
 		};
 		row.opening = this.buildOpen(row, cwd);
@@ -240,14 +236,12 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		if (entryId === undefined) {
 			throw new SessionEntryNotFoundError(options.messageId ?? "");
 		}
-		const approvals = new ApprovalBroker();
 		const agent = await this.factory.fork({
 			sessionFile: options.sessionFile,
 			entryId,
 			...(options.cwd === undefined ? {} : { cwd: options.cwd }),
-			approvalHandler: approvals.handler,
 		});
-		this.attach(agent, approvals);
+		this.attach(agent);
 		return this.snapshotRow(this.requireRow(agent.id));
 	}
 
@@ -282,7 +276,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 	}
 
 	/** 登记一个已建好的会话。同一会话已有另一份状态时保留先登记的,丢弃新的。 */
-	attach(agent: A, approvals: ApprovalBroker): void {
+	attach(agent: A): void {
 		const sessionId = agent.id;
 		const existing = this.table.get(sessionId);
 		if (existing) {
@@ -301,7 +295,6 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 			opening: undefined,
 			closeTimer: undefined,
 			channels: new Map(),
-			approvals,
 			projector: new ActionProjector(sessionId),
 		};
 		this.ensureChannel(row, makeChannel("session", sessionId));
@@ -426,17 +419,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		this.settle(row);
 	}
 
-	/** 回填一条工具确认的决定。请求不存在时返回假。 */
-	async respondApproval(
-		sessionId: string,
-		requestId: string,
-		decision: Parameters<ApprovalBroker["respond"]>[1],
-	): Promise<boolean> {
-		const row = await this.requireReady(sessionId);
-		return row.approvals.respond(requestId, decision);
-	}
-
-	/** 释放会话:停止记录、拒绝未应答的审批、销毁 agent。 */
+	/** 释放会话:停止记录、销毁 agent。 */
 	release(sessionId: string): void {
 		const row = this.table.get(sessionId);
 		if (!row) {
@@ -449,7 +432,6 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		for (const channel of row.channels.values()) {
 			channel.sinks.clear();
 		}
-		row.approvals.release("会话已释放");
 		row.agent?.dispose();
 	}
 
@@ -465,7 +447,6 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		const agent = await this.factory.open({
 			sessionFile: row.file as string,
 			...(cwd === undefined ? {} : { cwd }),
-			approvalHandler: row.approvals.handler,
 		});
 		row.agent = agent;
 		row.phase = "open";

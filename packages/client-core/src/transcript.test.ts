@@ -100,6 +100,17 @@ describe("toTranscript", () => {
 		expect(part?.kind === "toolCall" ? part.details : undefined).toEqual({ patch });
 	});
 
+	it("历史里的工具耗时带到工具段", () => {
+		const items = toTranscript(
+			viewWith([
+				historyItem("e1", assistant([{ type: "toolCall", id: "c1", name: "bash", arguments: {} }])),
+				historyItem("e2", { ...toolResult("c1", "完成"), durationMs: 1450 }),
+			]),
+		);
+		const part = items[0]?.parts[0];
+		expect(part?.kind === "toolCall" ? part.durationMs : undefined).toBe(1450);
+	});
+
 	it("失败的工具结果标成 failed", () => {
 		const items = toTranscript(
 			viewWith([

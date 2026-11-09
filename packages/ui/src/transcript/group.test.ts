@@ -3,7 +3,15 @@ import { describe, expect, it } from "vitest";
 import { groupRows, metaSummary } from "./group.ts";
 
 function item(overrides: Partial<TranscriptItem> & Pick<TranscriptItem, "id" | "role">): TranscriptItem {
-	return { kind: "message", entryId: undefined, parts: [], isStreaming: false, ...overrides };
+	return {
+		kind: "message",
+		entryId: undefined,
+		parts: [],
+		isStreaming: false,
+		startedAt: undefined,
+		endedAt: undefined,
+		...overrides,
+	};
 }
 
 function text(partId: string, value: string) {
@@ -40,10 +48,62 @@ describe("分行", () => {
 		expect(rows[1]?.items.map((entry) => entry.id)).toEqual(["m2", "m3"]);
 		expect(rows[1]?.thinkingCount).toBe(1);
 		expect(rows[1]?.toolCount).toBe(1);
-		expect(rows[1]?.durationMs).toBe(120);
-		const meta = rows[1];
-		expect(meta).toBeDefined();
-		expect(metaSummary(meta as (typeof rows)[number])).toBe("思考 1 段 · 工具 1 次 · 120 毫秒");
+		expect(rows[1]?.toolCount).toBe(1);
+		// 没有时间戳就算不出这一轮的工作时长,摘要留空
+		expect(metaSummary(rows[1] as (typeof rows)[number])).toBe("");
+	});
+
+	it("过程行说的是这一轮的工作时长,不是工具耗时之和", () => {
+		const rows = groupRows([
+			item({ id: "m1", role: "user", parts: [text("text:0", "改一下")], startedAt: 1_000, endedAt: 1_000 }),
+			item({
+				id: "m2",
+				role: "assistant",
+				parts: [thinking("thinking:0", "想"), tool("tool:c1", "c1", 120)],
+				startedAt: 1_000,
+				endedAt: 1_400,
+			}),
+			item({
+				id: "m3",
+				role: "assistant",
+				parts: [text("text:1", "好了")],
+				startedAt: 1_600,
+				endedAt: 1_800,
+			}),
+		]);
+		expect(rows[1]?.durationMs).toBe(800);
+		expect(metaSummary(rows[1] as (typeof rows)[number])).toBe("工作 800 毫秒");
+	});
+
+	it("没有答复时按已见到的最后时间算", () => {
+		const rows = groupRows([
+			item({ id: "m1", role: "user", parts: [text("text:0", "问")], startedAt: 1_000, endedAt: 1_000 }),
+			item({ id: "m2", role: "assistant", parts: [tool("tool:c1", "c1")], startedAt: 1_000, endedAt: 2_500 }),
+		]);
+		expect(rows[1]?.durationMs).toBe(1_500);
+	});
+
+	it("下一轮重新计时", () => {
+		const rows = groupRows([
+			item({ id: "m1", role: "user", parts: [text("text:0", "问")], startedAt: 1_000, endedAt: 1_000 }),
+			item({ id: "m2", role: "assistant", parts: [text("text:0", "答")], startedAt: 1_000, endedAt: 2_000 }),
+			item({ id: "m3", role: "user", parts: [text("text:0", "再问")], startedAt: 9_000, endedAt: 9_000 }),
+			item({
+				id: "m4",
+				role: "assistant",
+				parts: [tool("tool:c1", "c1")],
+				startedAt: 9_000,
+				endedAt: 9_400,
+			}),
+			item({
+				id: "m5",
+				role: "assistant",
+				parts: [text("text:0", "再答")],
+				startedAt: 9_400,
+				endedAt: 9_500,
+			}),
+		]);
+		expect(rows[3]?.durationMs).toBe(500);
 	});
 
 	it("正文是过程行的边界", () => {
@@ -197,5 +257,35 @@ describe("思考段的归属", () => {
 		]);
 		expect(rows.map((row) => row.kind)).toEqual(["meta", "assistant", "user", "assistant"]);
 		expect(rows[3]?.thinkingCount).toBe(1);
+	});
+});
+
+describe("工作时长", () => {
+	it("运行中由界面自己计时", () => {
+		const rows = groupRows([
+			item({ id: "m1", role: "user", parts: [text("text:0", "问")], startedAt: 1_000, endedAt: 1_000 }),
+			item({
+				id: "m2",
+				role: "assistant",
+				parts: [tool("tool:c1", "c1")],
+				isStreaming: true,
+				startedAt: 1_000,
+				endedAt: 1_000,
+			}),
+		]);
+		const meta = rows[1] as (typeof rows)[number];
+		expect(meta.startedAt).toBe(1_000);
+		expect(metaSummary(meta, 4_500)).toBe("工作 3.5 秒");
+	});
+
+	it("结束后用设备记录的起止时间,不再随时间走", () => {
+		const rows = groupRows([
+			item({ id: "m1", role: "user", parts: [text("text:0", "问")], startedAt: 1_000, endedAt: 1_000 }),
+			item({ id: "m2", role: "assistant", parts: [tool("tool:c1", "c1")], startedAt: 1_000, endedAt: 3_000 }),
+			item({ id: "m3", role: "assistant", parts: [text("text:0", "答")], startedAt: 3_000, endedAt: 4_000 }),
+		]);
+		const meta = rows[1] as (typeof rows)[number];
+		expect(meta.durationMs).toBe(3_000);
+		expect(metaSummary(meta, 99_000)).toBe("工作 3.0 秒");
 	});
 });

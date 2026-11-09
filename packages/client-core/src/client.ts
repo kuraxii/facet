@@ -10,7 +10,6 @@
 import type {
 	Action,
 	ActionFrame,
-	ApprovalDecision,
 	Capability,
 	Channel,
 	Entry,
@@ -46,7 +45,7 @@ export interface SessionTransport {
 
 export interface SessionClientOptions {
 	transport: SessionTransport;
-	/** 打开会话时装载的页数,缺省 2 */
+	/** 打开会话时装载的页数,缺省取完所有历史 */
 	initialPages?: number;
 	/** 每页条数,缺省 50 */
 	pageSize?: number;
@@ -62,7 +61,6 @@ export interface OpenedSession {
 	readonly snapshot: SessionSnapshot;
 }
 
-const DEFAULT_INITIAL_PAGES = 2;
 const DEFAULT_PAGE_SIZE = 50;
 
 export class SessionClient {
@@ -86,7 +84,7 @@ export class SessionClient {
 
 	constructor(options: SessionClientOptions) {
 		this.transport = options.transport;
-		this.initialPages = options.initialPages ?? DEFAULT_INITIAL_PAGES;
+		this.initialPages = options.initialPages ?? Number.POSITIVE_INFINITY;
 		this.pageSize = options.pageSize ?? DEFAULT_PAGE_SIZE;
 	}
 
@@ -289,15 +287,6 @@ export class SessionClient {
 		return this.transport.dispatch(this.requireOpened().chatChannel, { type: "chat/turnCancelled" });
 	}
 
-	/** 应答一条工具确认。 */
-	respondTool(requestId: string, decision: ApprovalDecision): number {
-		return this.transport.dispatch(this.requireOpened().chatChannel, {
-			type: "chat/toolCallConfirmed",
-			requestId,
-			decision,
-		});
-	}
-
 	/** 切换模型,结果通过 session/modelChanged 回到视图。 */
 	setModel(model: ModelRef, persist = false): number {
 		return this.transport.dispatch(this.requireOpened().sessionChannel, {
@@ -395,9 +384,9 @@ export class SessionClient {
 		this.olderCursor = cursor;
 	}
 
-	/** 重新装载最近一页。 */
+	/** 重新装载全部历史。 */
 	private async reloadHistory(channel: Channel, sessionId: string): Promise<void> {
 		this.olderCursor = undefined;
-		await this.loadPages(channel, sessionId, 1, true);
+		await this.loadPages(channel, sessionId, Number.POSITIVE_INFINITY, true);
 	}
 }

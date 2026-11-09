@@ -5,7 +5,7 @@
  * 默认只有过程行与文件改动行收起,其余行展开。
  */
 import type { Part, ToolCallPart, TranscriptItem } from "@facet/client-core";
-import { type ReactNode, useCallback, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { Markdown } from "../markdown/Markdown.tsx";
 import { type DiffChunk, type DisplayRow, groupRows, metaSummary } from "./group.ts";
 import { ForkIcon } from "./icons.tsx";
@@ -23,6 +23,25 @@ export interface ChatTranscriptProps {
 	retry?: { attempt: number; maxAttempts: number } | undefined;
 	/** 没有任何内容时显示的提示 */
 	emptyHint?: string;
+}
+
+/**
+ * 运行中的计时器。
+ *
+ * 回合还在跑的时候没有结束时间,界面每秒取一次当前时间自己计时;没有运行中的行时不挂定时器。
+ */
+function useNow(isTicking: boolean): number | undefined {
+	const [now, setNow] = useState<number | undefined>(undefined);
+	useEffect(() => {
+		if (!isTicking) {
+			setNow(undefined);
+			return;
+		}
+		setNow(Date.now());
+		const timer = setInterval(() => setNow(Date.now()), 1000);
+		return () => clearInterval(timer);
+	}, [isTicking]);
+	return now;
 }
 
 /** 默认收起的行。 */
@@ -271,6 +290,8 @@ function Shell({ className, children }: { className: string; children: ReactNode
 export function ChatTranscript({ items, canFork, onFork, retry, emptyHint }: ChatTranscriptProps) {
 	const rows = useMemo(() => groupRows(items), [items]);
 	const [overrides, setOverrides] = useState<ReadonlyMap<string, boolean>>(() => new Map());
+	const isTicking = rows.some((row) => row.isStreaming && row.startedAt !== undefined);
+	const now = useNow(isTicking);
 
 	const toggle = useCallback((row: DisplayRow) => {
 		setOverrides((previous) => {
@@ -361,7 +382,7 @@ export function ChatTranscript({ items, canFork, onFork, retry, emptyHint }: Cha
 									aria-expanded={!isCollapsed}
 									aria-label="过程"
 								>
-									<span className="summary">{metaSummary(row)}</span>
+									<span className="summary">{metaSummary(row, now)}</span>
 									{row.isStreaming ? (
 										<span className="live">
 											<i className="dot pulse" />

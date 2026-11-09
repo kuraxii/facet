@@ -68,15 +68,6 @@ export function reduceSession(view: SessionView, action: Action): SessionView {
 			};
 			return { ...view, compaction };
 		}
-		case "session/inputNeededSet": {
-			const known = view.inputNeeded.some((item) => item.id === action.request.id);
-			const inputNeeded = known
-				? view.inputNeeded.map((item) => (item.id === action.request.id ? action.request : item))
-				: [...view.inputNeeded, action.request];
-			return { ...view, inputNeeded };
-		}
-		case "session/inputNeededRemoved":
-			return { ...view, inputNeeded: view.inputNeeded.filter((item) => item.id !== action.id) };
 		case "session/titleChanged":
 			return { ...view, title: action.title };
 		case "session/configChanged":
@@ -97,7 +88,6 @@ export function reduceSession(view: SessionView, action: Action): SessionView {
 		case "chat/turnCancelled":
 		case "chat/pendingMessageSet":
 		case "chat/queueCleared":
-		case "chat/toolCallConfirmed":
 			return view;
 		default:
 			return unhandled(action);
@@ -212,15 +202,12 @@ export function reduceChat(view: ChatView, action: Action): ChatView {
 		case "chat/queueCleared":
 			return { ...view, queue: { steering: [], followUp: [] } };
 		case "chat/turnCancelled":
-		case "chat/toolCallConfirmed":
 			return view;
 		case "session/status":
 		case "session/modelChanged":
 		case "session/thinkingLevelChanged":
 		case "session/compactionStarted":
 		case "session/compactionCompleted":
-		case "session/inputNeededSet":
-		case "session/inputNeededRemoved":
 		case "session/titleChanged":
 		case "session/configChanged":
 			return view;

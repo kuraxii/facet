@@ -17,7 +17,6 @@ export interface ChannelAction {
 }
 
 export class ActionProjector {
-	private readonly sessionId: string;
 	private readonly sessionChannel: Channel;
 	private readonly chatChannel: Channel;
 	/** 已分配的消息序号 */
@@ -28,7 +27,6 @@ export class ActionProjector {
 	private readonly stamps = new Map<string, { role: string; timestamp: number }>();
 
 	constructor(sessionId: string) {
-		this.sessionId = sessionId;
 		this.sessionChannel = makeChannel("session", sessionId);
 		this.chatChannel = makeChannel("chat", sessionId);
 	}
@@ -82,24 +80,6 @@ export class ActionProjector {
 						error: event.error,
 					}),
 				];
-			case "approval_request":
-				return [
-					session({
-						type: "session/inputNeededSet",
-						request: {
-							id: event.request.id,
-							kind: "toolConfirmation",
-							channel: this.chatChannel,
-							sessionId: this.sessionId,
-							callId: event.request.callId,
-							toolName: event.request.toolName,
-							input: event.request.input,
-							cwd: event.request.cwd,
-						},
-					}),
-				];
-			case "approval_resolved":
-				return [session({ type: "session/inputNeededRemoved", id: event.requestId })];
 			case "message_start": {
 				this.messageCounter += 1;
 				this.pendingMessageId = `m${this.messageCounter}`;

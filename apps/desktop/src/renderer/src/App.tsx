@@ -1,8 +1,16 @@
-import { SessionClient, toTranscript } from "@facet/client-core";
-import type { InputRequest, SessionSummary } from "@facet/protocol";
+import { type DeviceHandshake, SessionClient, toTranscript } from "@facet/client-core";
+import type { SessionSummary } from "@facet/protocol";
 import { WsTransport } from "@facet/transport/ws";
-import { ChatTranscript, Composer, SessionSidebar, toolTarget } from "@facet/ui";
+import {
+	ArrowDownIcon,
+	ChatTranscript,
+	Composer,
+	SessionSidebar,
+	type SidebarHost,
+	useStickToBottom,
+} from "@facet/ui";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { PLACEHOLDER_HOSTS } from "./placeholder-hosts";
 
 /** 预加载脚本注入的启动参数 */
 interface FacetBridge {
@@ -20,18 +28,9 @@ declare global {
 const bridge = window.facet;
 
 const transport = new WsTransport({ url: bridge.endpoint });
-const client = new SessionClient({ transport, initialPages: 2, pageSize: 40 });
+const client = new SessionClient({ transport, pageSize: 200 });
 
 type Phase = "connecting" | "ready" | "failed";
-
-/** 审批条上的一句话说明:工具名加参数摘要。 */
-function approvalLabel(request: InputRequest | undefined): string {
-	if (!request) {
-		return "";
-	}
-	const target = toolTarget(request.input);
-	return target.length > 0 ? `${request.toolName} ${target}` : request.toolName;
-}
 
 export function App() {
 	const version = useSyncExternalStore(
@@ -42,6 +41,8 @@ export function App() {
 	const [failure, setFailure] = useState<string | undefined>(undefined);
 	const [sessions, setSessions] = useState<readonly SessionSummary[]>([]);
 	const [activeFile, setActiveFile] = useState<string | undefined>(undefined);
+	const [device, setDevice] = useState<DeviceHandshake | undefined>(undefined);
+	const [createCwd, setCreateCwd] = useState(bridge.projectDir);
 	const [draft, setDraft] = useState("");
 	const started = useRef(false);
 
@@ -67,6 +68,7 @@ export function App() {
 		void (async () => {
 			const handshake = await transport.connect();
 			client.attach(handshake);
+			setDevice(handshake);
 			const pool = await refreshSessions();
 			const newest = pool[0];
 			if (newest) {
@@ -84,22 +86,22 @@ export function App() {
 
 	const session = client.sessionView();
 	const chat = client.chatView();
-	const pending = session?.inputNeeded ?? [];
 
-	const openSession = useCallback(async (summary: SessionSummary) => {
+	const openSession = useCallback(async (path: string) => {
 		await client.release();
-		await client.openSession(summary.path);
-		setActiveFile(summary.path);
+		await client.openSession(path);
+		setActiveFile(path);
 	}, []);
 
-	const createSession = useCallback(async () => {
-		await client.release();
-		const opened = await client.createSession({
-			...(bridge.projectDir.length > 0 ? { cwd: bridge.projectDir } : {}),
-		});
-		setActiveFile(opened.file);
-		await refreshSessions();
-	}, [refreshSessions]);
+	const createSession = useCallback(
+		async (cwd: string) => {
+			await client.release();
+			const opened = await client.createSession({ ...(cwd.length > 0 ? { cwd } : {}) });
+			setActiveFile(opened.file);
+			await refreshSessions();
+		},
+		[refreshSessions],
+	);
 
 	const send = useCallback(() => {
 		const text = draft.trim();
@@ -109,10 +111,6 @@ export function App() {
 		setDraft("");
 		client.send(text);
 	}, [draft]);
-
-	const loadOlder = useCallback(() => {
-		void client.loadOlder();
-	}, []);
 
 	const forkFrom = useCallback(
 		(messageId: string) => {
@@ -125,6 +123,19 @@ export function App() {
 	);
 
 	const transcript = useMemo(() => (chat ? toTranscript(chat) : []), [chat]);
+	const { scrollRef, isPinned, scrollToBottom } = useStickToBottom(transcript, activeFile);
+
+	const hosts = useMemo<readonly SidebarHost[]>(() => {
+		const local: SidebarHost = {
+			id: device?.hostId ?? "local",
+			name: device?.hostName ?? "本机",
+			detail: bridge.endpoint,
+			state: "connected",
+			isLocal: true,
+			projects: [],
+		};
+		return [local, ...PLACEHOLDER_HOSTS];
+	}, [device]);
 
 	if (phase === "failed") {
 		return (
@@ -149,22 +160,21 @@ export function App() {
 		<div className="shell">
 			<SessionSidebar
 				sessions={sessions}
+				hosts={hosts}
 				activeFile={activeFile}
 				runningFile={chat?.isRunning === true ? activeFile : undefined}
-				projectDir={bridge.projectDir}
-				onSelect={(summary) => void openSession(summary)}
-				onCreate={() => void createSession()}
+				createCwd={createCwd}
+				onSelect={(path) => void openSession(path)}
+				onCreate={(cwd) => {
+					setCreateCwd(cwd);
+					void createSession(cwd);
+				}}
 				canCreate={phase === "ready"}
 			/>
 
 			<main className="main">
-				<section className="scroll">
+				<section className="scroll" ref={scrollRef}>
 					<div className="column">
-						{client.hasMore ? (
-							<button type="button" className="load-older" onClick={loadOlder}>
-								加载更早的历史
-							</button>
-						) : null}
 						<ChatTranscript
 							items={transcript}
 							canFork={chat?.isRunning !== true}
@@ -176,39 +186,17 @@ export function App() {
 				</section>
 
 				<div className="footer">
+					{isPinned ? null : (
+						<button
+							type="button"
+							className="to-bottom"
+							aria-label="回到底部"
+							onClick={() => scrollToBottom("smooth")}
+						>
+							<ArrowDownIcon size={16} />
+						</button>
+					)}
 					<div className="footer-column">
-						{pending.length > 0 ? (
-							<div className="approval">
-								<b>需要确认</b>
-								<span className="cmd">{approvalLabel(pending[0])}</span>
-								{pending.length > 1 ? <span className="stat">共 {pending.length} 项</span> : null}
-								<span className="actions">
-									<button
-										type="button"
-										className="btn"
-										onClick={() => {
-											for (const request of pending) {
-												client.respondTool(request.id, { action: "deny" });
-											}
-										}}
-									>
-										拒绝
-									</button>
-									<button
-										type="button"
-										className="btn pri"
-										onClick={() => {
-											for (const request of pending) {
-												client.respondTool(request.id, { action: "allow" });
-											}
-										}}
-									>
-										允许
-									</button>
-								</span>
-							</div>
-						) : null}
-
 						<Composer
 							value={draft}
 							onChange={setDraft}

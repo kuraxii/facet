@@ -59,6 +59,8 @@ export interface AssistantMessage {
 	stopReason: StopReason;
 	/** 失败或中止时的错误说明 */
 	errorMessage?: string;
+	/** 这一次模型调用的耗时,历史记录里可能缺失 */
+	durationMs?: number;
 	timestamp: number;
 }
 
@@ -74,6 +76,8 @@ export interface ToolResultMessage {
 	details?: unknown;
 	/** 结果是否为失败 */
 	isError: boolean;
+	/** 工具执行耗时,历史记录里可能缺失 */
+	durationMs?: number;
 	timestamp: number;
 }
 

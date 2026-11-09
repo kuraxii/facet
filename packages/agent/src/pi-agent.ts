@@ -1,20 +1,10 @@
-/**
- * 一个会话的全部操作入口。
- *
- * 包住一个 pi 会话，把事件、消息、模型与用量转换成 facet 自有类型，并在工具执行前
- * 插入审批网关。一个 PiAgent 只对应一个会话；切换会话与分叉由 PiAgentRuntime 处理。
- */
-import { randomUUID } from "node:crypto";
 import type {
 	AgentSession,
 	AgentSessionEvent,
-	ExtensionFactory,
 	ModelRuntime,
 	SessionEntry,
 } from "@earendil-works/pi-coding-agent";
 import type {
-	ApprovalDecision,
-	ApprovalRequest,
 	ContextUsage,
 	Entry,
 	EntryKind,
@@ -35,50 +25,7 @@ import type {
 } from "@facet/protocol";
 import { toMessage, toMessages, toModelInfo } from "./convert.ts";
 import { toSessionEvents } from "./events.ts";
-import type { ApprovalHandler, ModelMutationOptions, PromptOptions } from "./types.ts";
-
-/** 交给审批网关的调用信息，已脱离 pi 的事件类型。 */
-export interface ToolGateCall {
-	/** 工具调用 id，与工具结果、工具执行事件对应 */
-	toolCallId: string;
-	toolName: string;
-	/** 调用参数，原样交给审批方判断影响范围 */
-	input: unknown;
-	/** 由其他工具发起的嵌套调用时，指向外层调用 id */
-	parentCallId?: string;
-}
-
-/**
- * 审批扩展与 PiAgent 之间的可变引用。
- *
- * 扩展工厂必须在构造会话时注册，而 PiAgent 要等会话建好才能存在。用这个容器
- * 解开两者的先后依赖，扩展在每次调用时读当前值。
- */
-export interface ApprovalHook {
-	agent?: PiAgent;
-}
-
-/**
- * 构造审批扩展。
- *
- * 没有绑定 agent 时直接放行，用于宿主尚未安装审批网关的会话。
- */
-export function createApprovalExtension(hook: ApprovalHook): ExtensionFactory {
-	return (pi) => {
-		pi.on("tool_call", async (event) => {
-			const agent = hook.agent;
-			if (!agent) {
-				return undefined;
-			}
-			return await agent.gateToolCall({
-				toolCallId: event.toolCallId,
-				parentCallId: event.parentToolCallId,
-				toolName: event.toolName,
-				input: event.input,
-			});
-		});
-	};
-}
+import type { ModelMutationOptions, PromptOptions } from "./types.ts";
 
 /** 构造 PiAgent 所需的会话与共享资源。 */
 export interface PiAgentContext {
@@ -90,9 +37,7 @@ export interface PiAgentContext {
 	modelFallbackMessage?: string;
 	/** 扩展加载期的错误与警告，格式为「路径: 说明」 */
 	extensionIssues?: string[];
-	/** 工具审批处理函数，缺省时放行所有调用 */
-	approvalHandler?: ApprovalHandler;
-	/** 内部错误上报，主要是事件监听器与审批处理函数抛出的错误 */
+	/** 内部错误上报，主要是事件监听器抛出的错误 */
 	onError?: (error: unknown) => void;
 }
 
@@ -128,10 +73,7 @@ export class PiAgent {
 	private readonly extensionIssues: string[];
 	private readonly onError: ((error: unknown) => void) | undefined;
 	private readonly listeners = new Set<SessionEventListener>();
-	/** 未应答的审批请求，数量参与状态派生 */
-	private readonly pendingApprovals = new Map<string, ApprovalRequest>();
 	private readonly unsubscribeSession: () => void;
-	private approvalHandler: ApprovalHandler | undefined;
 	/** 已派生的状态，只在变化时对外发事件 */
 	private status: SessionStatus = "idle";
 	private disposed = false;
@@ -142,7 +84,6 @@ export class PiAgent {
 		this.modelRuntime = context.modelRuntime;
 		this.modelFallbackMessage = context.modelFallbackMessage;
 		this.extensionIssues = context.extensionIssues ?? [];
-		this.approvalHandler = context.approvalHandler;
 		this.onError = context.onError;
 		this.id = this.session.sessionId;
 		this.cwd = this.session.sessionManager.getCwd();
@@ -200,57 +141,6 @@ export class PiAgent {
 		return () => {
 			this.listeners.delete(listener);
 		};
-	}
-
-	/** 替换审批网关。已在等待的请求不受影响，新调用读取新值。 */
-	setApprovalHandler(handler: ApprovalHandler | undefined): void {
-		this.approvalHandler = handler;
-	}
-
-	/**
-	 * 工具执行前的审批判定，由审批扩展调用。
-	 *
-	 * 失败一律按拒绝处理：pi 会吞掉扩展处理函数抛出的错误并继续执行工具，
-	 * 所以异常与非法返回值都必须在这里收敛成 block，不能依赖 pi 兜底。
-	 */
-	async gateToolCall(call: ToolGateCall): Promise<{ block?: boolean; reason?: string } | undefined> {
-		const handler = this.approvalHandler;
-		if (!handler) {
-			return undefined;
-		}
-		const request: ApprovalRequest = {
-			id: randomUUID(),
-			callId: call.toolCallId,
-			toolName: call.toolName,
-			input: call.input,
-			cwd: this.cwd,
-			parentCallId: call.parentCallId,
-		};
-		this.pendingApprovals.set(request.id, request);
-		this.emit({ type: "approval_request", request });
-		this.refreshStatus();
-		let decision: ApprovalDecision;
-		try {
-			const outcome = await handler(request);
-			decision =
-				outcome?.action === "allow"
-					? { action: "allow" }
-					: { action: "deny", reason: outcome?.reason ?? `${request.toolName} was denied` };
-		} catch (error) {
-			this.onError?.(error);
-			decision = {
-				action: "deny",
-				reason: error instanceof Error ? error.message : `${request.toolName} was denied`,
-			};
-		} finally {
-			this.pendingApprovals.delete(request.id);
-			this.refreshStatus();
-		}
-		this.emit({ type: "approval_resolved", requestId: request.id, decision });
-		if (decision.action === "deny") {
-			return { block: true, reason: decision.reason };
-		}
-		return undefined;
 	}
 
 	/**
@@ -456,7 +346,6 @@ export class PiAgent {
 			availableThinkingLevels: this.availableThinkingLevels(),
 			activeToolNames: this.activeToolNames(),
 			queued: this.queued(),
-			pendingApprovals: [...this.pendingApprovals.values()],
 			contextUsage: this.contextUsage(),
 			stats: this.stats(),
 			modelFallbackMessage: this.modelFallbackMessage,
@@ -479,7 +368,6 @@ export class PiAgent {
 		this.disposed = true;
 		this.unsubscribeSession();
 		this.listeners.clear();
-		this.pendingApprovals.clear();
 		this.session.dispose();
 	}
 
@@ -495,9 +383,6 @@ export class PiAgent {
 	 * 审批优先于压缩与运行：等待审批时运行仍在进行，若先判运行会看不到审批态。
 	 */
 	private computeStatus(): SessionStatus {
-		if (this.pendingApprovals.size > 0) {
-			return "awaiting_approval";
-		}
 		if (this.session.isCompacting) {
 			return "compacting";
 		}

@@ -39,8 +39,10 @@ export interface DisplayRow {
 	toolCount: number;
 	/** 组内思考段数 */
 	thinkingCount: number;
-	/** 组内工具耗时合计,没有计时信息时为空 */
+	/** 这一轮的工作时长,回合结束后按起止时间定稿 */
 	durationMs: number | undefined;
+	/** 这一轮开始的时间,回合未结束时界面据此自己计时 */
+	startedAt: number | undefined;
 	/** 组内工具产生的文件改动,排在过程行之后 */
 	diffs: readonly DiffChunk[];
 	/** 这一行是否仍在增长 */
@@ -52,22 +54,12 @@ interface GroupDraft {
 	items: TranscriptItem[];
 	toolCount: number;
 	thinkingCount: number;
-	durationMs: number;
-	hasDuration: boolean;
 	diffs: DiffChunk[];
 	isStreaming: boolean;
 }
 
 function createGroup(): GroupDraft {
-	return {
-		items: [],
-		toolCount: 0,
-		thinkingCount: 0,
-		durationMs: 0,
-		hasDuration: false,
-		diffs: [],
-		isStreaming: false,
-	};
+	return { items: [], toolCount: 0, thinkingCount: 0, diffs: [], isStreaming: false };
 }
 
 /** 是否含正文。正文是过程行的边界。 */
@@ -152,10 +144,6 @@ function absorb(draft: GroupDraft, item: TranscriptItem): void {
 	for (const part of toolParts(item.parts)) {
 		draft.toolCount += 1;
 		draft.isStreaming = draft.isStreaming || part.status === "running";
-		if (part.durationMs !== undefined) {
-			draft.durationMs += part.durationMs;
-			draft.hasDuration = true;
-		}
 		const diff = diffOf(part);
 		if (diff) {
 			draft.diffs.push(diff);
@@ -176,7 +164,9 @@ function metaRow(draft: GroupDraft): DisplayRow | undefined {
 		forkTarget: undefined,
 		toolCount: draft.toolCount,
 		thinkingCount: draft.thinkingCount,
-		durationMs: draft.hasDuration ? draft.durationMs : undefined,
+		// 时长由这一轮的起止时间决定,不用工具耗时之和
+		durationMs: undefined,
+		startedAt: undefined,
 		diffs: draft.diffs,
 		isStreaming: draft.isStreaming,
 	};
@@ -196,6 +186,7 @@ function diffRow(diffs: readonly DiffChunk[]): DisplayRow | undefined {
 		toolCount: 0,
 		thinkingCount: 0,
 		durationMs: undefined,
+		startedAt: undefined,
 		diffs,
 		isStreaming: false,
 	};
@@ -212,7 +203,8 @@ function singleton(item: TranscriptItem, kind: RowKind): DisplayRow {
 		forkTarget: kind === "user" ? item.id : undefined,
 		toolCount: draft.toolCount,
 		thinkingCount: draft.thinkingCount,
-		durationMs: draft.hasDuration ? draft.durationMs : undefined,
+		durationMs: undefined,
+		startedAt: undefined,
 		diffs: kind === "assistant" ? draft.diffs : [],
 		isStreaming: item.isStreaming,
 	};
@@ -229,6 +221,41 @@ export function groupRows(items: readonly TranscriptItem[]): DisplayRow[] {
 	const rows: DisplayRow[] = [];
 	let group: GroupDraft | undefined;
 	let pending: DiffChunk[] = [];
+	/** 这一轮的开始时间与已见到的结束时间,用来算过程行上的工作时间 */
+	let turnStart: number | undefined;
+	let turnEnd: number | undefined;
+	/** 已输出的过程行下标,答复行到了之后回头补上这一轮的总时长 */
+	let metaIndex: number | undefined;
+
+	/** 记录一条的时间范围。 */
+	const track = (item: TranscriptItem): void => {
+		if (turnStart === undefined && item.startedAt !== undefined) {
+			turnStart = item.startedAt;
+		}
+		if (item.endedAt !== undefined && (turnEnd === undefined || item.endedAt > turnEnd)) {
+			turnEnd = item.endedAt;
+		}
+	};
+
+	/** 把这一轮的时长写到过程行上。 */
+	const settleTurn = (): void => {
+		if (metaIndex === undefined || turnStart === undefined || turnEnd === undefined) {
+			return;
+		}
+		const row = rows[metaIndex];
+		if (!row) {
+			return;
+		}
+		rows[metaIndex] = { ...row, durationMs: Math.max(0, turnEnd - turnStart) };
+	};
+
+	/** 一轮结束:补时长并清空计时。 */
+	const endTurn = (): void => {
+		settleTurn();
+		turnStart = undefined;
+		turnEnd = undefined;
+		metaIndex = undefined;
+	};
 
 	/** 过程行定稿,它的改动行留到正文之后。 */
 	const flush = (): void => {
@@ -237,7 +264,8 @@ export function groupRows(items: readonly TranscriptItem[]): DisplayRow[] {
 		}
 		const row = metaRow(group);
 		if (row) {
-			rows.push(row);
+			metaIndex = rows.length;
+			rows.push({ ...row, startedAt: turnStart });
 			pending.push(...row.diffs);
 		}
 		group = undefined;
@@ -254,19 +282,24 @@ export function groupRows(items: readonly TranscriptItem[]): DisplayRow[] {
 	for (const item of items) {
 		if (item.kind === "compaction" || item.kind === "branch" || item.role === "system") {
 			flush();
+			endTurn();
 			flushDiffs();
 			rows.push(singleton(item, "divider"));
 			continue;
 		}
 		if (item.kind === "error") {
 			flush();
+			track(item);
+			endTurn();
 			flushDiffs();
 			rows.push(singleton(item, "error"));
 			continue;
 		}
 		if (item.role === "user") {
 			flush();
+			endTurn();
 			flushDiffs();
+			track(item);
 			rows.push(singleton(item, "user"));
 			continue;
 		}
@@ -278,33 +311,41 @@ export function groupRows(items: readonly TranscriptItem[]): DisplayRow[] {
 				absorb(group, moved);
 			}
 			flush();
+			track(item);
+			// 答复行到了,这一轮的时间可以定稿
+			endTurn();
 			const row = singleton(moved ? withoutThinking(item) : item, "assistant");
 			rows.push({ ...row, diffs: [] });
 			pending.push(...row.diffs);
 			flushDiffs();
 			continue;
 		}
+		track(item);
 		group ??= createGroup();
 		absorb(group, item);
 	}
 	flush();
+	endTurn();
 	flushDiffs();
 	return rows;
 }
 
 /** 过程行的摘要文字。 */
-export function metaSummary(row: DisplayRow): string {
-	const parts: string[] = [];
-	if (row.thinkingCount > 0) {
-		parts.push(`思考 ${row.thinkingCount} 段`);
+/**
+ * 过程行的摘要。
+ *
+ * 只说这一轮工作了多久,不再列思考段数与工具次数——那些细节展开就能看到。
+ * 回合结束后用设备记录的起止时间;还在跑的时候由界面自己计时,调用方每秒传一次当前时间。
+ */
+export function metaSummary(row: DisplayRow, now?: number): string {
+	if (row.isStreaming && row.startedAt !== undefined) {
+		const elapsed = Math.max(0, (now ?? row.startedAt) - row.startedAt);
+		return `工作 ${formatDuration(elapsed)}`;
 	}
-	if (row.toolCount > 0) {
-		parts.push(`工具 ${row.toolCount} 次`);
+	if (row.durationMs === undefined) {
+		return "";
 	}
-	if (row.durationMs !== undefined) {
-		parts.push(formatDuration(row.durationMs));
-	}
-	return parts.length > 0 ? parts.join(" · ") : "过程";
+	return `工作 ${formatDuration(row.durationMs)}`;
 }
 
 /** 毫秒转成便于阅读的时长。 */
@@ -317,5 +358,5 @@ export function formatDuration(ms: number): string {
 	}
 	const minutes = Math.floor(ms / 60_000);
 	const seconds = Math.round((ms % 60_000) / 1000);
-	return `${minutes} 分 ${seconds} 秒`;
+	return seconds === 0 ? `${minutes} 分` : `${minutes} 分 ${seconds} 秒`;
 }

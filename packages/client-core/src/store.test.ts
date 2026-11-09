@@ -27,7 +27,7 @@ function assistant(text: string): AssistantMessage {
 	};
 }
 
-function snapshot(overrides: Partial<SessionSnapshot> = {}): SessionSnapshot {
+function _snapshot(overrides: Partial<SessionSnapshot> = {}): SessionSnapshot {
 	return {
 		id: "s1",
 		file: "/tmp/s1.jsonl",
@@ -39,7 +39,6 @@ function snapshot(overrides: Partial<SessionSnapshot> = {}): SessionSnapshot {
 		availableThinkingLevels: ["low", "medium", "high"],
 		activeToolNames: ["bash"],
 		queued: { steering: [], followUp: [] },
-		pendingApprovals: [],
 		contextUsage: undefined,
 		stats: {
 			sessionId: "s1",
@@ -118,26 +117,6 @@ describe("SessionStore", () => {
 		expect(view.messages).toHaveLength(1);
 		expect(view.messages[0]?.id).toBe("e:e1");
 		expect(isHistoryMessageId(view.messages[0]?.id ?? "")).toBe(true);
-	});
-
-	it("会话快照里的待应答审批变成阻塞项", () => {
-		const store = new SessionStore();
-		const view = store.ensureSession(
-			sessionChannel,
-			snapshot({ pendingApprovals: [{ id: "r1", callId: "c1", toolName: "bash", input: {}, cwd: "/tmp" }] }),
-		);
-		expect(view.inputNeeded).toEqual([
-			{
-				id: "r1",
-				kind: "toolConfirmation",
-				channel: chatChannel,
-				sessionId: "s1",
-				callId: "c1",
-				toolName: "bash",
-				input: {},
-				cwd: "/tmp",
-			},
-		]);
 	});
 
 	it("视图变化时通知订阅者并递增版本", () => {

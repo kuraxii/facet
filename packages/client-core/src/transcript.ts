@@ -61,6 +61,14 @@ export interface TranscriptItem {
 	parts: readonly Part[];
 	/** 是否仍在流式写入 */
 	isStreaming: boolean;
+	/** 这一条开始的时间,消息取自身时间戳;没有时间信息时为空 */
+	startedAt: number | undefined;
+	/**
+	 * 这一条结束的时间。
+	 *
+	 * 助手消息的时间戳是调用开始,加上这一次调用的耗时才是结束;工具结果并进来时取两者的较晚者。
+	 */
+	endedAt: number | undefined;
 }
 
 /** 取工具输出的纯文本。 */
@@ -180,10 +188,14 @@ function mergeToolResult(item: TranscriptItem, message: Message): TranscriptItem
 		status: message.isError ? "failed" : "done",
 		output: toolOutputText({ content: message.content, details: message.details, isError: message.isError }),
 		details: message.details,
+		// 历史记录里带工具耗时,补进来才能在卡片上显示
+		durationMs: message.durationMs ?? part.durationMs,
 	};
 	const parts = [...item.parts];
 	parts[index] = next;
-	return { ...item, parts };
+	const resultEnd = message.timestamp > 0 ? message.timestamp : undefined;
+	const endedAt = resultEnd === undefined ? item.endedAt : Math.max(item.endedAt ?? resultEnd, resultEnd);
+	return { ...item, parts, endedAt };
 }
 
 /**
@@ -196,6 +208,8 @@ export function toTranscript(view: ChatView): TranscriptItem[] {
 	const items: TranscriptItem[] = [];
 	const merged = new Map<string, number>();
 	for (const message of view.messages) {
+		const startedAt = message.message.timestamp > 0 ? message.message.timestamp : undefined;
+		const callDuration = message.message.role === "assistant" ? (message.message.durationMs ?? 0) : 0;
 		const base: TranscriptItem = {
 			kind: "message",
 			id: message.id,
@@ -203,6 +217,8 @@ export function toTranscript(view: ChatView): TranscriptItem[] {
 			role: message.message.role === "toolResult" ? "tool" : roleOf(message.message),
 			parts: [],
 			isStreaming: message.isStreaming,
+			startedAt,
+			endedAt: startedAt === undefined ? undefined : startedAt + callDuration,
 		};
 
 		if (message.message.role === "toolResult") {
@@ -290,6 +306,8 @@ export function toTranscript(view: ChatView): TranscriptItem[] {
 			role: "tool",
 			parts: [toolPart(call)],
 			isStreaming: call.isRunning,
+			startedAt: undefined,
+			endedAt: undefined,
 		});
 	}
 	return items;
@@ -316,7 +334,7 @@ function orphanToolPart(message: Message & { role: "toolResult" }): ToolCallPart
 		input: undefined,
 		status: message.isError ? "failed" : "done",
 		output: toolOutputText({ content: message.content, details: message.details, isError: message.isError }),
-		durationMs: undefined,
+		durationMs: message.durationMs,
 		details: message.details,
 	};
 }

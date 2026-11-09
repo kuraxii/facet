@@ -5,6 +5,8 @@
  */
 export { DEFAULT_AGENT_DIR } from "./paths.ts";
 export { PiAgent } from "./pi-agent.ts";
+export type { ScanSessionProjectsOptions, SessionProject } from "./projects.ts";
+export { projectIdOf, scanSessionProjects } from "./projects.ts";
 export type {
 	ForkPiAgentOptions,
 	OpenPiAgentOptions,

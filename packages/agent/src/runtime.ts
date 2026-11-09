@@ -18,8 +18,8 @@ import {
 import type { ModelInfo, ModelRef, ProviderInfo, SessionSummary, ThinkingLevel } from "@facet/protocol";
 import { toModelInfo } from "./convert.ts";
 import { applyAgentDir } from "./paths.ts";
-import { type ApprovalHook, createApprovalExtension, PiAgent } from "./pi-agent.ts";
-import type { ApprovalHandler } from "./types.ts";
+import { PiAgent } from "./pi-agent.ts";
+import { type SessionProject, scanSessionProjects } from "./projects.ts";
 
 /** 工厂的进程级配置。 */
 export interface PiAgentFactoryOptions {
@@ -49,8 +49,6 @@ export interface PiAgentLaunchOptions {
 	excludeTools?: string[];
 	/** 会话展示名 */
 	name?: string;
-	/** 工具审批处理函数 */
-	approvalHandler?: ApprovalHandler;
 	/** 扩展交互界面，缺省时扩展的对话框不可用 */
 	uiContext?: ExtensionUIContext;
 	/** 跳过文件里的扩展，内联扩展仍然加载 */
@@ -67,7 +65,6 @@ export interface OpenPiAgentOptions {
 	/** 覆盖会话记录的工作目录，目录已不存在时使用 */
 	cwd?: string;
 	sessionDir?: string;
-	approvalHandler?: ApprovalHandler;
 	uiContext?: ExtensionUIContext;
 	noExtensions?: boolean;
 	extensionFactories?: InlineExtension[];
@@ -130,6 +127,17 @@ export class PiAgentFactory {
 	findModel(ref: ModelRef): ModelInfo | undefined {
 		const model = this.modelRuntime.getModel(ref.provider, ref.id);
 		return model ? toModelInfo(model) : undefined;
+	}
+
+	/**
+	 * 扫描会话目录，取出含会话的工作目录。
+	 *
+	 * 只读每个会话文件的第一行，不校验目录是否存在，坏文件跳过。
+	 */
+	async scanProjects(): Promise<SessionProject[]> {
+		return await scanSessionProjects({
+			sessionsDir: this.sessionDir ?? join(this.agentDir, "sessions"),
+		});
 	}
 
 	/** 列出会话。指定 cwd 时只列该目录的会话，否则列出全部。 */
@@ -228,12 +236,7 @@ export class PiAgentFactory {
 		return model;
 	}
 
-	/**
-	 * 建会话的共同部分。
-	 *
-	 * 审批扩展必须先在资源加载器里注册，会话建好后再把 PiAgent 填进 hook，
-	 * 因此扩展的加载顺序与 PiAgent 的构造顺序互不依赖。
-	 */
+	/** 建会话的共同部分。 */
 	private async launch(
 		sessionManager: SessionManager,
 		options: PiAgentLaunchOptions | OpenPiAgentOptions,
@@ -246,14 +249,10 @@ export class PiAgentFactory {
 		},
 	): Promise<PiAgent> {
 		const cwd = sessionManager.getCwd();
-		const hook: ApprovalHook = {};
 		const resourceLoader = new DefaultResourceLoader({
 			cwd,
 			agentDir: this.agentDir,
-			extensionFactories: [
-				{ name: "facet-approval", hidden: true, factory: createApprovalExtension(hook) },
-				...(options.extensionFactories ?? []),
-			],
+			extensionFactories: [...(options.extensionFactories ?? [])],
 			noExtensions: options.noExtensions,
 		});
 		await resourceLoader.reload();
@@ -279,10 +278,8 @@ export class PiAgentFactory {
 				...extensionsResult.errors.map((issue) => `${issue.path}: ${issue.error}`),
 				...(extensionsResult.warnings ?? []).map((issue) => `${issue.path}: ${issue.warning}`),
 			],
-			approvalHandler: options.approvalHandler,
 			onError,
 		});
-		hook.agent = agent;
 
 		// mode 取 rpc：宿主没有终端，扩展的终端专属界面按不可用处理
 		await session.bindExtensions({

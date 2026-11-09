@@ -76,6 +76,22 @@ describe("toMessage", () => {
 		]);
 	});
 
+	it("工具结果带上执行耗时", () => {
+		const result = toMessage(
+			message({
+				role: "toolResult",
+				toolCallId: "call-1",
+				toolName: "bash",
+				content: [{ type: "text", text: "done" }],
+				isError: false,
+				durationMs: 1450,
+				timestamp: 3,
+			}),
+		);
+
+		expect(result.role === "toolResult" ? result.durationMs : undefined).toBe(1450);
+	});
+
 	it("把工具结果转成可序列化的形状", () => {
 		const result = toMessage(
 			message({

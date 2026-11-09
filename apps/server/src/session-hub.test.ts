@@ -1,7 +1,6 @@
 import { basename, resolve } from "node:path";
 import type { Entry, SessionEvent, SessionEventListener, SessionSnapshot } from "@facet/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApprovalBroker } from "./approval-broker.ts";
 import {
 	type ActionSink,
 	type AgentFactory,
@@ -54,7 +53,6 @@ class FakeAgent implements HubAgent {
 			availableThinkingLevels: ["medium"],
 			activeToolNames: [],
 			queued: { steering: [], followUp: [] },
-			pendingApprovals: [],
 			contextUsage: undefined,
 			stats: {
 				sessionId: this.id,
@@ -243,8 +241,8 @@ describe("会话建立与复用", () => {
 	it("同一会话已有另一份状态时保留先登记的", () => {
 		const first = new FakeAgent("s1", "/tmp/s1.jsonl");
 		const second = new FakeAgent("s1", "/tmp/s1.jsonl");
-		hub.attach(first, new ApprovalBroker());
-		hub.attach(second, new ApprovalBroker());
+		hub.attach(first);
+		hub.attach(second);
 		expect(hub.agent("s1")).toBe(first);
 		expect(first.disposed).toBe(false);
 		expect(second.disposed).toBe(true);

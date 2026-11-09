@@ -6,9 +6,9 @@
  */
 import type { Part, ToolCallPart, TranscriptItem } from "@facet/client-core";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
+import { Markdown } from "../markdown/Markdown.tsx";
 import { type DiffChunk, type DisplayRow, groupRows, metaSummary } from "./group.ts";
 import { ForkIcon, SparkIcon } from "./icons.tsx";
-import { Markdown } from "./Markdown.tsx";
 import { foldOutput, toolStatusText, toolTarget } from "./tool-text.ts";
 
 /** 面板参数。 */

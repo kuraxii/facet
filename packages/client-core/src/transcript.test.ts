@@ -88,6 +88,18 @@ describe("toTranscript", () => {
 		]);
 	});
 
+	it("工具结果里的结构化信息透传到工具段", () => {
+		const patch = "--- a/x.ts\n+++ b/x.ts\n@@\n-old\n+next";
+		const items = toTranscript(
+			viewWith([
+				historyItem("e1", assistant([{ type: "toolCall", id: "c1", name: "edit", arguments: {} }])),
+				historyItem("e2", { ...toolResult("c1", "改好了"), details: { patch } }),
+			]),
+		);
+		const part = items[0]?.parts[0];
+		expect(part?.kind === "toolCall" ? part.details : undefined).toEqual({ patch });
+	});
+
 	it("失败的工具结果标成 failed", () => {
 		const items = toTranscript(
 			viewWith([

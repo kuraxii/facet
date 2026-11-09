@@ -145,7 +145,20 @@ export class SessionClient {
 	 * 设备报告缓冲缺口时,快照与最近一页历史会重新装载。
 	 */
 	async openSession(sessionFile: string): Promise<OpenedSession> {
-		const snapshot = await this.transport.request("openSession", { sessionFile });
+		return await this.beginSession(await this.transport.request("openSession", { sessionFile }));
+	}
+
+	/**
+	 * 新建会话并进入。
+	 *
+	 * 参数缺省时由设备取默认工作目录与模型;返回与打开会话相同的句柄。
+	 */
+	async createSession(params: RequestParams["createSession"] = {}): Promise<OpenedSession> {
+		return await this.beginSession(await this.transport.request("createSession", params));
+	}
+
+	/** 订阅两条通道并从基线开始装载历史。打开与新建共用。 */
+	private async beginSession(snapshot: SessionSnapshot): Promise<OpenedSession> {
 		const channels = SessionStore.channelsFor(snapshot.id);
 		this.state.ensureSession(channels.session, snapshot);
 		this.state.ensureChat(channels.chat);

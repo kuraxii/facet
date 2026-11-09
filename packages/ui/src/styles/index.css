@@ -199,17 +199,11 @@ svg.fl {
 	min-height: 0;
 	overflow-x: hidden;
 	overflow-y: auto;
-	scrollbar-color: var(--line2) transparent;
-	scrollbar-width: thin;
+	scrollbar-width: none;
 }
 
 .sb-body::-webkit-scrollbar {
-	width: 6px;
-}
-
-.sb-body::-webkit-scrollbar-thumb {
-	border-radius: 3px;
-	background: var(--line2);
+	display: none;
 }
 
 .nav {

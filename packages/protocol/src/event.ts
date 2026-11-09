@@ -4,7 +4,6 @@
  * 事件都是可序列化的纯数据，设备侧产生、端点原样转发、界面按 type 分派。
  * run_end 之后仍可能有重试与排队工作，需要等待 settled 才能判定会话不再自动继续。
  */
-import type { ApprovalDecision, ApprovalRequest } from "./approval.ts";
 import type { ToolOutput } from "./content.ts";
 import type { Message } from "./message.ts";
 import type { ModelInfo, ThinkingLevel } from "./model.ts";
@@ -73,9 +72,7 @@ export type SessionEvent =
 	/** 直接执行的命令的流式输出 */
 	| { type: "bash_output"; id: string | undefined; delta: string }
 	/** 扩展或设备侧发出的通知 */
-	| { type: "notice"; level: NoticeLevel; message: string }
-	| { type: "approval_request"; request: ApprovalRequest }
-	| { type: "approval_resolved"; requestId: string; decision: ApprovalDecision };
+	| { type: "notice"; level: NoticeLevel; message: string };
 
 /** 事件监听器。抛出的错误由分发方隔离，不影响其他监听器。 */
 export type SessionEventListener = (event: SessionEvent) => void;

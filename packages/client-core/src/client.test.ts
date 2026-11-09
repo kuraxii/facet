@@ -47,7 +47,6 @@ function snapshot(): SessionSnapshot {
 		availableThinkingLevels: ["medium"],
 		activeToolNames: [],
 		queued: { steering: [], followUp: [] },
-		pendingApprovals: [],
 		contextUsage: undefined,
 		stats: {
 			sessionId: "s1",

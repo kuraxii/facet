@@ -4,7 +4,7 @@
  * 跨边界的结构由 @facet/protocol 定义，这里只保留 PiAgent 的选项与依赖 AbortSignal 的
  * 回调，避免把设备侧的实现细节带进协议层。
  */
-import type { ApprovalDecision, ApprovalRequest, ImageBlock, StreamingBehavior } from "@facet/protocol";
+import type { ImageBlock, StreamingBehavior } from "@facet/protocol";
 
 /** 发送一条消息时附带的可选参数。 */
 export interface PromptOptions {
@@ -19,13 +19,3 @@ export interface ModelMutationOptions {
 	/** 是否同时写入设备的全局默认值，缺省只影响当前会话 */
 	persist?: boolean;
 }
-
-/**
- * 工具审批处理函数。
- *
- * 返回拒绝或抛出错误都会拦截工具执行；等待远端应答时在此处挂起。
- */
-export type ApprovalHandler = (
-	request: ApprovalRequest,
-	signal?: AbortSignal,
-) => Promise<ApprovalDecision> | ApprovalDecision;

@@ -1,17 +1,15 @@
 /**
  * 会话状态、历史条目与统计。
  */
-import type { ApprovalRequest } from "./approval.ts";
 import type { Message } from "./message.ts";
 import type { ModelInfo, ThinkingLevel } from "./model.ts";
 
 /**
  * 会话的对外状态。
  *
- * 判定顺序为 awaiting_approval > compacting > running > idle：等待审批时运行仍在进行，
- * 压缩时则不处于流式输出。
+ * 判定顺序为 compacting > running > idle:压缩时不在流式输出,其余按有无运行判定。
  */
-export type SessionStatus = "idle" | "running" | "awaiting_approval" | "compacting";
+export type SessionStatus = "idle" | "running" | "compacting";
 
 /** 压缩的触发来源。manual 为手动触发，threshold 为达到阈值，overflow 为上下文溢出。 */
 export type CompactionReason = "manual" | "threshold" | "overflow";
@@ -148,8 +146,6 @@ export interface SessionSnapshot {
 	/** 已声明给模型的工具名 */
 	activeToolNames: string[];
 	queued: QueuedInput;
-	/** 尚未应答的审批请求 */
-	pendingApprovals: ApprovalRequest[];
 	contextUsage: ContextUsage | undefined;
 	stats: SessionStats;
 	/** 恢复会话时模型回退的提示，需要展示给用户 */

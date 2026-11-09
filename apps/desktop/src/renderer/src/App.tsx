@@ -1,7 +1,7 @@
 import { SessionClient, toTranscript } from "@facet/client-core";
-import type { InputRequest, SessionSummary } from "@facet/protocol";
+import type { SessionSummary } from "@facet/protocol";
 import { WsTransport } from "@facet/transport/ws";
-import { ChatTranscript, Composer, SessionSidebar, toolTarget } from "@facet/ui";
+import { ChatTranscript, Composer, SessionSidebar } from "@facet/ui";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 /** 预加载脚本注入的启动参数 */
@@ -23,15 +23,6 @@ const transport = new WsTransport({ url: bridge.endpoint });
 const client = new SessionClient({ transport, initialPages: 2, pageSize: 40 });
 
 type Phase = "connecting" | "ready" | "failed";
-
-/** 审批条上的一句话说明:工具名加参数摘要。 */
-function approvalLabel(request: InputRequest | undefined): string {
-	if (!request) {
-		return "";
-	}
-	const target = toolTarget(request.input);
-	return target.length > 0 ? `${request.toolName} ${target}` : request.toolName;
-}
 
 export function App() {
 	const version = useSyncExternalStore(
@@ -84,7 +75,6 @@ export function App() {
 
 	const session = client.sessionView();
 	const chat = client.chatView();
-	const pending = session?.inputNeeded ?? [];
 
 	const openSession = useCallback(async (summary: SessionSummary) => {
 		await client.release();
@@ -177,38 +167,6 @@ export function App() {
 
 				<div className="footer">
 					<div className="footer-column">
-						{pending.length > 0 ? (
-							<div className="approval">
-								<b>需要确认</b>
-								<span className="cmd">{approvalLabel(pending[0])}</span>
-								{pending.length > 1 ? <span className="stat">共 {pending.length} 项</span> : null}
-								<span className="actions">
-									<button
-										type="button"
-										className="btn"
-										onClick={() => {
-											for (const request of pending) {
-												client.respondTool(request.id, { action: "deny" });
-											}
-										}}
-									>
-										拒绝
-									</button>
-									<button
-										type="button"
-										className="btn pri"
-										onClick={() => {
-											for (const request of pending) {
-												client.respondTool(request.id, { action: "allow" });
-											}
-										}}
-									>
-										允许
-									</button>
-								</span>
-							</div>
-						) : null}
-
 						<Composer
 							value={draft}
 							onChange={setDraft}

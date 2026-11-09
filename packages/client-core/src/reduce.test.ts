@@ -147,28 +147,6 @@ describe("reduceSession", () => {
 		expect(view.thinkingLevel).toBe("high");
 	});
 
-	it("阻塞项按标识增删且不重复", () => {
-		const request = {
-			id: "r1",
-			kind: "toolConfirmation" as const,
-			channel: "chat:/s1" as const,
-			sessionId: "s1",
-			callId: "c1",
-			toolName: "bash",
-			input: { command: "rm -rf /" },
-			cwd: "/tmp",
-		};
-		let view = reduceSession(session(), { type: "session/inputNeededSet", request });
-		view = reduceSession(view, {
-			type: "session/inputNeededSet",
-			request: { ...request, toolName: "bash2" },
-		});
-		expect(view.inputNeeded).toHaveLength(1);
-		expect(view.inputNeeded[0]?.toolName).toBe("bash2");
-		view = reduceSession(view, { type: "session/inputNeededRemoved", id: "r1" });
-		expect(view.inputNeeded).toEqual([]);
-	});
-
 	it("压缩开始与结束", () => {
 		let view = reduceSession(session(), { type: "session/compactionStarted", reason: "threshold" });
 		expect(view.compaction).toMatchObject({ isRunning: true, reason: "threshold" });

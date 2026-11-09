@@ -55,7 +55,6 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 
 export type { ChannelAction } from "./action-projector.ts";
 export { ActionProjector } from "./action-projector.ts";
-export { ApprovalBroker } from "./approval-broker.ts";
 export type { ServerConfig } from "./config.ts";
 export { loadServerConfig } from "./config.ts";
 export type { EndpointHandle } from "./endpoint.ts";

@@ -10,7 +10,6 @@
 import type {
 	Action,
 	ActionFrame,
-	ApprovalDecision,
 	Capability,
 	Channel,
 	Entry,
@@ -287,15 +286,6 @@ export class SessionClient {
 	/** 中止当前运行。 */
 	cancel(): number {
 		return this.transport.dispatch(this.requireOpened().chatChannel, { type: "chat/turnCancelled" });
-	}
-
-	/** 应答一条工具确认。 */
-	respondTool(requestId: string, decision: ApprovalDecision): number {
-		return this.transport.dispatch(this.requireOpened().chatChannel, {
-			type: "chat/toolCallConfirmed",
-			requestId,
-			decision,
-		});
 	}
 
 	/** 切换模型,结果通过 session/modelChanged 回到视图。 */

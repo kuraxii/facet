@@ -4,7 +4,6 @@
  * 这里只定义负载本身，封装与传输由端点层决定。
  */
 
-import type { ApprovalDecision } from "./approval.ts";
 import type { ImageBlock } from "./content.ts";
 import type { ModelRef, ThinkingLevel } from "./model.ts";
 
@@ -46,12 +45,4 @@ export interface SetThinkingLevelRequest extends ModelMutationRequest {
 /** 设置激活的工具集合。 */
 export interface SetActiveToolsRequest {
 	names: string[];
-}
-
-/** 应答一条审批请求。 */
-export interface ApprovalResponseRequest {
-	/** 对应的审批请求 id */
-	requestId: string;
-	/** 应答内容 */
-	decision: ApprovalDecision;
 }

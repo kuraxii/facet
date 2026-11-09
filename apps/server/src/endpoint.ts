@@ -37,7 +37,7 @@ const ENDPOINT_PATH = "/endpoint";
 const MAX_FRAME_BYTES = 32 * 1024 * 1024;
 
 /** 当前设备已实现的能力。未列入的入口由端点隐藏。 */
-const CAPABILITIES: Capability[] = ["dispatch", "approval", "tools", "compaction", "export"];
+const CAPABILITIES: Capability[] = ["dispatch", "tools", "compaction", "export"];
 
 /** 请求被拒绝时带出的错误。未捕获的其他错误统一归类为内部错误。 */
 class RequestError extends Error {
@@ -200,9 +200,6 @@ async function applyAction(context: EndpointContext, channel: Channel, action: A
 		}
 		case "chat/queueCleared":
 			context.hub.agent(sessionId).clearQueue();
-			return;
-		case "chat/toolCallConfirmed":
-			await context.hub.respondApproval(sessionId, action.requestId, action.decision);
 			return;
 		case "session/titleChanged":
 			context.hub.agent(sessionId).setName(action.title);

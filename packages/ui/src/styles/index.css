@@ -802,42 +802,6 @@ svg.fl {
 	margin: 0 auto;
 }
 
-.approval {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	padding: 9px 10px 9px 14px;
-	border: 1px solid var(--warnbd);
-	border-radius: 12px;
-	background: var(--warnbg);
-	font-size: 13px;
-}
-
-.approval b {
-	color: var(--warn);
-	font-weight: 600;
-}
-
-.approval .cmd {
-	color: var(--t2);
-	font-family: var(--font-mono);
-	font-size: 12px;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.approval .stat {
-	color: var(--t2);
-	font-size: 12px;
-}
-
-.approval .actions {
-	display: flex;
-	gap: 8px;
-	margin-left: auto;
-}
-
 .composer {
 	padding: 12px 12px 10px 16px;
 	border: 1px solid var(--line2);

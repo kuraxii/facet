@@ -197,23 +197,6 @@ body {
 	cursor: pointer;
 }
 
-.approvals {
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	padding: 8px 18px;
-	border-top: 1px solid #1d1d21;
-	background: #17130f;
-}
-
-.approval {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	font-size: 12px;
-	color: #d7b48a;
-}
-
 .composer {
 	display: flex;
 	align-items: flex-end;
@@ -241,8 +224,7 @@ body {
 	gap: 8px;
 }
 
-.composer button,
-.approval button {
+.composer button {
 	padding: 6px 12px;
 	border: 1px solid #2a2a30;
 	border-radius: 6px;

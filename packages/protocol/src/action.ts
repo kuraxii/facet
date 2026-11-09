@@ -1,43 +1,9 @@
-/**
- * 动作词汇表。
- *
- * 动作是状态变更的唯一形式:客户端派发的与设备侧产生的都是同一类值,按所属通道定序,
- * 可回放、可归因。客户端可派发的动作在命名上不做区分,以注释标注。
- */
-import type { ApprovalDecision } from "./approval.ts";
-import type { Channel } from "./channel.ts";
 import type { ImageBlock, ToolOutput } from "./content.ts";
 import type { DeltaKind, NoticeLevel } from "./event.ts";
 import type { Message } from "./message.ts";
 import type { ModelInfo, ModelRef, ThinkingLevel } from "./model.ts";
 import type { StreamingBehavior } from "./request.ts";
 import type { CompactionReason, SessionStatus } from "./session.ts";
-
-/** 阻塞项的种类。目前只有工具确认,扩展输入与等待认证留待后续。 */
-export type InputRequestKind = "toolConfirmation";
-
-/**
- * 一条阻塞项。
- *
- * 自足:带上归属的对话通道与全部标识,订阅会话通道的端不必订阅对话就能应答。
- */
-export interface InputRequest {
-	/** 请求 id,应答时原样带回 */
-	id: string;
-	kind: InputRequestKind;
-	/** 归属的对话通道 */
-	channel: Channel;
-	/** 会话 id */
-	sessionId: string;
-	/** 待确认的工具调用 id */
-	callId: string;
-	/** 申请执行的工具名 */
-	toolName: string;
-	/** 调用参数,供审批界面展示影响范围 */
-	input: unknown;
-	/** 会话所在工作目录 */
-	cwd: string;
-}
 
 /** 会话动作。 */
 export type SessionAction =
@@ -59,10 +25,6 @@ export type SessionAction =
 			willRetry: boolean;
 			error: string | undefined;
 	  }
-	/** 设备侧:新增或更新一条阻塞项 */
-	| { type: "session/inputNeededSet"; request: InputRequest }
-	/** 设备侧:阻塞项已解决 */
-	| { type: "session/inputNeededRemoved"; id: string }
 	/** 客户端可派发:会话改名 */
 	| { type: "session/titleChanged"; title: string }
 	/** 客户端可派发:变更模型、思考档位或激活的工具 */
@@ -115,9 +77,7 @@ export type ChatAction =
 	/** 客户端可派发:排队一条消息,steering 插入当前回合之后,queued 等本轮结束 */
 	| { type: "chat/pendingMessageSet"; kind: "steering" | "queued"; text: string }
 	/** 客户端可派发:清空排队 */
-	| { type: "chat/queueCleared" }
-	/** 客户端可派发:应答一条工具确认,requestId 取自阻塞项的 id */
-	| { type: "chat/toolCallConfirmed"; requestId: string; decision: ApprovalDecision };
+	| { type: "chat/queueCleared" };
 
 /** 动作联合。按 `type` 前缀决定归属通道。 */
 export type Action = SessionAction | ChatAction;

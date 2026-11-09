@@ -9,7 +9,6 @@ import type {
 	Channel,
 	CompactionReason,
 	DeltaKind,
-	InputRequest,
 	Message,
 	ModelInfo,
 	NoticeLevel,
@@ -19,7 +18,6 @@ import type {
 	ThinkingLevel,
 	ToolOutput,
 } from "@facet/protocol";
-import { makeChannel } from "@facet/protocol";
 
 /** 一条工具调用在客户端的呈现状态。 */
 export interface ToolCallView {
@@ -87,8 +85,6 @@ export interface SessionView {
 	readonly model: ModelInfo | undefined;
 	readonly thinkingLevel: ThinkingLevel | undefined;
 	readonly title: string | undefined;
-	/** 待应答的阻塞项,例如工具确认 */
-	readonly inputNeeded: readonly InputRequest[];
 	readonly compaction: CompactionView | undefined;
 }
 
@@ -119,7 +115,6 @@ export function createSessionView(channel: Channel, snapshot?: SessionSnapshot):
 		model: snapshot?.model,
 		thinkingLevel: snapshot?.thinkingLevel,
 		title: snapshot?.name,
-		inputNeeded: snapshot ? pendingToInputNeeded(snapshot) : [],
 		compaction: undefined,
 	};
 }
@@ -142,19 +137,4 @@ export function createChatView(channel: Channel): ChatView {
 export function appendNotice(notices: readonly NoticeView[], notice: NoticeView): readonly NoticeView[] {
 	const next = [...notices, notice];
 	return next.length > MAX_NOTICES ? next.slice(next.length - MAX_NOTICES) : next;
-}
-
-/** 把快照里尚未应答的审批转成阻塞项,便于只订阅会话通道的端直接应答。 */
-function pendingToInputNeeded(snapshot: SessionSnapshot): readonly InputRequest[] {
-	const chatChannel = makeChannel("chat", snapshot.id);
-	return snapshot.pendingApprovals.map((request) => ({
-		id: request.id,
-		kind: "toolConfirmation",
-		channel: chatChannel,
-		sessionId: snapshot.id,
-		callId: request.callId,
-		toolName: request.toolName,
-		input: request.input,
-		cwd: request.cwd,
-	}));
 }

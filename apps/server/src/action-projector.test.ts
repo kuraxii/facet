@@ -51,30 +51,6 @@ describe("ActionProjector", () => {
 		expect(projector.currentMessageId).toBeUndefined();
 	});
 
-	it("审批请求投影成自足的阻塞项", () => {
-		const projector = new ActionProjector("s1");
-		const projected = projector.project({
-			type: "approval_request",
-			request: { id: "r1", callId: "c1", toolName: "bash", input: { command: "ls" }, cwd: "/tmp" },
-		});
-		expect(projected[0]).toEqual({
-			channel: "session:/s1",
-			action: {
-				type: "session/inputNeededSet",
-				request: {
-					id: "r1",
-					kind: "toolConfirmation",
-					channel: "chat:/s1",
-					sessionId: "s1",
-					callId: "c1",
-					toolName: "bash",
-					input: { command: "ls" },
-					cwd: "/tmp",
-				},
-			},
-		});
-	});
-
 	it("不产生动作的事件返回空数组", () => {
 		const projector = new ActionProjector("s1");
 		expect(projector.project({ type: "turn_start" })).toEqual([]);

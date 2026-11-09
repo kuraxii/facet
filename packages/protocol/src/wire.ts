@@ -14,7 +14,7 @@ import type { Entry, SessionSnapshot, SessionSummary } from "./session.ts";
 export const PROTOCOL_VERSION = 1;
 
 /** 设备上报的能力标记,端点据此隐藏不可用的入口。 */
-export type Capability = "dispatch" | "approval" | "tools" | "compaction" | "export";
+export type Capability = "dispatch" | "tools" | "compaction" | "export";
 
 /** 请求失败的分类。端点按 code 决定提示方式,message 仅用于展示与日志。 */
 export type ErrorCode =

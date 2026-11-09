@@ -30,6 +30,25 @@ export function SearchIcon({ size, ...rest }: IconProps) {
 	);
 }
 
+/** 项目目录。 */
+export function FolderIcon({ size, ...rest }: IconProps) {
+	return (
+		<Icon size={size} {...rest}>
+			<path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+		</Icon>
+	);
+}
+
+/** 远端主机上的会话。 */
+export function MonitorIcon({ size, ...rest }: IconProps) {
+	return (
+		<Icon size={size} {...rest}>
+			<rect x="3" y="4" width="18" height="12" rx="2" />
+			<path d="M8 20h8M12 16v4" />
+		</Icon>
+	);
+}
+
 /** 从一个用户消息处分叉。 */
 export function ForkIcon({ size, ...rest }: IconProps) {
 	return (

@@ -6,7 +6,22 @@
 export type { ComposerProps } from "./chat/Composer.tsx";
 export { Composer } from "./chat/Composer.tsx";
 export type { SessionSidebarProps } from "./chat/SessionSidebar.tsx";
-export { filterSessions, SessionSidebar } from "./chat/SessionSidebar.tsx";
+export { SessionSidebar } from "./chat/SessionSidebar.tsx";
+export type {
+	HostState,
+	SidebarData,
+	SidebarHost,
+	SidebarProject,
+	SidebarSession,
+} from "./chat/sidebar-model.ts";
+export {
+	baseName,
+	buildSidebar,
+	filterProjects,
+	sessionTitle,
+	shortenHome,
+	shortTime,
+} from "./chat/sidebar-model.ts";
 export type { CodeBlockShape } from "./markdown/code-block-state.ts";
 export { shouldShowCodeBlock } from "./markdown/code-block-state.ts";
 export { extractLangToken, PLAIN, resolveCodeLang } from "./markdown/code-lang.ts";

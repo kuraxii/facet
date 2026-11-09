@@ -1,8 +1,9 @@
-import { SessionClient, toTranscript } from "@facet/client-core";
+import { type DeviceHandshake, SessionClient, toTranscript } from "@facet/client-core";
 import type { SessionSummary } from "@facet/protocol";
 import { WsTransport } from "@facet/transport/ws";
-import { ChatTranscript, Composer, SessionSidebar } from "@facet/ui";
+import { ChatTranscript, Composer, SessionSidebar, type SidebarHost } from "@facet/ui";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { PLACEHOLDER_HOSTS } from "./placeholder-hosts";
 
 /** 预加载脚本注入的启动参数 */
 interface FacetBridge {
@@ -33,6 +34,8 @@ export function App() {
 	const [failure, setFailure] = useState<string | undefined>(undefined);
 	const [sessions, setSessions] = useState<readonly SessionSummary[]>([]);
 	const [activeFile, setActiveFile] = useState<string | undefined>(undefined);
+	const [device, setDevice] = useState<DeviceHandshake | undefined>(undefined);
+	const [createCwd, setCreateCwd] = useState(bridge.projectDir);
 	const [draft, setDraft] = useState("");
 	const started = useRef(false);
 
@@ -58,6 +61,7 @@ export function App() {
 		void (async () => {
 			const handshake = await transport.connect();
 			client.attach(handshake);
+			setDevice(handshake);
 			const pool = await refreshSessions();
 			const newest = pool[0];
 			if (newest) {
@@ -76,20 +80,21 @@ export function App() {
 	const session = client.sessionView();
 	const chat = client.chatView();
 
-	const openSession = useCallback(async (summary: SessionSummary) => {
+	const openSession = useCallback(async (path: string) => {
 		await client.release();
-		await client.openSession(summary.path);
-		setActiveFile(summary.path);
+		await client.openSession(path);
+		setActiveFile(path);
 	}, []);
 
-	const createSession = useCallback(async () => {
-		await client.release();
-		const opened = await client.createSession({
-			...(bridge.projectDir.length > 0 ? { cwd: bridge.projectDir } : {}),
-		});
-		setActiveFile(opened.file);
-		await refreshSessions();
-	}, [refreshSessions]);
+	const createSession = useCallback(
+		async (cwd: string) => {
+			await client.release();
+			const opened = await client.createSession({ ...(cwd.length > 0 ? { cwd } : {}) });
+			setActiveFile(opened.file);
+			await refreshSessions();
+		},
+		[refreshSessions],
+	);
 
 	const send = useCallback(() => {
 		const text = draft.trim();
@@ -116,6 +121,18 @@ export function App() {
 
 	const transcript = useMemo(() => (chat ? toTranscript(chat) : []), [chat]);
 
+	const hosts = useMemo<readonly SidebarHost[]>(() => {
+		const local: SidebarHost = {
+			id: device?.hostId ?? "local",
+			name: device?.hostName ?? "本机",
+			detail: bridge.endpoint,
+			state: "connected",
+			isLocal: true,
+			projects: [],
+		};
+		return [local, ...PLACEHOLDER_HOSTS];
+	}, [device]);
+
 	if (phase === "failed") {
 		return (
 			<main className="boot">
@@ -139,11 +156,16 @@ export function App() {
 		<div className="shell">
 			<SessionSidebar
 				sessions={sessions}
+				hosts={hosts}
 				activeFile={activeFile}
 				runningFile={chat?.isRunning === true ? activeFile : undefined}
+				createCwd={createCwd}
 				projectDir={bridge.projectDir}
-				onSelect={(summary) => void openSession(summary)}
-				onCreate={() => void createSession()}
+				onSelect={(path) => void openSession(path)}
+				onCreate={(cwd) => {
+					setCreateCwd(cwd);
+					void createSession(cwd);
+				}}
 				canCreate={phase === "ready"}
 			/>
 

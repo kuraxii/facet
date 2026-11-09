@@ -98,9 +98,8 @@
 
 | 缺口 | 需求 | 说明 |
 |---|---|---|
-| Markdown 渲染 | FR-CHAT-02 | 正文目前是纯文本,`**加粗**`、`##` 标题、表格、链接都原样显示 |
-| 代码块 | FR-CHAT-04 | 无语法高亮、无语言标签、无复制按钮 |
-| 图表与公式 | FR-CHAT-05 | mermaid 与 KaTeX 未接入 |
+| 代码块的语法高亮 | FR-CHAT-04 | 代码块有外框、语言标签与复制按钮,按语言着色依赖 stream-diffs 的默认主题,尚未按设计稿调色 |
+| 图表与公式 | FR-CHAT-05 | mermaid 与 KaTeX 已装上,缺容器规格与失败降级样式 |
 | 平滑输出 | FR-CHAT-03 | 增量按帧直出,没有逐字节奏 |
 | 滚动跟随底部 | FR-CHAT-01 | 没有回底按钮,也没有脱离跟随的判断 |
 | 图片显示 | FR-CHAT-11 | 用户消息里的图片现在只有一个占位标记 |
@@ -118,12 +117,12 @@
 
 | 库 | 用途 | 接入点 | 现状 |
 |---|---|---|---|
-| `markstream-react` | 正文 Markdown 渲染,支持流式未闭合内容 | 助手行与用户行的正文段 | 未安装 |
-| `stream-diffs` | Markstream 的代码块后端,提供代码块外框、工具栏、文件/差异视图 | 正文里的代码块 | 未安装 |
-| `shiki` + `stream-markdown` | 非 Markdown 文本的高亮:工具输出、补丁、日志 | 工具卡输出、文件改动行的补丁 | 未安装 |
-| `mermaid` | 正文里的 ```mermaid 图 | Markstream 的可选后端 | 未安装 |
-| `katex` | 公式 | Markstream 的可选后端 | 未安装 |
-| `zustand` | 界面状态:收起集合、滚动位置、草稿、面板开合 | `packages/ui` | 已声明未使用 |
+| `markstream-react` | 正文 Markdown 渲染,支持流式未闭合内容 | 助手行的正文段 | 已接入 |
+| `stream-diffs` | Markstream 的代码块后端,提供代码块外框、工具栏、行号 | 正文里的代码块 | 已接入 |
+| `mermaid` | 正文里的 ```mermaid 图 | Markstream 的可选后端 | 已安装,按需加载 |
+| `katex` | 公式 | Markstream 的可选后端 | 已安装,按需加载 |
+| `shiki` + `stream-markdown` | 非 Markdown 文本的高亮:工具输出、补丁、日志 | 工具卡输出、文件改动行的补丁 | 未接入,现在是纯等宽文本 |
+| `zustand` | 界面状态:收起集合、滚动位置、草稿、面板开合 | `packages/ui` | 已声明未使用,收起状态仍在组件内 |
 
 ### markstream-react
 

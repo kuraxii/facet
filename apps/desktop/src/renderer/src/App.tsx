@@ -45,10 +45,17 @@ export function App() {
 	const [draft, setDraft] = useState("");
 	const started = useRef(false);
 
+	const listSeq = useRef(0);
+
+	/** 拉一次会话列表。并发调用时只采用最后一次的结果,避免旧结果覆盖新结果。 */
 	const refreshSessions = useCallback(async () => {
+		listSeq.current += 1;
+		const seq = listSeq.current;
 		const scoped = await client.listSessions(bridge.projectDir);
 		const pool = scoped.length > 0 ? scoped : await client.listSessions();
-		setSessions(pool);
+		if (seq === listSeq.current) {
+			setSessions(pool);
+		}
 		return pool;
 	}, []);
 

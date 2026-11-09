@@ -115,6 +115,7 @@ function ToolCard({ part }: { part: ToolCallPart }) {
 	const isLong = folded.hiddenLines > 0;
 	const shown = isLong && !isExpanded ? folded.preview : output;
 	const target = toolTarget(part.input);
+	const statusText = toolStatusText(part.status, part.durationMs);
 
 	return (
 		<div className={`tool is-${part.status}`}>
@@ -124,7 +125,7 @@ function ToolCard({ part }: { part: ToolCallPart }) {
 				{target.length > 0 ? <span className="tool-arg">{target}</span> : null}
 				<span className="tool-status">
 					{part.status === "running" ? <i className="dot is-warn pulse" /> : null}
-					{toolStatusText(part.status, part.durationMs)}
+					{statusText}
 				</span>
 			</button>
 			{isOpen && output.length > 0 ? <pre className="tool-out">{shown}</pre> : null}

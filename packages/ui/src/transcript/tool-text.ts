@@ -47,19 +47,26 @@ export function toolTarget(input: unknown): string {
 	return "";
 }
 
-/** 工具状态文字,带耗时。 */
+/**
+ * 工具卡片右侧的状态文字。
+ *
+ * 成功与失败只靠颜色和边框区分,不再写字;文字位置留给耗时。执行中仍写出「执行中」,
+ * 因为它不是结论,还需要一个明确的进行时状态。
+ */
 export function toolStatusText(
 	status: "running" | "done" | "failed",
 	durationMs: number | undefined,
 ): string {
-	const base = status === "running" ? "执行中" : status === "failed" ? "失败" : "完成";
-	if (status === "running" || durationMs === undefined) {
-		return base;
+	if (status === "running") {
+		return "执行中";
+	}
+	if (durationMs === undefined) {
+		return "";
 	}
 	if (durationMs < 1000) {
-		return `${base} · ${Math.round(durationMs)}ms`;
+		return `${Math.round(durationMs)}ms`;
 	}
-	return `${base} · ${(durationMs / 1000).toFixed(1)}s`;
+	return `${(durationMs / 1000).toFixed(1)}s`;
 }
 
 /**

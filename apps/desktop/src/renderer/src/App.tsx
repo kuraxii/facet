@@ -160,7 +160,6 @@ export function App() {
 				activeFile={activeFile}
 				runningFile={chat?.isRunning === true ? activeFile : undefined}
 				createCwd={createCwd}
-				projectDir={bridge.projectDir}
 				onSelect={(path) => void openSession(path)}
 				onCreate={(cwd) => {
 					setCreateCwd(cwd);

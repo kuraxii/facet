@@ -93,16 +93,6 @@ export function baseName(path: string): string {
 	return segments[segments.length - 1] ?? path;
 }
 
-/** 把家目录缩成 `~` 开头，底部路径过长时省地方。 */
-export function shortenHome(path: string): string {
-	const matched = /^\/home\/[^/]+(?=\/|$)/.exec(path) ?? /^\/Users\/[^/]+(?=\/|$)/.exec(path);
-	if (!matched) {
-		return path;
-	}
-	const rest = path.slice(matched[0].length);
-	return rest.length > 0 ? `~${rest}` : "~";
-}
-
 /** 会话标题：优先会话名，其次首条消息摘要，都为空时给占位名。 */
 export function sessionTitle(name: string | undefined, firstMessage: string): string {
 	const trimmed = name?.trim() ?? "";

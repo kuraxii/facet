@@ -14,7 +14,6 @@ import {
 	type SidebarHost,
 	type SidebarProject,
 	type SidebarSession,
-	shortenHome,
 	shortTime,
 } from "./sidebar-model.ts";
 
@@ -30,8 +29,6 @@ export interface SessionSidebarProps {
 	runningFile: string | undefined;
 	/** 新建会话落在的目录 */
 	createCwd: string;
-	/** 工作目录，显示在底部 */
-	projectDir: string;
 	/** 选择一条会话 */
 	onSelect: (path: string) => void;
 	/** 在指定目录新建会话 */
@@ -111,7 +108,6 @@ export function SessionSidebar({
 	activeFile,
 	runningFile,
 	createCwd,
-	projectDir,
 	onSelect,
 	onCreate,
 	canCreate,
@@ -510,9 +506,6 @@ export function SessionSidebar({
 			</div>
 
 			<div className="sidebar-foot">
-				<span className="mono ell" title={projectDir}>
-					{shortenHome(projectDir)}
-				</span>
 				<button type="button" className="foot-act" disabled title="尚未实现">
 					设置
 				</button>

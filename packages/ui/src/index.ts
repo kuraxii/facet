@@ -19,7 +19,6 @@ export {
 	buildSidebar,
 	filterProjects,
 	sessionTitle,
-	shortenHome,
 	shortTime,
 } from "./chat/sidebar-model.ts";
 export type { CodeBlockShape } from "./markdown/code-block-state.ts";

@@ -6,7 +6,6 @@ import {
 	filterProjects,
 	type SidebarHost,
 	sessionTitle,
-	shortenHome,
 	shortTime,
 } from "./sidebar-model.ts";
 
@@ -38,11 +37,6 @@ describe("路径与标题", () => {
 		expect(baseName("/work/facet")).toBe("facet");
 		expect(baseName("/work/facet/")).toBe("facet");
 		expect(baseName("facet")).toBe("facet");
-	});
-
-	it("家目录缩成波浪号", () => {
-		expect(shortenHome("/home/zhu/work/facet")).toBe("~/work/facet");
-		expect(shortenHome("/opt/work")).toBe("/opt/work");
 	});
 
 	it("标题回退顺序为会话名、首条消息、占位名", () => {

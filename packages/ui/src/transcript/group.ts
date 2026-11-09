@@ -150,12 +150,12 @@ function absorb(draft: GroupDraft, item: TranscriptItem): void {
 }
 
 /** 过程行定稿。没有思考也没有工具调用时不成行。 */
-function metaRow(draft: GroupDraft): DisplayRow[] {
+function metaRow(draft: GroupDraft): DisplayRow | undefined {
 	const first = draft.items[0];
 	if (!first || (draft.toolCount === 0 && draft.thinkingCount === 0)) {
-		return [];
+		return undefined;
 	}
-	const row: DisplayRow = {
+	return {
 		kind: "meta",
 		id: first.id,
 		items: draft.items,
@@ -166,7 +166,6 @@ function metaRow(draft: GroupDraft): DisplayRow[] {
 		diffs: draft.diffs,
 		isStreaming: draft.isStreaming,
 	};
-	return [row, ...draft.diffs.map(diffRow)];
 }
 
 /** 一次文件改动单独成行。 */
@@ -204,47 +203,65 @@ function singleton(item: TranscriptItem, kind: RowKind): DisplayRow {
 /**
  * 把渲染单元聚合成面板行。
  *
- * 顺序保持与消息一致:用户消息与带正文的答复各自成行,夹在中间的无正文项并入同一过程行;
- * 带补丁的工具在过程行之后追加文件改动行。系统提示与压缩、分支摘要都是一行说明。
+ * 顺序保持与消息一致:用户消息与带正文的答复各自成行,夹在中间的无正文项并入同一过程行。
+ * 文件改动统一排在这一轮答复的正文之后;没有正文的回合里,改动行跟在过程行后面收尾。
+ * 系统提示与压缩、分支摘要都是一行说明。
  */
 export function groupRows(items: readonly TranscriptItem[]): DisplayRow[] {
 	const rows: DisplayRow[] = [];
 	let group: GroupDraft | undefined;
+	let pending: DiffChunk[] = [];
 
+	/** 过程行定稿,它的改动行留到正文之后。 */
 	const flush = (): void => {
 		if (!group) {
 			return;
 		}
-		rows.push(...metaRow(group));
+		const row = metaRow(group);
+		if (row) {
+			rows.push(row);
+			pending.push(...row.diffs);
+		}
 		group = undefined;
+	};
+
+	const flushDiffs = (): void => {
+		rows.push(...pending.map(diffRow));
+		pending = [];
 	};
 
 	for (const item of items) {
 		if (item.kind === "compaction" || item.kind === "branch" || item.role === "system") {
 			flush();
+			flushDiffs();
 			rows.push(singleton(item, "divider"));
 			continue;
 		}
 		if (item.kind === "error") {
 			flush();
+			flushDiffs();
 			rows.push(singleton(item, "error"));
 			continue;
 		}
 		if (item.role === "user") {
 			flush();
+			flushDiffs();
 			rows.push(singleton(item, "user"));
 			continue;
 		}
 		if (item.role === "assistant" && hasText(item.parts)) {
 			flush();
 			const row = singleton(item, "assistant");
-			rows.push(row, ...row.diffs.map(diffRow));
+			const own = row.diffs;
+			rows.push({ ...row, diffs: [] }, ...pending.map(diffRow), ...own.map(diffRow));
+			pending = [];
 			continue;
 		}
 		group ??= createGroup();
 		absorb(group, item);
 	}
 	flush();
+	flushDiffs();
 	return rows;
 }
 

@@ -74,17 +74,36 @@ describe("分行", () => {
 		expect(after[1]?.isStreaming).toBe(true);
 	});
 
-	it("带补丁的工具在过程行之后追加文件改动行", () => {
+	it("文件改动行排在正文之后", () => {
 		const patch = ["--- a/src/a.ts", "+++ b/src/a.ts", "@@ -1 +1 @@", "-old", "+next", "+more"].join("\n");
 		const rows = groupRows([
 			item({ id: "m1", role: "assistant", parts: [tool("tool:c1", "c1", 40, { patch })] }),
 			item({ id: "m2", role: "assistant", parts: [text("text:0", "改好了")] }),
 		]);
-		expect(rows.map((row) => row.kind)).toEqual(["meta", "diff", "assistant"]);
-		expect(rows[1]?.id).toBe("diff:c1");
-		expect(rows[1]?.diffs[0]?.files).toEqual(["src/a.ts"]);
-		expect(rows[1]?.diffs[0]?.added).toBe(2);
-		expect(rows[1]?.diffs[0]?.removed).toBe(1);
+		expect(rows.map((row) => row.kind)).toEqual(["meta", "assistant", "diff"]);
+		expect(rows[2]?.id).toBe("diff:c1");
+		expect(rows[2]?.diffs[0]?.files).toEqual(["src/a.ts"]);
+		expect(rows[2]?.diffs[0]?.added).toBe(2);
+		expect(rows[2]?.diffs[0]?.removed).toBe(1);
+	});
+
+	it("没有正文的回合,改动行跟在过程行之后收尾", () => {
+		const patch = ["--- a/b.ts", "+++ b/b.ts", "@@", "-x", "+y"].join("\n");
+		const rows = groupRows([
+			item({ id: "m1", role: "user", parts: [text("text:0", "改一下")] }),
+			item({ id: "m2", role: "assistant", parts: [tool("tool:c1", "c1", 5, { patch })] }),
+		]);
+		expect(rows.map((row) => row.kind)).toEqual(["user", "meta", "diff"]);
+	});
+
+	it("下一轮开始时先收尾上一轮未显示完的改动行", () => {
+		const patch = ["--- a/c.ts", "+++ b/c.ts", "@@", "-x", "+y"].join("\n");
+		const rows = groupRows([
+			item({ id: "m1", role: "assistant", parts: [tool("tool:c1", "c1", 5, { patch })] }),
+			item({ id: "m2", role: "user", parts: [text("text:0", "再来")] }),
+			item({ id: "m3", role: "assistant", parts: [text("text:0", "好")] }),
+		]);
+		expect(rows.map((row) => row.kind)).toEqual(["meta", "diff", "user", "assistant"]);
 	});
 
 	it("带正文的答复携带工具时,改动行排在答复行之后", () => {

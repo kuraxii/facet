@@ -354,10 +354,14 @@ export function ChatTranscript({ items, canFork, onFork, retry, emptyHint }: Cha
 					return (
 						<Shell key={row.id} className="is-process">
 							<div className="proc-box">
-								<button type="button" className="proc" onClick={() => toggle(row)}>
-									<i className={isCollapsed ? "chev" : "chev is-open"} />
+								<button
+									type="button"
+									className="proc"
+									onClick={() => toggle(row)}
+									aria-expanded={!isCollapsed}
+									aria-label="过程"
+								>
 									<SparkIcon className="fl" size={13} style={{ color: "var(--t3)" }} />
-									<span className="label">过程</span>
 									<span className="summary">{metaSummary(row)}</span>
 									{row.isStreaming ? (
 										<span className="live">

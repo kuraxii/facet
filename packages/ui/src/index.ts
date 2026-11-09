@@ -18,6 +18,7 @@ export {
 	baseName,
 	buildSidebar,
 	filterProjects,
+	samePath,
 	sessionTitle,
 	shortTime,
 } from "./chat/sidebar-model.ts";

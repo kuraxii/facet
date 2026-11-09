@@ -14,6 +14,7 @@ import {
 	type SidebarHost,
 	type SidebarProject,
 	type SidebarSession,
+	samePath,
 	shortTime,
 } from "./sidebar-model.ts";
 
@@ -166,7 +167,9 @@ export function SessionSidebar({
 	const targetName = baseName(createCwd);
 
 	const isProjectOpen = (project: SidebarProject): boolean =>
-		isSearching || (openProjects[project.cwd] ?? project.cwd === createCwd);
+		isSearching ||
+		(openProjects[project.cwd] ??
+			(samePath(project.cwd, createCwd) || project.sessions.some((session) => session.path === activeFile)));
 
 	const toggleProject = (project: SidebarProject): void => {
 		setOpenProjects((current) => ({ ...current, [project.cwd]: !isProjectOpen(project) }));
@@ -277,14 +280,14 @@ export function SessionSidebar({
 							<button
 								type="button"
 								key={project.cwd}
-								className={project.cwd === createCwd ? "ps is-current" : "ps"}
+								className={samePath(project.cwd, createCwd) ? "ps is-current" : "ps"}
 								onClick={() => {
 									onCreate(project.cwd);
 									setIsLocationOpen(false);
 								}}
 							>
 								<span className="ell">{project.name}</span>
-								{project.cwd === createCwd ? <span>当前</span> : <span />}
+								{samePath(project.cwd, createCwd) ? <span>当前</span> : <span />}
 							</button>
 						))}
 						{data.remotes.map((host) => (
@@ -356,41 +359,6 @@ export function SessionSidebar({
 			) : null}
 
 			<div className="sb-body">
-				<div className="sec">
-					<span>最近</span>
-					<button type="button" className="sec-act" onClick={() => setShowsAllRecents((show) => !show)}>
-						{showsAllRecents ? "收起" : "全部"}
-					</button>
-				</div>
-
-				<div className="recents">
-					{recents.length === 0 ? <p className="ps t3">还没有会话</p> : null}
-					{recents.map((session) => (
-						<button
-							type="button"
-							key={`recent:${session.path}`}
-							className={session.path === activeFile ? "rc is-active" : "rc"}
-							onClick={() => openSession(session)}
-							disabled={session.isPlaceholder === true}
-						>
-							<i className={`${dotClass(session.isRunning ? "running" : "idle")} rc-dot`} />
-							<div className="rc-main">
-								<b>{session.title}</b>
-								<small>
-									<span className="tag">
-										{session.host === undefined ? null : <MonitorIcon size={10} />}
-										{tagOf(session)}
-									</span>
-									<span>
-										{session.isRunning ? "运行中 · " : ""}
-										{shortTime(session.modified)}
-									</span>
-								</small>
-							</div>
-						</button>
-					))}
-				</div>
-
 				<div className="sec">
 					<span>项目</span>
 					<button
@@ -503,6 +471,40 @@ export function SessionSidebar({
 						) : null}
 					</div>
 				) : null}
+				<div className="sec">
+					<span>最近</span>
+					<button type="button" className="sec-act" onClick={() => setShowsAllRecents((show) => !show)}>
+						{showsAllRecents ? "收起" : "全部"}
+					</button>
+				</div>
+
+				<div className="recents">
+					{recents.length === 0 ? <p className="ps t3">还没有会话</p> : null}
+					{recents.map((session) => (
+						<button
+							type="button"
+							key={`recent:${session.path}`}
+							className={session.path === activeFile ? "rc is-active" : "rc"}
+							onClick={() => openSession(session)}
+							disabled={session.isPlaceholder === true}
+						>
+							<i className={`${dotClass(session.isRunning ? "running" : "idle")} rc-dot`} />
+							<div className="rc-main">
+								<b>{session.title}</b>
+								<small>
+									<span className="tag">
+										{session.host === undefined ? null : <MonitorIcon size={10} />}
+										{tagOf(session)}
+									</span>
+									<span>
+										{session.isRunning ? "运行中 · " : ""}
+										{shortTime(session.modified)}
+									</span>
+								</small>
+							</div>
+						</button>
+					))}
+				</div>
 			</div>
 
 			<div className="sidebar-foot">

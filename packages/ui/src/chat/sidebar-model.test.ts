@@ -5,6 +5,7 @@ import {
 	buildSidebar,
 	filterProjects,
 	type SidebarHost,
+	samePath,
 	sessionTitle,
 	shortTime,
 } from "./sidebar-model.ts";
@@ -37,6 +38,11 @@ describe("路径与标题", () => {
 		expect(baseName("/work/facet")).toBe("facet");
 		expect(baseName("/work/facet/")).toBe("facet");
 		expect(baseName("facet")).toBe("facet");
+	});
+
+	it("末尾斜杠不影响目录比较", () => {
+		expect(samePath("/work/facet/", "/work/facet")).toBe(true);
+		expect(samePath("/work/facet", "/work/linx-icp")).toBe(false);
 	});
 
 	it("标题回退顺序为会话名、首条消息、占位名", () => {

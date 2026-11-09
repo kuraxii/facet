@@ -93,6 +93,11 @@ export function baseName(path: string): string {
 	return segments[segments.length - 1] ?? path;
 }
 
+/** 两个目录是否指向同一处,忽略末尾斜杠。 */
+export function samePath(left: string, right: string): boolean {
+	return left.replace(/\/+$/, "") === right.replace(/\/+$/, "");
+}
+
 /** 会话标题：优先会话名，其次首条消息摘要，都为空时给占位名。 */
 export function sessionTitle(name: string | undefined, firstMessage: string): string {
 	const trimmed = name?.trim() ?? "";

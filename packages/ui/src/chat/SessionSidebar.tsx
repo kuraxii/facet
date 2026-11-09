@@ -386,8 +386,8 @@ export function SessionSidebar({
 								onClick={() => setIsHostsOpen((open) => !open)}
 								aria-expanded={isHostsOpen}
 							>
-								<i className={isHostsOpen ? "chev is-open" : "chev"} />
 								远程主机
+								<i className={isHostsOpen ? "chev is-open" : "chev"} />
 							</button>
 							{isHostsOpen && activeHost ? (
 								<div className="pop-wrap" ref={hostMenuRef}>

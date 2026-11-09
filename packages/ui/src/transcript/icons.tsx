@@ -70,6 +70,15 @@ export function SendIcon({ size, ...rest }: IconProps) {
 	);
 }
 
+/** 回到底部。 */
+export function ArrowDownIcon({ size, ...rest }: IconProps) {
+	return (
+		<Icon size={size} {...rest}>
+			<path d="M12 5v14M5 12l7 7 7-7" />
+		</Icon>
+	);
+}
+
 /** 停止。 */
 export function StopIcon({ size, ...rest }: IconProps) {
 	return (

@@ -183,6 +183,15 @@ describe("SessionClient", () => {
 		expect(client.hasMore).toBe(true);
 	});
 
+	it("缺省装载全部历史", async () => {
+		const { client } = createClient(12, { pageSize: 5 });
+		await client.openSession("/tmp/s1.jsonl");
+		const messages = client.chatView()?.messages ?? [];
+		expect(messages).toHaveLength(12);
+		expect(messages[0]?.id).toBe("e:e1");
+		expect(client.hasMore).toBe(false);
+	});
+
 	it("继续往更早翻页时补在前面且不重复", async () => {
 		const { client } = createClient(12, { initialPages: 1, pageSize: 5 });
 		await client.openSession("/tmp/s1.jsonl");
@@ -216,7 +225,7 @@ describe("SessionClient", () => {
 		expect(client.chatView()?.notices).toEqual([{ level: "info", message: "第一次" }]);
 	});
 
-	it("序号缺口时重新装载最近一页历史", async () => {
+	it("序号缺口时重新装载历史", async () => {
 		const { transport, client } = createClient(12, { initialPages: 1, pageSize: 5 });
 		await client.openSession("/tmp/s1.jsonl");
 		transport.emit(CHAT, { type: "chat/notice", level: "info", message: "第一条" }, 1);
@@ -225,7 +234,7 @@ describe("SessionClient", () => {
 		await new Promise((resolve) => setTimeout(resolve, 10));
 		const after = transport.calls.filter((call) => call.method === "entries").length;
 		expect(after).toBeGreaterThan(before);
-		expect(client.chatView()?.messages.length).toBe(5);
+		expect(client.chatView()?.messages.length).toBe(12);
 	});
 
 	it("状态通道缺口重取快照,不动历史", async () => {

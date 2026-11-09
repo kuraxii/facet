@@ -1,7 +1,14 @@
 import { type DeviceHandshake, SessionClient, toTranscript } from "@facet/client-core";
 import type { SessionSummary } from "@facet/protocol";
 import { WsTransport } from "@facet/transport/ws";
-import { ChatTranscript, Composer, SessionSidebar, type SidebarHost } from "@facet/ui";
+import {
+	ArrowDownIcon,
+	ChatTranscript,
+	Composer,
+	SessionSidebar,
+	type SidebarHost,
+	useStickToBottom,
+} from "@facet/ui";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { PLACEHOLDER_HOSTS } from "./placeholder-hosts";
 
@@ -21,7 +28,7 @@ declare global {
 const bridge = window.facet;
 
 const transport = new WsTransport({ url: bridge.endpoint });
-const client = new SessionClient({ transport, initialPages: 2, pageSize: 40 });
+const client = new SessionClient({ transport, pageSize: 200 });
 
 type Phase = "connecting" | "ready" | "failed";
 
@@ -105,10 +112,6 @@ export function App() {
 		client.send(text);
 	}, [draft]);
 
-	const loadOlder = useCallback(() => {
-		void client.loadOlder();
-	}, []);
-
 	const forkFrom = useCallback(
 		(messageId: string) => {
 			void client.fork(messageId).then(async (forked) => {
@@ -120,6 +123,7 @@ export function App() {
 	);
 
 	const transcript = useMemo(() => (chat ? toTranscript(chat) : []), [chat]);
+	const { scrollRef, isPinned, scrollToBottom } = useStickToBottom(transcript, activeFile);
 
 	const hosts = useMemo<readonly SidebarHost[]>(() => {
 		const local: SidebarHost = {
@@ -169,13 +173,8 @@ export function App() {
 			/>
 
 			<main className="main">
-				<section className="scroll">
+				<section className="scroll" ref={scrollRef}>
 					<div className="column">
-						{client.hasMore ? (
-							<button type="button" className="load-older" onClick={loadOlder}>
-								加载更早的历史
-							</button>
-						) : null}
 						<ChatTranscript
 							items={transcript}
 							canFork={chat?.isRunning !== true}
@@ -187,6 +186,16 @@ export function App() {
 				</section>
 
 				<div className="footer">
+					{isPinned ? null : (
+						<button
+							type="button"
+							className="to-bottom"
+							aria-label="回到底部"
+							onClick={() => scrollToBottom("smooth")}
+						>
+							<ArrowDownIcon size={16} />
+						</button>
+					)}
 					<div className="footer-column">
 						<Composer
 							value={draft}

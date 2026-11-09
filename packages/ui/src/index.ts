@@ -22,6 +22,8 @@ export {
 	sessionTitle,
 	shortTime,
 } from "./chat/sidebar-model.ts";
+export type { StickToBottom } from "./chat/use-stick-to-bottom.ts";
+export { useStickToBottom } from "./chat/use-stick-to-bottom.ts";
 export type { CodeBlockShape } from "./markdown/code-block-state.ts";
 export { shouldShowCodeBlock } from "./markdown/code-block-state.ts";
 export { extractLangToken, PLAIN, resolveCodeLang } from "./markdown/code-lang.ts";
@@ -29,6 +31,7 @@ export type { MarkdownProps } from "./markdown/Markdown.tsx";
 export { Markdown } from "./markdown/Markdown.tsx";
 export type { DiffChunk, DisplayRow, RowKind } from "./transcript/group.ts";
 export { formatDuration, groupRows, metaSummary } from "./transcript/group.ts";
+export { ArrowDownIcon } from "./transcript/icons.tsx";
 export type { ChatTranscriptProps } from "./transcript/rows.tsx";
 export { ChatTranscript } from "./transcript/rows.tsx";
 export { foldOutput, toolStatusText, toolTarget } from "./transcript/tool-text.ts";

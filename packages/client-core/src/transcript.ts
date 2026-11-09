@@ -41,6 +41,8 @@ export interface ToolCallPart {
 	output: string | undefined;
 	/** 执行耗时,结束后才有 */
 	durationMs: number | undefined;
+	/** 工具的结构化结果,例如编辑工具带的补丁,由渲染侧决定怎么用 */
+	details: unknown;
 }
 
 /** 渲染单元里的一段内容。 */
@@ -95,6 +97,7 @@ function toolPart(call: ToolCallView): ToolCallPart {
 		status: call.isRunning ? "running" : call.isError ? "failed" : "done",
 		output: toolOutputText(call.output),
 		durationMs: call.durationMs,
+		details: call.output?.details,
 	};
 }
 
@@ -145,6 +148,7 @@ function assistantParts(message: MessageView, calls: Readonly<Record<string, Too
 							status: "done",
 							output: undefined,
 							durationMs: undefined,
+							details: undefined,
 						},
 			);
 			continue;
@@ -175,6 +179,7 @@ function mergeToolResult(item: TranscriptItem, message: Message): TranscriptItem
 		...part,
 		status: message.isError ? "failed" : "done",
 		output: toolOutputText({ content: message.content, details: message.details, isError: message.isError }),
+		details: message.details,
 	};
 	const parts = [...item.parts];
 	parts[index] = next;
@@ -312,6 +317,7 @@ function orphanToolPart(message: Message & { role: "toolResult" }): ToolCallPart
 		status: message.isError ? "failed" : "done",
 		output: toolOutputText({ content: message.content, details: message.details, isError: message.isError }),
 		durationMs: undefined,
+		details: message.details,
 	};
 }
 

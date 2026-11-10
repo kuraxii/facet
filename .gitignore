@@ -15,6 +15,7 @@ Thumbs.db
 .pi/
 
 .local/
+.codebase-memory/
 .env
 .env.local
 

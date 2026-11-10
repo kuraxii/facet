@@ -33,7 +33,7 @@ export interface SidebarSession {
 export interface SidebarProject {
 	/** 项目目录，作为分组标识 */
 	cwd: string;
-	/** 项目名，取目录末段 */
+	/** 项目名，用户设置过时用设置值，否则取目录末段 */
 	name: string;
 	/** 项目下的会话，按修改时间倒序 */
 	sessions: readonly SidebarSession[];
@@ -69,7 +69,7 @@ export interface SidebarInput {
 	sessions: readonly SessionSummary[];
 	/** 当前设备之后的全部主机，第一项为本机 */
 	hosts: readonly SidebarHost[];
-	/** 用户添加的项目，只有这些会出现在项目段 */
+	/** 用户添加的项目，项目段按它分组与命名，其余会话目录补在后面 */
 	projects: readonly ProjectInfo[];
 	/** 当前会话的文件路径 */
 	activeFile: string | undefined;
@@ -93,9 +93,14 @@ export function baseName(path: string): string {
 	return segments[segments.length - 1] ?? path;
 }
 
+/** 目录的比较键，忽略末尾斜杠。 */
+function pathKey(path: string): string {
+	return path.replace(/\/+$/, "");
+}
+
 /** 两个目录是否指向同一处,忽略末尾斜杠。 */
 export function samePath(left: string, right: string): boolean {
-	return left.replace(/\/+$/, "") === right.replace(/\/+$/, "");
+	return pathKey(left) === pathKey(right);
 }
 
 /** 会话标题：优先会话名，其次首条消息摘要，都为空时给占位名。 */
@@ -154,32 +159,58 @@ function toSession(
 	};
 }
 
+/** 一组会话里最近的活动时间，没有会话时为 0。 */
+function latestModified(sessions: readonly SidebarSession[]): number {
+	return sessions.reduce((latest, session) => Math.max(latest, session.modified), 0);
+}
+
 /**
  * 组装侧栏数据。
  *
- * 项目段只列用户添加的项目，与会话按目录对上；没有对应项目的会话只出现在最近里。
+ * 项目段先按用户添加的项目成组，再把只有会话的目录按最近活动补在后面。
+ * 会话目录里扫描出的目录因此不必先添加就能成组，启动目录里的历史会话也直接可见。
  */
 export function buildSidebar(input: SidebarInput): SidebarData {
-	const groups = new Map<string, SidebarSession[]>();
+	const groups = new Map<string, { cwd: string; sessions: SidebarSession[] }>();
 	for (const summary of input.sessions) {
 		const entry = toSession(summary, input.runningFile, undefined);
-		const bucket = groups.get(summary.cwd);
+		const key = pathKey(summary.cwd);
+		const bucket = groups.get(key);
 		if (bucket) {
-			bucket.push(entry);
+			bucket.sessions.push(entry);
 		} else {
-			groups.set(summary.cwd, [entry]);
+			groups.set(key, { cwd: summary.cwd, sessions: [entry] });
 		}
 	}
 
-	const projects: SidebarProject[] = input.projects.map((project) => ({
-		cwd: project.cwd,
-		name: project.name ?? baseName(project.cwd),
-		sessions: newestFirst(groups.get(project.cwd) ?? []),
-	}));
+	const projects: SidebarProject[] = [];
+	const claimed = new Set<string>();
+	for (const project of input.projects) {
+		const key = pathKey(project.cwd);
+		claimed.add(key);
+		projects.push({
+			cwd: project.cwd,
+			name: project.name ?? baseName(project.cwd),
+			sessions: newestFirst(groups.get(key)?.sessions ?? []),
+		});
+	}
+
+	const unclaimed = [...groups.entries()].filter(([key]) => !claimed.has(key));
+	unclaimed.sort((left, right) => {
+		const diff = latestModified(right[1].sessions) - latestModified(left[1].sessions);
+		return diff !== 0 ? diff : left[0].localeCompare(right[0]);
+	});
+	for (const [, group] of unclaimed) {
+		projects.push({
+			cwd: group.cwd,
+			name: baseName(group.cwd),
+			sessions: newestFirst(group.sessions),
+		});
+	}
 
 	const remotes = input.hosts.filter((host) => !host.isLocal);
 	const recents = [
-		...[...groups.values()].flat(),
+		...[...groups.values()].flatMap((group) => group.sessions),
 		...remotes.flatMap((host) => host.projects.flatMap((project) => project.sessions)),
 	].sort((left, right) => right.modified - left.modified);
 

@@ -72,7 +72,7 @@ describe("组装侧栏", () => {
 		summary({ id: "c", path: "/s/c.jsonl", cwd: "/work/linx-icp", modified: 200 }),
 	];
 
-	it("只列添加过的项目，会话按目录归到项目下", () => {
+	it("会话按目录归到项目下", () => {
 		const data = buildSidebar({
 			sessions,
 			hosts: [host({ id: "local", name: "facet", isLocal: true })],
@@ -93,7 +93,7 @@ describe("组装侧栏", () => {
 		expect(data.remotes).toEqual([]);
 	});
 
-	it("没有会话的项目也列出来，未添加目录的会话只进最近", () => {
+	it("未添加过的会话目录也成组，排在已添加项目之后", () => {
 		const data = buildSidebar({
 			sessions,
 			hosts: [],
@@ -101,9 +101,39 @@ describe("组装侧栏", () => {
 			activeFile: undefined,
 			runningFile: undefined,
 		});
-		expect(data.projects.map((project) => project.cwd)).toEqual(["/work/docs-site"]);
+		expect(data.projects.map((project) => project.cwd)).toEqual([
+			"/work/docs-site",
+			"/work/facet",
+			"/work/linx-icp",
+		]);
 		expect(data.projects[0]?.sessions).toEqual([]);
+		expect(data.projects[1]?.sessions.map((session) => session.path)).toEqual(["/s/a.jsonl", "/s/b.jsonl"]);
 		expect(data.recents).toHaveLength(3);
+	});
+
+	it("项目清单为空时启动目录的会话照样成组", () => {
+		const data = buildSidebar({
+			sessions,
+			hosts: [],
+			projects: [],
+			activeFile: "/s/c.jsonl",
+			runningFile: undefined,
+		});
+		expect(data.projects.map((project) => project.name)).toEqual(["facet", "linx-icp"]);
+		expect(data.projects[1]?.sessions.map((session) => session.path)).toEqual(["/s/c.jsonl"]);
+		expect(data.recents.map((session) => session.path)).toEqual(["/s/a.jsonl", "/s/c.jsonl", "/s/b.jsonl"]);
+	});
+
+	it("同一目录既已添加又有会话时只成一组", () => {
+		const data = buildSidebar({
+			sessions,
+			hosts: [],
+			projects: [{ id: "p1", cwd: "/work/facet/", name: "facet 主仓", createdAt: 1 }],
+			activeFile: undefined,
+			runningFile: undefined,
+		});
+		expect(data.projects.map((project) => project.name)).toEqual(["facet 主仓", "linx-icp"]);
+		expect(data.projects[0]?.sessions).toHaveLength(2);
 	});
 
 	it("最近会话包含远端主机的会话，带主机名", () => {

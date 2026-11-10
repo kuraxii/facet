@@ -8,6 +8,7 @@ import {
 	CreateProjectDialog,
 	SessionSidebar,
 	type SidebarHost,
+	samePath,
 	useStickToBottom,
 } from "@facet/ui";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -35,6 +36,27 @@ const client = new SessionClient({ transport, pageSize: 200 });
 
 type Phase = "connecting" | "ready" | "failed";
 
+/** 启动时打开的会话：启动目录里最近更新的一条，没有则取全部会话里最近的一条。 */
+function pickStartupSession(
+	sessions: readonly SessionSummary[],
+	projectDir: string,
+): SessionSummary | undefined {
+	let scoped: SessionSummary | undefined;
+	let newest: SessionSummary | undefined;
+	for (const session of sessions) {
+		if (newest === undefined || session.modified > newest.modified) {
+			newest = session;
+		}
+		if (!samePath(session.cwd, projectDir)) {
+			continue;
+		}
+		if (scoped === undefined || session.modified > scoped.modified) {
+			scoped = session;
+		}
+	}
+	return scoped ?? newest;
+}
+
 export function App() {
 	const version = useSyncExternalStore(
 		(onChange) => client.store.subscribe(onChange),
@@ -53,16 +75,20 @@ export function App() {
 
 	const listSeq = useRef(0);
 
-	/** 拉一次会话列表。并发调用时只采用最后一次的结果,避免旧结果覆盖新结果。 */
-	const refreshSessions = useCallback(async () => {
+	/** 拉一次全部会话。并发调用时只采用最后一次的结果,避免旧结果覆盖新结果。 */
+	const refreshSessions = useCallback(async (): Promise<readonly SessionSummary[] | undefined> => {
 		listSeq.current += 1;
 		const seq = listSeq.current;
-		const scoped = await client.listSessions(bridge.projectDir);
-		const pool = scoped.length > 0 ? scoped : await client.listSessions();
-		if (seq === listSeq.current) {
-			setSessions(pool);
+		try {
+			const pool = await client.listSessions();
+			if (seq === listSeq.current) {
+				setSessions(pool);
+			}
+			return pool;
+		} catch {
+			// 列表刷新失败时保留已显示的会话,其他项目的历史不因此消失
+			return undefined;
 		}
-		return pool;
 	}, []);
 
 	useEffect(() => {
@@ -75,8 +101,8 @@ export function App() {
 			client.attach(handshake);
 			setDevice(handshake);
 			setProjects(await client.listProjects());
-			const pool = await refreshSessions();
-			const newest = pool[0];
+			const pool = (await refreshSessions()) ?? [];
+			const newest = pickStartupSession(pool, bridge.projectDir);
 			if (newest) {
 				await client.openSession(newest.path);
 				setActiveFile(newest.path);
@@ -118,14 +144,18 @@ export function App() {
 		client.send(text);
 	}, [draft]);
 
-	const createProject = useCallback(async (input: { cwd: string; name: string | undefined }) => {
-		const created = await client.addProject({
-			cwd: input.cwd,
-			...(input.name === undefined ? {} : { name: input.name }),
-		});
-		setProjects(await client.listProjects());
-		setCreateCwd(created.cwd);
-	}, []);
+	const createProject = useCallback(
+		async (input: { cwd: string; name: string | undefined }) => {
+			const created = await client.addProject({
+				cwd: input.cwd,
+				...(input.name === undefined ? {} : { name: input.name }),
+			});
+			setProjects(await client.listProjects());
+			setCreateCwd(created.cwd);
+			await refreshSessions();
+		},
+		[refreshSessions],
+	);
 
 	const forkFrom = useCallback(
 		(messageId: string) => {

@@ -24,7 +24,7 @@ export interface SessionSidebarProps {
 	sessions: readonly SessionSummary[];
 	/** 可连接的主机，第一项为当前设备 */
 	hosts: readonly SidebarHost[];
-	/** 用户添加的项目，只有这些会出现在项目段 */
+	/** 用户添加的项目，项目段按它分组与命名，其余会话目录补在后面 */
 	projects: readonly ProjectInfo[];
 	/** 当前会话的文件路径，没有打开会话时为空 */
 	activeFile: string | undefined;

@@ -173,6 +173,22 @@ export function App() {
 		});
 	}, []);
 
+	/**
+	 * 回退到某条用户消息之前:从那一轮末尾分出新会话并切过去,把这条消息的文本放回输入框。
+	 *
+	 * pi 的会话文件只追加,回退靠分叉实现,原会话保持不动。
+	 */
+	const revertTo = useCallback(
+		(entryId: string, text: string) => {
+			void client.fork(entryId).then(async (forked) => {
+				setActiveFile(forked.file);
+				setDraft(text);
+				await refreshSessions();
+			});
+		},
+		[refreshSessions],
+	);
+
 	const createProject = useCallback(
 		async (input: { cwd: string; name: string | undefined }) => {
 			const created = await client.addProject({
@@ -261,6 +277,8 @@ export function App() {
 							items={transcript}
 							canFork={canFork}
 							onFork={forkTurn}
+							canRevert={canFork}
+							onRevert={revertTo}
 							retry={retryOf(session?.state.maintenance)}
 							renames={chat?.renames}
 							emptyHint="还没有消息,输入内容开始"

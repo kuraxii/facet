@@ -8,7 +8,7 @@ import type { Part, ToolCallPart, TranscriptItem } from "@facet/client-core";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { Markdown } from "../markdown/Markdown.tsx";
 import { type DiffChunk, type DisplayRow, groupRows, metaSummary } from "./group.ts";
-import { ForkIcon } from "./icons.tsx";
+import { ForkIcon, RevertIcon } from "./icons.tsx";
 import { foldOutput, toolStatusText, toolTarget } from "./tool-text.ts";
 
 /** 面板参数。 */
@@ -19,6 +19,10 @@ export interface ChatTranscriptProps {
 	canFork: boolean;
 	/** 在某一轮结束处分叉,传入下一轮开始处条目的 id；缺省表示最后一轮 */
 	onFork: (beforeEntryId: string | undefined) => void;
+	/** 是否允许回退到某条用户消息之前,本轮结束前不允许 */
+	canRevert: boolean;
+	/** 回退到这条用户消息之前的一轮末尾,连同这条消息的文本一起带出 */
+	onRevert: (entryId: string, text: string) => void;
 	/** 正在进行的自动重试,没有则为空 */
 	retry?: { attempt: number; maxAttempts: number } | undefined;
 	/** 没有任何内容时显示的提示 */
@@ -299,8 +303,19 @@ function Shell({ className, children }: { className: string; children: ReactNode
 /**
  * 对话面板。把渲染单元聚合成分行,并维护每行的收起状态。
  */
-export function ChatTranscript({ items, canFork, onFork, retry, emptyHint, renames }: ChatTranscriptProps) {
+export function ChatTranscript({
+	items,
+	canFork,
+	onFork,
+	canRevert,
+	onRevert,
+	retry,
+	emptyHint,
+	renames,
+}: ChatTranscriptProps) {
 	const rows = useMemo(() => groupRows(items), [items]);
+	// 第一条用户消息之前没有可回退的轮次
+	const firstUserRowId = rows.find((row) => row.kind === "user")?.id;
 	const [overrides, setOverrides] = useState<ReadonlyMap<string, boolean>>(() => new Map());
 	const isTicking = rows.some((row) => row.isStreaming && row.startedAt !== undefined);
 	const now = useNow(isTicking);
@@ -406,11 +421,27 @@ export function ChatTranscript({ items, canFork, onFork, retry, emptyHint, renam
 
 				if (row.kind === "user") {
 					const text = textOf(row.items.flatMap((item) => item.parts));
+					// 回退要有落地过的条目:实时消息在提升之前没有条目 id
+					const entryId = row.items[0]?.entryId;
 					return (
 						<Shell key={row.id} className="is-user">
 							<div className="user-line">
 								<div className="bub">{text}</div>
 							</div>
+							{canRevert && entryId !== undefined && row.id !== firstUserRowId ? (
+								<div className="user-foot">
+									<button
+										type="button"
+										className="revert-btn"
+										aria-label="回退到这条消息之前"
+										title="回退到这条消息之前"
+										onClick={() => onRevert(entryId, text)}
+									>
+										<RevertIcon size={12} />
+										回退
+									</button>
+								</div>
+							) : null}
 						</Shell>
 					);
 				}

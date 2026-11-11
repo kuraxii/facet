@@ -648,6 +648,40 @@ svg.fl {
 	width: 100%;
 }
 
+.user-foot {
+	display: flex;
+	justify-content: flex-end;
+	width: 100%;
+}
+
+.revert-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	height: 22px;
+	padding: 0 8px;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	background: transparent;
+	color: var(--t3);
+	font-size: 12px;
+	opacity: 0;
+	transition:
+		opacity var(--dur-fast) var(--ease),
+		color var(--dur-fast) var(--ease),
+		border-color var(--dur-fast) var(--ease);
+}
+
+.row.is-user:hover .revert-btn,
+.revert-btn:focus-visible {
+	opacity: 1;
+}
+
+.revert-btn:hover {
+	color: var(--acc);
+	border-color: var(--acc);
+}
+
 .bub {
 	max-width: 80%;
 	padding: 10px 14px;

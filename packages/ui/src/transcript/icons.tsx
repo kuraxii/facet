@@ -62,6 +62,17 @@ export function ForkIcon({ size, ...rest }: IconProps) {
 }
 
 /** 发送。 */
+/** 回退。 */
+export function RevertIcon({ size, ...rest }: IconProps) {
+	return (
+		<Icon size={size} {...rest}>
+			<path d="M4 9h10a5 5 0 0 1 0 10h-4" />
+			<path d="M8 5 4 9l4 4" />
+		</Icon>
+	);
+}
+
+/** 发送。 */
 export function SendIcon({ size, ...rest }: IconProps) {
 	return (
 		<Icon size={size} {...rest} style={{ strokeWidth: 2.2 }}>

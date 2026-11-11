@@ -13,6 +13,8 @@ interface FakeAgentOptions {
 	run?: (run: FakeRun) => Promise<void>;
 	/** 中止的等待,用例自己决定何时结束 */
 	abort?: () => Promise<void>;
+	/** 回退时走的分支跳转,用例按需给出结果 */
+	navigateTree?: (entryId: string) => Promise<{ cancelled: boolean; editorText?: string }>;
 }
 
 /** 只实现用到的部分,其余字段由构造期的少量调用凑齐。 */
@@ -34,6 +36,7 @@ function createAgent(options: FakeAgentOptions = {}) {
 			await (options.run?.(run) ?? Promise.resolve());
 		},
 		abort: options.abort ?? (async () => {}),
+		navigateTree: options.navigateTree ?? (async () => ({ cancelled: false })),
 	} as unknown as PiAgentContext["session"];
 	const agent = new PiAgent({
 		session,
@@ -193,5 +196,19 @@ describe("阶段与维护动作", () => {
 		const { agent } = createAgent();
 		await agent.abort();
 		expect(agent.currentPhase).toBe("idle");
+	});
+});
+
+describe("PiAgent.revertTo", () => {
+	it("返回这条消息的文本,供界面放回输入框", async () => {
+		const { agent } = createAgent({
+			navigateTree: async (entryId) => ({ cancelled: false, editorText: `回退到 ${entryId}` }),
+		});
+		await expect(agent.revertTo("e3")).resolves.toBe("回退到 e3");
+	});
+
+	it("扩展取消回退时报错", async () => {
+		const { agent } = createAgent({ navigateTree: async () => ({ cancelled: true }) });
+		await expect(agent.revertTo("e3")).rejects.toThrow("回退被取消");
 	});
 });

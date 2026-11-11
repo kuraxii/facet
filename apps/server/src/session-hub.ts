@@ -31,6 +31,8 @@ export type HubAgent = Pick<
 	| "entryBefore"
 	| "snapshot"
 	| "setName"
+	| "revertTo"
+	| "leafEntryId"
 	| "dispose"
 >;
 
@@ -99,12 +101,12 @@ export class SessionBoundaryNotFoundError extends Error {
 	}
 }
 
-/** 会话正在运行,此时不允许分叉。 */
+/** 会话正在运行,此时不允许分叉或回退。 */
 export class SessionBusyError extends Error {
 	readonly sessionId: string;
 
 	constructor(sessionId: string) {
-		super(`会话正在运行,不能分叉:${sessionId}`);
+		super(`会话正在运行,不能执行这个操作:${sessionId}`);
 		this.sessionId = sessionId;
 	}
 }
@@ -445,6 +447,24 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 			this.drop(row);
 		}
 		await rm(key, { force: true });
+	}
+
+	/**
+	 * 回退到某条用户消息之前。
+	 *
+	 * 会话文件不动，只挪分支指针；挪完广播一条 chat/branchMoved，客户端据此重新装载历史。
+	 * 运行中不允许回退：这一轮还没写盘，挪指针会把在途内容丢掉。
+	 */
+	async revertTo(sessionId: string, entryId: string): Promise<void> {
+		const row = this.requireRow(sessionId);
+		if (row.agent?.isBusy === true) {
+			throw new SessionBusyError(sessionId);
+		}
+		await this.withSession(sessionId, async (agent) => {
+			await agent.revertTo(entryId);
+		});
+		const leafId = this.requireRow(sessionId).agent?.leafEntryId() ?? null;
+		this.publish(row, row.projector.chatChannelFor(), { type: "chat/branchMoved", leafId });
 	}
 
 	/** 还在跑的会话文件。退出应用前用来判断会话会不会被连带终止。 */

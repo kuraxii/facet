@@ -346,6 +346,20 @@ export class PiAgent {
 		this.session.setAutoRetryEnabled(enabled);
 	}
 
+	/**
+	 * 回退到某条用户消息之前。
+	 *
+	 * 只把分支指针挪到这条消息的前一条，会话文件仍然只追加：被放弃的那段留在文件里成为另一条
+	 * 分支。返回这条消息的文本，供界面放回输入框。
+	 */
+	async revertTo(entryId: string): Promise<string | undefined> {
+		const result = await this.session.navigateTree(entryId);
+		if (result.cancelled) {
+			throw new Error("回退被取消");
+		}
+		return result.editorText;
+	}
+
 	/** 设置会话展示名，写入一条 session_info 条目，变化由 pi 的会话事件发出。 */
 	setName(name: string): void {
 		this.session.setSessionName(name);

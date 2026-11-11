@@ -760,3 +760,27 @@ describe("重连", () => {
 		await expect(client.resume()).rejects.toThrow("subscribe 失败");
 	});
 });
+
+describe("回退", () => {
+	it("派发到对话通道", async () => {
+		const { client, transport } = createClient(5);
+		await client.openSession("/tmp/s1.jsonl");
+		client.revert("e3");
+		expect(transport.dispatched.at(-1)).toEqual({
+			channel: "chat:/s1",
+			action: { type: "chat/revertTo", entryId: "e3" },
+		});
+	});
+
+	it("收到 branchMoved 后重新装载历史", async () => {
+		const { client, transport } = createClient(25, { pageSize: 10 });
+		await client.openSession("/tmp/s1.jsonl");
+		const before = transport.calls.filter((call) => call.method === "entries").length;
+		transport.emit("chat:/s1", { type: "chat/branchMoved", leafId: null });
+		await new Promise((done) => setTimeout(done, 20));
+		const after = transport.calls.filter((call) => call.method === "entries").length;
+		expect(after).toBeGreaterThan(before);
+		// 清空之后重新装载，条目不会叠加
+		expect(client.chatView()?.items).toHaveLength(25);
+	});
+});

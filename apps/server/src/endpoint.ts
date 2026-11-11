@@ -185,6 +185,11 @@ async function applyAction(context: EndpointContext, channel: Channel, action: A
 	if (!parsed) {
 		throw new RequestError("unknown_channel", `unsupported channel: ${channel}`);
 	}
+	// 回退要挪分支指针,还得往外广播,自己持有会话,不走下面那段串行执行
+	if (action.type === "chat/revertTo") {
+		await context.hub.revertTo(parsed.id, action.entryId);
+		return;
+	}
 	// 同一会话的动作串行执行,执行期间持有会话,不会被空闲回收
 	await context.hub.withSession(parsed.id, async (agent) => {
 		switch (action.type) {

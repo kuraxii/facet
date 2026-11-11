@@ -16,6 +16,12 @@ export interface ChannelAction {
 export class ActionProjector {
 	private readonly sessionChannel: Channel;
 	private readonly chatChannel: Channel;
+
+	/** 对话通道名，需要主动往外发动作时用。 */
+	chatChannelFor(): Channel {
+		return this.chatChannel;
+	}
+
 	/** 已分配的消息序号 */
 	private messageCounter = 0;
 	/** 正在生成的消息标识,收到 message_end 后清空 */

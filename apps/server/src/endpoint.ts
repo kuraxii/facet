@@ -193,14 +193,14 @@ async function applyAction(context: EndpointContext, channel: Channel, action: A
 			case "chat/turnCancelled":
 				await agent.abort();
 				return;
-			case "chat/pendingMessageSet":
+			case "session/pendingMessageSet":
 				if (action.kind === "steering") {
 					await agent.steer(action.text);
 				} else {
 					await agent.followUp(action.text);
 				}
 				return;
-			case "chat/queueCleared":
+			case "session/queueCleared":
 				agent.clearQueue();
 				return;
 			case "session/titleChanged":

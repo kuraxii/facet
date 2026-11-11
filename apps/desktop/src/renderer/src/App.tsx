@@ -1,5 +1,5 @@
 import { chatActivity, type DeviceHandshake, SessionClient, toTranscript } from "@facet/client-core";
-import type { ProjectInfo, SessionSummary } from "@facet/protocol";
+import type { Maintenance, ProjectInfo, SessionSummary } from "@facet/protocol";
 import { WsTransport } from "@facet/transport/ws";
 import {
 	ArrowDownIcon,
@@ -39,6 +39,13 @@ type Phase = "connecting" | "ready" | "failed";
 
 /** 主题在本地保存键 */
 const THEME_KEY = "facet.theme";
+
+/** 等重试期间给对话面板的提示,其余维护动作不显示。 */
+function retryOf(maintenance: Maintenance | undefined): { attempt: number; maxAttempts: number } | undefined {
+	return maintenance?.kind === "retry"
+		? { attempt: maintenance.attempt, maxAttempts: maintenance.maxAttempts }
+		: undefined;
+}
 
 /** 读取上次选择的主题，缺省深色 */
 function readTheme(): ThemeName {
@@ -217,8 +224,8 @@ export function App() {
 	}
 
 	// 对话此刻的状态由会话状态与中止请求合并得出,界面不自己拼布尔量
-	const activity = chatActivity(session, chat);
-	const canFork = activity === "idle" && chat !== undefined && !chat.willRetry && chat.retry === undefined;
+	const activity = chatActivity(session);
+	const canFork = activity === "idle" && session?.state.maintenance === undefined;
 
 	return (
 		<div className="shell">
@@ -247,7 +254,7 @@ export function App() {
 							items={transcript}
 							canFork={canFork}
 							onFork={forkTurn}
-							retry={chat?.retry}
+							retry={retryOf(session?.state.maintenance)}
 							renames={chat?.renames}
 							emptyHint="还没有消息,输入内容开始"
 						/>
@@ -272,8 +279,8 @@ export function App() {
 							onSend={send}
 							onStop={() => client.cancel()}
 							activity={activity}
-							model={session?.model}
-							thinkingLevel={session?.thinkingLevel}
+							model={session?.state.model}
+							thinkingLevel={session?.state.thinkingLevel}
 						/>
 
 						{chat && chat.notices.length > 0 ? (

@@ -153,21 +153,6 @@ export class SessionStore {
 		return slot.view;
 	}
 
-	/**
-	 * 标记本轮已请求中止。
-	 *
-	 * 中止由端点派发的动作触发,设备不会回放它,所以这里由客户端自己置位;收尾时
-	 * chat/settled 把它清掉。
-	 */
-	markStopping(channel: Channel): void {
-		const slot = this.chats.get(channel);
-		if (!slot || slot.view.stopping) {
-			return;
-		}
-		slot.view = { ...slot.view, stopping: true };
-		this.markChanged();
-	}
-
 	/** 往更早的方向补一页历史,已存在的标识跳过。 */
 	prependHistory(channel: Channel, entries: readonly Entry[]): ChatView {
 		const slot = this.chats.get(channel) ?? this.createChatSlot(channel);

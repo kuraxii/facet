@@ -5,8 +5,54 @@
  * 事件按会话顺序到达，订阅方不需要再排序。
  */
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
-import type { EntryKind, SessionEvent } from "@facet/protocol";
+import type { EntryKind, Maintenance, SessionEvent, TurnPhase } from "@facet/protocol";
 import { toMessage, toMessages, toToolOutput } from "./convert.ts";
+
+/** 本轮的生命周期与维护动作。 */
+export interface TurnState {
+	readonly phase: TurnPhase;
+	readonly maintenance: Maintenance | undefined;
+}
+
+/**
+ * 由 pi 事件推出新的阶段与维护动作。
+ *
+ * 返回 undefined 表示这条事件不改变它们;返回新状态表示需要对外发一次 phase 事件。
+ * starting 与 stopping 由 prompt 与 abort 直接设定,不在这里推导。
+ */
+export function nextTurnState(event: AgentSessionEvent, current: TurnState): TurnState | undefined {
+	switch (event.type) {
+		case "agent_start":
+			return current.phase === "running" ? undefined : { ...current, phase: "running" };
+		case "agent_settled":
+			return current.phase === "idle" && current.maintenance === undefined
+				? undefined
+				: { phase: "idle", maintenance: undefined };
+		case "compaction_start":
+			return {
+				...current,
+				maintenance: {
+					kind: "compaction",
+					reason: event.reason,
+					tokensBefore: undefined,
+					estimatedTokensAfter: undefined,
+				},
+			};
+		case "compaction_end":
+			return current.maintenance === undefined ? undefined : { ...current, maintenance: undefined };
+		case "auto_retry_start":
+		case "summarization_retry_scheduled":
+			return {
+				...current,
+				maintenance: { kind: "retry", attempt: event.attempt, maxAttempts: event.maxAttempts },
+			};
+		case "auto_retry_end":
+		case "summarization_retry_finished":
+			return current.maintenance === undefined ? undefined : { ...current, maintenance: undefined };
+		default:
+			return undefined;
+	}
+}
 
 /** 取出流式增量。pi 的 message_update 还包含 start、end 等非增量变体，那些不对外输出。 */
 function deltaFor(
@@ -99,38 +145,6 @@ export function toSessionEvents(event: AgentSessionEvent): SessionEvent[] {
 			];
 		case "queue_update":
 			return [{ type: "queue", steering: [...event.steering], followUp: [...event.followUp] }];
-		case "compaction_start":
-			return [{ type: "compaction_start", reason: event.reason }];
-		case "compaction_end":
-			return [
-				{
-					type: "compaction_end",
-					reason: event.reason,
-					// 压缩被取消时没有结果，两个 token 数值都缺省
-					tokensBefore: event.result?.tokensBefore,
-					estimatedTokensAfter: event.result?.estimatedTokensAfter,
-					aborted: event.aborted,
-					willRetry: event.willRetry,
-					error: event.errorMessage,
-				},
-			];
-		// 单轮重试与摘要重试对界面是同一件事：尝试次数、上限与等待时间
-		case "auto_retry_start":
-		case "summarization_retry_scheduled":
-			return [
-				{
-					type: "retry_start",
-					attempt: event.attempt,
-					maxAttempts: event.maxAttempts,
-					delayMs: event.delayMs,
-					error: event.errorMessage,
-				},
-			];
-		case "auto_retry_end":
-			return [{ type: "retry_end", success: event.success, attempt: event.attempt, error: event.finalError }];
-		// 摘要重试结束不带尝试次数，界面只关心重试已停止
-		case "summarization_retry_finished":
-			return [{ type: "retry_end", success: true, attempt: 0, error: undefined }];
 		case "entry_appended":
 			return [
 				{
@@ -146,7 +160,7 @@ export function toSessionEvents(event: AgentSessionEvent): SessionEvent[] {
 			return [{ type: "thinking_level", level: event.level }];
 		case "bash_execution_update":
 			return [{ type: "bash_output", id: event.id, delta: event.delta }];
-		// 摘要重试的中间进度与尚无映射的变体不对外输出
+		// 阶段与维护动作由 nextTurnState 单独推导;其余尚无映射的变体不对外输出
 		default:
 			return [];
 	}

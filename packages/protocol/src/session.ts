@@ -5,11 +5,27 @@ import type { Message } from "./message.ts";
 import type { ModelInfo, ThinkingLevel } from "./model.ts";
 
 /**
- * 会话的对外状态。
+ * 本轮的生命周期。同一时刻只有一个阶段。
  *
- * 判定顺序为 compacting > running > idle:压缩时不在流式输出,其余按有无运行判定。
+ * starting 表示动作已受理、运行还没开始;stopping 表示已请求中止,等这一轮收尾。
  */
-export type SessionStatus = "idle" | "running" | "compacting";
+export type TurnPhase = "idle" | "starting" | "running" | "stopping";
+
+/**
+ * 与本轮并行的维护动作,同一时刻最多一个。
+ *
+ * compaction 期间没有流式输出;retry 表示上一轮失败后正在等下一次尝试。
+ */
+export type Maintenance =
+	| {
+			kind: "compaction";
+			reason: CompactionReason;
+			/** 压缩前的上下文 token 数,开始时为空 */
+			tokensBefore: number | undefined;
+			/** 压缩后的估算 token 数,结束时才有 */
+			estimatedTokensAfter: number | undefined;
+	  }
+	| { kind: "retry"; attempt: number; maxAttempts: number };
 
 /** 压缩的触发来源。manual 为手动触发，threshold 为达到阈值，overflow 为上下文溢出。 */
 export type CompactionReason = "manual" | "threshold" | "overflow";
@@ -138,7 +154,10 @@ export interface SessionSnapshot {
 	/** 会话的工作目录 */
 	cwd: string;
 	name: string | undefined;
-	status: SessionStatus;
+	/** 本轮的生命周期 */
+	phase: TurnPhase;
+	/** 与本轮并行的维护动作 */
+	maintenance: Maintenance | undefined;
 	model: ModelInfo | undefined;
 	thinkingLevel: ThinkingLevel;
 	/** 当前模型支持的档位，用于禁用不可选的档 */

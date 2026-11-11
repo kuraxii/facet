@@ -3,30 +3,24 @@ import type { DeltaKind, NoticeLevel } from "./event.ts";
 import type { Message } from "./message.ts";
 import type { ModelInfo, ModelRef, ThinkingLevel } from "./model.ts";
 import type { StreamingBehavior } from "./request.ts";
-import type { CompactionReason, SessionStatus } from "./session.ts";
+import type { Maintenance, TurnPhase } from "./session.ts";
 
 /** 会话动作。 */
 export type SessionAction =
-	/** 设备侧:派生状态变化 */
-	| { type: "session/status"; status: SessionStatus }
+	/** 设备侧:阶段或维护动作变化 */
+	| { type: "session/phase"; phase: TurnPhase; maintenance: Maintenance | undefined }
 	/** 设备侧:当前模型变化 */
 	| { type: "session/modelChanged"; model: ModelInfo | undefined }
 	/** 设备侧:思考档位变化 */
 	| { type: "session/thinkingLevelChanged"; level: ThinkingLevel }
-	/** 设备侧:压缩开始 */
-	| { type: "session/compactionStarted"; reason: CompactionReason }
-	/** 设备侧:压缩结束,被取消时没有结果 */
-	| {
-			type: "session/compactionCompleted";
-			reason: CompactionReason;
-			tokensBefore: number | undefined;
-			estimatedTokensAfter: number | undefined;
-			aborted: boolean;
-			willRetry: boolean;
-			error: string | undefined;
-	  }
+	/** 设备侧:排队内容变化 */
+	| { type: "session/queueChanged"; steering: string[]; followUp: string[] }
 	/** 客户端可派发:会话改名 */
 	| { type: "session/titleChanged"; title: string }
+	/** 客户端可派发:排队一条消息,steering 插入当前回合之后,queued 等本轮结束 */
+	| { type: "session/pendingMessageSet"; kind: "steering" | "queued"; text: string }
+	/** 客户端可派发:清空排队 */
+	| { type: "session/queueCleared" }
 	/** 客户端可派发:变更模型、思考档位或激活的工具 */
 	| {
 			type: "session/configChanged";
@@ -58,26 +52,14 @@ export type ChatAction =
 			isError: boolean;
 			durationMs?: number;
 	  }
-	/** 设备侧:排队内容变化 */
-	| { type: "chat/queueChanged"; steering: string[]; followUp: string[] }
-	/** 设备侧:一轮结束,willRetry 为真时后续还有重试 */
-	| { type: "chat/turnCompleted"; willRetry: boolean }
 	/** 设备侧:会话不会再自动继续,唯一的终局信号 */
 	| { type: "chat/settled"; aborted: boolean }
-	/** 设备侧:自动重试开始 */
-	| { type: "chat/retryStarted"; attempt: number; maxAttempts: number; delayMs: number; error: string }
-	/** 设备侧:自动重试结束 */
-	| { type: "chat/retryEnded"; success: boolean; attempt: number; error: string | undefined }
 	/** 设备侧:提示,例如扩展发出的通知 */
 	| { type: "chat/notice"; level: NoticeLevel; message: string }
 	/** 客户端可派发:发送一条消息 */
 	| { type: "chat/turnStarted"; text: string; images?: ImageBlock[]; streamingBehavior?: StreamingBehavior }
 	/** 客户端可派发:中止当前运行 */
-	| { type: "chat/turnCancelled" }
-	/** 客户端可派发:排队一条消息,steering 插入当前回合之后,queued 等本轮结束 */
-	| { type: "chat/pendingMessageSet"; kind: "steering" | "queued"; text: string }
-	/** 客户端可派发:清空排队 */
-	| { type: "chat/queueCleared" };
+	| { type: "chat/turnCancelled" };
 
 /** 动作联合。按 `type` 前缀决定归属通道。 */
 export type Action = SessionAction | ChatAction;

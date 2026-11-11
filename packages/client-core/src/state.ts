@@ -7,17 +7,17 @@
 
 import type {
 	Channel,
-	CompactionReason,
 	DeltaKind,
 	Entry,
+	Maintenance,
 	Message,
 	ModelInfo,
 	NoticeLevel,
 	QueuedInput,
 	SessionSnapshot,
-	SessionStatus,
 	ThinkingLevel,
 	ToolOutput,
+	TurnPhase,
 } from "@facet/protocol";
 
 /** 一条工具调用在客户端的呈现状态。 */
@@ -73,41 +73,37 @@ export interface NoticeView {
 	message: string;
 }
 
-/** 压缩进度。 */
-export interface CompactionView {
-	reason: CompactionReason;
-	isRunning: boolean;
-	tokensBefore: number | undefined;
-	estimatedTokensAfter: number | undefined;
-	aborted: boolean;
-	willRetry: boolean;
-	error: string | undefined;
+/**
+ * 会话状态。
+ *
+ * 订阅时由设备快照建立,之后由会话通道的动作就地更新;同一个字段只有这一个来源。
+ */
+export interface SessionState {
+	/** 会话文件路径,内存会话为空 */
+	readonly file: string | undefined;
+	/** 会话的工作目录 */
+	readonly cwd: string;
+	readonly title: string | undefined;
+	readonly model: ModelInfo | undefined;
+	readonly thinkingLevel: ThinkingLevel;
+	/** 本轮的生命周期 */
+	readonly phase: TurnPhase;
+	/** 与本轮并行的维护动作 */
+	readonly maintenance: Maintenance | undefined;
+	readonly queued: QueuedInput;
 }
 
 /** 会话通道的客户端状态。 */
 export interface SessionView {
 	readonly channel: Channel;
-	/** 设备给出的会话快照,订阅成功或重新同步后更新 */
-	readonly snapshot: SessionSnapshot | undefined;
-	readonly status: SessionStatus;
-	readonly model: ModelInfo | undefined;
-	readonly thinkingLevel: ThinkingLevel | undefined;
-	readonly title: string | undefined;
-	readonly compaction: CompactionView | undefined;
+	readonly state: SessionState;
 }
 
-/** 对话通道的客户端状态。 */
+/** 对话通道的客户端状态:只有内容,回合进度在会话通道上。 */
 export interface ChatView {
 	readonly channel: Channel;
 	readonly items: readonly EntryView[];
 	readonly toolCalls: Readonly<Record<string, ToolCallView>>;
-	readonly queue: QueuedInput;
-	/** 已请求中止本轮,等 chat/settled 收尾 */
-	readonly stopping: boolean;
-	/** 本轮结束后会自动重试 */
-	readonly willRetry: boolean;
-	/** 正在进行的一次自动重试 */
-	readonly retry: { attempt: number; maxAttempts: number } | undefined;
 	readonly notices: readonly NoticeView[];
 	/** 提升为历史消息时的标识迁移:旧视图标识到新标识,界面据此搬动按行保存的状态 */
 	readonly renames: Readonly<Record<string, string>>;
@@ -120,33 +116,46 @@ const MAX_NOTICES = 50;
  * 对话此刻的状态。
  *
  * 取值穷尽,界面据此决定发送按钮与输入是否可用,不再各自拼布尔量。
- * stopping 表示已请求中止、等这一轮收尾。
  */
 export type ChatActivity = "idle" | "running" | "compacting" | "stopping";
 
 /**
- * 合并两条通道得出对话此刻的状态。
+ * 由会话状态得出对话此刻的状态。
  *
- * 中止请求优先:一旦请求中止,界面只等这一轮收尾,不再区分此前是运行还是压缩。
+ * 优先看中止请求,其次看维护动作,最后看本轮阶段。等重试期间也算 running:这一轮还没结束,
+ * 发送会打断等待。
  */
-export function chatActivity(session: SessionView | undefined, chat: ChatView | undefined): ChatActivity {
-	if (chat?.stopping === true) {
+export function chatActivity(session: SessionView | undefined): ChatActivity {
+	const state = session?.state;
+	if (state === undefined) {
+		return "idle";
+	}
+	if (state.phase === "stopping") {
 		return "stopping";
 	}
-	const status = session?.status ?? "idle";
-	return status === "idle" ? "idle" : status;
+	if (state.maintenance?.kind === "compaction") {
+		return "compacting";
+	}
+	if (state.maintenance?.kind === "retry") {
+		return "running";
+	}
+	return state.phase === "idle" ? "idle" : "running";
 }
 
 /** 由会话快照建出会话视图。快照缺省时使用空状态。 */
 export function createSessionView(channel: Channel, snapshot?: SessionSnapshot): SessionView {
 	return {
 		channel,
-		snapshot,
-		status: snapshot?.status ?? "idle",
-		model: snapshot?.model,
-		thinkingLevel: snapshot?.thinkingLevel,
-		title: snapshot?.name,
-		compaction: undefined,
+		state: {
+			file: snapshot?.file,
+			cwd: snapshot?.cwd ?? "",
+			title: snapshot?.name,
+			model: snapshot?.model,
+			thinkingLevel: snapshot?.thinkingLevel ?? "off",
+			phase: snapshot?.phase ?? "idle",
+			maintenance: snapshot?.maintenance,
+			queued: snapshot?.queued ?? { steering: [], followUp: [] },
+		},
 	};
 }
 
@@ -156,10 +165,6 @@ export function createChatView(channel: Channel): ChatView {
 		channel,
 		items: [],
 		toolCalls: {},
-		queue: { steering: [], followUp: [] },
-		stopping: false,
-		willRetry: false,
-		retry: undefined,
 		notices: [],
 		renames: {},
 	};

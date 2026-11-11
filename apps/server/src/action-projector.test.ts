@@ -14,18 +14,27 @@ const message = {
 describe("ActionProjector", () => {
 	it("会话级事件投影到会话通道", () => {
 		const projector = new ActionProjector("s1");
-		const projected = projector.project({ type: "status", status: "running" });
+		const projected = projector.project({
+			type: "phase",
+			phase: "running",
+			maintenance: { kind: "retry", attempt: 1, maxAttempts: 3 },
+		});
 		expect(projected).toEqual([
-			{ channel: "session:/s1", action: { type: "session/status", status: "running" } },
+			{
+				channel: "session:/s1",
+				action: {
+					type: "session/phase",
+					phase: "running",
+					maintenance: { kind: "retry", attempt: 1, maxAttempts: 3 },
+				},
+			},
 		]);
 	});
 
 	it("对话级事件投影到对话通道", () => {
 		const projector = new ActionProjector("s1");
-		const projected = projector.project({ type: "run_end", willRetry: false });
-		expect(projected).toEqual([
-			{ channel: "chat:/s1", action: { type: "chat/turnCompleted", willRetry: false } },
-		]);
+		const projected = projector.project({ type: "settled", aborted: false });
+		expect(projected).toEqual([{ channel: "chat:/s1", action: { type: "chat/settled", aborted: false } }]);
 	});
 
 	it("同一条消息的增量与完成沿用同一标识", () => {

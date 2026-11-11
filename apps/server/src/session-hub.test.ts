@@ -110,7 +110,8 @@ class FakeAgent implements HubAgent {
 			file: this.file,
 			cwd: "/tmp",
 			name: `会话 ${this.id}`,
-			status: this.busy ? "running" : "idle",
+			phase: this.busy ? "running" : "idle",
+			maintenance: undefined,
 			model: undefined,
 			thinkingLevel: "medium",
 			availableThinkingLevels: ["medium"],
@@ -563,9 +564,9 @@ describe("通道与动作", () => {
 			id: "b",
 			send: (frame) => chatFrames.push(frame.action.type),
 		});
-		agent.emit({ type: "status", status: "running" });
+		agent.emit({ type: "phase", phase: "running", maintenance: undefined });
 		agent.emit({ type: "notice", level: "info", message: "hello" });
-		expect(sessionFrames).toEqual(["session/status"]);
+		expect(sessionFrames).toEqual(["session/phase"]);
 		expect(chatFrames.includes("chat/notice")).toBe(true);
 	});
 });

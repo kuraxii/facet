@@ -5,7 +5,7 @@
  * 测试不需要窗口也不需要网络。
  */
 import type { Action, Message } from "@facet/protocol";
-import type { ChatView, CompactionView, EntryView, SessionView } from "./state.ts";
+import type { ChatView, EntryView, SessionView } from "./state.ts";
 import { appendNotice } from "./state.ts";
 
 /** 消息是否还在流式写入。设备只在 message_end 时发 messageUpdated,中途的增量走 chat/delta。 */
@@ -48,46 +48,36 @@ function unhandled(value: never): never {
 /** 归约一条会话通道动作。对话动作原样返回。 */
 export function reduceSession(view: SessionView, action: Action): SessionView {
 	switch (action.type) {
-		case "session/status":
-			return { ...view, status: action.status };
+		case "session/phase":
+			return { ...view, state: { ...view.state, phase: action.phase, maintenance: action.maintenance } };
 		case "session/modelChanged":
-			return { ...view, model: action.model };
+			return { ...view, state: { ...view.state, model: action.model } };
 		case "session/thinkingLevelChanged":
-			return { ...view, thinkingLevel: action.level };
-		case "session/compactionStarted":
-			return { ...view, compaction: startCompaction(action.reason) };
-		case "session/compactionCompleted": {
-			const compaction: CompactionView = {
-				reason: action.reason,
-				isRunning: false,
-				tokensBefore: action.tokensBefore,
-				estimatedTokensAfter: action.estimatedTokensAfter,
-				aborted: action.aborted,
-				willRetry: action.willRetry,
-				error: action.error,
+			return { ...view, state: { ...view.state, thinkingLevel: action.level } };
+		case "session/queueChanged":
+			return {
+				...view,
+				state: { ...view.state, queued: { steering: action.steering, followUp: action.followUp } },
 			};
-			return { ...view, compaction };
-		}
 		case "session/titleChanged":
-			return { ...view, title: action.title };
+			return { ...view, state: { ...view.state, title: action.title } };
 		case "session/configChanged":
-			return action.thinkingLevel === undefined ? view : { ...view, thinkingLevel: action.thinkingLevel };
+			return action.thinkingLevel === undefined
+				? view
+				: { ...view, state: { ...view.state, thinkingLevel: action.thinkingLevel } };
+		case "session/pendingMessageSet":
+		case "session/queueCleared":
+			return view;
 		case "chat/messageAppended":
 		case "chat/messageUpdated":
 		case "chat/delta":
 		case "chat/toolCallStarted":
 		case "chat/toolCallUpdated":
 		case "chat/toolCallEnded":
-		case "chat/queueChanged":
-		case "chat/turnCompleted":
 		case "chat/settled":
-		case "chat/retryStarted":
-		case "chat/retryEnded":
 		case "chat/notice":
 		case "chat/turnStarted":
 		case "chat/turnCancelled":
-		case "chat/pendingMessageSet":
-		case "chat/queueCleared":
 			return view;
 		default:
 			return unhandled(action);
@@ -181,54 +171,27 @@ export function reduceChat(view: ChatView, action: Action): ChatView {
 				},
 			};
 		}
-		case "chat/queueChanged":
-			return { ...view, queue: { steering: action.steering, followUp: action.followUp } };
-		case "chat/turnCompleted":
-			return { ...view, willRetry: action.willRetry };
-		case "chat/settled":
-			return { ...view, willRetry: false, retry: undefined, stopping: false };
-		case "chat/retryStarted":
-			return { ...view, retry: { attempt: action.attempt, maxAttempts: action.maxAttempts } };
-		case "chat/retryEnded":
-			return { ...view, retry: undefined };
 		case "chat/notice":
 			return {
 				...view,
 				notices: appendNotice(view.notices, { level: action.level, message: action.message }),
 			};
-		case "chat/turnStarted":
-			// 运行状态由 session/status 反映,这个动作只表示端点发出了这条消息
+		case "chat/settled":
 			return view;
-		case "chat/pendingMessageSet": {
-			const key = action.kind === "steering" ? "steering" : "followUp";
-			return { ...view, queue: { ...view.queue, [key]: [...view.queue[key], action.text] } };
-		}
-		case "chat/queueCleared":
-			return { ...view, queue: { steering: [], followUp: [] } };
+		// 发出消息与中止请求都由设备回过来,这里不需要改视图
+		case "chat/turnStarted":
 		case "chat/turnCancelled":
 			return view;
-		case "session/status":
+		case "session/phase":
 		case "session/modelChanged":
 		case "session/thinkingLevelChanged":
-		case "session/compactionStarted":
-		case "session/compactionCompleted":
+		case "session/queueChanged":
 		case "session/titleChanged":
 		case "session/configChanged":
+		case "session/pendingMessageSet":
+		case "session/queueCleared":
 			return view;
 		default:
 			return unhandled(action);
 	}
-}
-
-/** 建出正在进行的压缩状态。 */
-function startCompaction(reason: CompactionView["reason"]): CompactionView {
-	return {
-		reason,
-		isRunning: true,
-		tokensBefore: undefined,
-		estimatedTokensAfter: undefined,
-		aborted: false,
-		willRetry: false,
-		error: undefined,
-	};
 }

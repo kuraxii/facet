@@ -7,7 +7,7 @@
 import type { ToolOutput } from "./content.ts";
 import type { Message } from "./message.ts";
 import type { ModelInfo, ThinkingLevel } from "./model.ts";
-import type { CompactionReason, EntryKind, SessionStatus } from "./session.ts";
+import type { EntryKind, Maintenance, TurnPhase } from "./session.ts";
 
 /** 提示级别，用于扩展或设备侧发出的通知。 */
 export type NoticeLevel = "info" | "warning" | "error";
@@ -17,8 +17,8 @@ export type DeltaKind = "text" | "thinking" | "toolCall";
 
 /** 会话事件。 */
 export type SessionEvent =
-	/** 派生状态发生变化 */
-	| { type: "status"; status: SessionStatus }
+	/** 阶段或维护动作发生变化 */
+	| { type: "phase"; phase: TurnPhase; maintenance: Maintenance | undefined }
 	/** 一次底层运行开始 */
 	| { type: "run_start" }
 	/** 一次底层运行结束，willRetry 为真时后续还有重试 */
@@ -50,21 +50,7 @@ export type SessionEvent =
 	  }
 	/** 队列内容变化，用于界面展示排队条 */
 	| { type: "queue"; steering: string[]; followUp: string[] }
-	| { type: "compaction_start"; reason: CompactionReason }
-	/** 压缩结束，被取消时没有结果，两个 token 数值都缺省 */
-	| {
-			type: "compaction_end";
-			reason: CompactionReason;
-			tokensBefore: number | undefined;
-			estimatedTokensAfter: number | undefined;
-			aborted: boolean;
-			willRetry: boolean;
-			error: string | undefined;
-	  }
-	/** 自动重试开始，界面可据此展示尝试次数与倒计时 */
-	| { type: "retry_start"; attempt: number; maxAttempts: number; delayMs: number; error: string }
-	| { type: "retry_end"; success: boolean; attempt: number; error: string | undefined }
-	/** 追加了一个持久化条目，entryId 可作为读取游标 */
+	/** 追加了一个持久化条目,entryId 可作为读取游标 */
 	| { type: "entry"; entryId: string; parentId: string | null; kind: EntryKind }
 	| { type: "name"; name: string | undefined }
 	| { type: "model"; model: ModelInfo | undefined }

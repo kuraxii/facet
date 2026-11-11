@@ -99,36 +99,14 @@ describe("reduceChat", () => {
 		expect(view.toolCalls.c1).toMatchObject({ isRunning: false, durationMs: 12, isError: false });
 	});
 
-	it("终局信号清掉重试状态", () => {
-		let view = reduceChat(chat(), {
-			type: "chat/retryStarted",
-			attempt: 1,
-			maxAttempts: 3,
-			delayMs: 500,
-			error: "限流",
-		});
-		view = reduceChat(view, { type: "chat/turnCompleted", willRetry: true });
-		expect(view).toMatchObject({ willRetry: true });
-		view = reduceChat(view, { type: "chat/settled", aborted: true });
-		expect(view).toMatchObject({ willRetry: false, retry: undefined });
-	});
-
-	it("回合收尾清掉停止中状态", () => {
-		const view = { ...chat(), stopping: true };
-		expect(reduceChat(view, { type: "chat/settled", aborted: true }).stopping).toBe(false);
-	});
-
-	it("排队变化两边都记录", () => {
-		let view = reduceChat(chat(), { type: "chat/queueChanged", steering: ["a"], followUp: ["b"] });
-		view = reduceChat(view, { type: "chat/pendingMessageSet", kind: "queued", text: "c" });
-		expect(view.queue).toEqual({ steering: ["a"], followUp: ["b", "c"] });
-		view = reduceChat(view, { type: "chat/queueCleared" });
-		expect(view.queue).toEqual({ steering: [], followUp: [] });
+	it("回合终局不改变对话内容", () => {
+		const base = chat();
+		expect(reduceChat(base, { type: "chat/settled", aborted: true })).toBe(base);
 	});
 
 	it("会话动作对对话视图无影响", () => {
 		const base = chat();
-		expect(reduceChat(base, { type: "session/status", status: "running" })).toBe(base);
+		expect(reduceChat(base, { type: "session/phase", phase: "running", maintenance: undefined })).toBe(base);
 	});
 
 	it("归约不改动入参", () => {
@@ -144,31 +122,38 @@ describe("reduceChat", () => {
 });
 
 describe("reduceSession", () => {
-	it("状态、模型与思考档位分别更新", () => {
-		let view = reduceSession(session(), { type: "session/status", status: "running" });
+	it("阶段、模型与思考档位分别更新", () => {
+		let view = reduceSession(session(), { type: "session/phase", phase: "running", maintenance: undefined });
 		view = reduceSession(view, { type: "session/thinkingLevelChanged", level: "high" });
-		expect(view.status).toBe("running");
-		expect(view.thinkingLevel).toBe("high");
+		expect(view.state.phase).toBe("running");
+		expect(view.state.thinkingLevel).toBe("high");
 	});
 
-	it("压缩开始与结束", () => {
-		let view = reduceSession(session(), { type: "session/compactionStarted", reason: "threshold" });
-		expect(view.compaction).toMatchObject({ isRunning: true, reason: "threshold" });
-		view = reduceSession(view, {
-			type: "session/compactionCompleted",
+	it("维护动作独立于阶段", () => {
+		let view = reduceSession(session(), {
+			type: "session/phase",
+			phase: "idle",
+			maintenance: { kind: "compaction", reason: "threshold", tokensBefore: 100, estimatedTokensAfter: 20 },
+		});
+		expect(view.state.phase).toBe("idle");
+		expect(view.state.maintenance).toEqual({
+			kind: "compaction",
 			reason: "threshold",
 			tokensBefore: 100,
 			estimatedTokensAfter: 20,
-			aborted: false,
-			willRetry: false,
-			error: undefined,
 		});
-		expect(view.compaction).toMatchObject({ isRunning: false, tokensBefore: 100, estimatedTokensAfter: 20 });
+		view = reduceSession(view, { type: "session/phase", phase: "running", maintenance: undefined });
+		expect(view.state.maintenance).toBeUndefined();
+	});
+
+	it("排队内容记在会话视图上", () => {
+		const view = reduceSession(session(), { type: "session/queueChanged", steering: ["a"], followUp: ["b"] });
+		expect(view.state.queued).toEqual({ steering: ["a"], followUp: ["b"] });
 	});
 
 	it("改名立即生效", () => {
 		const view = reduceSession(session(), { type: "session/titleChanged", title: "新名字" });
-		expect(view.title).toBe("新名字");
+		expect(view.state.title).toBe("新名字");
 	});
 
 	it("对话动作对会话视图无影响", () => {

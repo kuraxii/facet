@@ -9,6 +9,7 @@ import type {
 	Entry,
 	EntryKind,
 	ImageBlock,
+	Maintenance,
 	Message,
 	ModelInfo,
 	ModelRef,
@@ -19,12 +20,12 @@ import type {
 	SessionEventListener,
 	SessionSnapshot,
 	SessionStats,
-	SessionStatus,
 	ThinkingLevel,
 	ToolInfo,
+	TurnPhase,
 } from "@facet/protocol";
 import { toMessage, toMessages, toModelInfo } from "./convert.ts";
-import { toSessionEvents } from "./events.ts";
+import { nextTurnState, type TurnState, toSessionEvents } from "./events.ts";
 import { pageOf } from "./paging.ts";
 import type { ModelMutationOptions, PromptOptions } from "./types.ts";
 
@@ -75,8 +76,10 @@ export class PiAgent {
 	private readonly onError: ((error: unknown) => void) | undefined;
 	private readonly listeners = new Set<SessionEventListener>();
 	private readonly unsubscribeSession: () => void;
-	/** 已派生的状态，只在变化时对外发事件 */
-	private status: SessionStatus = "idle";
+	/** 本轮的生命周期,只在变化时对外发事件 */
+	private phase: TurnPhase = "idle";
+	/** 与本轮并行的维护动作 */
+	private maintenance: Maintenance | undefined;
 	private disposed = false;
 
 	/** 构造后立即订阅，保证首次 prompt 之前的运行不会漏事件。 */
@@ -88,7 +91,6 @@ export class PiAgent {
 		this.onError = context.onError;
 		this.id = this.session.sessionId;
 		this.cwd = this.session.sessionManager.getCwd();
-		this.status = this.computeStatus();
 		this.unsubscribeSession = this.session.subscribe((event) => {
 			this.handleSessionEvent(event);
 		});
@@ -109,8 +111,14 @@ export class PiAgent {
 		return this.session.systemPrompt;
 	}
 
-	get currentStatus(): SessionStatus {
-		return this.status;
+	/** 本轮的生命周期 */
+	get currentPhase(): TurnPhase {
+		return this.phase;
+	}
+
+	/** 与本轮并行的维护动作 */
+	get currentMaintenance(): Maintenance | undefined {
+		return this.maintenance;
 	}
 
 	/** 恢复会话时模型回退的提示，需要展示给用户 */
@@ -131,9 +139,9 @@ export class PiAgent {
 		return this.session.isCompacting;
 	}
 
-	/** 会话仍在推进:运行中、压缩中,或工具在等审批。 */
+	/** 会话仍在推进:本轮未回到 idle,或有维护动作在跑。 */
 	get isBusy(): boolean {
-		return this.status !== "idle";
+		return this.phase !== "idle" || this.maintenance !== undefined;
 	}
 
 	/** 订阅事件，返回取消订阅函数。多个订阅方互不影响。 */
@@ -159,6 +167,10 @@ export class PiAgent {
 		if (this.session.isStreaming && !options.streamingBehavior) {
 			throw new Error("prompt rejected: the session is streaming and no streamingBehavior was given");
 		}
+		// 运行开始之前就置成 starting:界面立刻看到忙碌,空闲回收也会等到这一段落定
+		if (!this.session.isStreaming && this.phase === "idle") {
+			this.applyTurnState({ phase: "starting", maintenance: this.maintenance });
+		}
 		let disposition: PromptDisposition | undefined;
 		let acceptRun!: (value: PromptDisposition) => void;
 		const started = new Promise<PromptDisposition>((resolve) => {
@@ -182,10 +194,16 @@ export class PiAgent {
 			failure.then((error) => ({ kind: "failed" as const, error })),
 		]);
 		if (first.kind === "failed") {
+			// 没能进入运行,阶段退回空闲
+			this.applyTurnState({ phase: "idle", maintenance: this.maintenance });
 			if (first.error === undefined) {
 				return disposition ?? "started";
 			}
 			throw first.error;
+		}
+		if (first.value !== "started") {
+			// 被扩展消费或排队,这一轮没有开始
+			this.applyTurnState({ phase: "idle", maintenance: this.maintenance });
 		}
 		void failure.then((error) => {
 			if (error !== undefined && first.value === "started") {
@@ -205,9 +223,23 @@ export class PiAgent {
 		return await this.session.followUp(text, images);
 	}
 
-	/** 中止当前操作并等待会话空闲。 */
+	/**
+	 * 中止当前操作并等待会话空闲。
+	 *
+	 * 请求发出后先进入 stopping,等 pi 的 settled 把阶段收回 idle;没有可中止的运行时不改动阶段。
+	 */
 	async abort(): Promise<void> {
-		await this.session.abort();
+		const wasActive = this.phase === "running" || this.phase === "starting";
+		if (wasActive) {
+			this.applyTurnState({ phase: "stopping", maintenance: this.maintenance });
+		}
+		try {
+			await this.session.abort();
+		} finally {
+			if (wasActive && this.phase === "stopping") {
+				this.applyTurnState({ phase: "idle", maintenance: this.maintenance });
+			}
+		}
 	}
 
 	/** 等待会话空闲，不中止正在执行的操作。 */
@@ -409,7 +441,8 @@ export class PiAgent {
 			file: this.file,
 			cwd: this.cwd,
 			name: this.name,
-			status: this.status,
+			phase: this.phase,
+			maintenance: this.maintenance,
 			model: this.model(),
 			thinkingLevel: this.thinkingLevel(),
 			availableThinkingLevels: this.availableThinkingLevels(),
@@ -446,29 +479,22 @@ export class PiAgent {
 		}
 	}
 
-	/**
-	 * 派生当前状态。
-	 *
-	 * 审批优先于压缩与运行：等待审批时运行仍在进行，若先判运行会看不到审批态。
-	 */
-	private computeStatus(): SessionStatus {
-		if (this.session.isCompacting) {
-			return "compacting";
-		}
-		if (this.session.isStreaming) {
-			return "running";
-		}
-		return "idle";
-	}
-
-	/** 状态未变时不发事件，避免高频运行期刷出大量重复状态。 */
-	private refreshStatus(): void {
-		const next = this.computeStatus();
-		if (next === this.status) {
+	/** 设定阶段与维护动作,并对外发一次 phase 事件。 */
+	private applyTurnState(next: TurnState): void {
+		if (next.phase === this.phase && next.maintenance === this.maintenance) {
 			return;
 		}
-		this.status = next;
-		this.emit({ type: "status", status: next });
+		this.phase = next.phase;
+		this.maintenance = next.maintenance;
+		this.emit({ type: "phase", phase: next.phase, maintenance: next.maintenance });
+	}
+
+	/** 由 pi 事件推出阶段与维护动作。 */
+	private refreshTurnState(event: AgentSessionEvent): void {
+		const next = nextTurnState(event, { phase: this.phase, maintenance: this.maintenance });
+		if (next) {
+			this.applyTurnState(next);
+		}
 	}
 
 	/** 一个 pi 事件可能转成多条对外事件，也可能只用于触发状态刷新。 */
@@ -476,7 +502,7 @@ export class PiAgent {
 		for (const mapped of toSessionEvents(event)) {
 			this.emit(mapped);
 		}
-		this.refreshStatus();
+		this.refreshTurnState(event);
 	}
 
 	/** 逐个通知订阅方。单个订阅方抛错只上报，不影响其余订阅方收到事件。 */

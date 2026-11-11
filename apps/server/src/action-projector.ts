@@ -35,28 +35,14 @@ export class ActionProjector {
 		const chat = (action: Action): ChannelAction => ({ channel: this.chatChannel, action });
 
 		switch (event.type) {
-			case "status":
-				return [session({ type: "session/status", status: event.status })];
+			case "phase":
+				return [session({ type: "session/phase", phase: event.phase, maintenance: event.maintenance })];
 			case "model":
 				return [session({ type: "session/modelChanged", model: event.model })];
 			case "thinking_level":
 				return [session({ type: "session/thinkingLevelChanged", level: event.level })];
 			case "name":
 				return [session({ type: "session/titleChanged", title: event.name ?? "" })];
-			case "compaction_start":
-				return [session({ type: "session/compactionStarted", reason: event.reason })];
-			case "compaction_end":
-				return [
-					session({
-						type: "session/compactionCompleted",
-						reason: event.reason,
-						tokensBefore: event.tokensBefore,
-						estimatedTokensAfter: event.estimatedTokensAfter,
-						aborted: event.aborted,
-						willRetry: event.willRetry,
-						error: event.error,
-					}),
-				];
 			case "message_start": {
 				this.messageCounter += 1;
 				this.pendingMessageId = `m${this.messageCounter}`;
@@ -110,30 +96,11 @@ export class ActionProjector {
 					}),
 				];
 			case "queue":
-				return [chat({ type: "chat/queueChanged", steering: event.steering, followUp: event.followUp })];
-			case "run_end":
-				return [chat({ type: "chat/turnCompleted", willRetry: event.willRetry })];
+				return [
+					session({ type: "session/queueChanged", steering: event.steering, followUp: event.followUp }),
+				];
 			case "settled":
 				return [chat({ type: "chat/settled", aborted: event.aborted })];
-			case "retry_start":
-				return [
-					chat({
-						type: "chat/retryStarted",
-						attempt: event.attempt,
-						maxAttempts: event.maxAttempts,
-						delayMs: event.delayMs,
-						error: event.error,
-					}),
-				];
-			case "retry_end":
-				return [
-					chat({
-						type: "chat/retryEnded",
-						success: event.success,
-						attempt: event.attempt,
-						error: event.error,
-					}),
-				];
 			case "notice":
 				return [chat({ type: "chat/notice", level: event.level, message: event.message })];
 			default:

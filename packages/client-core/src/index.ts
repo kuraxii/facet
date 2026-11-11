@@ -11,9 +11,9 @@ export { reduceChat, reduceSession } from "./reduce.ts";
 export type {
 	ChatActivity,
 	ChatView,
-	CompactionView,
 	EntryView,
 	NoticeView,
+	SessionState,
 	SessionView,
 	StreamedPart,
 	ToolCallView,

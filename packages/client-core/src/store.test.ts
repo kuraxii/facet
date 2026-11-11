@@ -33,7 +33,8 @@ function _snapshot(overrides: Partial<SessionSnapshot> = {}): SessionSnapshot {
 		file: "/tmp/s1.jsonl",
 		cwd: "/tmp",
 		name: "测试会话",
-		status: "idle",
+		phase: "idle",
+		maintenance: undefined,
 		model: undefined,
 		thinkingLevel: "medium",
 		availableThinkingLevels: ["low", "medium", "high"],
@@ -68,20 +69,33 @@ function frame(
 describe("SessionStore", () => {
 	it("按通道种类分派到各自的视图", () => {
 		const store = new SessionStore();
-		store.apply(frame(sessionChannel, 1, { type: "session/status", status: "running" }));
+		store.apply(
+			frame(sessionChannel, 1, { type: "session/phase", phase: "running", maintenance: undefined }),
+		);
 		store.apply(frame(chatChannel, 1, { type: "chat/notice", level: "info", message: "hi" }));
-		expect(store.sessionView(sessionChannel)?.status).toBe("running");
+		expect(store.sessionView(sessionChannel)?.state.phase).toBe("running");
 		expect(store.chatView(chatChannel)?.notices).toHaveLength(1);
 		expect(store.sessionView(chatChannel)).toBeUndefined();
 	});
 
-	it("中止请求置停止中,回合收尾后清掉", () => {
+	it("阶段与维护动作只落在会话视图上", () => {
 		const store = new SessionStore();
-		store.ensureChat(chatChannel);
-		store.markStopping(chatChannel);
-		expect(store.chatView(chatChannel)?.stopping).toBe(true);
-		store.apply(frame(chatChannel, 1, { type: "chat/settled", aborted: true }));
-		expect(store.chatView(chatChannel)?.stopping).toBe(false);
+		store.ensureSession(sessionChannel);
+		store.apply(
+			frame(sessionChannel, 1, {
+				type: "session/phase",
+				phase: "stopping",
+				maintenance: {
+					kind: "compaction",
+					reason: "manual",
+					tokensBefore: undefined,
+					estimatedTokensAfter: undefined,
+				},
+			}),
+		);
+		expect(store.sessionView(sessionChannel)?.state.phase).toBe("stopping");
+		expect(store.sessionView(sessionChannel)?.state.maintenance?.kind).toBe("compaction");
+		expect(store.chatView(sessionChannel)).toBeUndefined();
 	});
 
 	it("重复序号的帧被丢弃", () => {

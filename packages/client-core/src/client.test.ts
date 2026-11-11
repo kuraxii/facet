@@ -47,7 +47,8 @@ function snapshot(): SessionSnapshot {
 		file: "/tmp/s1.jsonl",
 		cwd: "/tmp",
 		name: "既有会话",
-		status: "idle",
+		phase: "idle",
+		maintenance: undefined,
 		model: undefined,
 		thinkingLevel: "medium",
 		availableThinkingLevels: ["medium"],
@@ -206,14 +207,15 @@ describe("SessionClient", () => {
 		expect(client.current?.sessionId).toBe("s1");
 	});
 
-	it("中止请求置停止中,回合收尾后清掉", async () => {
+	it("中止请求走对话通道,阶段由设备回报", async () => {
 		const { transport, client } = createClient(2);
 		await client.openSession("/tmp/s1.jsonl");
 		client.cancel();
 		expect(transport.dispatched).toEqual([{ channel: CHAT, action: { type: "chat/turnCancelled" } }]);
-		expect(client.chatView()?.stopping).toBe(true);
-		transport.emit(CHAT, { type: "chat/settled", aborted: true });
-		expect(client.chatView()?.stopping).toBe(false);
+		transport.emit(SESSION, { type: "session/phase", phase: "stopping", maintenance: undefined });
+		expect(client.sessionView()?.state.phase).toBe("stopping");
+		transport.emit(SESSION, { type: "session/phase", phase: "idle", maintenance: undefined });
+		expect(client.sessionView()?.state.phase).toBe("idle");
 	});
 
 	it("项目请求带上参数", async () => {
@@ -501,10 +503,10 @@ describe("SessionClient", () => {
 	it("状态通道缺口重取快照,不动历史", async () => {
 		const { transport, client } = createClient(12, { initialPages: 1, pageSize: 5 });
 		await client.openSession("/tmp/s1.jsonl");
-		transport.emit(SESSION, { type: "session/status", status: "running" }, 1);
+		transport.emit(SESSION, { type: "session/phase", phase: "running", maintenance: undefined }, 1);
 		const before = transport.calls.filter((call) => call.method === "entries").length;
 		const snapshots = transport.calls.filter((call) => call.method === "snapshot").length;
-		transport.emit(SESSION, { type: "session/status", status: "idle" }, 6);
+		transport.emit(SESSION, { type: "session/phase", phase: "idle", maintenance: undefined }, 6);
 		await new Promise((resolve) => setTimeout(resolve, 10));
 		expect(transport.calls.filter((call) => call.method === "entries").length).toBe(before);
 		expect(transport.calls.filter((call) => call.method === "snapshot").length).toBeGreaterThan(snapshots);
@@ -523,7 +525,7 @@ describe("SessionClient", () => {
 	it("重连续订时带上已收到的最后序号", async () => {
 		const { transport, client } = createClient(4, { initialPages: 1, pageSize: 5 });
 		await client.openSession("/tmp/s1.jsonl");
-		transport.emit(SESSION, { type: "session/status", status: "running" }, 2);
+		transport.emit(SESSION, { type: "session/phase", phase: "running", maintenance: undefined }, 2);
 		transport.emit(CHAT, { type: "chat/turnStarted", text: "hi" }, 1);
 		const before = transport.calls.length;
 		await client.resume();

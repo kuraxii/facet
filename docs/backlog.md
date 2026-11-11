@@ -51,9 +51,9 @@ PoC 不做,记在这里,按「影响基本使用」到「结构」排序。
 - **工具卡的成败**只靠颜色区分,不写「完成」「失败」;执行中仍写「执行中」
 - **历史工具耗时**靠协议补的 `durationMs`;更早的会话文件里没有该字段时,工具卡不显示时间
 - **历史分页**只映射窗口内的条目,并且只取活动分支;游标用条目 id,跨进程重启仍然有效
-- **运行状态**取设备的 `session/status`(`idle`、`running`、`compacting`),对话视图不再维护一份 `isRunning`
-- **中止请求**由客户端自己记下 `stopping`,直到 `chat/settled` 收尾;被中止的助手消息按 `stopReason` 在行末标「已停止」
-- **界面读一个状态**`chatActivity(session, chat)` 把会话状态与中止请求合成 `idle`、`running`、`compacting`、`stopping` 四值,发送与停止按钮按它决定形态
+- **回合状态**由设备的 `session/phase` 给出,取值 `idle`、`starting`、`running`、`stopping`;压缩与自动重试记在 `maintenance` 上,两者都由 `session/phase` 一条动作推送
+- **两条通道各放一类数据**:会话通道只放状态(`SessionState`:阶段、维护动作、模型、思考档位、标题、队列),对话通道只放内容(`ChatView`:条目、工具调用、提示、标识迁移)
+- **界面读一个状态**`chatActivity(session)` 把阶段与维护动作合成 `idle`、`running`、`compacting`、`stopping` 四值,发送与停止按钮按它决定形态;被中止的助手消息按 `stopReason` 在行末标「已停止」
 - **动作的持有**`hub.withSession()` 在调用时同步登记持有,归还之前会话不会被空闲回收;显式 `release()` 遇到持有会挂起,等最后一个归还再执行
 - **同一会话的动作串行执行**,后到的动作看到前一个动作完成后的状态;`PiAgent.prompt` 在运行开始后即返回,不再等整轮结束,停止请求不会被整轮阻塞
 
@@ -68,7 +68,7 @@ PoC 不做,记在这里,按「影响基本使用」到「结构」排序。
 | D2 | 运行期再发一条消息,消息消失且没有提示 | 端点 guard 抛「session is running, streamingBehavior is required」(串行队列保证这是确定行为);草稿在 `send()` 里已经清空 |
 | D3 | 压缩期间发送,消息消失 | pi 抛「Cannot submit a prompt while compaction is in progress」;压缩进度条可见时用户仍可发送 |
 | D4 | 切到没有凭证的模型,芯片仍显示旧模型 | `AgentSession.setModel` 抛「No API key for p/i」,回执是带 `rejectionReason` 的动作帧,客户端不读 |
-| D7 | 排队消息没有支撑 | `chat/pendingMessageSet` 与 `chat/queueCleared` 两个方向都没有调用者:`client-core` 没有对应方法,设备侧只处理不产出 |
+| D7 | 排队消息没有支撑 | `session/pendingMessageSet` 与 `session/queueCleared` 只有设备侧的受理,客户端没有对应方法,界面也没有展示 |
 
 ### 4.2 `rejectionReason` 的接收路径全部失效
 

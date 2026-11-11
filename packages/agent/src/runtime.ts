@@ -20,7 +20,13 @@ import {
 import type { ModelInfo, ModelRef, ProviderInfo, SessionSummary, ThinkingLevel } from "@facet/protocol";
 import { toModelInfo } from "./convert.ts";
 import { FileCredentialStore } from "./credential-store.ts";
-import { ModelConfigStore } from "./model-config-store.ts";
+import {
+	type CustomModelEntry,
+	type CustomProviderEntry,
+	InvalidProviderError,
+	ModelConfigStore,
+	normalizeBaseUrl,
+} from "./model-config-store.ts";
 import { applyAgentDir } from "./paths.ts";
 import { PiAgent } from "./pi-agent.ts";
 import { normalizeProjectPath, type SessionProject, scanSessionProjects } from "./projects.ts";
@@ -80,6 +86,15 @@ export interface ForkPiAgentOptions extends OpenPiAgentOptions {
 	entryId?: string;
 }
 
+/** 自定义提供方可以选的接口协议，与 pi 认识的适配器一致。 */
+const KNOWN_APIS = [
+	"openai-completions",
+	"openai-responses",
+	"anthropic-messages",
+	"google-generative-ai",
+	"mistral-conversations",
+];
+
 /** 凭证来源的展示名。pi 给的是来源分类，这里换成能看懂的说明。 */
 const AUTH_SOURCE_LABELS: Record<string, string> = {
 	stored: "本机保存的密钥",
@@ -121,6 +136,8 @@ export class PiAgentFactory {
 	private readonly modelConfig: ModelConfigStore;
 	/** 已生效的地址覆写，键为提供方 id */
 	private baseUrlOverrides: Record<string, string>;
+	/** 自定义提供方配置里的地址，键为提供方 id；它们的模型不一定带地址，列表要能显示 */
+	private customBaseUrls: Record<string, string>;
 	private disposed = false;
 
 	private constructor(
@@ -128,6 +145,7 @@ export class PiAgentFactory {
 		credentials: FileCredentialStore,
 		modelConfig: ModelConfigStore,
 		baseUrlOverrides: Record<string, string>,
+		customBaseUrls: Record<string, string>,
 		options: PiAgentFactoryOptions,
 		agentDir: string,
 	) {
@@ -135,6 +153,7 @@ export class PiAgentFactory {
 		this.credentials = credentials;
 		this.modelConfig = modelConfig;
 		this.baseUrlOverrides = baseUrlOverrides;
+		this.customBaseUrls = customBaseUrls;
 		this.agentDir = agentDir;
 		this.sessionDir = options.sessionDir;
 		this.onError = options.onError;
@@ -156,7 +175,18 @@ export class PiAgentFactory {
 		for (const [providerId, baseUrl] of Object.entries(baseUrlOverrides)) {
 			modelRuntime.registerProvider(providerId, { baseUrl });
 		}
-		return new PiAgentFactory(modelRuntime, credentials, modelConfig, baseUrlOverrides, options, agentDir);
+		const customBaseUrls = Object.fromEntries(
+			(await modelConfig.customProviders()).map((entry) => [entry.id, entry.baseUrl]),
+		);
+		return new PiAgentFactory(
+			modelRuntime,
+			credentials,
+			modelConfig,
+			baseUrlOverrides,
+			customBaseUrls,
+			options,
+			agentDir,
+		);
 	}
 
 	/**
@@ -184,7 +214,7 @@ export class PiAgentFactory {
 			const status = this.modelRuntime.getProviderAuthStatus(provider.id);
 			const source =
 				status.label ?? (status.source === undefined ? undefined : AUTH_SOURCE_LABELS[status.source]);
-			const effective = provider.getModels()[0]?.baseUrl;
+			const effective = provider.getModels()[0]?.baseUrl ?? this.customBaseUrls[provider.id];
 			const override = this.baseUrlOverrides[provider.id];
 			return {
 				id: provider.id,
@@ -197,6 +227,78 @@ export class PiAgentFactory {
 				...(override === undefined ? {} : { baseUrlOverride: override }),
 			};
 		});
+	}
+
+	/** 配置里声明了模型清单的提供方，也就是用户自己加的提供方。 */
+	async customProviders(): Promise<CustomProviderEntry[]> {
+		return await this.modelConfig.customProviders();
+	}
+
+	/**
+	 * 新增或修改一个自定义提供方。
+	 *
+	 * 标识、名称、接口地址、协议与模型清单都要合法；标识不能与内置提供方重名，否则会盖掉
+	 * 内置的配置。写完重读一次模型目录，新提供方立刻可选。
+	 */
+	async saveCustomProvider(input: {
+		id: string;
+		name: string;
+		baseUrl: string;
+		api: string;
+		models: readonly {
+			id: string;
+			name?: string;
+			reasoning?: boolean;
+			contextWindow?: number;
+			maxTokens?: number;
+		}[];
+	}): Promise<void> {
+		const id = input.id.trim();
+		if (!/^[a-z0-9][a-z0-9._-]*$/.test(id)) {
+			throw new InvalidProviderError(
+				"提供方标识只能用小写字母、数字、点、下划线与连字符，且以字母或数字开头",
+			);
+		}
+		const isKnownCustom = await this.modelConfig.isCustom(id);
+		if (!isKnownCustom && this.modelRuntime.getProvider(id) !== undefined) {
+			throw new InvalidProviderError(`提供方标识与内置提供方重名:${id}`);
+		}
+		const name = input.name.trim();
+		if (name.length === 0) {
+			throw new InvalidProviderError("提供方名称不能为空");
+		}
+		const baseUrl = normalizeBaseUrl(input.baseUrl);
+		if (baseUrl === undefined) {
+			throw new InvalidProviderError("接口地址不能为空");
+		}
+		const api = input.api.trim();
+		if (!KNOWN_APIS.includes(api)) {
+			throw new InvalidProviderError(`接口协议不支持:${api}`);
+		}
+		const models = input.models.map((model) => ({ ...model, id: model.id.trim() }));
+		if (models.length === 0) {
+			throw new InvalidProviderError("至少要有一个模型");
+		}
+		for (const model of models) {
+			if (model.id.length === 0) {
+				throw new InvalidProviderError("模型标识不能为空");
+			}
+		}
+		await this.modelConfig.saveProvider({ id, name, baseUrl, api, models });
+		this.customBaseUrls[id] = baseUrl;
+		await this.modelRuntime.refresh({ allowNetwork: false });
+	}
+
+	/** 删除一个自定义提供方：配置、凭证与运行态一起清掉。 */
+	async removeCustomProvider(providerId: string): Promise<void> {
+		if (!(await this.modelConfig.isCustom(providerId))) {
+			throw new InvalidProviderError(`不是自定义提供方:${providerId}`);
+		}
+		await this.modelConfig.removeProvider(providerId);
+		delete this.customBaseUrls[providerId];
+		await this.credentials.delete(providerId);
+		await this.modelRuntime.removeRuntimeApiKey(providerId);
+		await this.modelRuntime.refresh({ allowNetwork: false });
 	}
 
 	/**

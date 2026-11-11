@@ -72,3 +72,34 @@ export interface ProviderInfo {
 	/** 写在模型配置里的地址覆写，没有覆写时为空 */
 	baseUrlOverride?: string;
 }
+
+/** 自定义提供方里的一个模型。 */
+export interface CustomModelInfo {
+	/** 模型标识，请求里用它取名 */
+	id: string;
+	/** 展示名，缺省时用标识 */
+	name?: string;
+	/** 是否支持思考 */
+	reasoning?: boolean;
+	/** 上下文窗口 */
+	contextWindow?: number;
+	/** 单次最大输出 token */
+	maxTokens?: number;
+}
+
+/** 用户自己添加的提供方。 */
+export interface CustomProviderInfo {
+	/** 提供方标识 */
+	id: string;
+	/** 展示名 */
+	name: string;
+	/** 接口地址 */
+	baseUrl: string;
+	/** 接口协议，例如 openai-completions */
+	api: string;
+	/** 模型清单，至少一个 */
+	models: CustomModelInfo[];
+}
+
+/** 保存自定义提供方的入参，字段要求与 CustomProviderInfo 相同。 */
+export type CustomProviderInput = CustomProviderInfo;

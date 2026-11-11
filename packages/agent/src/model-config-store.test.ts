@@ -72,3 +72,45 @@ describe("接口地址", () => {
 		});
 	});
 });
+
+describe("自定义提供方", () => {
+	const entry = {
+		id: "my-gateway",
+		name: "我的网关",
+		baseUrl: "https://gateway.example.com/v1",
+		api: "openai-completions",
+		models: [{ id: "local-llama", contextWindow: 32000 }],
+	};
+
+	it("保存后读得到,只认带模型清单的条目", async () => {
+		const store = new ModelConfigStore({ file });
+		await store.setBaseUrl("anthropic", "https://proxy.example.com");
+		await store.saveProvider(entry);
+
+		expect(await store.customProviders()).toEqual([entry]);
+		expect(await store.isCustom("my-gateway")).toBe(true);
+		expect(await store.isCustom("anthropic")).toBe(false);
+	});
+
+	it("修改时保留其他字段", async () => {
+		await writeFile(
+			file,
+			JSON.stringify({ providers: { "my-gateway": { apiKey: "!echo sk", models: [{ id: "old" }] } } }),
+			"utf8",
+		);
+		const store = new ModelConfigStore({ file });
+		await store.saveProvider(entry);
+		const written = JSON.parse(await readFile(file, "utf8")) as {
+			providers: Record<string, { apiKey?: string; models?: { id: string }[] }>;
+		};
+		expect(written.providers["my-gateway"]?.apiKey).toBe("!echo sk");
+		expect(written.providers["my-gateway"]?.models?.map((model) => model.id)).toEqual(["local-llama"]);
+	});
+
+	it("删除时连同地址一起清掉", async () => {
+		const store = new ModelConfigStore({ file });
+		await store.saveProvider(entry);
+		await store.removeProvider("my-gateway");
+		expect(JSON.parse(await readFile(file, "utf8"))).toEqual({ providers: {} });
+	});
+});

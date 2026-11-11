@@ -9,12 +9,13 @@ import { randomUUID } from "node:crypto";
 import { realpath, stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import { isAbsolute } from "node:path";
-import type { PiAgentFactory } from "@facet/agent";
+import { InvalidProviderError, type PiAgentFactory } from "@facet/agent";
 import {
 	type Action,
 	type ActionFrame,
 	type Capability,
 	type Channel,
+	type CustomProviderInfo,
 	type ErrorCode,
 	type FacetSettings,
 	type HelloFrame,
@@ -360,6 +361,25 @@ async function handleRequest(
 				}),
 			};
 		}
+		case "listCustomProviders":
+			return { providers: await context.factory.customProviders() };
+		case "saveCustomProvider": {
+			const source = asObject(params);
+			const provider = asObject(source.provider);
+			await context.factory.saveCustomProvider({
+				id: requiredString(provider, "id"),
+				name: requiredString(provider, "name"),
+				baseUrl: requiredString(provider, "baseUrl"),
+				api: requiredString(provider, "api"),
+				models: Array.isArray(provider.models) ? (provider.models as CustomProviderInfo["models"]) : [],
+			});
+			return { providers: await context.factory.customProviders() };
+		}
+		case "removeCustomProvider": {
+			const source = asObject(params);
+			await context.factory.removeCustomProvider(requiredString(source, "providerId"));
+			return { providers: await context.factory.customProviders() };
+		}
 		case "setProviderBaseUrl": {
 			const source = asObject(params);
 			await context.factory.setProviderBaseUrl(
@@ -444,6 +464,9 @@ function toProtocolError(error: unknown): { code: ErrorCode; message: string } {
 	}
 	if (error instanceof ChannelNotFoundError) {
 		return { code: "unknown_channel", message: error.message };
+	}
+	if (error instanceof InvalidProviderError) {
+		return { code: "rejected", message: error.message };
 	}
 	if (
 		error instanceof ProjectExistsError ||

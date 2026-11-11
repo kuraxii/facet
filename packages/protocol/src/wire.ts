@@ -7,7 +7,14 @@
  */
 import type { Action, ActionOrigin } from "./action.ts";
 import type { Channel } from "./channel.ts";
-import type { ModelInfo, ModelRef, ProviderInfo, ThinkingLevel } from "./model.ts";
+import type {
+	CustomProviderInfo,
+	CustomProviderInput,
+	ModelInfo,
+	ModelRef,
+	ProviderInfo,
+	ThinkingLevel,
+} from "./model.ts";
 import type { ProjectInfo } from "./project.ts";
 import type { Entry, SessionSnapshot, SessionSummary } from "./session.ts";
 import type { FacetSettings } from "./settings.ts";
@@ -202,6 +209,12 @@ export interface RequestParams {
 	testModel: { provider: string; id: string };
 	/** 设置提供方的接口地址，空串恢复默认。返回更新后的提供方清单。 */
 	setProviderBaseUrl: { providerId: string; baseUrl: string };
+	/** 列出用户自己添加的提供方。 */
+	listCustomProviders: Record<string, never>;
+	/** 新增或修改一个自定义提供方，返回更新后的清单。 */
+	saveCustomProvider: { provider: CustomProviderInput };
+	/** 删除一个自定义提供方，连同它的凭证，返回更新后的清单。 */
+	removeCustomProvider: { providerId: string };
 }
 
 /** 每条请求的应答数据。 */
@@ -234,6 +247,9 @@ export interface RequestResults {
 	diagnostics: { text: string };
 	testModel: { ok: boolean; latencyMs: number; message?: string };
 	setProviderBaseUrl: { providers: ProviderInfo[] };
+	listCustomProviders: { providers: CustomProviderInfo[] };
+	saveCustomProvider: { providers: CustomProviderInfo[] };
+	removeCustomProvider: { providers: CustomProviderInfo[] };
 }
 
 /** 请求方法名。 */

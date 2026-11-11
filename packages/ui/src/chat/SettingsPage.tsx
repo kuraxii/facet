@@ -4,9 +4,10 @@
  * 左侧分类、右侧内容；切换分类只加载该分类需要的数据，读取与保存都有明确的进行中与失败状态。
  * 保存失败时保留用户正在编辑的输入，可以直接重试。
  */
-import type { FacetSettings, ModelInfo, ModelRef, ProviderInfo } from "@facet/protocol";
+import type { CustomProviderInfo, FacetSettings, ModelInfo, ModelRef, ProviderInfo } from "@facet/protocol";
 import { useCallback, useEffect, useState } from "react";
 import { CloseIcon } from "../transcript/icons.tsx";
+import { ProviderForm } from "./ProviderForm.tsx";
 
 /** 设置分类。 */
 export type SettingsSection = "providers" | "models" | "appearance" | "input" | "about";
@@ -36,6 +37,12 @@ export interface SettingsDataSource {
 	deleteCredential: (providerId: string) => Promise<ProviderInfo[]>;
 	/** 设置提供方的接口地址，空串恢复默认，返回更新后的提供方清单 */
 	setProviderBaseUrl: (providerId: string, baseUrl: string) => Promise<ProviderInfo[]>;
+	/** 列出自定义提供方 */
+	listCustomProviders: () => Promise<CustomProviderInfo[]>;
+	/** 保存自定义提供方，返回更新后的清单 */
+	saveCustomProvider: (provider: CustomProviderInfo) => Promise<CustomProviderInfo[]>;
+	/** 删除自定义提供方，返回更新后的清单 */
+	removeCustomProvider: (providerId: string) => Promise<CustomProviderInfo[]>;
 	/** 用指定模型发一次最小请求 */
 	testModel: (model: ModelRef) => Promise<{ ok: boolean; latencyMs: number; message?: string }>;
 	/** 生成诊断文本 */
@@ -190,13 +197,16 @@ export function SettingsPage({
 
 				<div className="set-content">
 					{section === "providers" ? (
-						<ProvidersSection
-							providers={providers}
-							error={providersError}
-							onRetry={loadProviders}
-							onChanged={setProviders}
-							data={data}
-						/>
+						<>
+							<ProvidersSection
+								providers={providers}
+								error={providersError}
+								onRetry={loadProviders}
+								onChanged={setProviders}
+								data={data}
+							/>
+							<CustomProvidersSection data={data} onProvidersChanged={loadProviders} />
+						</>
 					) : null}
 
 					{section === "about" ? <AboutSection about={about} data={data} /> : null}
@@ -460,6 +470,129 @@ function ProvidersSection({
 				})}
 				{providers.length === 0 ? <li className="set-row set-row-empty">没有可用的提供方</li> : null}
 			</ul>
+		</section>
+	);
+}
+
+/**
+ * 自定义提供方。
+ *
+ * 增改用同一个表单，删除前二次确认；列表里的提供方与内置的一样可以配凭证、测地址。
+ */
+function CustomProvidersSection({
+	data,
+	onProvidersChanged,
+}: {
+	data: SettingsDataSource;
+	onProvidersChanged: () => Promise<void>;
+}) {
+	const [providers, setProviders] = useState<readonly CustomProviderInfo[] | undefined>(undefined);
+	const [error, setError] = useState<string | undefined>(undefined);
+	const [editing, setEditing] = useState<{ initial: CustomProviderInfo | undefined } | undefined>(undefined);
+	const [removing, setRemoving] = useState<string | undefined>(undefined);
+	const [busy, setBusy] = useState(false);
+
+	const load = useCallback(async () => {
+		setError(undefined);
+		try {
+			setProviders(await data.listCustomProviders());
+		} catch (loadError) {
+			setError(loadError instanceof Error ? loadError.message : String(loadError));
+		}
+	}, [data]);
+
+	useEffect(() => {
+		if (providers !== undefined) {
+			return;
+		}
+		void load();
+	}, [load, providers]);
+
+	/** 保存之后刷新列表，同时让上面的提供方清单跟着更新。 */
+	const save = async (provider: CustomProviderInfo) => {
+		setProviders(await data.saveCustomProvider(provider));
+		setEditing(undefined);
+		await onProvidersChanged();
+	};
+
+	const remove = async (providerId: string) => {
+		setBusy(true);
+		setError(undefined);
+		try {
+			setProviders(await data.removeCustomProvider(providerId));
+			setRemoving(undefined);
+			await onProvidersChanged();
+		} catch (removeError) {
+			setError(removeError instanceof Error ? removeError.message : String(removeError));
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	return (
+		<section className="set-section">
+			<h2 className="set-section-title">自定义提供方</h2>
+			<p className="set-hint">自己填接口地址与模型清单,适合自建网关或本地推理服务。</p>
+
+			{error === undefined ? null : <p className="set-row-error">{error}</p>}
+
+			{providers === undefined ? (
+				<p className="set-hint">正在读取…</p>
+			) : (
+				<ul className="set-list">
+					{providers.map((provider) => (
+						<li key={provider.id} className="set-row is-block">
+							<div className="set-row-head">
+								<span className="set-row-name ell">{provider.name}</span>
+								<span className="set-row-meta mono">{provider.id}</span>
+								<span className="set-row-meta mono">{provider.models.length} 个模型</span>
+								<button
+									type="button"
+									className="set-row-action"
+									onClick={() => setEditing({ initial: provider })}
+								>
+									编辑
+								</button>
+								{removing === provider.id ? (
+									<>
+										<button
+											type="button"
+											className="set-row-action is-danger"
+											disabled={busy}
+											onClick={() => void remove(provider.id)}
+										>
+											确认删除
+										</button>
+										<button type="button" className="set-row-action" onClick={() => setRemoving(undefined)}>
+											取消
+										</button>
+									</>
+								) : (
+									<button
+										type="button"
+										className="set-row-action is-danger"
+										onClick={() => setRemoving(provider.id)}
+									>
+										删除
+									</button>
+								)}
+							</div>
+							<p className="set-hint mono">{provider.baseUrl}</p>
+						</li>
+					))}
+					{providers.length === 0 ? <li className="set-row set-row-empty">还没有自定义提供方</li> : null}
+				</ul>
+			)}
+
+			{editing === undefined ? (
+				<div className="set-actions">
+					<button type="button" className="set-save" onClick={() => setEditing({ initial: undefined })}>
+						添加提供方
+					</button>
+				</div>
+			) : (
+				<ProviderForm initial={editing.initial} onSave={save} onCancel={() => setEditing(undefined)} />
+			)}
 		</section>
 	);
 }

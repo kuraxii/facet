@@ -4,6 +4,8 @@
  * 只放出 PiAgent、PiAgentFactory 与 facet 自有类型，pi SDK 的类型不外露。
  */
 export { writeFileAtomic } from "./atomic-write.ts";
+export type { CustomModelEntry, CustomProviderEntry } from "./model-config-store.ts";
+export { InvalidProviderError } from "./model-config-store.ts";
 export type { PageWindow } from "./paging.ts";
 export { pageOf } from "./paging.ts";
 export { DEFAULT_AGENT_DIR } from "./paths.ts";

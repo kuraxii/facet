@@ -9,6 +9,8 @@ export type { CreateProjectDialogProps } from "./chat/CreateProjectDialog.tsx";
 export { CreateProjectDialog } from "./chat/CreateProjectDialog.tsx";
 export type { EmptyStateProps } from "./chat/EmptyState.tsx";
 export { EmptyState } from "./chat/EmptyState.tsx";
+export type { ProviderFormProps } from "./chat/ProviderForm.tsx";
+export { ProviderForm } from "./chat/ProviderForm.tsx";
 export type { QueueStripProps } from "./chat/QueueStrip.tsx";
 export { QueueStrip } from "./chat/QueueStrip.tsx";
 export type { SessionSidebarProps, ThemeName } from "./chat/SessionSidebar.tsx";

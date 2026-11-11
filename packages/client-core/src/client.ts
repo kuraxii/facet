@@ -12,6 +12,8 @@ import type {
 	ActionFrame,
 	Capability,
 	Channel,
+	CustomProviderInfo,
+	CustomProviderInput,
 	Entry,
 	FacetSettings,
 	ModelInfo,
@@ -226,6 +228,24 @@ export class SessionClient {
 	async listModels(providerId?: string): Promise<ModelInfo[]> {
 		const result = await this.transport.request("models", providerId === undefined ? {} : { providerId });
 		return result.models;
+	}
+
+	/** 列出用户自己添加的提供方。 */
+	async listCustomProviders(): Promise<CustomProviderInfo[]> {
+		const result = await this.transport.request("listCustomProviders", {});
+		return result.providers;
+	}
+
+	/** 新增或修改一个自定义提供方，返回更新后的清单。 */
+	async saveCustomProvider(provider: CustomProviderInput): Promise<CustomProviderInfo[]> {
+		const result = await this.transport.request("saveCustomProvider", { provider });
+		return result.providers;
+	}
+
+	/** 删除一个自定义提供方，返回更新后的清单。 */
+	async removeCustomProvider(providerId: string): Promise<CustomProviderInfo[]> {
+		const result = await this.transport.request("removeCustomProvider", { providerId });
+		return result.providers;
 	}
 
 	/** 设置提供方的接口地址，空串恢复默认，返回更新后的提供方清单。 */

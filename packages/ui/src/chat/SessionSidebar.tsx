@@ -47,6 +47,10 @@ export interface SessionSidebarProps {
 	canCreate: boolean;
 	/** 打开添加项目 */
 	onAddProject: () => void;
+	/** 项目列表上一次刷新失败，过滤器里给出重试入口 */
+	isProjectsStale?: boolean;
+	/** 重新拉取项目列表 */
+	onRefreshProjects?: () => void;
 	/** 切换深浅色 */
 	onToggleTheme: () => void;
 }
@@ -103,6 +107,8 @@ export function SessionSidebar({
 	onCreate,
 	canCreate,
 	onAddProject,
+	isProjectsStale = false,
+	onRefreshProjects,
 	onToggleTheme,
 }: SessionSidebarProps) {
 	const [keyword, setKeyword] = useState("");
@@ -357,6 +363,14 @@ export function SessionSidebar({
 								);
 							})}
 							{projectMatches.length === 0 ? <p className="sb-opt-empty">没有匹配的项目</p> : null}
+							{isProjectsStale ? (
+								<div className="sb-opt-stale">
+									<span className="sb-opt-name ell">项目列表没刷新成功</span>
+									<button type="button" className="sb-opt-action" onClick={() => onRefreshProjects?.()}>
+										刷新
+									</button>
+								</div>
+							) : null}
 						</div>
 						<button
 							type="button"

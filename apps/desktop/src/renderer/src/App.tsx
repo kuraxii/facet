@@ -54,6 +54,17 @@ function readTheme(): ThemeName {
 	return localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark";
 }
 
+/** 把一条项目并进列表：同一个标识就替换，没有就追加，保持原有顺序。 */
+function mergeProject(list: readonly ProjectInfo[], project: ProjectInfo): ProjectInfo[] {
+	const index = list.findIndex((item) => item.id === project.id);
+	if (index < 0) {
+		return [...list, project];
+	}
+	const next = [...list];
+	next[index] = project;
+	return next;
+}
+
 /** 启动时打开的会话：启动目录里最近更新的一条，没有则取全部会话里最近的一条。 */
 function pickStartupSession(
 	sessions: readonly SessionSummary[],
@@ -86,6 +97,8 @@ export function App() {
 	const [activeFile, setActiveFile] = useState<string | undefined>(undefined);
 	const [device, setDevice] = useState<DeviceHandshake | undefined>(undefined);
 	const [projects, setProjects] = useState<readonly ProjectInfo[]>([]);
+	/** 项目列表上一次拉取失败，侧栏据此给出刷新入口 */
+	const [isProjectsStale, setIsProjectsStale] = useState(false);
 	const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
 	const [createCwd, setCreateCwd] = useState(bridge.projectDir);
 	const [draft, setDraft] = useState("");
@@ -259,17 +272,34 @@ export function App() {
 		[runSessionAction],
 	);
 
+	/** 拉一次项目清单。失败只标脏，已经显示的项目保持原样。 */
+	const refreshProjects = useCallback(async (): Promise<void> => {
+		try {
+			setProjects(await client.listProjects());
+			setIsProjectsStale(false);
+		} catch {
+			setIsProjectsStale(true);
+		}
+	}, []);
+
+	/**
+	 * 添加项目。
+	 *
+	 * 添加接口返回的数据直接并进列表，后续的列表刷新失败只标脏，已经添加成功的项目不会
+	 * 从侧栏消失；拉取会话失败同样不影响添加结果。
+	 */
 	const createProject = useCallback(
 		async (input: { cwd: string; name: string | undefined }) => {
 			const created = await client.addProject({
 				cwd: input.cwd,
 				...(input.name === undefined ? {} : { name: input.name }),
 			});
-			setProjects(await client.listProjects());
+			setProjects((current) => mergeProject(current, created));
 			setCreateCwd(created.cwd);
+			await refreshProjects();
 			await refreshSessions();
 		},
-		[refreshSessions],
+		[refreshProjects, refreshSessions],
 	);
 
 	const forkTurn = useCallback(
@@ -330,6 +360,8 @@ export function App() {
 				}}
 				canCreate={phase === "ready"}
 				onAddProject={() => setIsProjectDialogOpen(true)}
+				isProjectsStale={isProjectsStale}
+				onRefreshProjects={() => void refreshProjects()}
 				onToggleTheme={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
 			/>
 

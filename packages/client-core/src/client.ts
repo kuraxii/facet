@@ -69,6 +69,17 @@ export interface OpenedSession {
 
 const DEFAULT_PAGE_SIZE = 50;
 
+/**
+ * 设备是不是不认识这个会话。
+ *
+ * 传输层把设备的错误码带在 error.code 上;这里按码判断,不依赖具体传输实现。
+ */
+function isUnknownSession(error: unknown): boolean {
+	return (
+		typeof error === "object" && error !== null && (error as { code?: unknown }).code === "unknown_session"
+	);
+}
+
 export class SessionClient {
 	private readonly transport: SessionTransport;
 	private readonly initialPages: number;
@@ -148,7 +159,10 @@ export class SessionClient {
 		});
 		this.stopState ??= this.transport.onStateChange?.((state) => {
 			if (state === "ready") {
-				void this.resume();
+				// 续订失败交给宿主处理:会话文件不在盘上时界面要回到没有会话的状态
+				void this.resume().catch((error: unknown) => {
+					debugLog("client", "自动续订失败", { error: String(error) });
+				});
 			}
 		});
 	}
@@ -436,6 +450,20 @@ export class SessionClient {
 		if (!opened) {
 			return;
 		}
+		try {
+			await this.resumeChannels(opened);
+		} catch (error) {
+			// 设备重启过时它已经不记得这个会话,按文件重新打开一次即可接着用
+			if (opened.file !== undefined && isUnknownSession(error)) {
+				await this.switchSession(opened.file);
+				return;
+			}
+			throw error;
+		}
+	}
+
+	/** 按最后收到的序号续订两个通道,缓冲补不上时整体重新对齐。 */
+	private async resumeChannels(opened: OpenedSession): Promise<void> {
 		const sessionSub = await this.transport.request("subscribe", {
 			channel: opened.sessionChannel,
 			since: this.state.lastSeq(opened.sessionChannel),

@@ -193,6 +193,8 @@ export function App() {
 	const started = useRef(false);
 	/** 会话切换的序号,只有最后一次选择的结果会落到界面上 */
 	const switchSeq = useRef(0);
+	/** 正在进行的重连,重复触发时共用同一次 */
+	const reconnecting = useRef<Promise<void> | undefined>(undefined);
 
 	// 设置变化时应用外观，并把有效主题同步给侧栏的切换按钮
 	useEffect(() => {
@@ -232,16 +234,6 @@ export function App() {
 		void client.saveSettings(changed).catch(() => undefined);
 	}, [settings, theme]);
 
-	/** 拉一次项目清单。失败只标脏,已经显示的项目保持原样。 */
-	const refreshProjects = useCallback(async (): Promise<void> => {
-		try {
-			setProjects(await client.listProjects());
-			setIsProjectsStale(false);
-		} catch {
-			setIsProjectsStale(true);
-		}
-	}, []);
-
 	/** 拉一次全部会话。并发调用时只采用最后一次的结果,避免旧结果覆盖新结果。 */
 	const refreshSessions = useCallback(async (): Promise<readonly SessionSummary[] | undefined> => {
 		listSeq.current += 1;
@@ -257,6 +249,60 @@ export function App() {
 			return undefined;
 		}
 	}, []);
+
+	/** 拉一次项目清单。失败只标脏,已经显示的项目保持原样。 */
+	const refreshProjects = useCallback(async (): Promise<void> => {
+		try {
+			setProjects(await client.listProjects());
+			setIsProjectsStale(false);
+		} catch {
+			setIsProjectsStale(true);
+		}
+	}, []);
+
+	/**
+	 * 重连设备。
+	 *
+	 * 断线之后按退避间隔一直试，连上就续订已打开的会话、重取会话状态与会话列表；同一个
+	 * 时刻只跑一次，手动重试与自动重连共用这条路。
+	 */
+	const reconnect = useCallback(async (): Promise<void> => {
+		reconnecting.current ??= (async () => {
+			let delay = 400;
+			for (;;) {
+				try {
+					const handshake = await transport.connect();
+					client.attach(handshake);
+					setDevice(handshake);
+					// 会话回不来(例如它的文件已经不在了)时退回没有会话的状态,连接本身照常可用
+					const resumed = await client.resume().then(
+						() => true,
+						() => false,
+					);
+					if (!resumed) {
+						await client.release().catch(() => undefined);
+						setActiveFile(undefined);
+					}
+					await refreshSessions();
+					await refreshProjects();
+					return;
+				} catch {
+					await new Promise((done) => setTimeout(done, delay));
+					delay = Math.min(delay * 2, 8000);
+				}
+			}
+		})().finally(() => {
+			reconnecting.current = undefined;
+		});
+		await reconnecting.current;
+	}, [refreshProjects, refreshSessions]);
+
+	// 断线之后自动重连，期间输入区提示连接已断开
+	useEffect(() => {
+		if (!isOnline && phase === "ready") {
+			void reconnect();
+		}
+	}, [isOnline, phase, reconnect]);
 
 	void version;
 
@@ -647,6 +693,22 @@ export function App() {
 				<h1>连不上设备</h1>
 				<p>{failure}</p>
 				<p>{bridge.endpoint}</p>
+				<button
+					type="button"
+					className="boot-retry"
+					onClick={() => {
+						setPhase("connecting");
+						void reconnect().then(
+							() => setPhase("ready"),
+							(error: unknown) => {
+								setFailure(error instanceof Error ? error.message : String(error));
+								setPhase("failed");
+							},
+						);
+					}}
+				>
+					重试
+				</button>
 			</main>
 		);
 	}

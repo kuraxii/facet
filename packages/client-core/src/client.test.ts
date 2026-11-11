@@ -82,6 +82,8 @@ class FakeTransport implements SessionTransport {
 	failNext: RequestMethod | undefined;
 	/** 这些通道的订阅直接失败,用例按需设置 */
 	readonly failSubscribe = new Set<Channel>();
+	/** 为真时订阅按设备不认识这个会话报错,模拟设备重启过 */
+	unknownSession = false;
 
 	constructor(entryCount: number) {
 		this.entries = Array.from({ length: entryCount }, (_, index) => ({
@@ -128,6 +130,11 @@ class FakeTransport implements SessionTransport {
 					const channel = (params as { channel: Channel }).channel;
 					if (this.failSubscribe.has(channel)) {
 						throw new Error("subscribe 失败");
+					}
+					if (this.unknownSession) {
+						// 设备刚重启时不认识旧会话,重新打开之后就记得了
+						this.unknownSession = false;
+						throw Object.assign(new Error("会话不存在:s1"), { code: "unknown_session" });
 					}
 					return { seq: 0, resync: false, session: channel.startsWith("session:") ? snapshot() : undefined };
 				}
@@ -730,5 +737,26 @@ describe("SessionClient", () => {
 		expect(last?.id).toBe("m1");
 		expect(last?.streaming[0]?.text).toBe("你好");
 		expect(last?.isStreaming).toBe(true);
+	});
+});
+
+describe("重连", () => {
+	it("设备重启过时按文件重新打开会话", async () => {
+		const { client, transport } = createClient(5);
+		const opened = await client.openSession("/tmp/s1.jsonl");
+		expect(client.sessionView()?.state.file).toBe("/tmp/s1.jsonl");
+
+		transport.unknownSession = true;
+		await client.resume();
+		expect(transport.calls.filter((call) => call.method === "openSession")).toHaveLength(2);
+		expect(client.sessionView()?.state.file).toBe("/tmp/s1.jsonl");
+		expect(opened.file).toBe("/tmp/s1.jsonl");
+	});
+
+	it("其他失败照常抛出", async () => {
+		const { client, transport } = createClient(5);
+		await client.openSession("/tmp/s1.jsonl");
+		transport.failSubscribe.add("session:/s1");
+		await expect(client.resume()).rejects.toThrow("subscribe 失败");
 	});
 });

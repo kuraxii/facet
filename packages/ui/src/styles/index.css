@@ -1597,6 +1597,21 @@ svg.fl {
 	font-family: var(--font-mono);
 }
 
+.boot-retry {
+	margin-top: 6px;
+	height: 30px;
+	padding: 0 16px;
+	border: 1px solid var(--line2);
+	border-radius: 7px;
+	background: var(--surface2);
+	color: var(--t1);
+	font-size: 12.5px;
+}
+
+.boot-retry:hover {
+	background: var(--surface3);
+}
+
 /* Markdown 正文 */
 
 /* markstream 自己的变量换成本项目的配色 */

@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { PiAgentFactory } from "./runtime.ts";
+import { PiAgentFactory, thinkingLevelForModel } from "./runtime.ts";
 
 let root: string;
 let factory: PiAgentFactory;
@@ -51,5 +51,20 @@ describe("项目信任", () => {
 		const cwd = await projectWithExtension("app");
 		factory.setProjectTrust(cwd, false);
 		expect(factory.projectTrust(cwd)).toEqual({ hasProjectResources: true, trusted: false });
+	});
+});
+
+describe("新建会话的思考档位", () => {
+	it("模型支持思考时保留设置里的档位", () => {
+		expect(thinkingLevelForModel({ reasoning: true }, "high")).toBe("high");
+	});
+
+	it("模型不支持思考时丢掉档位", () => {
+		expect(thinkingLevelForModel({ reasoning: false }, "high")).toBeUndefined();
+	});
+
+	it("没有设置档位或模型未知时原样交出", () => {
+		expect(thinkingLevelForModel({ reasoning: false }, undefined)).toBeUndefined();
+		expect(thinkingLevelForModel(undefined, "low")).toBe("low");
 	});
 });

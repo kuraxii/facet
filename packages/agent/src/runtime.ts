@@ -78,6 +78,22 @@ export interface ForkPiAgentOptions extends OpenPiAgentOptions {
 	entryId?: string;
 }
 
+/**
+ * 校验思考档位与模型是否相配。
+ *
+ * 模型支持思考时原样返回；不支持思考或模型未知时丢掉档位，交给 pi 用模型自己的缺省值，
+ * 免得把设置里的档位硬套到一个用不上的模型上。
+ */
+export function thinkingLevelForModel(
+	model: { reasoning: boolean } | undefined,
+	level: ThinkingLevel | undefined,
+): ThinkingLevel | undefined {
+	if (level === undefined || model === undefined) {
+		return level;
+	}
+	return model.reasoning ? level : undefined;
+}
+
 export class PiAgentFactory {
 	/** 全局配置目录 */
 	readonly agentDir: string;
@@ -193,7 +209,7 @@ export class PiAgentFactory {
 		const sessionManager = sessionDir ? SessionManager.create(cwd, sessionDir) : SessionManager.create(cwd);
 		const agent = await this.launch(sessionManager, options, {
 			model: options.model,
-			thinkingLevel: options.thinkingLevel,
+			thinkingLevel: this.thinkingLevelFor(options.model, options.thinkingLevel),
 			tools: options.tools,
 			excludeTools: options.excludeTools,
 			name: options.name,
@@ -281,6 +297,17 @@ export class PiAgentFactory {
 			throw new Error(`unknown model: ${ref.provider}/${ref.id}`);
 		}
 		return model;
+	}
+
+	/** 按模型能力校验新建会话的思考档位。 */
+	private thinkingLevelFor(
+		ref: ModelRef | undefined,
+		level: ThinkingLevel | undefined,
+	): ThinkingLevel | undefined {
+		if (ref === undefined) {
+			return level;
+		}
+		return thinkingLevelForModel(this.modelRuntime.getModel(ref.provider, ref.id), level);
 	}
 
 	/** 建会话的共同部分。 */

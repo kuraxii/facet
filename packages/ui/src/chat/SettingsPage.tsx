@@ -4,7 +4,7 @@
  * 左侧分类、右侧内容；切换分类只加载该分类需要的数据，读取与保存都有明确的进行中与失败状态。
  * 保存失败时保留用户正在编辑的输入，可以直接重试。
  */
-import type { FacetSettings, ProviderInfo } from "@facet/protocol";
+import type { FacetSettings, ModelInfo, ModelRef, ProviderInfo } from "@facet/protocol";
 import { useCallback, useEffect, useState } from "react";
 import { CloseIcon } from "../transcript/icons.tsx";
 
@@ -28,6 +28,8 @@ export interface SettingsDataSource {
 	saveSettings: (settings: FacetSettings) => Promise<FacetSettings>;
 	/** 读提供方清单，含授权状态与模型数量 */
 	loadProviders: () => Promise<ProviderInfo[]>;
+	/** 读全部模型，模型选择与可见性都用它 */
+	loadModels: () => Promise<ModelInfo[]>;
 }
 
 /** 设置页参数。 */
@@ -189,7 +191,7 @@ export function SettingsPage({
 							{isLoading ? <p className="set-hint">正在读取设置…</p> : null}
 							{draft === undefined ? null : (
 								<>
-									{section === "models" ? <ModelsSection draft={draft} patch={patch} /> : null}
+									{section === "models" ? <ModelsSection draft={draft} patch={patch} data={data} /> : null}
 									{section === "appearance" ? <AppearanceSection draft={draft} patch={patch} /> : null}
 									{section === "input" ? <InputSection draft={draft} patch={patch} /> : null}
 									{saveError === undefined ? null : (
@@ -268,37 +270,95 @@ function ProvidersSection({
 	);
 }
 
-/** 模型设置：默认模型与隐藏的模型。 */
+/** 模型键，模型可见性与选择器共用。 */
+function modelKey(model: ModelRef): string {
+	return `${model.provider}/${model.id}`;
+}
+
+/**
+ * 模型设置。
+ *
+ * 默认模型与默认思考档位决定新建会话用什么；档位按所选模型是否支持思考来筛，不支持时
+ * 只留「不思考」。可见性决定模型选择器里出现哪些模型，已有会话的模型不受影响。
+ */
 function ModelsSection({
 	draft,
 	patch,
+	data,
 }: {
 	draft: FacetSettings;
 	patch: (change: (current: FacetSettings) => FacetSettings) => void;
+	data: SettingsDataSource;
 }) {
-	const defaultModel = draft.defaultModel;
+	const [models, setModels] = useState<readonly ModelInfo[] | undefined>(undefined);
+	const [error, setError] = useState<string | undefined>(undefined);
+
+	const load = useCallback(async () => {
+		setError(undefined);
+		try {
+			setModels(await data.loadModels());
+		} catch (loadError) {
+			setError(loadError instanceof Error ? loadError.message : String(loadError));
+		}
+	}, [data]);
+
+	useEffect(() => {
+		if (models !== undefined) {
+			return;
+		}
+		void load();
+	}, [load, models]);
+
+	if (error !== undefined) {
+		return (
+			<>
+				<h2 className="set-section-title">模型</h2>
+				<StatusNote message={`读取模型失败:${error}`} onRetry={() => void load()} tone="error" />
+			</>
+		);
+	}
+	if (models === undefined) {
+		return (
+			<>
+				<h2 className="set-section-title">模型</h2>
+				<p className="set-hint">正在读取模型…</p>
+			</>
+		);
+	}
+
+	const selected = draft.defaultModel;
+	// 选中的模型不支持思考时,只保留「不思考」一档
+	const selectedModel =
+		selected === undefined ? undefined : models.find((model) => modelKey(model) === modelKey(selected));
+	const levelOptions =
+		selectedModel === undefined || selectedModel.reasoning ? THINKING_LEVEL_OPTIONS : (["off"] as const);
+
 	return (
 		<>
 			<h2 className="set-section-title">模型</h2>
 			<p className="set-hint">新建会话采用这里的默认模型与思考档位；已有会话保持自己的选择。</p>
 			<label className="set-field">
 				<span className="set-label">默认模型</span>
-				<input
-					className="set-input mono"
-					value={defaultModel === undefined ? "" : `${defaultModel.provider}/${defaultModel.id}`}
+				<select
+					className="set-input"
+					value={selected === undefined ? "" : modelKey(selected)}
 					onChange={(event) => {
-						const text = event.target.value.trim();
-						const slash = text.indexOf("/");
+						const value = event.target.value;
+						const found = models.find((model) => modelKey(model) === value);
 						patch((current) => ({
 							...current,
-							...(slash <= 0
-								? { defaultModel: undefined }
-								: { defaultModel: { provider: text.slice(0, slash), id: text.slice(slash + 1) } }),
+							defaultModel: found === undefined ? undefined : { provider: found.provider, id: found.id },
 						}));
 					}}
-					placeholder="provider/model,留空则不指定"
 					aria-label="默认模型"
-				/>
+				>
+					<option value="">由设备决定</option>
+					{models.map((model) => (
+						<option key={modelKey(model)} value={modelKey(model)}>
+							{model.provider} / {model.name}
+						</option>
+					))}
+				</select>
 			</label>
 			<label className="set-field">
 				<span className="set-label">默认思考档位</span>
@@ -317,16 +377,48 @@ function ModelsSection({
 					aria-label="默认思考档位"
 				>
 					<option value="">由模型决定</option>
-					{THINKING_LEVEL_OPTIONS.map((level) => (
+					{levelOptions.map((level) => (
 						<option key={level} value={level}>
 							{level}
 						</option>
 					))}
 				</select>
 			</label>
-			<p className="set-hint">
-				已隐藏的模型:{draft.hiddenModels.length === 0 ? "无" : draft.hiddenModels.join("、")}
-			</p>
+			{selectedModel !== undefined && !selectedModel.reasoning ? (
+				<p className="set-hint">这个模型不支持思考，档位只保留「off」。</p>
+			) : null}
+
+			<h3 className="set-section-subtitle">模型可见性</h3>
+			<p className="set-hint">隐藏的模型不出现在模型选择器里，已经用着它的会话不受影响。</p>
+			<ul className="set-list set-list-scroll">
+				{models.map((model) => {
+					const key = modelKey(model);
+					const isHidden = draft.hiddenModels.includes(key);
+					return (
+						<li key={key} className="set-row">
+							<span className="set-row-name ell">
+								{model.provider} / {model.name}
+							</span>
+							<label className="set-toggle">
+								<input
+									type="checkbox"
+									checked={!isHidden}
+									onChange={(event) =>
+										patch((current) => ({
+											...current,
+											hiddenModels: event.target.checked
+												? current.hiddenModels.filter((item) => item !== key)
+												: [...current.hiddenModels, key],
+										}))
+									}
+								/>
+								<span>{isHidden ? "已隐藏" : "显示"}</span>
+							</label>
+						</li>
+					);
+				})}
+				{models.length === 0 ? <li className="set-row set-row-empty">没有可用的模型</li> : null}
+			</ul>
 		</>
 	);
 }

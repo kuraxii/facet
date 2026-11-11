@@ -184,6 +184,7 @@ export function App() {
 			loadSettings: () => client.getSettings(),
 			saveSettings: (next) => client.saveSettings(next),
 			loadProviders: () => client.listProviders(),
+			loadModels: () => client.listModels(),
 		}),
 		[],
 	);
@@ -332,16 +333,23 @@ export function App() {
 		[runSessionAction, sessions, withTrust],
 	);
 
+	/** 新建会话，采用设置里的默认模型与思考档位；没有设置时交给设备决定。 */
 	const createSession = useCallback(
 		(cwd: string) => {
+			const model = settings.defaultModel;
+			const thinkingLevel = settings.defaultThinkingLevel;
 			withTrust(cwd, () => {
 				runSessionAction(async () => {
-					const opened = await client.createSession({ ...(cwd.length > 0 ? { cwd } : {}) });
+					const opened = await client.createSession({
+						...(cwd.length > 0 ? { cwd } : {}),
+						...(model === undefined ? {} : { model }),
+						...(thinkingLevel === undefined ? {} : { thinkingLevel }),
+					});
 					return opened.file;
 				});
 			});
 		},
-		[runSessionAction, withTrust],
+		[runSessionAction, settings.defaultModel, settings.defaultThinkingLevel, withTrust],
 	);
 
 	useEffect(() => {

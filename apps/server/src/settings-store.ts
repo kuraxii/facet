@@ -5,8 +5,8 @@
  * 不影响项目与会话。整份设置一次读写，改动串行执行，写盘成功之后才替换内存。
  */
 import { readFile, rename } from "node:fs/promises";
+import { writeFileAtomic } from "@facet/agent";
 import { DEFAULT_SETTINGS, type FacetSettings, type SendKey, type ThemeMode } from "@facet/protocol";
-import { writeFileAtomic } from "./atomic-write.ts";
 
 /** 文件格式版本，读取时按它判断能否兼容。 */
 const FILE_VERSION = 1;

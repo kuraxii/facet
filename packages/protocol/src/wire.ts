@@ -187,6 +187,15 @@ export interface RequestParams {
 	getSettings: Record<string, never>;
 	/** 整份替换界面偏好设置，返回设备实际存下的那份。 */
 	updateSettings: { settings: FacetSettings };
+	/**
+	 * 保存提供方凭证。
+	 *
+	 * 只接受 API key 形式的凭证，密钥写入 pi 的凭证文件，读回来时只给出是否已配置与来源，
+	 * 不回传密钥内容。
+	 */
+	saveCredential: { providerId: string; apiKey: string };
+	/** 删除提供方凭证。 */
+	deleteCredential: { providerId: string };
 }
 
 /** 每条请求的应答数据。 */
@@ -214,6 +223,8 @@ export interface RequestResults {
 	deleteSession: Record<string, never>;
 	getSettings: { settings: FacetSettings };
 	updateSettings: { settings: FacetSettings };
+	saveCredential: { providers: ProviderInfo[] };
+	deleteCredential: { providers: ProviderInfo[] };
 }
 
 /** 请求方法名。 */

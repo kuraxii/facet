@@ -185,6 +185,8 @@ export function App() {
 			saveSettings: (next) => client.saveSettings(next),
 			loadProviders: () => client.listProviders(),
 			loadModels: () => client.listModels(),
+			saveCredential: (providerId, apiKey) => client.saveCredential(providerId, apiKey),
+			deleteCredential: (providerId) => client.deleteCredential(providerId),
 		}),
 		[],
 	);

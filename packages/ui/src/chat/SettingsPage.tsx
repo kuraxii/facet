@@ -30,6 +30,10 @@ export interface SettingsDataSource {
 	loadProviders: () => Promise<ProviderInfo[]>;
 	/** 读全部模型，模型选择与可见性都用它 */
 	loadModels: () => Promise<ModelInfo[]>;
+	/** 保存提供方凭证，返回更新后的提供方清单 */
+	saveCredential: (providerId: string, apiKey: string) => Promise<ProviderInfo[]>;
+	/** 删除提供方凭证，返回更新后的提供方清单 */
+	deleteCredential: (providerId: string) => Promise<ProviderInfo[]>;
 }
 
 /** 设置页参数。 */
@@ -178,7 +182,13 @@ export function SettingsPage({
 
 				<div className="set-content">
 					{section === "providers" ? (
-						<ProvidersSection providers={providers} error={providersError} onRetry={loadProviders} />
+						<ProvidersSection
+							providers={providers}
+							error={providersError}
+							onRetry={loadProviders}
+							onChanged={setProviders}
+							data={data}
+						/>
 					) : null}
 
 					{section === "about" ? <AboutSection about={about} /> : null}
@@ -226,19 +236,35 @@ export function SettingsPage({
 	);
 }
 
-/** 提供方清单。 */
+/**
+ * 提供方清单与凭证管理。
+ *
+ * 凭证只上行，界面不回显密钥内容；已配置的提供方可以替换或删除。保存与删除失败时把错误
+ * 留在该提供方下面，输入的内容不清空，可以直接重试。
+ */
 function ProvidersSection({
 	providers,
 	error,
 	onRetry,
+	onChanged,
+	data,
 }: {
 	providers: readonly ProviderInfo[] | undefined;
 	error: string | undefined;
 	onRetry: () => void;
+	onChanged: (providers: ProviderInfo[]) => void;
+	data: SettingsDataSource;
 }) {
+	/** 展开凭证输入的提供方 */
+	const [editingId, setEditingId] = useState<string | undefined>(undefined);
+	const [key, setKey] = useState("");
+	const [busyId, setBusyId] = useState<string | undefined>(undefined);
+	const [failure, setFailure] = useState<{ providerId: string; message: string } | undefined>(undefined);
+
 	if (error !== undefined) {
 		return (
 			<section className="set-section">
+				<h2 className="set-section-title">提供方</h2>
 				<StatusNote message={`读取提供方失败:${error}`} onRetry={onRetry} tone="error" />
 			</section>
 		);
@@ -246,24 +272,122 @@ function ProvidersSection({
 	if (providers === undefined) {
 		return (
 			<section className="set-section">
+				<h2 className="set-section-title">提供方</h2>
 				<p className="set-hint">正在读取提供方…</p>
 			</section>
 		);
 	}
+
+	const submit = async (providerId: string) => {
+		setBusyId(providerId);
+		setFailure(undefined);
+		try {
+			onChanged(await data.saveCredential(providerId, key));
+			setEditingId(undefined);
+			setKey("");
+		} catch (saveError) {
+			setFailure({
+				providerId,
+				message: saveError instanceof Error ? saveError.message : String(saveError),
+			});
+		} finally {
+			setBusyId(undefined);
+		}
+	};
+
+	const remove = async (providerId: string) => {
+		setBusyId(providerId);
+		setFailure(undefined);
+		try {
+			onChanged(await data.deleteCredential(providerId));
+		} catch (removeError) {
+			setFailure({
+				providerId,
+				message: removeError instanceof Error ? removeError.message : String(removeError),
+			});
+		} finally {
+			setBusyId(undefined);
+		}
+	};
+
 	return (
 		<section className="set-section">
 			<h2 className="set-section-title">提供方</h2>
-			<p className="set-hint">凭证状态由设备读取，密钥内容不会出现在界面上。</p>
+			<p className="set-hint">凭证保存在设备上，界面不回显密钥内容，也不进入日志。</p>
 			<ul className="set-list">
-				{providers.map((provider) => (
-					<li key={provider.id} className="set-row">
-						<span className="set-row-name">{provider.name}</span>
-						<span className={provider.authenticated ? "set-badge is-on" : "set-badge"}>
-							{provider.authenticated ? "已配置凭证" : "未配置凭证"}
-						</span>
-						<span className="set-row-meta mono">{provider.modelCount} 个模型</span>
-					</li>
-				))}
+				{providers.map((provider) => {
+					const isEditing = editingId === provider.id;
+					const isBusy = busyId === provider.id;
+					return (
+						<li key={provider.id} className="set-row is-block">
+							<div className="set-row-head">
+								<span className="set-row-name">{provider.name}</span>
+								<span className={provider.authenticated ? "set-badge is-on" : "set-badge"}>
+									{provider.authenticated
+										? provider.subscription
+											? "订阅登录"
+											: "已配置凭证"
+										: "未配置凭证"}
+								</span>
+								{provider.authSource === undefined ? null : (
+									<span className="set-row-meta mono">{provider.authSource}</span>
+								)}
+								<span className="set-row-meta mono">{provider.modelCount} 个模型</span>
+								<button
+									type="button"
+									className="set-row-action"
+									onClick={() => {
+										setFailure(undefined);
+										setKey("");
+										setEditingId(isEditing ? undefined : provider.id);
+									}}
+								>
+									{provider.authenticated ? "替换凭证" : "添加凭证"}
+								</button>
+								{provider.authenticated ? (
+									<button
+										type="button"
+										className="set-row-action is-danger"
+										disabled={isBusy}
+										onClick={() => void remove(provider.id)}
+									>
+										删除
+									</button>
+								) : null}
+							</div>
+
+							{isEditing ? (
+								<div className="set-row-edit">
+									<input
+										className="set-input mono"
+										type="password"
+										value={key}
+										onChange={(event) => setKey(event.target.value)}
+										onKeyDown={(event) => {
+											if (event.key === "Enter" && key.trim().length > 0) {
+												void submit(provider.id);
+											}
+										}}
+										placeholder="粘贴 API key"
+										aria-label={`${provider.name} 的 API key`}
+									/>
+									<button
+										type="button"
+										className="set-save"
+										disabled={isBusy || key.trim().length === 0}
+										onClick={() => void submit(provider.id)}
+									>
+										{isBusy ? "保存中…" : "保存"}
+									</button>
+								</div>
+							) : null}
+
+							{failure?.providerId === provider.id ? (
+								<p className="set-row-error">{failure.message}</p>
+							) : null}
+						</li>
+					);
+				})}
 				{providers.length === 0 ? <li className="set-row set-row-empty">没有可用的提供方</li> : null}
 			</ul>
 		</section>

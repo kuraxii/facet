@@ -19,6 +19,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type { ModelInfo, ModelRef, ProviderInfo, SessionSummary, ThinkingLevel } from "@facet/protocol";
 import { toModelInfo } from "./convert.ts";
+import { FileCredentialStore } from "./credential-store.ts";
 import { applyAgentDir } from "./paths.ts";
 import { PiAgent } from "./pi-agent.ts";
 import { normalizeProjectPath, type SessionProject, scanSessionProjects } from "./projects.ts";
@@ -78,6 +79,16 @@ export interface ForkPiAgentOptions extends OpenPiAgentOptions {
 	entryId?: string;
 }
 
+/** 凭证来源的展示名。pi 给的是来源分类，这里换成能看懂的说明。 */
+const AUTH_SOURCE_LABELS: Record<string, string> = {
+	stored: "本机保存的密钥",
+	runtime: "本次运行里设置的密钥",
+	environment: "环境变量",
+	fallback: "内置缺省凭证",
+	models_json_key: "模型配置里的密钥",
+	models_json_command: "模型配置里的取密钥命令",
+};
+
 /**
  * 校验思考档位与模型是否相配。
  *
@@ -103,10 +114,18 @@ export class PiAgentFactory {
 	private readonly onError: ((error: unknown) => void) | undefined;
 	/** 项目信任记录，与 pi 命令行共用同一份 */
 	private readonly trustStore: ProjectTrustStore;
+	/** 凭证文件，写盘与运行态更新都经过它 */
+	private readonly credentials: FileCredentialStore;
 	private disposed = false;
 
-	private constructor(modelRuntime: ModelRuntime, options: PiAgentFactoryOptions, agentDir: string) {
+	private constructor(
+		modelRuntime: ModelRuntime,
+		credentials: FileCredentialStore,
+		options: PiAgentFactoryOptions,
+		agentDir: string,
+	) {
 		this.modelRuntime = modelRuntime;
+		this.credentials = credentials;
 		this.agentDir = agentDir;
 		this.sessionDir = options.sessionDir;
 		this.onError = options.onError;
@@ -116,12 +135,13 @@ export class PiAgentFactory {
 	/** 建立共享资源。凭证与模型配置的路径由 agentDir 推出。 */
 	static async create(options: PiAgentFactoryOptions = {}): Promise<PiAgentFactory> {
 		const agentDir = applyAgentDir(options.agentDir);
+		const credentials = new FileCredentialStore(join(agentDir, "auth.json"));
 		const modelRuntime = await ModelRuntime.create({
-			authPath: join(agentDir, "auth.json"),
+			credentials,
 			modelsPath: join(agentDir, "models.json"),
 			allowModelNetwork: options.allowModelNetwork,
 		});
-		return new PiAgentFactory(modelRuntime, options, agentDir);
+		return new PiAgentFactory(modelRuntime, credentials, options, agentDir);
 	}
 
 	/**
@@ -143,14 +163,42 @@ export class PiAgentFactory {
 		this.trustStore.set(cwd, trusted);
 	}
 
-	/** 提供方清单，附带是否已配置凭证，用于设置面板与模型选择器分组。 */
+	/** 提供方清单，附带凭证来源，用于设置面板与模型选择器分组。 */
 	providers(): ProviderInfo[] {
-		return this.modelRuntime.getProviders().map((provider) => ({
-			id: provider.id,
-			name: provider.name,
-			authenticated: this.modelRuntime.hasConfiguredAuth(provider.id),
-			modelCount: provider.getModels().length,
-		}));
+		return this.modelRuntime.getProviders().map((provider) => {
+			const status = this.modelRuntime.getProviderAuthStatus(provider.id);
+			const source =
+				status.label ?? (status.source === undefined ? undefined : AUTH_SOURCE_LABELS[status.source]);
+			return {
+				id: provider.id,
+				name: provider.name,
+				authenticated: status.configured,
+				modelCount: provider.getModels().length,
+				...(source === undefined ? {} : { authSource: source }),
+				...(this.modelRuntime.isUsingSubscription(provider.id) ? { subscription: true } : {}),
+			};
+		});
+	}
+
+	/**
+	 * 保存 API key。
+	 *
+	 * 先写进凭证文件，再让运行态立刻用上：写盘保证重启后还在，运行态更新保证当前会话
+	 * 马上就能调用。密钥不回显，读回来只有是否已配置与来源。
+	 */
+	async saveCredential(providerId: string, apiKey: string): Promise<void> {
+		const trimmed = apiKey.trim();
+		if (trimmed.length === 0) {
+			throw new Error("凭证内容不能为空");
+		}
+		await this.credentials.modify(providerId, async () => ({ type: "api_key", key: trimmed }));
+		await this.modelRuntime.setRuntimeApiKey(providerId, trimmed);
+	}
+
+	/** 删除提供方的凭证：文件与运行态一起删。 */
+	async deleteCredential(providerId: string): Promise<void> {
+		await this.credentials.delete(providerId);
+		await this.modelRuntime.removeRuntimeApiKey(providerId);
 	}
 
 	/** 目录里的全部模型，含未配置凭证的模型，是否可用由调用方判断。 */

@@ -338,6 +338,19 @@ async function handleRequest(
 			}
 			return { settings: await context.settingsStore.save(settings as FacetSettings) };
 		}
+		case "saveCredential": {
+			const source = asObject(params);
+			await context.factory.saveCredential(
+				requiredString(source, "providerId"),
+				requiredString(source, "apiKey"),
+			);
+			return { providers: context.factory.providers() };
+		}
+		case "deleteCredential": {
+			const source = asObject(params);
+			await context.factory.deleteCredential(requiredString(source, "providerId"));
+			return { providers: context.factory.providers() };
+		}
 		case "renameSession": {
 			const source = asObject(params);
 			await context.hub.renameSession(requiredString(source, "sessionFile"), optionalString(source, "name"));

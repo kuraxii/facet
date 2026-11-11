@@ -63,4 +63,8 @@ export interface ProviderInfo {
 	authenticated: boolean;
 	/** 目录内的模型数量 */
 	modelCount: number;
+	/** 凭证来源，例如环境变量名或 OAuth；没有凭证时为空 */
+	authSource?: string;
+	/** 是否为订阅类登录（OAuth） */
+	subscription?: boolean;
 }

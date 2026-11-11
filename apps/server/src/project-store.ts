@@ -4,10 +4,9 @@
  * 清单写在 `$XDG_DATA_HOME/facet/projects.json`，没有设置时落在 `~/.local/share/facet`。
  * 只有 Linux 走 XDG 规范；写入先落临时文件再改名，避免中途中断留下半个文件。
  */
-import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute } from "node:path";
-import { normalizeProjectPath, projectIdOf } from "@facet/agent";
+import { readFile, rename } from "node:fs/promises";
+import { isAbsolute } from "node:path";
+import { normalizeProjectPath, projectIdOf, writeFileAtomic } from "@facet/agent";
 
 /** 清单文件格式版本，读取时按它判断能否兼容。 */
 const FILE_VERSION = 1;
@@ -210,14 +209,6 @@ export class ProjectStore {
 	/** 整体写回。先写临时文件再改名，中途失败时临时文件不留。 */
 	private async write(projects: Map<string, StoredProject>): Promise<void> {
 		const payload = `${JSON.stringify({ version: FILE_VERSION, projects: [...projects.values()] }, null, 2)}\n`;
-		const temp = `${this.file}.${randomUUID()}.tmp`;
-		await mkdir(dirname(this.file), { recursive: true });
-		try {
-			await writeFile(temp, payload, "utf8");
-			await rename(temp, this.file);
-		} catch (error) {
-			await rm(temp, { force: true }).catch(() => undefined);
-			throw error;
-		}
+		await writeFileAtomic(this.file, payload);
 	}
 }

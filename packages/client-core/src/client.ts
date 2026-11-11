@@ -195,6 +195,18 @@ export class SessionClient {
 		return result.providers;
 	}
 
+	/** 保存提供方凭证，返回更新后的提供方清单。密钥只上行，不回传。 */
+	async saveCredential(providerId: string, apiKey: string): Promise<ProviderInfo[]> {
+		const result = await this.transport.request("saveCredential", { providerId, apiKey });
+		return result.providers;
+	}
+
+	/** 删除提供方凭证，返回更新后的提供方清单。 */
+	async deleteCredential(providerId: string): Promise<ProviderInfo[]> {
+		const result = await this.transport.request("deleteCredential", { providerId });
+		return result.providers;
+	}
+
 	/** 模型清单，指定提供方时只列该提供方的模型。 */
 	async listModels(providerId?: string): Promise<ModelInfo[]> {
 		const result = await this.transport.request("models", providerId === undefined ? {} : { providerId });

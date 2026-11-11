@@ -5,7 +5,7 @@
  * 只有 Linux 走 XDG 规范；写入先落临时文件再改名，避免中途中断留下半个文件。
  */
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute } from "node:path";
 import { normalizeProjectPath, projectIdOf } from "@facet/agent";
 
@@ -75,9 +75,10 @@ function parseProject(value: unknown): StoredProject | undefined {
 
 export class ProjectStore {
 	private readonly file: string;
-	private readonly projects = new Map<string, StoredProject>();
-	/** 串行化的写入队列，前一次失败不影响后一次 */
-	private writing: Promise<void> = Promise.resolve();
+	/** 当前清单。改动先写进副本，写入磁盘成功之后才替换它 */
+	private projects = new Map<string, StoredProject>();
+	/** 串行化的操作队列，前一次失败不影响后一次 */
+	private tail: Promise<unknown> = Promise.resolve();
 
 	private constructor(file: string) {
 		this.file = file;
@@ -111,38 +112,64 @@ export class ProjectStore {
 			throw new Error(`项目目录必须是绝对路径:${input.cwd}`);
 		}
 		const cwd = normalizeProjectPath(input.cwd);
-		if ([...this.projects.values()].some((project) => project.cwd === cwd)) {
-			throw new ProjectExistsError(cwd);
-		}
-		const project: StoredProject = {
-			id: projectIdOf(cwd),
-			cwd,
-			name: normalizeName(input.name),
-			createdAt: Date.now(),
-		};
-		this.projects.set(project.id, project);
-		await this.persist();
-		return project;
+		return await this.transact((draft) => {
+			if ([...draft.values()].some((project) => project.cwd === cwd)) {
+				throw new ProjectExistsError(cwd);
+			}
+			const project: StoredProject = {
+				id: projectIdOf(cwd),
+				cwd,
+				name: normalizeName(input.name),
+				createdAt: Date.now(),
+			};
+			draft.set(project.id, project);
+			return project;
+		});
 	}
 
 	/** 改名。名称为空时清除自定义名，按目录名显示。 */
 	async rename(id: string, name: string | undefined): Promise<StoredProject> {
-		const current = this.projects.get(id);
-		if (!current) {
-			throw new ProjectNotFoundError(id);
-		}
-		const next: StoredProject = { ...current, name: normalizeName(name) };
-		this.projects.set(id, next);
-		await this.persist();
-		return next;
+		return await this.transact((draft) => {
+			const current = draft.get(id);
+			if (!current) {
+				throw new ProjectNotFoundError(id);
+			}
+			const next: StoredProject = { ...current, name: normalizeName(name) };
+			draft.set(id, next);
+			return next;
+		});
 	}
 
 	/** 移除一个项目。 */
 	async remove(id: string): Promise<void> {
-		if (!this.projects.delete(id)) {
-			throw new ProjectNotFoundError(id);
-		}
-		await this.persist();
+		await this.transact((draft) => {
+			if (!draft.delete(id)) {
+				throw new ProjectNotFoundError(id);
+			}
+		});
+	}
+
+	/**
+	 * 一次改动：读当前清单 → 在副本上改 → 写盘 → 替换内存。
+	 *
+	 * 整段排进同一条队列，所以并发调用看到的一定是前一次的结果，不会互相覆盖。写入失败时
+	 * 内存保持原样，界面读到的与磁盘上的始终一致，调用方可以直接重试。
+	 */
+	private async transact<T>(work: (draft: Map<string, StoredProject>) => T): Promise<T> {
+		return await this.exclusive(async () => {
+			const draft = new Map(this.projects);
+			const result = work(draft);
+			await this.write(draft);
+			this.projects = draft;
+			return result;
+		});
+	}
+
+	/** 把操作排进队列。队列只保证顺序，失败不牵动前后的操作。 */
+	private async exclusive<T>(work: () => Promise<T>): Promise<T> {
+		const run = this.tail.catch(() => undefined).then(work);
+		this.tail = run.catch(() => undefined);
+		return await run;
 	}
 
 	private async load(): Promise<void> {
@@ -180,17 +207,17 @@ export class ProjectStore {
 		await rename(this.file, `${this.file}.broken-${Date.now()}`).catch(() => undefined);
 	}
 
-	/** 整体写回。写入串行进行，先写临时文件再改名。 */
-	private persist(): Promise<void> {
-		const payload = `${JSON.stringify({ version: FILE_VERSION, projects: [...this.projects.values()] }, null, 2)}\n`;
+	/** 整体写回。先写临时文件再改名，中途失败时临时文件不留。 */
+	private async write(projects: Map<string, StoredProject>): Promise<void> {
+		const payload = `${JSON.stringify({ version: FILE_VERSION, projects: [...projects.values()] }, null, 2)}\n`;
 		const temp = `${this.file}.${randomUUID()}.tmp`;
-		this.writing = this.writing
-			.catch(() => undefined)
-			.then(async () => {
-				await mkdir(dirname(this.file), { recursive: true });
-				await writeFile(temp, payload, "utf8");
-				await rename(temp, this.file);
-			});
-		return this.writing;
+		await mkdir(dirname(this.file), { recursive: true });
+		try {
+			await writeFile(temp, payload, "utf8");
+			await rename(temp, this.file);
+		} catch (error) {
+			await rm(temp, { force: true }).catch(() => undefined);
+			throw error;
+		}
 	}
 }

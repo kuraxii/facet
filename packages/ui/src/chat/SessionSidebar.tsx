@@ -57,6 +57,10 @@ export interface SessionSidebarProps {
 	onRemoveProject?: (id: string) => Promise<void>;
 	/** 在设备的文件管理器里打开项目目录，失败时抛错 */
 	onRevealProject?: (id: string) => Promise<void>;
+	/** 会话改名，失败时抛错 */
+	onRenameSession?: (path: string, name: string | undefined) => Promise<void>;
+	/** 删除会话，失败时抛错 */
+	onDeleteSession?: (path: string) => Promise<void>;
 	/** 切换深浅色 */
 	onToggleTheme: () => void;
 }
@@ -118,6 +122,8 @@ export function SessionSidebar({
 	onRenameProject,
 	onRemoveProject,
 	onRevealProject,
+	onRenameSession,
+	onDeleteSession,
 	onToggleTheme,
 }: SessionSidebarProps) {
 	const [keyword, setKeyword] = useState("");
@@ -139,6 +145,16 @@ export function SessionSidebar({
 	const [isProjectBusy, setIsProjectBusy] = useState(false);
 	/** 项目操作失败的提示，显示在操作面板里 */
 	const [projectError, setProjectError] = useState<string | undefined>(undefined);
+	/** 展开了操作面板的会话文件 */
+	const [sessionMenuPath, setSessionMenuPath] = useState<string | undefined>(undefined);
+	/** 正在改名的会话与输入中的名字 */
+	const [sessionRename, setSessionRename] = useState<{ path: string; value: string } | undefined>(undefined);
+	/** 正在确认删除的会话文件 */
+	const [sessionDeletePath, setSessionDeletePath] = useState<string | undefined>(undefined);
+	/** 会话操作进行中 */
+	const [isSessionBusy, setIsSessionBusy] = useState(false);
+	/** 会话操作失败的提示 */
+	const [sessionMenuError, setSessionMenuError] = useState<string | undefined>(undefined);
 
 	const filterRef = useRef<HTMLDivElement>(null);
 	const panelRef = useRef<HTMLDivElement>(null);
@@ -293,6 +309,39 @@ export function SessionSidebar({
 		} finally {
 			setIsProjectBusy(false);
 		}
+	};
+
+	/** 收起会话操作面板并清掉其中的临时状态。 */
+	const closeSessionMenu = (): void => {
+		setSessionMenuPath(undefined);
+		setSessionRename(undefined);
+		setSessionDeletePath(undefined);
+		setSessionMenuError(undefined);
+	};
+
+	/** 跑一次会话操作，失败时把错误留在面板里。 */
+	const runSessionMenuAction = async (work: () => Promise<void>): Promise<void> => {
+		setIsSessionBusy(true);
+		setSessionMenuError(undefined);
+		try {
+			await work();
+			closeSessionMenu();
+		} catch (error) {
+			setSessionMenuError(error instanceof Error ? error.message : String(error));
+		} finally {
+			setIsSessionBusy(false);
+		}
+	};
+
+	const submitSessionRename = async (): Promise<void> => {
+		const target = sessionRename;
+		if (target === undefined) {
+			return;
+		}
+		const trimmed = target.value.trim();
+		await runSessionMenuAction(async () => {
+			await onRenameSession?.(target.path, trimmed.length > 0 ? trimmed : undefined);
+		});
 	};
 
 	const submitRename = async (cwd: string): Promise<void> => {
@@ -598,24 +647,125 @@ export function SessionSidebar({
 							<span>{group.label}</span>
 							<span className="mono">{group.sessions.length}</span>
 						</h2>
-						{group.sessions.map((session) => (
-							<button
-								type="button"
-								key={session.path}
-								className={session.path === activeFile ? "sb-row is-active" : "sb-row"}
-								aria-current={session.path === activeFile}
-								onClick={() => openSession(session)}
-								disabled={session.isPlaceholder === true}
-								title={session.title}
-							>
-								<i className={dotClass(session.dot)} />
-								<span className="sb-row-title ell">{session.title}</span>
-								{scopeCwd === undefined && session.host === undefined ? (
-									<span className="sb-row-proj ell">{session.project}</span>
-								) : null}
-								<span className="sb-row-time mono">{shortTime(session.modified)}</span>
-							</button>
-						))}
+						{group.sessions.map((session) => {
+							const isMenuOpen = sessionMenuPath === session.path;
+							const isRenaming = isMenuOpen && sessionRename !== undefined;
+							return (
+								<div key={session.path} className="sb-row-item">
+									<div className="sb-row-wrap">
+										<button
+											type="button"
+											className={session.path === activeFile ? "sb-row is-active" : "sb-row"}
+											aria-current={session.path === activeFile}
+											onClick={() => openSession(session)}
+											disabled={session.isPlaceholder === true}
+											title={session.title}
+										>
+											<i className={dotClass(session.dot)} />
+											<span className="sb-row-title ell">{session.title}</span>
+											{scopeCwd === undefined && session.host === undefined ? (
+												<span className="sb-row-proj ell">{session.project}</span>
+											) : null}
+											<span className="sb-row-time mono">{shortTime(session.modified)}</span>
+										</button>
+										<button
+											type="button"
+											className="sb-row-more"
+											aria-label="会话操作"
+											aria-expanded={isMenuOpen}
+											onClick={() => {
+												setSessionMenuError(undefined);
+												setSessionRename(undefined);
+												setSessionDeletePath(undefined);
+												setSessionMenuPath(isMenuOpen ? undefined : session.path);
+											}}
+										>
+											⋯
+										</button>
+									</div>
+
+									{isMenuOpen ? (
+										<div className="sb-opt-menu">
+											{isRenaming ? (
+												<label className="sb-rename">
+													<input
+														className="sb-rename-input"
+														value={sessionRename.value}
+														onChange={(event) =>
+															setSessionRename({ path: sessionRename.path, value: event.target.value })
+														}
+														onKeyDown={(event) => {
+															if (event.key === "Enter") {
+																void submitSessionRename();
+															}
+															if (event.key === "Escape") {
+																setSessionRename(undefined);
+															}
+														}}
+														placeholder="会话名称"
+														aria-label="会话名称"
+													/>
+													<button
+														type="button"
+														className="sb-opt-action"
+														disabled={isSessionBusy}
+														onClick={() => void submitSessionRename()}
+													>
+														保存
+													</button>
+												</label>
+											) : sessionDeletePath === session.path ? (
+												<div className="sb-confirm">
+													<span className="sb-confirm-text">删除后会话文件不可恢复</span>
+													<div className="sb-confirm-actions">
+														<button
+															type="button"
+															className="sb-opt-action is-danger"
+															disabled={isSessionBusy}
+															onClick={() =>
+																void runSessionMenuAction(async () => {
+																	await onDeleteSession?.(session.path);
+																})
+															}
+														>
+															删除
+														</button>
+														<button
+															type="button"
+															className="sb-opt-action"
+															onClick={() => setSessionDeletePath(undefined)}
+														>
+															取消
+														</button>
+													</div>
+												</div>
+											) : (
+												<div className="sb-menu-actions">
+													<button
+														type="button"
+														className="sb-menu-item"
+														onClick={() => setSessionRename({ path: session.path, value: session.title })}
+													>
+														重命名
+													</button>
+													<button
+														type="button"
+														className="sb-menu-item is-danger"
+														onClick={() => setSessionDeletePath(session.path)}
+													>
+														删除
+													</button>
+												</div>
+											)}
+
+											{sessionMenuError === undefined ? null : (
+												<p className="sb-menu-error">{sessionMenuError}</p>
+											)}
+										</div>
+									) : null}
+								</div>
+							);
+						})}
 					</section>
 				))}
 			</div>

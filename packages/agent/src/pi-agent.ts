@@ -101,9 +101,10 @@ export class PiAgent {
 		return this.session.sessionFile;
 	}
 
-	/** 会话展示名，未命名为空 */
+	/** 会话展示名，未命名或名字被清空时为空 */
 	get name(): string | undefined {
-		return this.session.sessionName;
+		const name = this.session.sessionName;
+		return typeof name === "string" && name.trim().length > 0 ? name : undefined;
 	}
 
 	/** 当前生效的系统提示词，含尚未发送给模型的部分 */

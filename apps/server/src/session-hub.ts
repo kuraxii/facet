@@ -8,7 +8,10 @@
  * 一行的寿命由持有者与运行状态共同决定:没人订阅且不在运行时进入待关闭,倒计时结束才回收;
  * 还在推进就等它停下。运行状态本身只由 PiAgent 维护,这里不复制。
  */
+
+import { rm, stat } from "node:fs/promises";
 import { resolve } from "node:path";
+import { SessionManager } from "@earendil-works/pi-coding-agent";
 import type { ForkPiAgentOptions, OpenPiAgentOptions, PiAgent, PiAgentLaunchOptions } from "@facet/agent";
 import type { Action, ActionFrame, Channel, SessionSnapshot } from "@facet/protocol";
 import { makeChannel, parseChannel } from "@facet/protocol";
@@ -27,6 +30,7 @@ export type HubAgent = Pick<
 	| "entriesAfter"
 	| "entryBefore"
 	| "snapshot"
+	| "setName"
 	| "dispose"
 >;
 
@@ -105,6 +109,16 @@ export class SessionBusyError extends Error {
 	}
 }
 
+/** 会话文件不在盘上,常见于还没写过任何消息的空会话。 */
+export class SessionFileMissingError extends Error {
+	readonly file: string;
+
+	constructor(file: string) {
+		super(`会话文件不存在:${file}`);
+		this.file = file;
+	}
+}
+
 /** 同一会话 id 出现在两个文件上,通常是复制了会话文件。 */
 export class SessionConflictError extends Error {
 	readonly requested: string;
@@ -166,6 +180,16 @@ export interface SessionHubOptions<A extends HubAgent> {
 	readonly maxPageSize?: number;
 	/** 没人订阅且不在运行后,等多久回收,毫秒 */
 	readonly idleCloseMs?: number;
+}
+
+/** 文件是否存在。 */
+async function fileExists(file: string): Promise<boolean> {
+	try {
+		await stat(file);
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 /** 会话文件路径归一化,同一文件的不同写法落到同一个键。 */
@@ -374,6 +398,53 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		const row = await this.requireReady(sessionId);
 		this.touch(row);
 		return this.snapshotRow(row);
+	}
+
+	/**
+	 * 改名。
+	 *
+	 * 会话已经打开时直接改运行态,pi 会追加一条会话信息条目并把变化推给订阅者;没有打开的
+	 * 会话按文件离线追加同样的条目,不必为此启动一个会话。
+	 */
+	async renameSession(file: string, name: string | undefined): Promise<void> {
+		const trimmed = name?.trim() ?? "";
+		const key = normalizeFile(file);
+		if (!(await fileExists(key))) {
+			throw new SessionFileMissingError(key);
+		}
+		const sessionId = await this.factory.peekSessionId(key);
+		const row = this.table.get(sessionId);
+		if (row !== undefined) {
+			if (row.file !== undefined && row.file !== key) {
+				throw new SessionConflictError(key, row.file);
+			}
+			await this.withSession(sessionId, async (agent) => {
+				agent.setName(trimmed);
+			});
+			return;
+		}
+		const manager = SessionManager.open(key);
+		manager.appendSessionInfo(trimmed);
+	}
+
+	/**
+	 * 删除会话。
+	 *
+	 * 已经打开的会话先释放再删文件,免得运行态继续往已删除的文件里写;还在跑的一轮会随
+	 * agent 一并销毁。会话文件之外的产物不动。
+	 */
+	async deleteSession(file: string): Promise<void> {
+		const key = normalizeFile(file);
+		if (!(await fileExists(key))) {
+			throw new SessionFileMissingError(key);
+		}
+		const sessionId = await this.factory.peekSessionId(key);
+		const row = this.table.get(sessionId);
+		if (row !== undefined) {
+			row.pendingRelease = false;
+			this.drop(row);
+		}
+		await rm(key, { force: true });
 	}
 
 	/** 通道当前序号,通道不存在时为 0。 */

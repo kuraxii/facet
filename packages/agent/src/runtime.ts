@@ -175,7 +175,8 @@ export class PiAgentFactory {
 			id: info.id,
 			path: info.path,
 			cwd: normalizeProjectPath(info.cwd),
-			name: info.name,
+			// pi 会用 null 表示没有名字，协议里缺省就是 undefined
+			name: info.name ?? undefined,
 			parentSessionPath: info.parentSessionPath,
 			created: info.created.getTime(),
 			modified: info.modified.getTime(),

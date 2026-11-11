@@ -173,6 +173,15 @@ export interface RequestParams {
 	setProjectTrust: { cwd: string; trusted: boolean };
 	/** 在设备的文件管理器里打开某个已添加项目的目录。 */
 	revealProject: { id: string };
+	/**
+	 * 会话改名。
+	 *
+	 * 已打开的会话直接改运行态；没有打开的会话离线追加一条会话信息条目，不为此启动会话。
+	 * 名称为空时去掉自定义名。
+	 */
+	renameSession: { sessionFile: string; name?: string };
+	/** 删除会话文件。不可恢复。 */
+	deleteSession: { sessionFile: string };
 }
 
 /** 每条请求的应答数据。 */
@@ -196,6 +205,8 @@ export interface RequestResults {
 	projectTrust: { hasProjectResources: boolean; trusted: boolean | undefined };
 	setProjectTrust: Record<string, never>;
 	revealProject: Record<string, never>;
+	renameSession: Record<string, never>;
+	deleteSession: Record<string, never>;
 }
 
 /** 请求方法名。 */

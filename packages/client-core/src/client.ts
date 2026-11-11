@@ -192,6 +192,37 @@ export class SessionClient {
 	}
 
 	/**
+	 * 会话改名。
+	 *
+	 * 排在会话级队列里执行，改名与切换不会互相插队；已打开的会话由设备改运行态，没打开的
+	 * 会话离线追加一条会话信息条目。
+	 */
+	async renameSession(sessionFile: string, name: string | undefined): Promise<void> {
+		await this.exclusive(
+			async () =>
+				await this.transport.request(
+					"renameSession",
+					name === undefined ? { sessionFile } : { sessionFile, name },
+				),
+		);
+	}
+
+	/**
+	 * 删除会话。
+	 *
+	 * 删的是当前打开的会话时，连接上的订阅与本地投影一并清掉，界面回到没有会话的状态。
+	 */
+	async deleteSession(sessionFile: string): Promise<void> {
+		await this.exclusive(async () => {
+			await this.transport.request("deleteSession", { sessionFile });
+			const opened = this.opened;
+			if (opened !== undefined && opened.file === sessionFile) {
+				await this.release();
+			}
+		});
+	}
+
+	/**
 	 * 会话级操作排队执行。
 	 *
 	 * 快速切换时后一次进入要等前一次收尾,最后一次选择的打开结果就是留在界面上的那份;

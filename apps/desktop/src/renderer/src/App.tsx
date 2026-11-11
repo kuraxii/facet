@@ -378,6 +378,38 @@ export function App() {
 		await client.revealProject(id);
 	}, []);
 
+	/** 会话改名。改的是当前会话时名字会随会话状态一起推过来，列表在这里重拉一次。 */
+	const renameSession = useCallback(
+		async (path: string, name: string | undefined) => {
+			await client.renameSession(path, name);
+			await refreshSessions();
+		},
+		[refreshSessions],
+	);
+
+	/**
+	 * 删除会话。
+	 *
+	 * 删的是当前打开的会话时，连接会连带释放，界面回到没有会话的状态，再重新拉起一个
+	 * 可用的会话或落到空状态页。
+	 */
+	const deleteSession = useCallback(
+		async (path: string) => {
+			await client.deleteSession(path);
+			const pool = (await refreshSessions()) ?? [];
+			if (activeFile !== path) {
+				return;
+			}
+			setActiveFile(undefined);
+			// 还有别的会话就切过去,一个都不剩时留在空状态页
+			const next = pickStartupSession(pool, bridge.projectDir);
+			if (next !== undefined) {
+				openSession(next.path, next.cwd);
+			}
+		},
+		[activeFile, openSession, refreshSessions],
+	);
+
 	const forkTurn = useCallback(
 		(beforeEntryId: string | undefined) => {
 			withTrust(session?.state.cwd, () => {
@@ -459,6 +491,8 @@ export function App() {
 				onRenameProject={renameProject}
 				onRemoveProject={removeProject}
 				onRevealProject={revealProject}
+				onRenameSession={renameSession}
+				onDeleteSession={deleteSession}
 				onToggleTheme={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
 			/>
 

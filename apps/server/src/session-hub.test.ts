@@ -1,4 +1,6 @@
-import { basename, resolve } from "node:path";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, join, resolve } from "node:path";
 import type { Entry, SessionEvent, SessionEventListener, SessionSnapshot } from "@facet/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -132,6 +134,13 @@ class FakeAgent implements HubAgent {
 			},
 			modelFallbackMessage: undefined,
 		};
+	}
+
+	/** 用例调用 setName 之后记录下来的名字 */
+	renamed: string | undefined;
+
+	setName(name: string): void {
+		this.renamed = name;
 	}
 
 	dispose(): void {
@@ -580,5 +589,40 @@ describe("查询", () => {
 
 	it("未登记的会话取快照报不存在", async () => {
 		await expect(hub.snapshot("nope")).rejects.toThrow("会话不存在");
+	});
+});
+
+describe("会话改名与删除", () => {
+	it("已打开的会话改名走运行态", async () => {
+		const root = await mkdtemp(join(tmpdir(), "facet-hub-rename-"));
+		const file = join(root, "s1.jsonl");
+		await writeFile(file, '{"type":"session","id":"s1"}\n', "utf8");
+		factory.ids.set(resolve(file), "s1");
+		const snapshot = await hub.openSession(file);
+		const agent = hub.agent(snapshot.id);
+
+		await hub.renameSession(file, "  新名字  ");
+		expect(agent.renamed).toBe("新名字");
+		await rm(root, { recursive: true, force: true });
+	});
+
+	it("会话文件不在盘上时改名与删除都报错", async () => {
+		await expect(hub.renameSession("/tmp/missing.jsonl", "x")).rejects.toThrow("会话文件不存在");
+		await expect(hub.deleteSession("/tmp/missing.jsonl")).rejects.toThrow("会话文件不存在");
+	});
+
+	it("删除已打开的会话先释放再删文件", async () => {
+		const root = await mkdtemp(join(tmpdir(), "facet-hub-delete-"));
+		const file = join(root, "s1.jsonl");
+		await writeFile(file, '{"type":"session","id":"s1"}\n', "utf8");
+		factory.ids.set(resolve(file), "s1");
+		const snapshot = await hub.openSession(file);
+		const agent = hub.agent(snapshot.id);
+
+		await hub.deleteSession(file);
+		expect(agent.disposed).toBe(true);
+		expect(hub.sessionIdByFile(file)).toBeUndefined();
+		await expect(readFile(file, "utf8")).rejects.toThrow();
+		await rm(root, { recursive: true, force: true });
 	});
 });

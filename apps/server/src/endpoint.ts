@@ -34,6 +34,7 @@ import {
 	SessionBoundaryNotFoundError,
 	SessionBusyError,
 	SessionEntryNotFoundError,
+	SessionFileMissingError,
 	type SessionHub,
 	SessionNotFoundError,
 } from "./session-hub.ts";
@@ -324,6 +325,16 @@ async function handleRequest(
 			context.factory.setProjectTrust(await resolveProjectDirectory(requiredString(source, "cwd")), trusted);
 			return {};
 		}
+		case "renameSession": {
+			const source = asObject(params);
+			await context.hub.renameSession(requiredString(source, "sessionFile"), optionalString(source, "name"));
+			return {};
+		}
+		case "deleteSession": {
+			const source = asObject(params);
+			await context.hub.deleteSession(requiredString(source, "sessionFile"));
+			return {};
+		}
 		case "revealProject": {
 			const source = asObject(params);
 			const id = requiredString(source, "id");
@@ -381,7 +392,8 @@ function toProtocolError(error: unknown): { code: ErrorCode; message: string } {
 	if (
 		error instanceof SessionEntryNotFoundError ||
 		error instanceof SessionBoundaryNotFoundError ||
-		error instanceof SessionBusyError
+		error instanceof SessionBusyError ||
+		error instanceof SessionFileMissingError
 	) {
 		return { code: "rejected", message: error.message };
 	}

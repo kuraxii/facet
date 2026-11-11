@@ -63,6 +63,26 @@ function retryOf(maintenance: Maintenance | undefined): { attempt: number; maxAt
 		: undefined;
 }
 
+/** 草稿在本地保存的键 */
+const DRAFTS_KEY = "facet.drafts";
+/** 还没打开会话时草稿用的键 */
+const NEW_DRAFT_KEY = "__new__";
+
+/** 读出保存的各会话草稿；读不懂时当作没有草稿。 */
+function readDrafts(): Record<string, string> {
+	try {
+		const parsed: unknown = JSON.parse(localStorage.getItem(DRAFTS_KEY) ?? "{}");
+		if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+			return {};
+		}
+		return Object.fromEntries(
+			Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+		);
+	} catch {
+		return {};
+	}
+}
+
 /** 读取上次选择的主题，缺省深色 */
 function readTheme(): ThemeName {
 	const stored = localStorage.getItem(THEME_KEY);
@@ -154,7 +174,8 @@ export function App() {
 	const [isProjectsStale, setIsProjectsStale] = useState(false);
 	const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
 	const [createCwd, setCreateCwd] = useState(bridge.projectDir);
-	const [draft, setDraft] = useState("");
+	/** 各会话的草稿，键为会话文件路径，新会话页面用 NEW_DRAFT_KEY */
+	const [drafts, setDrafts] = useState<Record<string, string>>(readDrafts);
 	const [theme, setTheme] = useState<ThemeName>(readTheme);
 	/** 设备上的偏好设置；没读到之前先用缺省值 */
 	const [settings, setSettings] = useState<FacetSettings>(DEFAULT_SETTINGS);
@@ -388,6 +409,32 @@ export function App() {
 		});
 	}, [openSession, refreshProjects, refreshSessions]);
 
+	/** 当前草稿落在哪个键：打开的会话按文件路径分开存，没有会话时存到新会话页面。 */
+	const draftKey = activeFile ?? NEW_DRAFT_KEY;
+	const draft = drafts[draftKey] ?? "";
+
+	/** 改当前草稿。延迟写入本地保存，切换会话时不丢。 */
+	const updateDraft = useCallback(
+		(change: string | ((current: string) => string)) => {
+			setDrafts((current) => {
+				const value = typeof change === "function" ? change(current[draftKey] ?? "") : change;
+				const next = { ...current };
+				if (value.length === 0) {
+					delete next[draftKey];
+				} else {
+					next[draftKey] = value;
+				}
+				return next;
+			});
+		},
+		[draftKey],
+	);
+
+	// 草稿写进本地保存，重启之后还在
+	useEffect(() => {
+		localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts));
+	}, [drafts]);
+
 	const send = useCallback(() => {
 		const text = draft.trim();
 		if (text.length === 0) {
@@ -412,18 +459,18 @@ export function App() {
 		if (entries.length === 0) {
 			return;
 		}
-		setDraft((current) => {
+		updateDraft((current) => {
 			const restored = entries.join("\n\n");
 			return current.trim().length === 0 ? restored : `${restored}\n\n${current}`;
 		});
-	}, [queued]);
+	}, [queued, updateDraft]);
 
 	useEffect(() => {
 		return client.onSent((text) => {
 			// 只收掉刚发出的那段,等待期间新输入的内容保留
-			setDraft((current) => (current.trim() === text ? "" : current));
+			updateDraft((current) => (current.trim() === text ? "" : current));
 		});
-	}, []);
+	}, [updateDraft]);
 
 	/**
 	 * 回退到某条用户消息之前:从那一轮末尾分出新会话并切过去,把这条消息的文本放回输入框。
@@ -435,7 +482,7 @@ export function App() {
 			withTrust(session?.state.cwd, () => {
 				runSessionAction(
 					async () => (await client.fork(entryId)).file,
-					() => setDraft(text),
+					() => updateDraft(() => text),
 				);
 			});
 		},
@@ -678,7 +725,7 @@ export function App() {
 								<QueueStrip queued={queued} onClear={takeBackQueue} />
 								<Composer
 									value={draft}
-									onChange={setDraft}
+									onChange={updateDraft}
 									onSend={send}
 									onStop={() => client.cancel()}
 									activity={activity}

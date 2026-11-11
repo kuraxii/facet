@@ -35,6 +35,8 @@ export interface SessionSidebarProps {
 	activeFile: string | undefined;
 	/** 正在运行的会话文件路径 */
 	runningFile: string | undefined;
+	/** 这个会话此刻的状态点：运行中或压缩中 */
+	runningDot?: SessionDot | undefined;
 	/** 没有选中项目时新建会话落在的目录 */
 	createCwd: string;
 	/** 当前主题 */
@@ -69,9 +71,12 @@ export interface SessionSidebarProps {
 	isSettingsOpen?: boolean;
 }
 
-/** 会话行状态点的样式类。 */
+/** 会话行状态点的样式类。压缩中用强调色常亮，运行中用警告色呼吸。 */
 function dotClass(dot: SessionDot): string {
-	return dot === "running" ? "dot is-warn pulse" : "dot is-off";
+	if (dot === "running") {
+		return "dot is-warn pulse";
+	}
+	return dot === "compacting" ? "dot is-acc" : "dot is-off";
 }
 
 /** 设备状态点的样式类。 */
@@ -115,6 +120,7 @@ export function SessionSidebar({
 	projects: storedProjects,
 	activeFile,
 	runningFile,
+	runningDot,
 	createCwd,
 	theme,
 	onSelect,
@@ -178,10 +184,11 @@ export function SessionSidebar({
 				hosts,
 				projects: storedProjects,
 				runningFile,
+				runningDot,
 				projectCwd: scopeCwd,
 				keyword,
 			}),
-		[sessions, hosts, storedProjects, runningFile, scopeCwd, keyword],
+		[sessions, hosts, storedProjects, runningFile, runningDot, scopeCwd, keyword],
 	);
 
 	const currentProject: SidebarProject | undefined =

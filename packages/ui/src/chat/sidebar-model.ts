@@ -12,10 +12,10 @@ export type HostState = "connected" | "connecting" | "offline";
 /**
  * 会话行左侧的状态点。
  *
- * 设计稿上的完成与未读两态需要设备侧的未读标记与待应答信息，当前只有运行与空闲两态，
+ * 设计稿上的完成与未读两态需要设备侧的未读标记与待应答信息，当前有运行、压缩与空闲三态，
  * 取值确定后才加入新值。
  */
-export type SessionDot = "running" | "idle";
+export type SessionDot = "running" | "compacting" | "idle";
 
 /** 队列分组的键，数组顺序即展示顺序。 */
 export type GroupKey = "running" | "today" | "yesterday" | "earlier";
@@ -122,6 +122,8 @@ export interface SidebarInput {
 	projects: readonly ProjectInfo[];
 	/** 正在运行的会话文件路径 */
 	runningFile: string | undefined;
+	/** 这个会话此刻的状态点，缺省按运行中显示 */
+	runningDot?: SessionDot | undefined;
 	/** 队列的范围：给出时只列该目录的会话，缺省列出全部 */
 	projectCwd?: string | undefined;
 	/** 会话标题关键词，空串表示不过滤 */
@@ -216,8 +218,16 @@ function shiftDay(dayStart: number, days: number): number {
 	return date.getTime();
 }
 
-/** 一条会话的展示数据。 */
-function toSession(summary: SessionSummary, runningFile: string | undefined): SidebarSession {
+/**
+ * 一条会话的展示数据。
+ *
+ * 只有当前打开的会话才有运行态:设备上的会话只有被打开时才可能跑一轮,其余都按空闲显示。
+ */
+function toSession(
+	summary: SessionSummary,
+	runningFile: string | undefined,
+	phase: SessionDot | undefined,
+): SidebarSession {
 	const isRunning = summary.path === runningFile;
 	return {
 		path: summary.path,
@@ -225,7 +235,7 @@ function toSession(summary: SessionSummary, runningFile: string | undefined): Si
 		modified: summary.modified,
 		messageCount: summary.messageCount,
 		isRunning,
-		dot: isRunning ? "running" : "idle",
+		dot: isRunning ? (phase ?? "running") : "idle",
 		project: baseName(summary.cwd),
 		cwd: summary.cwd,
 		host: undefined,
@@ -344,7 +354,7 @@ export function buildSidebar(input: SidebarInput): SidebarData {
 	const now = input.now ?? Date.now();
 	const keyword = (input.keyword ?? "").trim().toLowerCase();
 	const all = input.sessions
-		.map((summary) => toSession(summary, input.runningFile))
+		.map((summary) => toSession(summary, input.runningFile, input.runningDot))
 		.sort((left, right) => right.modified - left.modified);
 
 	const inScope =

@@ -1047,6 +1047,10 @@ svg.fl {
 	background: var(--ok);
 }
 
+.dot.is-acc {
+	background: var(--acc);
+}
+
 .dot.is-warn {
 	background: var(--warn);
 }

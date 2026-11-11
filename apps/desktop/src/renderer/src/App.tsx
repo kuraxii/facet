@@ -734,6 +734,7 @@ export function App() {
 				projects={projects}
 				activeFile={activeFile}
 				runningFile={activity === "idle" ? undefined : activeFile}
+				runningDot={activity === "compacting" ? "compacting" : "running"}
 				createCwd={createCwd}
 				theme={theme}
 				onSelect={(path) => void openSession(path)}

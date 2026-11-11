@@ -7,6 +7,7 @@ import {
 	CloseIcon,
 	Composer,
 	CreateProjectDialog,
+	EmptyState,
 	QueueStrip,
 	SessionSidebar,
 	type SidebarHost,
@@ -386,6 +387,22 @@ export function App() {
 		[runSessionAction, session?.state.cwd, withTrust],
 	);
 
+	/** 没有打开会话时新建落在的目录：优先上次用过的，其次第一个项目。 */
+	const emptyCreateCwd = createCwd.length > 0 ? createCwd : projects[0]?.cwd;
+	/** 会话错误条，打开类操作失败时共用。 */
+	const errorBar =
+		sessionError === undefined ? null : (
+			<div className="session-error">
+				<span className="session-error-text">{sessionError.message}</span>
+				<button type="button" className="btn" onClick={sessionError.retry}>
+					重试
+				</button>
+				<button type="button" className="ib" aria-label="关闭提示" onClick={() => setSessionError(undefined)}>
+					<CloseIcon size={12} />
+				</button>
+			</div>
+		);
+
 	const transcript = useMemo(() => (chat ? toTranscript(chat) : []), [chat]);
 	const { scrollRef, isPinned, scrollToBottom } = useStickToBottom(transcript, activeFile);
 
@@ -446,74 +463,77 @@ export function App() {
 			/>
 
 			<main className="main">
-				<section className="scroll" ref={scrollRef}>
-					<div className="column">
-						<ChatTranscript
-							items={transcript}
-							canFork={canFork}
-							onFork={forkTurn}
-							canRevert={canFork}
-							onRevert={revertTo}
-							retry={retryOf(session?.state.maintenance)}
-							renames={chat?.renames}
-							emptyHint="还没有消息,输入内容开始"
+				{session === undefined ? (
+					<div className="empty-wrap">
+						{errorBar}
+						<EmptyState
+							cwd={emptyCreateCwd}
+							canCreate={phase === "ready"}
+							onCreate={() => {
+								if (emptyCreateCwd !== undefined) {
+									createSession(emptyCreateCwd);
+								}
+							}}
+							onAddProject={() => setIsProjectDialogOpen(true)}
 						/>
 					</div>
-				</section>
+				) : (
+					<>
+						<section className="scroll" ref={scrollRef}>
+							<div className="column">
+								<ChatTranscript
+									items={transcript}
+									canFork={canFork}
+									onFork={forkTurn}
+									canRevert={canFork}
+									onRevert={revertTo}
+									retry={retryOf(session.state.maintenance)}
+									renames={chat?.renames}
+									emptyHint="还没有消息,输入内容开始"
+								/>
+							</div>
+						</section>
 
-				<div className="footer">
-					{isPinned ? null : (
-						<button
-							type="button"
-							className="to-bottom"
-							aria-label="回到底部"
-							onClick={() => scrollToBottom("smooth")}
-						>
-							<ArrowDownIcon size={16} />
-						</button>
-					)}
-					<div className="footer-column">
-						{sessionError ? (
-							<div className="session-error">
-								<span className="session-error-text">{sessionError.message}</span>
-								<button type="button" className="btn" onClick={sessionError.retry}>
-									重试
-								</button>
+						<div className="footer">
+							{isPinned ? null : (
 								<button
 									type="button"
-									className="ib"
-									aria-label="关闭提示"
-									onClick={() => setSessionError(undefined)}
+									className="to-bottom"
+									aria-label="回到底部"
+									onClick={() => scrollToBottom("smooth")}
 								>
-									<CloseIcon size={12} />
+									<ArrowDownIcon size={16} />
 								</button>
-							</div>
-						) : null}
-						<QueueStrip queued={queued} onClear={takeBackQueue} />
-						<Composer
-							value={draft}
-							onChange={setDraft}
-							onSend={send}
-							onStop={() => client.cancel()}
-							activity={activity}
-							model={session?.state.model}
-							thinkingLevel={session?.state.thinkingLevel}
-						/>
+							)}
+							<div className="footer-column">
+								{errorBar}
+								<QueueStrip queued={queued} onClear={takeBackQueue} />
+								<Composer
+									value={draft}
+									onChange={setDraft}
+									onSend={send}
+									onStop={() => client.cancel()}
+									activity={activity}
+									model={session.state.model}
+									thinkingLevel={session.state.thinkingLevel}
+								/>
 
-						{chat && chat.notices.length > 0 ? (
-							<div className="notices">
-								{chat.notices.map((notice) => (
-									<span
-										key={`${notice.level}:${notice.message}`}
-										className={notice.level === "error" ? "chip is-error" : "chip"}
-									>
-										{notice.message}
-									</span>
-								))}
+								{chat && chat.notices.length > 0 ? (
+									<div className="notices">
+										{chat.notices.map((notice) => (
+											<span
+												key={`${notice.level}:${notice.message}`}
+												className={notice.level === "error" ? "chip is-error" : "chip"}
+											>
+												{notice.message}
+											</span>
+										))}
+									</div>
+								) : null}
 							</div>
-						) : null}
-					</div>
-				</div>
+						</div>
+					</>
+				)}
 			</main>
 
 			<CreateProjectDialog

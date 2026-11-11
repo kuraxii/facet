@@ -1948,6 +1948,85 @@ svg.fl {
 	font-size: 12px;
 }
 
+.empty-wrap {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 10px;
+	padding: 18px 24px 0;
+}
+
+.empty-main {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+	padding: 40px 24px;
+	text-align: center;
+}
+
+.empty-title {
+	margin: 0;
+	color: var(--t1);
+	font-size: 17px;
+	font-weight: 600;
+}
+
+.empty-hint {
+	margin: 0;
+	max-width: 420px;
+	color: var(--t3);
+	font-size: 12.5px;
+	line-height: 1.6;
+	overflow-wrap: anywhere;
+}
+
+.empty-actions {
+	display: flex;
+	gap: 8px;
+	margin-top: 6px;
+}
+
+.empty-primary {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 32px;
+	padding: 0 14px;
+	border: 0;
+	border-radius: 8px;
+	background: var(--acc);
+	color: #fff;
+	font-size: 12.5px;
+	font-weight: 500;
+}
+
+.empty-primary:disabled {
+	background: var(--surface3);
+	color: var(--t3);
+	cursor: default;
+}
+
+.empty-secondary {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 32px;
+	padding: 0 14px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: var(--surface2);
+	color: var(--t2);
+	font-size: 12.5px;
+}
+
+.empty-secondary:hover {
+	background: var(--surface3);
+	color: var(--t1);
+}
+
 .trust-note {
 	display: flex;
 	gap: 8px;

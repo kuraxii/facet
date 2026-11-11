@@ -105,6 +105,20 @@ describe("SessionStore", () => {
 		expect(store.chatView(chatChannel)?.notices).toEqual([{ level: "info", message: "第一次" }]);
 	});
 
+	it("拒绝帧不进入归约", () => {
+		const store = new SessionStore();
+		store.ensureChat(chatChannel);
+		store.apply({
+			type: "action",
+			channel: chatChannel,
+			serverSeq: 0,
+			origin: { clientId: "c", clientSeq: 1 },
+			action: { type: "chat/notice", level: "error", message: "不该出现的提示" },
+			rejectionReason: "session is running",
+		});
+		expect(store.chatView(chatChannel)?.notices).toEqual([]);
+	});
+
 	it("序号跳跃时报出缺口并照常应用", () => {
 		const store = new SessionStore();
 		const gaps: ChannelGap[] = [];

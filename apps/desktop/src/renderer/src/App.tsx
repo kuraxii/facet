@@ -162,9 +162,16 @@ export function App() {
 		if (text.length === 0) {
 			return;
 		}
-		setDraft("");
+		// 草稿留到设备把这条消息放进对话再收,发送被拒时不用重打
 		client.send(text);
 	}, [draft]);
+
+	useEffect(() => {
+		return client.onSent((text) => {
+			// 只收掉刚发出的那段,等待期间新输入的内容保留
+			setDraft((current) => (current.trim() === text ? "" : current));
+		});
+	}, []);
 
 	const createProject = useCallback(
 		async (input: { cwd: string; name: string | undefined }) => {

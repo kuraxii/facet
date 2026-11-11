@@ -112,6 +112,10 @@ export class SessionStore {
 	 * 照常应用并报出缺口,由调用方决定是否重新拉取。
 	 */
 	apply(frame: ActionFrame): void {
+		// 拒绝帧不占通道序号,也没有被应用过,不能进入归约
+		if (frame.rejectionReason !== undefined) {
+			return;
+		}
 		const parsed = parseChannel(frame.channel);
 		if (!parsed) {
 			return;

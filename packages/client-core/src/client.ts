@@ -78,6 +78,9 @@ export class SessionClient {
 	private readonly resyncing = { session: false, chat: false };
 	private handshake: DeviceHandshake | undefined;
 	private opened: OpenedSession | undefined;
+	/** 等设备确认的这次发送 */
+	private pendingSend: { clientSeq: number; text: string } | undefined;
+	private readonly sentListeners = new Set<(text: string) => void>();
 	/** 是否已经挂了缺口监听,避免重复注册 */
 	private isGapWatched = false;
 	/** 下一页更早历史的游标,为空表示已经到最早 */
@@ -128,8 +131,13 @@ export class SessionClient {
 		this.handshake = handshake;
 		this.stopActions?.();
 		this.stopActions = this.transport.onAction((frame) => {
+			if (frame.rejectionReason !== undefined) {
+				this.handleRejection(frame, frame.rejectionReason);
+				return;
+			}
 			this.state.apply(frame);
 			this.observe(frame);
+			this.confirmSend(frame);
 		});
 		this.stopState ??= this.transport.onStateChange?.((state) => {
 			if (state === "ready") {
@@ -281,9 +289,59 @@ export class SessionClient {
 		}
 	}
 
-	/** 发一条消息。 */
+	/**
+	 * 发一条消息。
+	 *
+	 * 界面在设备把这条用户消息放进对话之后才算发出:那之前草稿留在输入框,被拒时用户可以
+	 * 直接改或重发。
+	 */
 	send(text: string): number {
-		return this.transport.dispatch(this.requireOpened().chatChannel, { type: "chat/turnStarted", text });
+		const clientSeq = this.transport.dispatch(this.requireOpened().chatChannel, {
+			type: "chat/turnStarted",
+			text,
+		});
+		this.pendingSend = { clientSeq, text };
+		return clientSeq;
+	}
+
+	/** 设备把这条消息放进对话时回调,带上当时的文本。 */
+	onSent(listener: (text: string) => void): () => void {
+		this.sentListeners.add(listener);
+		return () => {
+			this.sentListeners.delete(listener);
+		};
+	}
+
+	/** 设备确认消息已进入对话,通知界面收起草稿。 */
+	private confirmSend(frame: ActionFrame): void {
+		const opened = this.opened;
+		const pending = this.pendingSend;
+		if (opened === undefined || pending === undefined) {
+			return;
+		}
+		if (frame.channel !== opened.chatChannel || frame.action.type !== "chat/messageAppended") {
+			return;
+		}
+		if (frame.action.message.role !== "user") {
+			return;
+		}
+		this.pendingSend = undefined;
+		for (const listener of [...this.sentListeners]) {
+			listener(pending.text);
+		}
+	}
+
+	/**
+	 * 处理设备拒绝的动作。
+	 *
+	 * 拒绝帧不进序号流,也不参与归约;原因目前只写进控制台,界面提示还没有做。
+	 */
+	private handleRejection(frame: ActionFrame, reason: string): void {
+		const clientSeq = frame.origin?.clientSeq;
+		if (clientSeq !== undefined && this.pendingSend?.clientSeq === clientSeq) {
+			this.pendingSend = undefined;
+		}
+		console.error(`[facet] 动作被设备拒绝:${frame.action.type}(${reason})`);
 	}
 
 	/**
@@ -336,6 +394,7 @@ export class SessionClient {
 		this.opened = undefined;
 		this.olderCursor = undefined;
 		this.lastEntryId = undefined;
+		this.pendingSend = undefined;
 		if (!opened) {
 			return;
 		}

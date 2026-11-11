@@ -170,6 +170,18 @@ class FakeTransport implements SessionTransport {
 		};
 	}
 
+	/** 推一条带拒绝原因的动作帧,序号取通道当前值,与设备侧一致。 */
+	reject(channel: Channel, clientSeq: number, action: Action, reason: string): void {
+		this.listener?.({
+			type: "action",
+			channel,
+			action,
+			serverSeq: this.lastSeq.get(channel) ?? 0,
+			origin: { clientId: "c", clientSeq },
+			rejectionReason: reason,
+		});
+	}
+
 	/** 按通道推动作,序号自动递增。 */
 	emit(channel: Channel, action: Action, seq?: number): void {
 		const previous = this.lastSeq.get(channel) ?? 0;
@@ -216,6 +228,49 @@ describe("SessionClient", () => {
 		expect(client.sessionView()?.state.phase).toBe("stopping");
 		transport.emit(SESSION, { type: "session/phase", phase: "idle", maintenance: undefined });
 		expect(client.sessionView()?.state.phase).toBe("idle");
+	});
+
+	it("用户消息进入对话后才确认发送", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		const sent: string[] = [];
+		client.onSent((text) => sent.push(text));
+		client.send("你好");
+		// 设备先回别的动作,不算确认
+		transport.emit(CHAT, { type: "chat/notice", level: "info", message: "开始" });
+		expect(sent).toEqual([]);
+		transport.emit(CHAT, { type: "chat/messageAppended", messageId: "m1", message: assistant("答复") });
+		expect(sent).toEqual([]);
+		transport.emit(CHAT, {
+			type: "chat/messageAppended",
+			messageId: "m2",
+			message: { role: "user", content: [{ type: "text", text: "你好" }], timestamp: 1 },
+		});
+		expect(sent).toEqual(["你好"]);
+	});
+
+	it("发送被拒时打印错误且不确认", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		const errors: string[] = [];
+		const spy = vi.spyOn(console, "error").mockImplementation((message: string) => {
+			errors.push(message);
+		});
+		const sent: string[] = [];
+		client.onSent((text) => sent.push(text));
+		const clientSeq = client.send("你好");
+		transport.reject(CHAT, clientSeq, { type: "chat/turnStarted", text: "你好" }, "session is running");
+		expect(sent).toEqual([]);
+		expect(errors).toHaveLength(1);
+		expect(errors[0]).toContain("session is running");
+		// 之后同类消息也不会再触发确认
+		transport.emit(CHAT, {
+			type: "chat/messageAppended",
+			messageId: "m3",
+			message: { role: "user", content: [{ type: "text", text: "你好" }], timestamp: 1 },
+		});
+		expect(sent).toEqual([]);
+		spy.mockRestore();
 	});
 
 	it("项目请求带上参数", async () => {

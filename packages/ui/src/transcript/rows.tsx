@@ -24,7 +24,13 @@ export interface ChatTranscriptProps {
 	/** 回退到这条用户消息之前的一轮末尾,连同这条消息的文本一起带出 */
 	onRevert: (entryId: string, text: string) => void;
 	/** 正在进行的自动重试,没有则为空 */
-	retry?: { attempt: number; maxAttempts: number } | undefined;
+	retry?: { attempt: number; maxAttempts: number; delayMs: number } | undefined;
+	/** 重试这一轮:按最后一条用户消息重新发一次,不重复添加用户消息 */
+	onRetryTurn?: ((entryId: string, text: string) => void) | undefined;
+	/** 打开设置里与错误有关的那一页 */
+	onOpenSettings?: (() => void) | undefined;
+	/** 复制错误详情 */
+	onCopyDetails?: ((text: string) => void) | undefined;
 	/** 没有任何内容时显示的提示 */
 	emptyHint?: string;
 	/** 实时消息提升为历史消息时的标识迁移，用来搬动按行标识保存的收起状态 */
@@ -36,6 +42,19 @@ export interface ChatTranscriptProps {
  *
  * 回合还在跑的时候没有结束时间,界面每秒取一次当前时间自己计时;没有运行中的行时不挂定时器。
  */
+/** 重试倒计时的文案,没有剩余时间时为空。 */
+function retryDelayText(
+	delayMs: number,
+	startedAt: number | undefined,
+	now: number | undefined,
+): string | undefined {
+	if (delayMs <= 0 || startedAt === undefined || now === undefined) {
+		return undefined;
+	}
+	const left = Math.ceil((startedAt + delayMs - now) / 1000);
+	return left <= 0 ? "正在重试…" : `${left} 秒后重试`;
+}
+
 function useNow(isTicking: boolean): number | undefined {
 	const [now, setNow] = useState<number | undefined>(undefined);
 	useEffect(() => {
@@ -310,6 +329,9 @@ export function ChatTranscript({
 	canRevert,
 	onRevert,
 	retry,
+	onRetryTurn,
+	onOpenSettings,
+	onCopyDetails,
 	emptyHint,
 	renames,
 }: ChatTranscriptProps) {
@@ -319,6 +341,12 @@ export function ChatTranscript({
 	const [overrides, setOverrides] = useState<ReadonlyMap<string, boolean>>(() => new Map());
 	const isTicking = rows.some((row) => row.isStreaming && row.startedAt !== undefined);
 	const now = useNow(isTicking);
+	// 重试开始的时刻,倒计时以它为准;重试结束或次数变化时重新计时
+	const retryKey = retry === undefined ? undefined : `${retry.attempt}/${retry.maxAttempts}`;
+	const [retryStartedAt, setRetryStartedAt] = useState<number | undefined>(undefined);
+	useEffect(() => {
+		setRetryStartedAt(retryKey === undefined ? undefined : Date.now());
+	}, [retryKey]);
 
 	// 一轮结束、消息提升为历史消息后行标识会变，把按旧标识保存的收起状态搬到新标识上
 	useEffect(() => {
@@ -409,11 +437,43 @@ export function ChatTranscript({
 
 				if (row.kind === "error") {
 					const text = textOf(row.items.flatMap((item) => item.parts));
+					const message = text.length > 0 ? text : "运行出错";
+					// 重试按最后一条用户消息重发一次,失败的那条助手消息留在历史里
+					const lastUser = [...rows].reverse().find((item) => item.kind === "user");
+					const retryTarget =
+						lastUser === undefined
+							? undefined
+							: {
+									entryId: lastUser.items[0]?.entryId,
+									text: textOf(lastUser.items.flatMap((item) => item.parts)),
+								};
+					const canRetry = onRetryTurn !== undefined && canRevert && retryTarget?.entryId !== undefined;
 					return (
 						<Shell key={row.id} className="is-error">
 							<div className="error-line">
 								<b>出错</b>
-								<span className="t2">{text.length > 0 ? text : "运行出错"}</span>
+								<span className="t2">{message}</span>
+							</div>
+							<div className="error-actions">
+								{canRetry ? (
+									<button
+										type="button"
+										className="btn"
+										onClick={() => onRetryTurn(retryTarget.entryId as string, retryTarget.text)}
+									>
+										重试
+									</button>
+								) : null}
+								{onOpenSettings === undefined ? null : (
+									<button type="button" className="btn" onClick={onOpenSettings}>
+										打开设置
+									</button>
+								)}
+								{onCopyDetails === undefined ? null : (
+									<button type="button" className="btn" onClick={() => onCopyDetails(message)}>
+										复制详情
+									</button>
+								)}
 							</div>
 						</Shell>
 					);
@@ -501,6 +561,9 @@ export function ChatTranscript({
 						<span className="chip is-warn">
 							<i className="dot is-warn pulse" />第 {retry.attempt}/{retry.maxAttempts} 次重试
 						</span>
+						{retryDelayText(retry.delayMs, retryStartedAt, now) === undefined ? null : (
+							<span className="t2">{retryDelayText(retry.delayMs, retryStartedAt, now)}</span>
+						)}
 					</div>
 				</Shell>
 			) : null}

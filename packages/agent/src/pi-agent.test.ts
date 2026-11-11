@@ -160,7 +160,7 @@ describe("阶段与维护动作", () => {
 		emitToAgent({ type: "compaction_end", reason: "threshold", aborted: false, willRetry: false });
 		expect(agent.currentMaintenance).toBeUndefined();
 		emitToAgent({ type: "auto_retry_start", attempt: 2, maxAttempts: 3, delayMs: 500 });
-		expect(agent.currentMaintenance).toEqual({ kind: "retry", attempt: 2, maxAttempts: 3 });
+		expect(agent.currentMaintenance).toEqual({ kind: "retry", attempt: 2, maxAttempts: 3, delayMs: 500 });
 		emitToAgent({ type: "auto_retry_end", success: true, attempt: 2 });
 		expect(agent.currentMaintenance).toBeUndefined();
 	});

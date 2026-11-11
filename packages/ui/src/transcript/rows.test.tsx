@@ -106,3 +106,54 @@ describe("被中止的一轮", () => {
 		expect(html).toContain("已停止");
 	});
 });
+
+describe("错误卡片", () => {
+	const errorItem: TranscriptItem = {
+		kind: "error",
+		id: "e:err",
+		entryId: "err",
+		role: "assistant",
+		stopReason: "error",
+		parts: [{ kind: "text", partId: "text:0", text: "429 请求过多" }],
+		isStreaming: false,
+		startedAt: 1,
+		endedAt: 2,
+	};
+
+	function renderWithActions(onRetryTurn: (entryId: string, text: string) => void): string {
+		return renderToStaticMarkup(
+			createElement(ChatTranscript, {
+				items: [userItem("e:u1", "u1", "帮我看下日志"), errorItem],
+				canFork: true,
+				onFork: () => {},
+				canRevert: true,
+				onRevert: () => {},
+				onRetryTurn,
+				onOpenSettings: () => {},
+				onCopyDetails: () => {},
+			}),
+		);
+	}
+
+	it("显示错误原文与三个动作", () => {
+		const html = renderWithActions(() => {});
+		expect(html).toContain("429 请求过多");
+		expect(html).toContain("重试");
+		expect(html).toContain("打开设置");
+		expect(html).toContain("复制详情");
+	});
+
+	it("运行中不给重试入口", () => {
+		const html = renderToStaticMarkup(
+			createElement(ChatTranscript, {
+				items: [userItem("e:u1", "u1", "帮我看下日志"), errorItem],
+				canFork: false,
+				onFork: () => {},
+				canRevert: false,
+				onRevert: () => {},
+				onRetryTurn: () => {},
+			}),
+		);
+		expect(html).not.toContain(">重试<");
+	});
+});

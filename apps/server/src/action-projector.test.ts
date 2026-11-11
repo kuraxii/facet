@@ -17,7 +17,7 @@ describe("ActionProjector", () => {
 		const projected = projector.project({
 			type: "phase",
 			phase: "running",
-			maintenance: { kind: "retry", attempt: 1, maxAttempts: 3 },
+			maintenance: { kind: "retry", attempt: 1, maxAttempts: 3, delayMs: 2000 },
 		});
 		expect(projected).toEqual([
 			{
@@ -25,7 +25,7 @@ describe("ActionProjector", () => {
 				action: {
 					type: "session/phase",
 					phase: "running",
-					maintenance: { kind: "retry", attempt: 1, maxAttempts: 3 },
+					maintenance: { kind: "retry", attempt: 1, maxAttempts: 3, delayMs: 2000 },
 				},
 			},
 		]);

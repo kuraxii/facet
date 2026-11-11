@@ -59,9 +59,11 @@ type Phase = "connecting" | "ready" | "failed";
 const THEME_KEY = "facet.theme";
 
 /** 等重试期间给对话面板的提示,其余维护动作不显示。 */
-function retryOf(maintenance: Maintenance | undefined): { attempt: number; maxAttempts: number } | undefined {
+function retryOf(
+	maintenance: Maintenance | undefined,
+): { attempt: number; maxAttempts: number; delayMs: number } | undefined {
 	return maintenance?.kind === "retry"
-		? { attempt: maintenance.attempt, maxAttempts: maintenance.maxAttempts }
+		? { attempt: maintenance.attempt, maxAttempts: maintenance.maxAttempts, delayMs: maintenance.delayMs }
 		: undefined;
 }
 
@@ -584,6 +586,27 @@ export function App() {
 	 * 添加接口返回的数据直接并进列表，后续的列表刷新失败只标脏，已经添加成功的项目不会
 	 * 从侧栏消失；拉取会话失败同样不影响添加结果。
 	 */
+	/**
+	 * 重试失败的一轮。
+	 *
+	 * 从这条用户消息之前分叉出新会话并立刻重发同一段文本:新会话里只有一份用户消息,失败
+	 * 的那次调用留在原会话里,不会重复追加。
+	 */
+	const retryTurn = useCallback(
+		(entryId: string, text: string) => {
+			withTrust(session?.state.cwd, () => {
+				runSessionAction(
+					async () => (await client.fork(entryId)).file,
+					() => {
+						updateDraft(() => text);
+						client.send(text);
+					},
+				);
+			});
+		},
+		[runSessionAction, session?.state.cwd, updateDraft, withTrust],
+	);
+
 	const createProject = useCallback(
 		async (input: { cwd: string; name: string | undefined }) => {
 			const created = await client.addProject({
@@ -797,6 +820,14 @@ export function App() {
 									canRevert={canFork}
 									onRevert={revertTo}
 									retry={retryOf(session.state.maintenance)}
+									onRetryTurn={retryTurn}
+									onOpenSettings={() => {
+										setSettingsSection("providers");
+										setView("settings");
+									}}
+									onCopyDetails={(text) => {
+										void navigator.clipboard.writeText(text).catch(() => undefined);
+									}}
 									renames={chat?.renames}
 									emptyHint="还没有消息,输入内容开始"
 								/>

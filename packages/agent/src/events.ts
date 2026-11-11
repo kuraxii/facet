@@ -41,10 +41,25 @@ export function nextTurnState(event: AgentSessionEvent, current: TurnState): Tur
 		case "compaction_end":
 			return current.maintenance === undefined ? undefined : { ...current, maintenance: undefined };
 		case "auto_retry_start":
-		case "summarization_retry_scheduled":
 			return {
 				...current,
-				maintenance: { kind: "retry", attempt: event.attempt, maxAttempts: event.maxAttempts },
+				maintenance: {
+					kind: "retry",
+					attempt: event.attempt,
+					maxAttempts: event.maxAttempts,
+					delayMs: event.delayMs,
+				},
+			};
+		case "summarization_retry_scheduled":
+			// 摘要重试没有给出等待时长，按零处理，界面只显示次数
+			return {
+				...current,
+				maintenance: {
+					kind: "retry",
+					attempt: event.attempt,
+					maxAttempts: event.maxAttempts,
+					delayMs: 0,
+				},
 			};
 		case "auto_retry_end":
 		case "summarization_retry_finished":

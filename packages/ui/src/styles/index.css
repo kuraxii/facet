@@ -1354,6 +1354,12 @@ svg.fl {
 
 /* 错误与提示 */
 
+.error-actions {
+	display: flex;
+	gap: 6px;
+	margin-top: 8px;
+}
+
 .error-line {
 	display: flex;
 	align-items: center;

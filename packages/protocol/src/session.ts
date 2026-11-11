@@ -25,7 +25,13 @@ export type Maintenance =
 			/** 压缩后的估算 token 数,结束时才有 */
 			estimatedTokensAfter: number | undefined;
 	  }
-	| { kind: "retry"; attempt: number; maxAttempts: number };
+	| {
+			kind: "retry";
+			attempt: number;
+			maxAttempts: number;
+			/** 距离下一次尝试还有多久，界面据此显示倒计时 */
+			delayMs: number;
+	  };
 
 /** 压缩的触发来源。manual 为手动触发，threshold 为达到阈值，overflow 为上下文溢出。 */
 export type CompactionReason = "manual" | "threshold" | "overflow";

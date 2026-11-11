@@ -1,4 +1,4 @@
-import { type DeviceHandshake, SessionClient, toTranscript } from "@facet/client-core";
+import { chatActivity, type DeviceHandshake, SessionClient, toTranscript } from "@facet/client-core";
 import type { ProjectInfo, SessionSummary } from "@facet/protocol";
 import { WsTransport } from "@facet/transport/ws";
 import {
@@ -216,6 +216,10 @@ export function App() {
 		);
 	}
 
+	// 对话此刻的状态由会话状态与中止请求合并得出,界面不自己拼布尔量
+	const activity = chatActivity(session, chat);
+	const canFork = activity === "idle" && chat !== undefined && !chat.willRetry && chat.retry === undefined;
+
 	return (
 		<div className="shell">
 			<SessionSidebar
@@ -223,7 +227,7 @@ export function App() {
 				hosts={hosts}
 				projects={projects}
 				activeFile={activeFile}
-				runningFile={chat?.isRunning === true ? activeFile : undefined}
+				runningFile={activity === "idle" ? undefined : activeFile}
 				createCwd={createCwd}
 				theme={theme}
 				onSelect={(path) => void openSession(path)}
@@ -241,7 +245,7 @@ export function App() {
 					<div className="column">
 						<ChatTranscript
 							items={transcript}
-							canFork={chat !== undefined && !chat.isRunning && !chat.willRetry && chat.retry === undefined}
+							canFork={canFork}
 							onFork={forkTurn}
 							retry={chat?.retry}
 							renames={chat?.renames}
@@ -267,7 +271,7 @@ export function App() {
 							onChange={setDraft}
 							onSend={send}
 							onStop={() => client.cancel()}
-							isRunning={chat?.isRunning === true}
+							activity={activity}
 							model={session?.model}
 							thinkingLevel={session?.thinkingLevel}
 						/>

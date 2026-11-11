@@ -184,9 +184,9 @@ export function reduceChat(view: ChatView, action: Action): ChatView {
 		case "chat/queueChanged":
 			return { ...view, queue: { steering: action.steering, followUp: action.followUp } };
 		case "chat/turnCompleted":
-			return { ...view, isRunning: false, willRetry: action.willRetry };
+			return { ...view, willRetry: action.willRetry };
 		case "chat/settled":
-			return { ...view, isRunning: false, willRetry: false, retry: undefined };
+			return { ...view, willRetry: false, retry: undefined, stopping: false };
 		case "chat/retryStarted":
 			return { ...view, retry: { attempt: action.attempt, maxAttempts: action.maxAttempts } };
 		case "chat/retryEnded":
@@ -197,7 +197,8 @@ export function reduceChat(view: ChatView, action: Action): ChatView {
 				notices: appendNotice(view.notices, { level: action.level, message: action.message }),
 			};
 		case "chat/turnStarted":
-			return { ...view, isRunning: true, willRetry: false };
+			// 运行状态由 session/status 反映,这个动作只表示端点发出了这条消息
+			return view;
 		case "chat/pendingMessageSet": {
 			const key = action.kind === "steering" ? "steering" : "followUp";
 			return { ...view, queue: { ...view.queue, [key]: [...view.queue[key], action.text] } };

@@ -4,6 +4,7 @@
  * 输入框、发送与停止、以及当前模型与思考档位的两个芯片。附件与引用还没有实现,
  * 按钮保持可见但不可点,避免与设计稿的布局产生落差。
  */
+import type { ChatActivity } from "@facet/client-core";
 import type { ModelInfo, ThinkingLevel } from "@facet/protocol";
 import { ClipIcon, SendIcon, StopIcon } from "../transcript/icons.tsx";
 
@@ -17,8 +18,8 @@ export interface ComposerProps {
 	onSend: () => void;
 	/** 停止运行 */
 	onStop: () => void;
-	/** 是否有回合在运行 */
-	isRunning: boolean;
+	/** 对话此刻的状态 */
+	activity: ChatActivity;
 	/** 当前模型 */
 	model: ModelInfo | undefined;
 	/** 当前思考档位 */
@@ -40,12 +41,12 @@ export function Composer({
 	onChange,
 	onSend,
 	onStop,
-	isRunning,
+	activity,
 	model,
 	thinkingLevel,
 	onCycleModel,
 }: ComposerProps) {
-	const canSend = value.trim().length > 0 && !isRunning;
+	const canSend = value.trim().length > 0 && activity === "idle";
 
 	return (
 		<div className="composer">
@@ -82,12 +83,12 @@ export function Composer({
 				</button>
 				<span className="chip">思考 · {thinkingLevel ?? "默认"}</span>
 				<span className="composer-send">
-					{isRunning ? (
-						<button type="button" className="btn" onClick={onStop}>
+					{activity === "idle" ? null : (
+						<button type="button" className="btn" onClick={onStop} disabled={activity === "stopping"}>
 							<StopIcon size={11} />
-							停止
+							{activity === "stopping" ? "停止中" : "停止"}
 						</button>
-					) : null}
+					)}
 					<button type="button" className="send" aria-label="发送" onClick={onSend} disabled={!canSend}>
 						<SendIcon size={16} />
 					</button>

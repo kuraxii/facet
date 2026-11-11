@@ -1,6 +1,6 @@
 # 进度与待办
 
-PoC 阶段结束。本文件记录 PoC 覆盖到的范围与已知的打磨项;功能推进顺序见 `todo.md`。
+PoC 阶段结束。本文件记录 PoC 覆盖到的范围、已知的打磨项与已知缺陷;功能推进顺序见 `todo.md`。
 
 ## 一、PoC 覆盖范围
 
@@ -51,3 +51,48 @@ PoC 不做,记在这里,按「影响基本使用」到「结构」排序。
 - **工具卡的成败**只靠颜色区分,不写「完成」「失败」;执行中仍写「执行中」
 - **历史工具耗时**靠协议补的 `durationMs`;更早的会话文件里没有该字段时,工具卡不显示时间
 - **历史分页**只映射窗口内的条目,并且只取活动分支;游标用条目 id,跨进程重启仍然有效
+- **运行状态**取设备的 `session/status`(`idle`、`running`、`compacting`),对话视图不再维护一份 `isRunning`
+- **中止请求**由客户端自己记下 `stopping`,直到 `chat/settled` 收尾;被中止的助手消息按 `stopReason` 在行末标「已停止」
+- **界面读一个状态**`chatActivity(session, chat)` 把会话状态与中止请求合成 `idle`、`running`、`compacting`、`stopping` 四值,发送与停止按钮按它决定形态
+- **动作的持有**`hub.withSession()` 在调用时同步登记持有,归还之前会话不会被空闲回收;显式 `release()` 遇到持有会挂起,等最后一个归还再执行
+- **同一会话的动作串行执行**,后到的动作看到前一个动作完成后的状态;`PiAgent.prompt` 在运行开始后即返回,不再等整轮结束,停止请求不会被整轮阻塞
+
+## 四、已知缺陷
+
+记录已经定位、尚未修复的问题。每条给出触发条件与修改方向,修复顺序见本节末尾。
+
+### 4.1 运行状态与动作回执
+
+| # | 现象 | 原因 |
+|---|---|---|
+| D2 | 运行期再发一条消息,消息消失且没有提示 | 端点 guard 抛「session is running, streamingBehavior is required」(串行队列保证这是确定行为);草稿在 `send()` 里已经清空 |
+| D3 | 压缩期间发送,消息消失 | pi 抛「Cannot submit a prompt while compaction is in progress」;压缩进度条可见时用户仍可发送 |
+| D4 | 切到没有凭证的模型,芯片仍显示旧模型 | `AgentSession.setModel` 抛「No API key for p/i」,回执是带 `rejectionReason` 的动作帧,客户端不读 |
+| D7 | 排队消息没有支撑 | `chat/pendingMessageSet` 与 `chat/queueCleared` 两个方向都没有调用者:`client-core` 没有对应方法,设备侧只处理不产出 |
+
+### 4.2 `rejectionReason` 的接收路径全部失效
+
+帧由 `endpoint.ts` 在 `applyAction` 抛错时发出,`serverSeq` 取 `hub.lastSeq(channel)`,刻意不占新序号。客户端 `SessionStore.apply` 先按序号判重,而 `packages/client-core` 与 `packages/transport` 都没有读取 `rejectionReason` 的地方:
+
+| 通道状态 | 结果 |
+|---|---|
+| 通道上已有动作(`lastSeq > 0`) | 帧的 `serverSeq` 等于当前最后序号,判为重复,整帧丢弃 |
+| 通道上还没有动作(`lastSeq === 0`) | 判重不成立,被拒绝的动作被当成真实动作归约一遍。当前 `chat/turnStarted` 的归约是空操作,所以症状不明显;换成带状态的动作用同样的条件就会写进视图 |
+| 通道未订阅 | `apply` 里的 `?? createChatSlot(...)` 新建空槽,帧进入没人看的视图 |
+
+同步阶段抛的错走另一条路:`requiredChannel` 失败、动作缺 `type` 时直接 `ws.close(1008)`,不产生 `rejectionReason`。设备侧也没有按 `clientSeq` 去重。
+
+### 4.3 中止时的界面表现
+
+| 现象 | 位置 |
+|---|---|
+| 助手消息里没有对应视图的 toolCall 块固定按 `status: "done"` 渲染,中止时必然命中,显示成「已完成、无输出」 | `packages/client-core/src/transcript.ts` |
+| 流刚开始就被打断的中止消息 `content` 为空,归入过程行 | `packages/client-core/src/transcript.ts`、`packages/ui/src/transcript/group.ts` |
+| `chat/settled` 带的 `aborted` 在客户端没有消费方,中止与正常结束只靠各条消息的 `stopReason` 区分 | 全包 |
+| 未被执行的工具调用只有消息内容里的块,没有事件与结果,界面无法与「执行完但没输出」区分 | 协议边界 |
+
+### 修复顺序
+
+1. D2/D3/D4 的可见性:`rejectionReason` 转成 `chat/notice` 且不进归约。
+2. 4.3 的两条:未执行工具的状态、空内容中止消息的呈现。
+3. D7 随排队功能一起做。

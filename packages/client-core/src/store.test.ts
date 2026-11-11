@@ -69,10 +69,19 @@ describe("SessionStore", () => {
 	it("按通道种类分派到各自的视图", () => {
 		const store = new SessionStore();
 		store.apply(frame(sessionChannel, 1, { type: "session/status", status: "running" }));
-		store.apply(frame(chatChannel, 1, { type: "chat/turnStarted", text: "hi" }));
+		store.apply(frame(chatChannel, 1, { type: "chat/notice", level: "info", message: "hi" }));
 		expect(store.sessionView(sessionChannel)?.status).toBe("running");
-		expect(store.chatView(chatChannel)?.isRunning).toBe(true);
+		expect(store.chatView(chatChannel)?.notices).toHaveLength(1);
 		expect(store.sessionView(chatChannel)).toBeUndefined();
+	});
+
+	it("中止请求置停止中,回合收尾后清掉", () => {
+		const store = new SessionStore();
+		store.ensureChat(chatChannel);
+		store.markStopping(chatChannel);
+		expect(store.chatView(chatChannel)?.stopping).toBe(true);
+		store.apply(frame(chatChannel, 1, { type: "chat/settled", aborted: true }));
+		expect(store.chatView(chatChannel)?.stopping).toBe(false);
 	});
 
 	it("重复序号的帧被丢弃", () => {

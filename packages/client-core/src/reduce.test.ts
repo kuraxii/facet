@@ -99,9 +99,8 @@ describe("reduceChat", () => {
 		expect(view.toolCalls.c1).toMatchObject({ isRunning: false, durationMs: 12, isError: false });
 	});
 
-	it("终局信号清掉运行与重试状态", () => {
-		let view = reduceChat(chat(), { type: "chat/turnStarted", text: "hi" });
-		view = reduceChat(view, {
+	it("终局信号清掉重试状态", () => {
+		let view = reduceChat(chat(), {
 			type: "chat/retryStarted",
 			attempt: 1,
 			maxAttempts: 3,
@@ -109,9 +108,14 @@ describe("reduceChat", () => {
 			error: "限流",
 		});
 		view = reduceChat(view, { type: "chat/turnCompleted", willRetry: true });
-		expect(view).toMatchObject({ isRunning: false, willRetry: true });
-		view = reduceChat(view, { type: "chat/settled", aborted: false });
-		expect(view).toMatchObject({ isRunning: false, willRetry: false, retry: undefined });
+		expect(view).toMatchObject({ willRetry: true });
+		view = reduceChat(view, { type: "chat/settled", aborted: true });
+		expect(view).toMatchObject({ willRetry: false, retry: undefined });
+	});
+
+	it("回合收尾清掉停止中状态", () => {
+		const view = { ...chat(), stopping: true };
+		expect(reduceChat(view, { type: "chat/settled", aborted: true }).stopping).toBe(false);
 	});
 
 	it("排队变化两边都记录", () => {

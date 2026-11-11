@@ -125,6 +125,12 @@ interface ChannelState {
 /** 会话的寿命阶段。opening 表示正在建立,此时还没有 agent。 */
 type SessionPhase = "opening" | "open" | "draining";
 
+/** 动作执行期间的持有。取得与登记同步完成,不需要 await。 */
+export interface SessionLease {
+	/** 归还,可重复调用 */
+	release(): void;
+}
+
 interface SessionState<A extends HubAgent> {
 	/** 主键,来自会话文件头部 */
 	readonly sessionId: string;
@@ -134,6 +140,12 @@ interface SessionState<A extends HubAgent> {
 	unsubscribe: (() => void) | undefined;
 	/** 正在看这个会话的端 */
 	readonly holders: Set<string>;
+	/** 在途的动作与请求数。大于零时不会被空闲回收 */
+	holds: number;
+	/** 持有归零之后再执行释放 */
+	pendingRelease: boolean;
+	/** 同一会话的动作串行执行 */
+	tail: Promise<void>;
 	phase: SessionPhase;
 	/** 建立中的单飞句柄,建立结束即清空 */
 	opening: Promise<void> | undefined;
@@ -215,6 +227,9 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 			agent: undefined,
 			unsubscribe: undefined,
 			holders: new Set(),
+			holds: 0,
+			pendingRelease: false,
+			tail: Promise.resolve(),
 			phase: "opening",
 			opening: undefined,
 			closeTimer: undefined,
@@ -251,14 +266,20 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		if (source?.agent?.isBusy === true) {
 			throw new SessionBusyError(source.sessionId);
 		}
-		const entryId = this.forkPoint(source, options.beforeEntryId);
-		const agent = await this.factory.fork({
-			sessionFile: options.sessionFile,
-			...(entryId === undefined ? {} : { entryId }),
-			...(options.cwd === undefined ? {} : { cwd: options.cwd }),
-		});
-		this.attach(agent);
-		return this.snapshotRow(this.requireRow(agent.id));
+		// 源会话在整个复制期间持有,避免复制到一半被回收
+		const lease = source === undefined ? undefined : this.holdRow(source);
+		try {
+			const entryId = this.forkPoint(source, options.beforeEntryId);
+			const agent = await this.factory.fork({
+				sessionFile: options.sessionFile,
+				...(entryId === undefined ? {} : { entryId }),
+				...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+			});
+			this.attach(agent);
+			return this.snapshotRow(this.requireRow(agent.id));
+		} finally {
+			lease?.release();
+		}
 	}
 
 	/**
@@ -299,6 +320,9 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 			agent,
 			unsubscribe: undefined,
 			holders: new Set(),
+			holds: 0,
+			pendingRelease: false,
+			tail: Promise.resolve(),
 			phase: "open",
 			opening: undefined,
 			closeTimer: undefined,
@@ -332,6 +356,11 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 	}
 
 	/** 取会话的 agent,供端点执行发消息、中止与读取条目。 */
+	/**
+	 * 取运行态,供检查与测试。
+	 *
+	 * 执行会改变会话的动作要走 withSession:那里才登记持有并串行。
+	 */
 	agent(sessionId: string): A {
 		const agent = this.requireRow(sessionId).agent;
 		if (!agent) {
@@ -455,15 +484,36 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		this.settle(row);
 	}
 
-	/** 释放会话:停止记录、销毁 agent。 */
+	/**
+	 * 释放会话:停止记录、销毁 agent。
+	 *
+	 * 还有动作在途时先挂起,最后一个持有归还后再释放,避免把正在启动的一轮连带销毁。
+	 */
 	release(sessionId: string): void {
 		const row = this.table.get(sessionId);
 		if (!row) {
 			return;
 		}
-		this.table.delete(sessionId);
+		if (row.holds > 0) {
+			row.pendingRelease = true;
+			return;
+		}
+		this.drop(row);
+	}
+
+	/** 释放全部会话,可重复调用。持有不阻止清空,进程退出时要能立刻走完。 */
+	dispose(): void {
+		for (const row of [...this.table.values()]) {
+			row.pendingRelease = false;
+			this.drop(row);
+		}
+	}
+
+	private drop(row: SessionState<A>): void {
+		this.table.delete(row.sessionId);
 		this.clearCloseTimer(row);
 		row.unsubscribe?.();
+		row.unsubscribe = undefined;
 		row.holders.clear();
 		for (const channel of row.channels.values()) {
 			channel.sinks.clear();
@@ -471,11 +521,68 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		row.agent?.dispose();
 	}
 
-	/** 释放全部会话,可重复调用。 */
-	dispose(): void {
-		for (const sessionId of [...this.table.keys()]) {
-			this.release(sessionId);
+	/** 登记持有,期间这个会话不会被空闲回收。 */
+	hold(sessionId: string): SessionLease {
+		return this.holdRow(this.requireRow(sessionId));
+	}
+
+	private holdRow(row: SessionState<A>): SessionLease {
+		row.holds += 1;
+		this.clearCloseTimer(row);
+		let released = false;
+		return {
+			release: () => {
+				if (released) {
+					return;
+				}
+				released = true;
+				row.holds -= 1;
+				if (row.holds > 0) {
+					return;
+				}
+				if (row.pendingRelease) {
+					this.release(row.sessionId);
+					return;
+				}
+				this.settle(row);
+			},
+		};
+	}
+
+	/**
+	 * 持有会话并按会话串行执行一段动作。
+	 *
+	 * 持有在调用时同步登记,从登记到归还之间这个会话不会被回收;串行队列保证同一会话的
+	 * 动作依次执行,后到的动作看到前一个动作完成后的状态。
+	 *
+	 * 会话还没就绪时等它建好,期间持有有效;会话不存在或已被释放时报错,由调用方转成回执。
+	 */
+	async withSession(sessionId: string, work: (agent: A) => Promise<void>): Promise<void> {
+		const row = this.requireRow(sessionId);
+		const lease = this.holdRow(row);
+		const previous = row.tail;
+		let finish!: () => void;
+		row.tail = new Promise<void>((resolve) => {
+			finish = resolve;
+		});
+		try {
+			await previous;
+			await work(await this.readyAgent(row));
+		} finally {
+			finish();
+			lease.release();
 		}
+	}
+
+	/** 等会话建好并取运行态。 */
+	private async readyAgent(row: SessionState<A>): Promise<A> {
+		if (row.opening !== undefined) {
+			await row.opening;
+		}
+		if (!row.agent) {
+			throw new SessionNotFoundError(row.sessionId);
+		}
+		return row.agent;
 	}
 
 	/** 建立会话并填进行里。字段先就位再让 promise 兑现,等待者醒来即可用。 */
@@ -508,11 +615,10 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 			return;
 		}
 		const isBusy = row.agent?.isBusy ?? true;
-		if (row.holders.size === 0 && !isBusy) {
-			if (row.phase !== "draining") {
-				row.phase = "draining";
-				this.scheduleClose(row);
-			}
+		if (row.holders.size === 0 && row.holds === 0 && !isBusy) {
+			// 持有归还后定时器可能已被清掉,这里重新排上
+			row.phase = "draining";
+			this.scheduleClose(row);
 			return;
 		}
 		if (row.phase === "draining") {
@@ -535,7 +641,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		}
 		row.closeTimer = setTimeout(() => {
 			row.closeTimer = undefined;
-			if (row.holders.size === 0 && row.agent?.isBusy !== true) {
+			if (row.holders.size === 0 && row.holds === 0 && row.agent?.isBusy !== true) {
 				this.release(row.sessionId);
 				return;
 			}

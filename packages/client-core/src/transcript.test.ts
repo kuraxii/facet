@@ -133,6 +133,14 @@ describe("toTranscript", () => {
 		expect(items[0]?.parts[0]).toMatchObject({ status: "failed", output: "拒绝执行" });
 	});
 
+	it("被中止的助手消息带上终止原因", () => {
+		const [item] = toTranscript(
+			viewWith([historyItem("e1", assistant([{ type: "text", text: "说到一半" }], "aborted"))]),
+		);
+		expect(item).toMatchObject({ role: "assistant", stopReason: "aborted" });
+		expect(item?.parts).toEqual([{ kind: "text", partId: "text:0", text: "说到一半" }]);
+	});
+
 	it("定位字段直接用视图上的 entryId，与标识前缀无关", () => {
 		const [promoted] = toTranscript(
 			viewWith([

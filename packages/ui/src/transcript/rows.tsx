@@ -239,6 +239,16 @@ function FilesRow({ diffs }: { diffs: readonly DiffChunk[] }) {
 	);
 }
 
+/** 这一行是否被用户中止。 */
+function isAborted(row: DisplayRow): boolean {
+	return row.items.some((item) => item.stopReason === "aborted");
+}
+
+/** 中止的提示,挂在被截断的那一行末尾。 */
+function StoppedNote(): ReactNode {
+	return <div className="stopped-line">已停止</div>;
+}
+
 /** 答复行的正文:相邻的正文段合成一块 Markdown,思考与工具按原位置插入。 */
 function bodyOf(row: DisplayRow): ReactNode[] {
 	const nodes: ReactNode[] = [];
@@ -438,6 +448,7 @@ export function ChatTranscript({ items, canFork, onFork, retry, emptyHint, renam
 										)}
 									</div>
 								)}
+								{isAborted(row) ? <StoppedNote /> : null}
 							</div>
 						</Shell>
 					);
@@ -445,7 +456,10 @@ export function ChatTranscript({ items, canFork, onFork, retry, emptyHint, renam
 
 				return (
 					<Shell key={row.id} className="is-assistant">
-						<div className="assistant-body">{bodyOf(row)}</div>
+						<div className="assistant-body">
+							{bodyOf(row)}
+							{isAborted(row) ? <StoppedNote /> : null}
+						</div>
 					</Shell>
 				);
 			})}

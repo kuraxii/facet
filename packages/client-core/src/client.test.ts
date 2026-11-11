@@ -153,8 +153,12 @@ class FakeTransport implements SessionTransport {
 		return result as RequestResults[M];
 	}
 
-	dispatch(_channel: Channel, _action: Action): number {
+	/** 已派发的动作,用例按需断言 */
+	readonly dispatched: { channel: Channel; action: Action }[] = [];
+
+	dispatch(channel: Channel, action: Action): number {
 		this.seq += 1;
+		this.dispatched.push({ channel, action });
 		return this.seq;
 	}
 
@@ -200,6 +204,16 @@ describe("SessionClient", () => {
 			CHAT,
 		]);
 		expect(client.current?.sessionId).toBe("s1");
+	});
+
+	it("中止请求置停止中,回合收尾后清掉", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		client.cancel();
+		expect(transport.dispatched).toEqual([{ channel: CHAT, action: { type: "chat/turnCancelled" } }]);
+		expect(client.chatView()?.stopping).toBe(true);
+		transport.emit(CHAT, { type: "chat/settled", aborted: true });
+		expect(client.chatView()?.stopping).toBe(false);
 	});
 
 	it("项目请求带上参数", async () => {

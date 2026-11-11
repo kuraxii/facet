@@ -5,7 +5,7 @@
  * 实时是流式累积加上按调用 id 记录的工具状态。这里把两者归一成同一套渲染单元,
  * 判定规则只写一份,避免界面在两条链路上各写一遍。
  */
-import type { ContentBlock, InputBlock, Message, ToolOutput } from "@facet/protocol";
+import type { ContentBlock, InputBlock, Message, StopReason, ToolOutput } from "@facet/protocol";
 import type { ChatView, EntryView, StreamedPart, ToolCallView } from "./state.ts";
 
 /** 工具调用在投影里的状态。 */
@@ -57,6 +57,8 @@ export interface TranscriptItem {
 	entryId: string | undefined;
 	/** 消息角色,分界项为空 */
 	role: "user" | "assistant" | "system" | "tool" | undefined;
+	/** 助手消息的终止原因;其余消息与分界项为空 */
+	stopReason: StopReason | undefined;
 	parts: readonly Part[];
 	/** 是否仍在流式写入 */
 	isStreaming: boolean;
@@ -220,6 +222,7 @@ export function toTranscript(view: ChatView): TranscriptItem[] {
 			id: entryView.id,
 			entryId: entryView.entry?.id,
 			role: entryView.message.role === "toolResult" ? "tool" : roleOf(entryView.message),
+			stopReason: entryView.message.role === "assistant" ? entryView.message.stopReason : undefined,
 			parts: [],
 			isStreaming: entryView.isStreaming,
 			startedAt,
@@ -311,6 +314,7 @@ export function toTranscript(view: ChatView): TranscriptItem[] {
 			id: `tool:${call.callId}`,
 			entryId: undefined,
 			role: "tool",
+			stopReason: undefined,
 			parts: [toolPart(call)],
 			isStreaming: call.isRunning,
 			startedAt: undefined,

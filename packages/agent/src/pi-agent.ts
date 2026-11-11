@@ -149,6 +149,10 @@ export class PiAgent {
 	 *
 	 * 会话正在运行时必须指定投递方式，缺省直接拒绝，避免消息去向不明。
 	 * 返回值说明这次输入是被扩展消费、排队，还是开启了运行。
+	 *
+	 * 运行一旦开始就立即返回，不等整轮结束：回合的后续进展由事件推送，运行开始之后才出现
+	 * 的失败无法再回执，改发一条 notice。这样同一会话的其它动作不会被整轮阻塞，停止请求
+	 * 也能落在运行期而不必排在回合之后。
 	 */
 	async prompt(text: string, options: PromptOptions = {}): Promise<PromptDisposition> {
 		this.assertAlive();
@@ -156,14 +160,39 @@ export class PiAgent {
 			throw new Error("prompt rejected: the session is streaming and no streamingBehavior was given");
 		}
 		let disposition: PromptDisposition | undefined;
-		await this.session.prompt(text, {
+		let acceptRun!: (value: PromptDisposition) => void;
+		const started = new Promise<PromptDisposition>((resolve) => {
+			acceptRun = resolve;
+		});
+		const run = this.session.prompt(text, {
 			images: options.images,
 			streamingBehavior: options.streamingBehavior,
 			preflightResult: (value) => {
 				disposition = value;
+				acceptRun(value);
 			},
 		});
-		return disposition ?? "started";
+		// 启动之前的失败要回给调用方；启动之后的失败已经无法回执
+		const failure: Promise<Error | undefined> = run.then(
+			() => undefined,
+			(error: unknown) => (error instanceof Error ? error : new Error(String(error))),
+		);
+		const first = await Promise.race([
+			started.then((value) => ({ kind: "accepted" as const, value })),
+			failure.then((error) => ({ kind: "failed" as const, error })),
+		]);
+		if (first.kind === "failed") {
+			if (first.error === undefined) {
+				return disposition ?? "started";
+			}
+			throw first.error;
+		}
+		void failure.then((error) => {
+			if (error !== undefined && first.value === "started") {
+				this.emit({ type: "notice", level: "error", message: error.message });
+			}
+		});
+		return first.value;
 	}
 
 	/** 排队一条消息，在当前助手回合的工具调用执行完后插入。 */

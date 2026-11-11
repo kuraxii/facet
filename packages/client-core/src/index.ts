@@ -9,6 +9,7 @@ export { SessionClient } from "./client.ts";
 export { historyMessageId, isHistoryMessageId } from "./message-id.ts";
 export { reduceChat, reduceSession } from "./reduce.ts";
 export type {
+	ChatActivity,
 	ChatView,
 	CompactionView,
 	EntryView,
@@ -17,7 +18,7 @@ export type {
 	StreamedPart,
 	ToolCallView,
 } from "./state.ts";
-export { appendNotice, createChatView, createSessionView } from "./state.ts";
+export { appendNotice, chatActivity, createChatView, createSessionView } from "./state.ts";
 export type { ChannelGap } from "./store.ts";
 export { messageDisplayText, messageText, SessionStore } from "./store.ts";
 export type {

@@ -658,6 +658,12 @@ svg.fl {
 	word-break: break-word;
 }
 
+.stopped-line {
+	margin-top: 6px;
+	color: var(--t3);
+	font-size: 12px;
+}
+
 .row.is-fork {
 	justify-content: flex-end;
 	margin-top: -6px;
@@ -1115,6 +1121,15 @@ svg.fl {
 
 .btn:hover {
 	border-color: var(--t3);
+}
+
+.btn:disabled {
+	color: var(--t3);
+	cursor: default;
+}
+
+.btn:disabled:hover {
+	border-color: var(--line2);
 }
 
 .btn.pri {

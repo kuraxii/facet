@@ -102,8 +102,8 @@ export interface ChatView {
 	readonly items: readonly EntryView[];
 	readonly toolCalls: Readonly<Record<string, ToolCallView>>;
 	readonly queue: QueuedInput;
-	/** 是否有运行中的回合 */
-	readonly isRunning: boolean;
+	/** 已请求中止本轮,等 chat/settled 收尾 */
+	readonly stopping: boolean;
 	/** 本轮结束后会自动重试 */
 	readonly willRetry: boolean;
 	/** 正在进行的一次自动重试 */
@@ -115,6 +115,27 @@ export interface ChatView {
 
 /** 提示条保留的条数 */
 const MAX_NOTICES = 50;
+
+/**
+ * 对话此刻的状态。
+ *
+ * 取值穷尽,界面据此决定发送按钮与输入是否可用,不再各自拼布尔量。
+ * stopping 表示已请求中止、等这一轮收尾。
+ */
+export type ChatActivity = "idle" | "running" | "compacting" | "stopping";
+
+/**
+ * 合并两条通道得出对话此刻的状态。
+ *
+ * 中止请求优先:一旦请求中止,界面只等这一轮收尾,不再区分此前是运行还是压缩。
+ */
+export function chatActivity(session: SessionView | undefined, chat: ChatView | undefined): ChatActivity {
+	if (chat?.stopping === true) {
+		return "stopping";
+	}
+	const status = session?.status ?? "idle";
+	return status === "idle" ? "idle" : status;
+}
 
 /** 由会话快照建出会话视图。快照缺省时使用空状态。 */
 export function createSessionView(channel: Channel, snapshot?: SessionSnapshot): SessionView {
@@ -136,7 +157,7 @@ export function createChatView(channel: Channel): ChatView {
 		items: [],
 		toolCalls: {},
 		queue: { steering: [], followUp: [] },
-		isRunning: false,
+		stopping: false,
 		willRetry: false,
 		retry: undefined,
 		notices: [],

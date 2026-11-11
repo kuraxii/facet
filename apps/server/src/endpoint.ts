@@ -177,53 +177,50 @@ async function applyAction(context: EndpointContext, channel: Channel, action: A
 	if (!parsed) {
 		throw new RequestError("unknown_channel", `unsupported channel: ${channel}`);
 	}
-	const sessionId = parsed.id;
-	switch (action.type) {
-		case "chat/turnStarted": {
-			const agent = context.hub.agent(sessionId);
-			if (agent.isStreaming && action.streamingBehavior === undefined) {
-				throw new RequestError("rejected", "session is running, streamingBehavior is required");
-			}
-			await agent.prompt(action.text, {
-				images: action.images,
-				streamingBehavior: action.streamingBehavior,
-			});
-			return;
+	// 同一会话的动作串行执行,执行期间持有会话,不会被空闲回收
+	await context.hub.withSession(parsed.id, async (agent) => {
+		switch (action.type) {
+			case "chat/turnStarted":
+				if (agent.isStreaming && action.streamingBehavior === undefined) {
+					throw new RequestError("rejected", "session is running, streamingBehavior is required");
+				}
+				// prompt 在运行开始后返回,这里不会挂到整轮结束
+				await agent.prompt(action.text, {
+					images: action.images,
+					streamingBehavior: action.streamingBehavior,
+				});
+				return;
+			case "chat/turnCancelled":
+				await agent.abort();
+				return;
+			case "chat/pendingMessageSet":
+				if (action.kind === "steering") {
+					await agent.steer(action.text);
+				} else {
+					await agent.followUp(action.text);
+				}
+				return;
+			case "chat/queueCleared":
+				agent.clearQueue();
+				return;
+			case "session/titleChanged":
+				agent.setName(action.title);
+				return;
+			case "session/configChanged":
+				if (action.model) {
+					await agent.setModel(action.model, { persist: action.persist });
+				}
+				if (action.thinkingLevel) {
+					agent.setThinkingLevel(action.thinkingLevel, { persist: action.persist });
+				}
+				if (action.activeToolNames) {
+					agent.setActiveTools(action.activeToolNames);
+				}
+				return;
+			default:
+				throw new RequestError("unknown_method", `action is produced by the device: ${action.type}`);
 		}
-		case "chat/turnCancelled":
-			await context.hub.agent(sessionId).abort();
-			return;
-		case "chat/pendingMessageSet": {
-			const agent = context.hub.agent(sessionId);
-			if (action.kind === "steering") {
-				await agent.steer(action.text);
-			} else {
-				await agent.followUp(action.text);
-			}
-			return;
-		}
-		case "chat/queueCleared":
-			context.hub.agent(sessionId).clearQueue();
-			return;
-		case "session/titleChanged":
-			context.hub.agent(sessionId).setName(action.title);
-			return;
-		case "session/configChanged": {
-			const agent = context.hub.agent(sessionId);
-			if (action.model) {
-				await agent.setModel(action.model, { persist: action.persist });
-			}
-			if (action.thinkingLevel) {
-				agent.setThinkingLevel(action.thinkingLevel, { persist: action.persist });
-			}
-			if (action.activeToolNames) {
-				agent.setActiveTools(action.activeToolNames);
-			}
-			return;
-		}
-		default:
-			throw new RequestError("unknown_method", `action is produced by the device: ${action.type}`);
-	}
+	});
 }
 
 async function handleRequest(

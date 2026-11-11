@@ -422,6 +422,31 @@ describe("空闲回收", () => {
 		await expect(hub.entriesAfter(snapshot.id, "e9")).rejects.toThrow("条目不在活动分支上");
 	});
 
+	it("持有期间到点也不回收,归还后才回收", async () => {
+		const snapshot = await hub.createSession();
+		const agent = hub.agent(snapshot.id);
+		const lease = hub.hold(snapshot.id);
+		await vi.advanceTimersByTimeAsync(IDLE_MS * 3);
+		expect(hub.has(snapshot.id)).toBe(true);
+		expect(agent.disposed).toBe(false);
+		lease.release();
+		await vi.advanceTimersByTimeAsync(IDLE_MS + 1);
+		expect(hub.has(snapshot.id)).toBe(false);
+		expect(agent.disposed).toBe(true);
+	});
+
+	it("持有期间的显式释放等归还后再执行", async () => {
+		const snapshot = await hub.createSession();
+		const agent = hub.agent(snapshot.id);
+		const lease = hub.hold(snapshot.id);
+		hub.release(snapshot.id);
+		expect(hub.has(snapshot.id)).toBe(true);
+		expect(agent.disposed).toBe(false);
+		lease.release();
+		expect(hub.has(snapshot.id)).toBe(false);
+		expect(agent.disposed).toBe(true);
+	});
+
 	it("读历史或取快照会续期", async () => {
 		const snapshot = await hub.openSession("/tmp/s1.jsonl");
 		await vi.advanceTimersByTimeAsync(IDLE_MS - 400);
@@ -431,6 +456,70 @@ describe("空闲回收", () => {
 		await hub.snapshot(snapshot.id);
 		await vi.advanceTimersByTimeAsync(IDLE_MS + 1);
 		expect(hub.has(snapshot.id)).toBe(false);
+	});
+});
+
+describe("动作的持有与串行", () => {
+	it("同一会话的动作依次执行", async () => {
+		const snapshot = await hub.createSession();
+		const order: string[] = [];
+		let releaseFirst!: () => void;
+		const firstGate = new Promise<void>((resolve) => {
+			releaseFirst = resolve;
+		});
+		const first = hub.withSession(snapshot.id, async () => {
+			order.push("第一个开始");
+			await firstGate;
+			order.push("第一个结束");
+		});
+		const second = hub.withSession(snapshot.id, async () => {
+			order.push("第二个开始");
+		});
+		await vi.advanceTimersByTimeAsync(0);
+		expect(order).toEqual(["第一个开始"]);
+		releaseFirst();
+		await Promise.all([first, second]);
+		expect(order).toEqual(["第一个开始", "第一个结束", "第二个开始"]);
+	});
+
+	it("执行期间持有会话,到点也不回收", async () => {
+		const snapshot = await hub.createSession();
+		const agent = hub.agent(snapshot.id);
+		let release!: () => void;
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const running = hub.withSession(snapshot.id, async () => {
+			await gate;
+		});
+		await vi.advanceTimersByTimeAsync(IDLE_MS * 3);
+		expect(hub.has(snapshot.id)).toBe(true);
+		expect(agent.disposed).toBe(false);
+		release();
+		await running;
+		await vi.advanceTimersByTimeAsync(IDLE_MS + 1);
+		expect(hub.has(snapshot.id)).toBe(false);
+	});
+
+	it("动作抛错时归还持有并继续处理后面的动作", async () => {
+		const snapshot = await hub.createSession();
+		const order: string[] = [];
+		await expect(
+			hub.withSession(snapshot.id, async () => {
+				order.push("失败的动作");
+				throw new Error("boom");
+			}),
+		).rejects.toThrow("boom");
+		await hub.withSession(snapshot.id, async () => {
+			order.push("后面的动作");
+		});
+		expect(order).toEqual(["失败的动作", "后面的动作"]);
+		await vi.advanceTimersByTimeAsync(IDLE_MS + 1);
+		expect(hub.has(snapshot.id)).toBe(false);
+	});
+
+	it("会话不存在时报错", async () => {
+		await expect(hub.withSession("nope", async () => {})).rejects.toThrow("unknown session");
 	});
 });
 

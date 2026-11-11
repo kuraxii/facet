@@ -312,9 +312,15 @@ export class SessionClient {
 		return await this.openSession(forked.file);
 	}
 
-	/** 中止当前运行。 */
+	/**
+	 * 中止当前运行。
+	 *
+	 * 设备等到这一轮真正结束才发 chat/settled,收到之前的界面状态由视图的 stopping 表示。
+	 */
 	cancel(): number {
-		return this.transport.dispatch(this.requireOpened().chatChannel, { type: "chat/turnCancelled" });
+		const opened = this.requireOpened();
+		this.state.markStopping(opened.chatChannel);
+		return this.transport.dispatch(opened.chatChannel, { type: "chat/turnCancelled" });
 	}
 
 	/** 切换模型,结果通过 session/modelChanged 回到视图。 */

@@ -842,7 +842,7 @@ function AppearanceSection({
 							appearance: { ...current.appearance, bodyFont: event.target.value },
 						}))
 					}
-					placeholder="留空使用界面默认字体"
+					placeholder="留空使用 Inter"
 					aria-label="正文字体"
 				/>
 			</label>
@@ -857,7 +857,7 @@ function AppearanceSection({
 							appearance: { ...current.appearance, codeFont: event.target.value },
 						}))
 					}
-					placeholder="留空使用界面默认等宽字体"
+					placeholder="留空使用 Maple Mono"
 					aria-label="代码字体"
 				/>
 			</label>

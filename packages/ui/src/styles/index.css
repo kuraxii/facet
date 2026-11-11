@@ -1,10 +1,8 @@
 /* 界面样式。深色为默认，变量集中在此，浅色主题另加一组覆盖。 */
+@import "./fonts.css";
 @import "@fontsource/inter/400.css";
 @import "@fontsource/inter/500.css";
 @import "@fontsource/inter/600.css";
-@import "@fontsource/jetbrains-mono/400.css";
-@import "@fontsource/jetbrains-mono/500.css";
-@import "@fontsource/jetbrains-mono/700.css";
 
 :root {
 	color-scheme: dark;
@@ -36,8 +34,9 @@
 	--addbg: #10231a;
 	--delbg: #2a1316;
 	--user: #1b1c24;
+	/* 界面字体与代码字体，两者都随构建产物一起打进应用 */
 	--font-sans: Inter, "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
-	--font-mono: "JetBrains Mono", ui-monospace, monospace;
+	--font-mono: "Maple Mono", ui-monospace, SFMono-Regular, Menlo, "Noto Sans SC", monospace;
 	/* 正文字号，由设置里的字号写入 */
 	--text-size: 13px;
 	/* 交互动效：极快反馈 120ms，展开折叠 180ms */
@@ -1641,7 +1640,7 @@ svg.fl {
 	--code-action-hover-bg: #1a1a1f;
 	--code-action-hover-fg: #ececf0;
 	--code-line-number: #81818b;
-	--ms-font-sans: Inter, "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
+	--ms-font-sans: var(--font-sans);
 	--ms-size-code-max-height: 360px;
 	font-size: 14px;
 	line-height: 1.7;

@@ -39,6 +39,20 @@ export interface LayoutSettings {
 	sidebarWidth: number;
 }
 
+/** 窗口位置与尺寸。x、y 缺省时由系统决定位置。 */
+export interface WindowBounds {
+	/** 宽度，单位 px */
+	width: number;
+	/** 高度，单位 px */
+	height: number;
+	/** 距屏幕左边距 */
+	x?: number;
+	/** 距屏幕上边距 */
+	y?: number;
+	/** 是否最大化 */
+	maximized: boolean;
+}
+
 /** 一整份设置。 */
 export interface FacetSettings {
 	/** 文件格式版本 */
@@ -55,6 +69,8 @@ export interface FacetSettings {
 	input: InputSettings;
 	/** 界面布局 */
 	layout: LayoutSettings;
+	/** 上次退出时的窗口位置与尺寸，缺省时用应用默认值 */
+	window?: WindowBounds;
 }
 
 /** 缺省设置。 */

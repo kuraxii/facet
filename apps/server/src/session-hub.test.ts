@@ -626,3 +626,14 @@ describe("会话改名与删除", () => {
 		await rm(root, { recursive: true, force: true });
 	});
 });
+
+describe("退出前的检查", () => {
+	it("列出还在跑的会话文件", async () => {
+		const first = await hub.openSession("/tmp/s1.jsonl");
+		await hub.openSession("/tmp/s2.jsonl");
+		expect(hub.busyFiles()).toEqual([]);
+
+		hub.agent(first.id).busy = true;
+		expect(hub.busyFiles()).toEqual([resolve("/tmp/s1.jsonl")]);
+	});
+});

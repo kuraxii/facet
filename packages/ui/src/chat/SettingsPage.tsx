@@ -684,9 +684,32 @@ function InputSection({
 					<option value="shiftEnter">Shift+回车发送,回车换行</option>
 				</select>
 			</label>
+
+			<h3 className="set-section-subtitle">快捷键</h3>
+			<ul className="set-list">
+				{SHORTCUTS.map((item) => (
+					<li key={item.keys} className="set-row">
+						<span className="set-row-name">{item.action}</span>
+						<span className="set-row-meta mono">{item.keys}</span>
+					</li>
+				))}
+				<li className="set-row">
+					<span className="set-row-name">发送消息</span>
+					<span className="set-row-meta mono">
+						{draft.input.sendKey === "shiftEnter" ? "Shift+Enter" : "Enter"}
+					</span>
+				</li>
+			</ul>
 		</>
 	);
 }
+
+/** 已实现的快捷键，按使用频率排列。 */
+const SHORTCUTS: ReadonlyArray<{ keys: string; action: string }> = [
+	{ keys: "⌘K / Ctrl+K", action: "展开并聚焦侧栏搜索" },
+	{ keys: "Esc", action: "关闭浮层、对话框与搜索" },
+	{ keys: "Enter", action: "提交对话框里的输入" },
+];
 
 /**
  * 关于与诊断。

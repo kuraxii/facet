@@ -101,3 +101,32 @@ describe("设置读取", () => {
 		expect(written.hiddenModels).toEqual(["a/b"]);
 	});
 });
+
+describe("窗口尺寸", () => {
+	it("保存后重新打开读得到,越界的尺寸收回范围", async () => {
+		const store = await SettingsStore.open({ file });
+		await store.save({
+			...store.get(),
+			window: { width: 1300, height: 900, x: 40, y: 20, maximized: true },
+		});
+		const reopened = await SettingsStore.open({ file });
+		expect(reopened.get().window).toEqual({ width: 1300, height: 900, x: 40, y: 20, maximized: true });
+
+		await writeFile(
+			file,
+			JSON.stringify({ version: 1, window: { width: 100, height: 9000, maximized: "yes" } }),
+			"utf8",
+		);
+		expect((await SettingsStore.open({ file })).get().window).toEqual({
+			width: 640,
+			height: 8000,
+			maximized: false,
+		});
+	});
+
+	it("没有窗口记录时该字段为空", async () => {
+		const store = await SettingsStore.open({ file });
+		await store.save({ ...store.get(), hiddenModels: [] });
+		expect((await SettingsStore.open({ file })).get().window).toBeUndefined();
+	});
+});

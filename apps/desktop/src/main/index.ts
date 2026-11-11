@@ -13,10 +13,50 @@ const projectDir = process.env.FACET_PROJECT_DIR?.trim() || process.cwd();
 
 let server: ServerHandle | undefined;
 
+/** 上次退出时的窗口位置与尺寸，没有记录时用应用默认值。 */
+function windowBounds(): { width: number; height: number; x?: number; y?: number } {
+	const saved = server?.settingsStore.get().window;
+	if (saved === undefined) {
+		return { width: 1100, height: 760 };
+	}
+	return {
+		width: saved.width,
+		height: saved.height,
+		...(saved.x === undefined ? {} : { x: saved.x }),
+		...(saved.y === undefined ? {} : { y: saved.y }),
+	};
+}
+
+/** 记下窗口位置与尺寸，退出与关闭时各存一次。 */
+function saveWindowBounds(window: BrowserWindow): void {
+	const store = server?.settingsStore;
+	if (store === undefined) {
+		return;
+	}
+	const isMaximized = window.isMaximized();
+	// 最大化时记的是还原后的尺寸，否则再打开会一直停在最大化
+	const bounds = isMaximized ? window.getNormalBounds() : window.getBounds();
+	const current = store.get();
+	void store
+		.save({
+			...current,
+			window: {
+				width: bounds.width,
+				height: bounds.height,
+				x: bounds.x,
+				y: bounds.y,
+				maximized: isMaximized,
+			},
+		})
+		.catch((error: unknown) => {
+			console.log(`[main] 保存窗口尺寸失败 ${String(error)}`);
+		});
+}
+
 function createWindow(endpoint: string): BrowserWindow {
+	const saved = server?.settingsStore.get().window;
 	const window = new BrowserWindow({
-		width: 1100,
-		height: 760,
+		...windowBounds(),
 		minWidth: 640,
 		minHeight: 480,
 		show: false,
@@ -37,7 +77,30 @@ function createWindow(endpoint: string): BrowserWindow {
 	});
 
 	window.once("ready-to-show", () => {
+		if (saved?.maximized === true) {
+			window.maximize();
+		}
 		window.show();
+	});
+
+	// 关闭时先确认有没有正在跑的会话，再记下窗口尺寸
+	window.on("close", (event) => {
+		const busy = server?.hub.busyFiles() ?? [];
+		if (busy.length > 0) {
+			const choice = dialog.showMessageBoxSync(window, {
+				type: "warning",
+				buttons: ["取消", "仍然退出"],
+				defaultId: 0,
+				cancelId: 0,
+				message: "有会话还在运行",
+				detail: `退出会终止 ${busy.length} 个会话上正在进行的任务。`,
+			});
+			if (choice === 0) {
+				event.preventDefault();
+				return;
+			}
+		}
+		saveWindowBounds(window);
 	});
 
 	window.webContents.setWindowOpenHandler(({ url }) => {
@@ -113,6 +176,10 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
+	const window = BrowserWindow.getAllWindows()[0];
+	if (window !== undefined) {
+		saveWindowBounds(window);
+	}
 	void server?.close();
 	server = undefined;
 });

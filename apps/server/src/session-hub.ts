@@ -447,6 +447,17 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		await rm(key, { force: true });
 	}
 
+	/** 还在跑的会话文件。退出应用前用来判断会话会不会被连带终止。 */
+	busyFiles(): string[] {
+		const files: string[] = [];
+		for (const row of this.table.values()) {
+			if (row.agent?.isBusy === true && row.file !== undefined) {
+				files.push(row.file);
+			}
+		}
+		return files;
+	}
+
 	/** 通道当前序号,通道不存在时为 0。 */
 	lastSeq(channel: Channel): number {
 		const parsed = parseChannel(channel);

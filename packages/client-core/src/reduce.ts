@@ -51,10 +51,6 @@ export function reduceSession(view: SessionView, action: Action): SessionView {
 		case "session/phase":
 			return { ...view, state: { ...view.state, phase: action.phase, maintenance: action.maintenance } };
 		case "session/modelChanged":
-			return { ...view, state: { ...view.state, model: action.model } };
-		case "session/thinkingLevelChanged":
-			return { ...view, state: { ...view.state, thinkingLevel: action.level } };
-		case "session/modelChanged":
 			return {
 				...view,
 				state: {
@@ -63,6 +59,8 @@ export function reduceSession(view: SessionView, action: Action): SessionView {
 					availableThinkingLevels: action.availableThinkingLevels,
 				},
 			};
+		case "session/thinkingLevelChanged":
+			return { ...view, state: { ...view.state, thinkingLevel: action.level } };
 		case "session/queueChanged":
 			return {
 				...view,

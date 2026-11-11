@@ -21,7 +21,6 @@ import type { ModelInfo, ModelRef, ProviderInfo, SessionSummary, ThinkingLevel }
 import { toModelInfo } from "./convert.ts";
 import { FileCredentialStore } from "./credential-store.ts";
 import {
-	type CustomModelEntry,
 	type CustomProviderEntry,
 	InvalidProviderError,
 	ModelConfigStore,

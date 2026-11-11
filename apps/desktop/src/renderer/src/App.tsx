@@ -582,7 +582,7 @@ export function App() {
 				);
 			});
 		},
-		[runSessionAction, session?.state.cwd, withTrust],
+		[runSessionAction, session?.state.cwd, updateDraft, withTrust],
 	);
 
 	/**

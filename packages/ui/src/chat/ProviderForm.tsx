@@ -17,14 +17,29 @@ const API_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
 	{ value: "mistral-conversations", label: "Mistral Conversations" },
 ];
 
+/** 表单里的一行模型。key 只用于渲染，跟着行一起移动，不用下标当键。 */
+interface ModelRow {
+	key: string;
+	model: CustomModelInfo;
+}
+
+let rowCounter = 0;
+
+/** 造一行模型。 */
+function modelRow(model: CustomModelInfo = { id: "" }): ModelRow {
+	rowCounter += 1;
+	return { key: `row-${rowCounter}`, model };
+}
+
 /** 空表单的初始值。 */
-function emptyDraft(): CustomProviderInfo {
+function emptyDraft(): CustomProviderInfo & { rows: ModelRow[] } {
 	return {
 		id: "",
 		name: "",
 		baseUrl: "",
 		api: API_OPTIONS[0]?.value ?? "openai-completions",
-		models: [{ id: "" }],
+		models: [],
+		rows: [modelRow()],
 	};
 }
 
@@ -39,15 +54,21 @@ export interface ProviderFormProps {
 }
 
 export function ProviderForm({ initial, onSave, onCancel }: ProviderFormProps) {
-	const [draft, setDraft] = useState<CustomProviderInfo>(initial ?? emptyDraft);
+	const [draft, setDraft] = useState<CustomProviderInfo & { rows: ModelRow[] }>(() =>
+		initial === undefined
+			? emptyDraft()
+			: { ...initial, rows: initial.models.map((model) => modelRow(model)) },
+	);
 	const [isSaving, setIsSaving] = useState(false);
 	const [error, setError] = useState<string | undefined>(undefined);
 	const isEditing = initial !== undefined;
 
-	const patchModel = (index: number, change: Partial<CustomModelInfo>): void => {
+	const patchModel = (key: string, change: Partial<CustomModelInfo>): void => {
 		setDraft((current) => ({
 			...current,
-			models: current.models.map((model, position) => (position === index ? { ...model, ...change } : model)),
+			rows: current.rows.map((row) =>
+				row.key === key ? { ...row, model: { ...row.model, ...change } } : row,
+			),
 		}));
 	};
 
@@ -62,7 +83,7 @@ export function ProviderForm({ initial, onSave, onCancel }: ProviderFormProps) {
 		if (draft.baseUrl.trim().length === 0) {
 			return "接口地址不能为空";
 		}
-		if (draft.models.length === 0 || draft.models.some((model) => model.id.trim().length === 0)) {
+		if (draft.rows.length === 0 || draft.rows.some((row) => row.model.id.trim().length === 0)) {
 			return "每个模型都要填标识";
 		}
 		return undefined;
@@ -82,7 +103,7 @@ export function ProviderForm({ initial, onSave, onCancel }: ProviderFormProps) {
 				id: draft.id.trim(),
 				name: draft.name.trim(),
 				baseUrl: draft.baseUrl.trim(),
-				models: draft.models.map((model) => ({ ...model, id: model.id.trim() })),
+				models: draft.rows.map((row) => ({ ...row.model, id: row.model.id.trim() })),
 			});
 		} catch (saveError) {
 			setError(saveError instanceof Error ? saveError.message : String(saveError));
@@ -142,77 +163,80 @@ export function ProviderForm({ initial, onSave, onCancel }: ProviderFormProps) {
 
 			<p className="set-label">模型</p>
 			<ul className="set-list">
-				{draft.models.map((model, index) => (
-					<li key={index} className="set-row is-block">
-						<div className="set-row-head">
-							<input
-								className="set-input mono"
-								value={model.id}
-								onChange={(event) => patchModel(index, { id: event.target.value })}
-								placeholder="模型标识"
-								aria-label={`模型 ${index + 1} 标识`}
-							/>
-							<input
-								className="set-input"
-								value={model.name ?? ""}
-								onChange={(event) => patchModel(index, { name: event.target.value })}
-								placeholder="展示名（可选）"
-								aria-label={`模型 ${index + 1} 展示名`}
-							/>
-							<input
-								className="set-input mono"
-								type="number"
-								value={model.contextWindow ?? ""}
-								onChange={(event) =>
-									patchModel(index, {
-										contextWindow: event.target.value === "" ? undefined : Number(event.target.value),
-									})
-								}
-								placeholder="上下文窗口"
-								aria-label={`模型 ${index + 1} 上下文窗口`}
-							/>
-							<input
-								className="set-input mono"
-								type="number"
-								value={model.maxTokens ?? ""}
-								onChange={(event) =>
-									patchModel(index, {
-										maxTokens: event.target.value === "" ? undefined : Number(event.target.value),
-									})
-								}
-								placeholder="最大输出"
-								aria-label={`模型 ${index + 1} 最大输出`}
-							/>
-							<label className="set-toggle">
+				{draft.rows.map((row, index) => {
+					const model = row.model;
+					return (
+						<li key={row.key} className="set-row is-block">
+							<div className="set-row-head">
 								<input
-									type="checkbox"
-									checked={model.reasoning === true}
-									onChange={(event) => patchModel(index, { reasoning: event.target.checked })}
+									className="set-input mono"
+									value={model.id}
+									onChange={(event) => patchModel(row.key, { id: event.target.value })}
+									placeholder="模型标识"
+									aria-label={`模型 ${index + 1} 标识`}
 								/>
-								<span>支持思考</span>
-							</label>
-							<button
-								type="button"
-								className="set-row-action is-danger"
-								onClick={() =>
-									setDraft((current) => ({
-										...current,
-										models: current.models.filter((_, position) => position !== index),
-									}))
-								}
-								disabled={draft.models.length <= 1}
-							>
-								移除
-							</button>
-						</div>
-					</li>
-				))}
+								<input
+									className="set-input"
+									value={model.name ?? ""}
+									onChange={(event) => patchModel(row.key, { name: event.target.value })}
+									placeholder="展示名（可选）"
+									aria-label={`模型 ${index + 1} 展示名`}
+								/>
+								<input
+									className="set-input mono"
+									type="number"
+									value={model.contextWindow ?? ""}
+									onChange={(event) =>
+										patchModel(row.key, {
+											contextWindow: event.target.value === "" ? undefined : Number(event.target.value),
+										})
+									}
+									placeholder="上下文窗口"
+									aria-label={`模型 ${index + 1} 上下文窗口`}
+								/>
+								<input
+									className="set-input mono"
+									type="number"
+									value={model.maxTokens ?? ""}
+									onChange={(event) =>
+										patchModel(row.key, {
+											maxTokens: event.target.value === "" ? undefined : Number(event.target.value),
+										})
+									}
+									placeholder="最大输出"
+									aria-label={`模型 ${index + 1} 最大输出`}
+								/>
+								<label className="set-toggle">
+									<input
+										type="checkbox"
+										checked={model.reasoning === true}
+										onChange={(event) => patchModel(row.key, { reasoning: event.target.checked })}
+									/>
+									<span>支持思考</span>
+								</label>
+								<button
+									type="button"
+									className="set-row-action is-danger"
+									onClick={() =>
+										setDraft((current) => ({
+											...current,
+											rows: current.rows.filter((item) => item.key !== row.key),
+										}))
+									}
+									disabled={draft.rows.length <= 1}
+								>
+									移除
+								</button>
+							</div>
+						</li>
+					);
+				})}
 			</ul>
 			<div className="set-actions">
 				<button
 					type="button"
 					className="set-reset"
-					onClick={() => setDraft((current) => ({ ...current, models: [...current.models, { id: "" }] }))}
+					onClick={() => setDraft((current) => ({ ...current, rows: [...current.rows, modelRow()] }))}
 				>
 					添加模型
 				</button>

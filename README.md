@@ -1,0 +1,92 @@
+# facet
+
+在桌面应用里用 pi 的 agent 干活：会话、工具调用、模型切换都在图形界面里完成，设备侧是一个独立的服务进程，界面通过 WebSocket 连它。
+
+## 环境要求
+
+- Node.js ≥ 22.19，npm（仓库用 npm workspaces）
+- Electron 由 `postinstall` 脚本准备；Linux 上如果 `node-pty` 需要现编，系统要装有编译工具链（`gcc`、`make`、`python3`）
+
+## 安装
+
+**在仓库根目录装一次**，不要在 `apps/desktop` 里单独装：
+
+```bash
+git clone <repo> facet
+cd facet
+npm install
+```
+
+依赖关系是 workspaces 提升到根的 `node_modules`，界面包 `@facet/ui` 的依赖（`shiki`、`markstream-react`、`@fontsource/*`、`mermaid`、`katex`）也装在这一层。只装某个子包的依赖时，开发服务器会报 `Failed to resolve import "shiki"`、`Unable to resolve "@import "@fontsource/inter/400.css""` 这类错误。
+
+## 运行
+
+```bash
+npm run dev            # 桌面应用（Electron + Vite）
+npm run dev -w @facet/web   # Web 壳
+```
+
+首次启动会读取 `~/.pi/agent-dev` 下的凭证与模型配置；没有凭证时先在设置页的提供方里配好密钥，或改用自定义提供方。
+
+## 校验
+
+```bash
+npm run typecheck   # 全部工作区的类型检查
+npm run lint        # biome
+npm run test        # vitest，所有工作区
+```
+
+## 打包
+
+```bash
+npm run build                  # 全部工作区构建
+npm run dist -w @facet/desktop # 出安装包
+```
+
+## 目录结构
+
+| 路径 | 内容 |
+|---|---|
+| `apps/desktop` | Electron 主进程、预加载与渲染进程 |
+| `apps/server` | 设备侧服务：端点、会话登记、项目与设置存储 |
+| `apps/web` | Web 壳 |
+| `packages/protocol` | 跨边界的类型与常量，零运行时依赖 |
+| `packages/agent` | 包住 pi SDK：会话、模型、凭证、配置 |
+| `packages/client-core` | 端点的状态归约与请求封装 |
+| `packages/transport` | WebSocket 传输 |
+| `packages/ui` | 界面组件，不碰文件系统与 Node |
+| `packages/services`、`packages/ui-editor`、`packages/ui-terminal` | 预留的几个包 |
+
+依赖方向单向：`protocol ← services / agent / client-core / transport ← ui ← apps`。
+
+## 数据放在哪
+
+| 路径 | 内容 | 覆盖方式 |
+|---|---|---|
+| `~/.pi/agent-dev` | 凭证 `auth.json`、模型 `models.json`、设置、会话目录 | `FACET_AGENT_DIR` |
+| `$XDG_DATA_HOME/facet`（缺省 `~/.local/share/facet`） | 项目清单 `projects.json`、界面设置 `settings.json` | `FACET_DATA_DIR` |
+
+用 `agent-dev` 而不是 `~/.pi/agent`，是为了和 pi 命令行共用凭证与模型配置，同时不把开发期的会话混进真实目录。
+
+## 环境变量
+
+| 变量 | 含义 |
+|---|---|
+| `FACET_HOST`、`FACET_PORT` | 设备端点监听地址与端口，缺省 `127.0.0.1`、系统分配 |
+| `FACET_HOST_NAME` | 设备展示名 |
+| `FACET_AGENT_DIR` | pi 数据目录 |
+| `FACET_SESSION_DIR` | 会话文件目录，缺省按工作目录分组 |
+| `FACET_DATA_DIR` | 应用数据目录 |
+| `FACET_REPLAY_LIMIT` | 每个通道保留的动作条数 |
+| `FACET_SESSION_IDLE_MS` | 没人订阅且空闲后多久回收会话 |
+| `FACET_DEBUG` | 打开设备侧调试日志 |
+| `FACET_PROJECT_DIR` | 启动时打开的项目目录 |
+| `FACET_SKIP_ELECTRON_DOWNLOAD` | `1` 表示跳过 Electron 二进制检查 |
+
+## 文档
+
+- `docs/requirements.md`：需求与取舍
+- `docs/ui_design_specification.md`：界面设计说明
+- `docs/backlog.md`：进度、设计取舍与遗留项
+- `todo.md`：按优先级排的功能推进顺序
+- `AGENTS.md`：分支、提交与注释规范

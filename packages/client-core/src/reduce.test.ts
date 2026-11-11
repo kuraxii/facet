@@ -174,3 +174,26 @@ describe("动作帧与视图的配合", () => {
 		expect(reduceChat(chat(), frame.action).notices).toEqual([{ level: "info", message: "已连接" }]);
 	});
 });
+
+describe("会话模型变化", () => {
+	it("换模型时同时更新可选档位", () => {
+		const view = reduceSession(session(), {
+			type: "session/modelChanged",
+			model: undefined,
+			availableThinkingLevels: ["off", "medium"],
+		});
+		expect(view.state.availableThinkingLevels).toEqual(["off", "medium"]);
+		expect(view.state.model).toBeUndefined();
+	});
+
+	it("换档位不动模型与可选档位", () => {
+		const base = reduceSession(session(), {
+			type: "session/modelChanged",
+			model: undefined,
+			availableThinkingLevels: ["off", "high"],
+		});
+		const view = reduceSession(base, { type: "session/thinkingLevelChanged", level: "high" });
+		expect(view.state.thinkingLevel).toBe("high");
+		expect(view.state.availableThinkingLevels).toEqual(["off", "high"]);
+	});
+});

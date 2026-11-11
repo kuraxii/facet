@@ -29,7 +29,8 @@
 		"rules": {
 			"preset": "recommended",
 			"suspicious": {
-				"noExplicitAny": "off"
+				"noExplicitAny": "off",
+				"noDuplicateCase": "error"
 			}
 		}
 	},

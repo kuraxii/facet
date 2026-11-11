@@ -195,6 +195,38 @@ export class PiAgentFactory {
 		await this.modelRuntime.setRuntimeApiKey(providerId, trimmed);
 	}
 
+	/**
+	 * 用指定模型发一次最小请求。
+	 *
+	 * 请求只带一句话与很小的输出上限，用来确认凭证、地址与网络是否真的可用；耗时按整次调用
+	 * 计。失败不抛错，把原因带回给界面显示。
+	 */
+	async testModel(ref: ModelRef): Promise<{ ok: boolean; latencyMs: number; message?: string }> {
+		const model = this.modelRuntime.getModel(ref.provider, ref.id);
+		if (!model) {
+			return { ok: false, latencyMs: 0, message: `unknown model: ${ref.provider}/${ref.id}` };
+		}
+		const started = Date.now();
+		try {
+			const reply = await this.modelRuntime.completeSimple(
+				model,
+				{ messages: [{ role: "user", content: [{ type: "text", text: "ping" }], timestamp: Date.now() }] },
+				{ maxTokens: 16 },
+			);
+			const latencyMs = Date.now() - started;
+			if (reply.stopReason === "error") {
+				return { ok: false, latencyMs, message: reply.errorMessage ?? "请求失败" };
+			}
+			return { ok: true, latencyMs };
+		} catch (error) {
+			return {
+				ok: false,
+				latencyMs: Date.now() - started,
+				message: error instanceof Error ? error.message : String(error),
+			};
+		}
+	}
+
 	/** 删除提供方的凭证：文件与运行态一起删。 */
 	async deleteCredential(providerId: string): Promise<void> {
 		await this.credentials.delete(providerId);

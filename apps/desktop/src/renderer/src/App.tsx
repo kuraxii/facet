@@ -217,6 +217,7 @@ export function App() {
 			loadModels: () => client.listModels(),
 			saveCredential: (providerId, apiKey) => client.saveCredential(providerId, apiKey),
 			deleteCredential: (providerId) => client.deleteCredential(providerId),
+			testModel: (model) => client.testModel(model),
 			diagnostics: () => client.diagnostics(),
 			saveText: (suggestedName, text) => window.facet.saveText(suggestedName, text),
 		}),

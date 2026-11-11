@@ -34,6 +34,8 @@ export interface SettingsDataSource {
 	saveCredential: (providerId: string, apiKey: string) => Promise<ProviderInfo[]>;
 	/** 删除提供方凭证，返回更新后的提供方清单 */
 	deleteCredential: (providerId: string) => Promise<ProviderInfo[]>;
+	/** 用指定模型发一次最小请求 */
+	testModel: (model: ModelRef) => Promise<{ ok: boolean; latencyMs: number; message?: string }>;
 	/** 生成诊断文本 */
 	diagnostics: () => Promise<string>;
 	/** 保存一段文本到用户选定的文件，取消时返回 false */
@@ -420,6 +422,33 @@ function ModelsSection({
 }) {
 	const [models, setModels] = useState<readonly ModelInfo[] | undefined>(undefined);
 	const [error, setError] = useState<string | undefined>(undefined);
+	/** 每个模型的测试结果，键为 provider/model */
+	const [tests, setTests] = useState<
+		Record<string, { ok: boolean; latencyMs: number; message?: string } | undefined>
+	>({});
+	/** 正在测试的模型 */
+	const [testing, setTesting] = useState<string | undefined>(undefined);
+
+	/** 发一次最小请求，结果留在该模型下面。 */
+	const runTest = async (model: ModelInfo) => {
+		const key = modelKey(model);
+		setTesting(key);
+		try {
+			const result = await data.testModel({ provider: model.provider, id: model.id });
+			setTests((current) => ({ ...current, [key]: result }));
+		} catch (testError) {
+			setTests((current) => ({
+				...current,
+				[key]: {
+					ok: false,
+					latencyMs: 0,
+					message: testError instanceof Error ? testError.message : String(testError),
+				},
+			}));
+		} finally {
+			setTesting(undefined);
+		}
+	};
 
 	const load = useCallback(async () => {
 		setError(undefined);
@@ -522,26 +551,43 @@ function ModelsSection({
 				{models.map((model) => {
 					const key = modelKey(model);
 					const isHidden = draft.hiddenModels.includes(key);
+					const probe = tests[key];
 					return (
-						<li key={key} className="set-row">
-							<span className="set-row-name ell">
-								{model.provider} / {model.name}
-							</span>
-							<label className="set-toggle">
-								<input
-									type="checkbox"
-									checked={!isHidden}
-									onChange={(event) =>
-										patch((current) => ({
-											...current,
-											hiddenModels: event.target.checked
-												? current.hiddenModels.filter((item) => item !== key)
-												: [...current.hiddenModels, key],
-										}))
-									}
-								/>
-								<span>{isHidden ? "已隐藏" : "显示"}</span>
-							</label>
+						<li key={key} className="set-row is-block">
+							<div className="set-row-head">
+								<span className="set-row-name ell">
+									{model.provider} / {model.name}
+								</span>
+								{probe === undefined ? null : (
+									<span className={probe.ok ? "set-badge is-on" : "set-badge is-off"}>
+										{probe.ok ? `可用 · ${probe.latencyMs} ms` : "不可用"}
+									</span>
+								)}
+								<button
+									type="button"
+									className="set-row-action"
+									disabled={testing === key}
+									onClick={() => void runTest(model)}
+								>
+									{testing === key ? "测试中…" : "测试"}
+								</button>
+								<label className="set-toggle">
+									<input
+										type="checkbox"
+										checked={!isHidden}
+										onChange={(event) =>
+											patch((current) => ({
+												...current,
+												hiddenModels: event.target.checked
+													? current.hiddenModels.filter((item) => item !== key)
+													: [...current.hiddenModels, key],
+											}))
+										}
+									/>
+									<span>{isHidden ? "已隐藏" : "显示"}</span>
+								</label>
+							</div>
+							{probe?.message === undefined ? null : <p className="set-row-error">{probe.message}</p>}
 						</li>
 					);
 				})}

@@ -360,6 +360,13 @@ async function handleRequest(
 				}),
 			};
 		}
+		case "testModel": {
+			const source = asObject(params);
+			return await context.factory.testModel({
+				provider: requiredString(source, "provider"),
+				id: requiredString(source, "id"),
+			});
+		}
 		case "saveCredential": {
 			const source = asObject(params);
 			await context.factory.saveCredential(

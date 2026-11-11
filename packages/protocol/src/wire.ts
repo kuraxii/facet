@@ -198,6 +198,8 @@ export interface RequestParams {
 	deleteCredential: { providerId: string };
 	/** 生成一份诊断文本，用于附在问题反馈里。凭证与令牌不在其中。 */
 	diagnostics: Record<string, never>;
+	/** 用指定模型发一次最小请求，确认凭证、地址与网络是否可用。 */
+	testModel: { provider: string; id: string };
 }
 
 /** 每条请求的应答数据。 */
@@ -228,6 +230,7 @@ export interface RequestResults {
 	saveCredential: { providers: ProviderInfo[] };
 	deleteCredential: { providers: ProviderInfo[] };
 	diagnostics: { text: string };
+	testModel: { ok: boolean; latencyMs: number; message?: string };
 }
 
 /** 请求方法名。 */

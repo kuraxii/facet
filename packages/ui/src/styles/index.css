@@ -2377,6 +2377,11 @@ svg.fl {
 	font-size: 11px;
 }
 
+.set-badge.is-off {
+	border-color: var(--err);
+	color: var(--err);
+}
+
 .set-badge.is-on {
 	border-color: var(--acc);
 	color: var(--acc);

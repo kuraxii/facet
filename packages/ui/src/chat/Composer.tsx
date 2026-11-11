@@ -42,6 +42,8 @@ export interface ComposerProps {
 	onSetDefaultThinkingLevel?: (level: ThinkingLevel) => void;
 	/** 发送键位：true 表示 Shift+回车发送 */
 	shiftEnterToSend?: boolean;
+	/** 现在不能发送的原因，给出时输入区上方显示说明并禁用发送 */
+	blockedReason?: string | undefined;
 }
 
 /** 模型芯片的显示文本。 */
@@ -101,9 +103,11 @@ export function Composer({
 	onSetDefaultModel,
 	onSetDefaultThinkingLevel,
 	shiftEnterToSend = false,
+	blockedReason,
 }: ComposerProps) {
-	// 运行中发送走排队，插入当前轮次；压缩与停止中不接受新输入
-	const canSend = value.trim().length > 0 && (activity === "idle" || activity === "running");
+	// 运行中发送走排队，插入当前轮次；压缩、停止中与连接断开时不接受新输入
+	const canSend =
+		blockedReason === undefined && value.trim().length > 0 && (activity === "idle" || activity === "running");
 	const isQueuing = activity === "running";
 	const [openMenu, setOpenMenu] = useState<"model" | "level" | undefined>(undefined);
 	const modelRef = useDismiss(openMenu === "model", () => setOpenMenu(undefined));
@@ -134,6 +138,7 @@ export function Composer({
 
 	return (
 		<div className="composer">
+			{blockedReason === undefined ? null : <p className="composer-blocked">{blockedReason}</p>}
 			<textarea
 				rows={2}
 				value={value}

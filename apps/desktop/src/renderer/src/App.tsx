@@ -165,6 +165,8 @@ export function App() {
 		() => client.store.getVersion(),
 	);
 	const [phase, setPhase] = useState<Phase>("connecting");
+	/** 与设备的连接是否可用，断开时输入区说明原因并禁用发送 */
+	const [isOnline, setIsOnline] = useState(false);
 	const [failure, setFailure] = useState<string | undefined>(undefined);
 	const [sessions, setSessions] = useState<readonly SessionSummary[]>([]);
 	const [activeFile, setActiveFile] = useState<string | undefined>(undefined);
@@ -262,6 +264,37 @@ export function App() {
 	const chat = client.chatView();
 	// 对话此刻的状态由会话状态得出,界面不自己拼布尔量
 	const activity = chatActivity(session);
+
+	/** 设备的模型目录与各提供方的凭证状态，供输入区的模型选择使用。 */
+	const [catalog, setCatalog] = useState<{ models: readonly ModelInfo[]; auth: Record<string, boolean> }>({
+		models: [],
+		auth: {},
+	});
+	/** 输入区可选的模型：去掉设置里隐藏的那些。 */
+	const visibleModels = useMemo(
+		() => catalog.models.filter((model) => !settings.hiddenModels.includes(`${model.provider}/${model.id}`)),
+		[catalog.models, settings.hiddenModels],
+	);
+	const providerAuth = catalog.auth;
+
+	/**
+	 * 现在不能发送的原因。
+	 *
+	 * 依次看连接、阶段与凭证：任何一条不满足都不该把消息送出去，说明写在输入区上方，
+	 * 草稿留在输入框里。
+	 */
+	let blockedReason: string | undefined;
+	if (!isOnline) {
+		blockedReason = "与设备的连接已断开,恢复之后可以继续发送";
+	} else if (activity === "compacting") {
+		blockedReason = "正在压缩上下文,完成之后再发送";
+	} else if (activity === "stopping") {
+		blockedReason = "正在停止这一轮,稍后可以继续发送";
+	} else if (session !== undefined && session.state.model === undefined) {
+		blockedReason = "这个会话没有可用模型,到设置里配置提供方与凭证";
+	} else if (session !== undefined && providerAuth[session.state.model?.provider ?? ""] === false) {
+		blockedReason = "当前模型的提供方还没有配置凭证,到设置里补上";
+	}
 	const queued = session?.state.queued ?? { steering: [], followUp: [] };
 	const canFork = activity === "idle" && session?.state.maintenance === undefined;
 
@@ -375,6 +408,12 @@ export function App() {
 		},
 		[runSessionAction, settings.defaultModel, settings.defaultThinkingLevel, withTrust],
 	);
+
+	// 连接状态：断开时输入区说明原因，恢复后自动放开
+	useEffect(() => {
+		setIsOnline(transport.state === "ready");
+		return transport.onStateChange((state) => setIsOnline(state === "ready"));
+	}, []);
 
 	useEffect(() => {
 		if (started.current) {
@@ -571,18 +610,6 @@ export function App() {
 		[runSessionAction, session?.state.cwd, withTrust],
 	);
 
-	/** 设备的模型目录与各提供方的凭证状态，供输入区的模型选择使用。 */
-	const [catalog, setCatalog] = useState<{ models: readonly ModelInfo[]; auth: Record<string, boolean> }>({
-		models: [],
-		auth: {},
-	});
-	/** 输入区可选的模型：去掉设置里隐藏的那些。 */
-	const visibleModels = useMemo(
-		() => catalog.models.filter((model) => !settings.hiddenModels.includes(`${model.provider}/${model.id}`)),
-		[catalog.models, settings.hiddenModels],
-	);
-	const providerAuth = catalog.auth;
-
 	/** 没有打开会话时新建落在的目录：优先上次用过的，其次第一个项目。 */
 	const emptyCreateCwd = createCwd.length > 0 ? createCwd : projects[0]?.cwd;
 	/** 会话错误条，打开类操作失败时共用。 */
@@ -752,6 +779,7 @@ export function App() {
 											.catch(() => undefined)
 									}
 									shiftEnterToSend={settings.input.sendKey === "shiftEnter"}
+									blockedReason={blockedReason}
 								/>
 
 								{chat && chat.notices.length > 0 ? (

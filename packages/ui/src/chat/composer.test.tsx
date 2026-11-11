@@ -115,3 +115,23 @@ describe("模型与思考档位芯片", () => {
 		expect(html).toContain("Shift+回车发送");
 	});
 });
+
+describe("发送受阻", () => {
+	it("给出原因时显示说明并禁用发送", () => {
+		const html = renderToStaticMarkup(
+			createElement(Composer, {
+				value: "有待发送的内容",
+				onChange: () => {},
+				onSend: () => {},
+				onStop: () => {},
+				activity: "idle",
+				model: undefined,
+				thinkingLevel: undefined,
+				blockedReason: "与设备的连接已断开",
+			}),
+		);
+		expect(html).toContain("composer-blocked");
+		expect(html).toContain("与设备的连接已断开");
+		expect(html).toMatch(/class="send"[^>]*disabled/);
+	});
+});

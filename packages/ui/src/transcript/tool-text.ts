@@ -51,14 +51,17 @@ export function toolTarget(input: unknown): string {
  * 工具卡片右侧的状态文字。
  *
  * 成功与失败只靠颜色和边框区分,不再写字;文字位置留给耗时。执行中仍写出「执行中」,
- * 因为它不是结论,还需要一个明确的进行时状态。
+ * 因为它不是结论,还需要一个明确的进行时状态;未执行也写出来,它不是执行结果。
  */
 export function toolStatusText(
-	status: "running" | "done" | "failed",
+	status: "running" | "done" | "failed" | "skipped",
 	durationMs: number | undefined,
 ): string {
 	if (status === "running") {
 		return "执行中";
+	}
+	if (status === "skipped") {
+		return "未执行";
 	}
 	if (durationMs === undefined) {
 		return "";

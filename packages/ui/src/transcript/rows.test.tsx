@@ -73,3 +73,36 @@ describe("用户消息的回退入口", () => {
 		expect(html).not.toContain("revert-btn");
 	});
 });
+
+describe("被中止的一轮", () => {
+	it("没执行到的工具调用标成未执行", () => {
+		const aborted: TranscriptItem = {
+			kind: "message",
+			id: "e:a1",
+			entryId: "a1",
+			role: "assistant",
+			stopReason: "aborted",
+			parts: [
+				{ kind: "text", partId: "text:0", text: "我先看看" },
+				{
+					kind: "toolCall",
+					partId: "tool:c1",
+					callId: "c1",
+					name: "bash",
+					input: { command: "ls" },
+					status: "skipped",
+					output: undefined,
+					durationMs: undefined,
+					details: undefined,
+				},
+			],
+			isStreaming: false,
+			startedAt: 2,
+			endedAt: 3,
+		};
+		const html = render([userItem("e:u1", "u1", "看看文件"), aborted], false);
+		expect(html).toContain("is-skipped");
+		expect(html).toContain("未执行");
+		expect(html).toContain("已停止");
+	});
+});

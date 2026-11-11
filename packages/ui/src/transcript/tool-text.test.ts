@@ -17,6 +17,11 @@ describe("工具状态文字", () => {
 		expect(toolStatusText("running", undefined)).toBe("执行中");
 		expect(toolStatusText("running", 100)).toBe("执行中");
 	});
+
+	it("未执行写出来,耗时无意义", () => {
+		expect(toolStatusText("skipped", undefined)).toBe("未执行");
+		expect(toolStatusText("skipped", 100)).toBe("未执行");
+	});
 });
 
 describe("工具参数摘要", () => {

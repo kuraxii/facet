@@ -912,6 +912,11 @@ svg.fl {
 	border-color: var(--line2);
 }
 
+.tool.is-skipped {
+	border-style: dashed;
+	border-color: var(--line2);
+}
+
 .tool-head {
 	display: flex;
 	align-items: center;
@@ -953,6 +958,10 @@ svg.fl {
 
 .tool.is-failed .tool-status {
 	color: var(--err);
+}
+
+.tool.is-skipped .tool-status {
+	color: var(--t3);
 }
 
 .tool.is-running .tool-status {
@@ -1124,6 +1133,12 @@ svg.fl {
 	border-color: var(--warnbd);
 	background: var(--warnbg);
 	color: var(--warn);
+}
+
+.chip.is-error {
+	border-color: var(--err);
+	background: var(--errbg);
+	color: var(--err);
 }
 
 .divider {

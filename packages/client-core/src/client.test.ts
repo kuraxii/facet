@@ -249,20 +249,15 @@ describe("SessionClient", () => {
 		expect(sent).toEqual(["你好"]);
 	});
 
-	it("发送被拒时打印错误且不确认", async () => {
+	it("发送被拒时给出提示且不确认", async () => {
 		const { transport, client } = createClient(2);
 		await client.openSession("/tmp/s1.jsonl");
-		const errors: string[] = [];
-		const spy = vi.spyOn(console, "error").mockImplementation((message: string) => {
-			errors.push(message);
-		});
 		const sent: string[] = [];
 		client.onSent((text) => sent.push(text));
 		const clientSeq = client.send("你好");
 		transport.reject(CHAT, clientSeq, { type: "chat/turnStarted", text: "你好" }, "session is running");
 		expect(sent).toEqual([]);
-		expect(errors).toHaveLength(1);
-		expect(errors[0]).toContain("session is running");
+		expect(client.chatView()?.notices).toEqual([{ level: "error", message: "发送失败:session is running" }]);
 		// 之后同类消息也不会再触发确认
 		transport.emit(CHAT, {
 			type: "chat/messageAppended",
@@ -270,7 +265,15 @@ describe("SessionClient", () => {
 			message: { role: "user", content: [{ type: "text", text: "你好" }], timestamp: 1 },
 		});
 		expect(sent).toEqual([]);
-		spy.mockRestore();
+	});
+
+	it("会话通道的动作被拒也提示在对话视图上", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		transport.reject(SESSION, 1, { type: "session/configChanged" }, "unknown model: nope/nope");
+		expect(client.chatView()?.notices).toEqual([
+			{ level: "error", message: "操作被拒绝:unknown model: nope/nope" },
+		]);
 	});
 
 	it("项目请求带上参数", async () => {

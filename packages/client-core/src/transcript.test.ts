@@ -141,6 +141,43 @@ describe("toTranscript", () => {
 		expect(item?.parts).toEqual([{ kind: "text", partId: "text:0", text: "说到一半" }]);
 	});
 
+	it("中止轮里没执行到的工具调用标成未执行", () => {
+		const [item] = toTranscript(
+			viewWith([
+				historyItem(
+					"e1",
+					assistant(
+						[
+							{ type: "text", text: "先看看" },
+							{ type: "toolCall", id: "c1", name: "bash", arguments: { command: "ls" } },
+						],
+						"aborted",
+					),
+				),
+			]),
+		);
+		expect(item?.stopReason).toBe("aborted");
+		expect(item?.parts).toEqual([
+			{ kind: "text", partId: "text:0", text: "先看看" },
+			{
+				kind: "toolCall",
+				partId: "tool:c1",
+				callId: "c1",
+				name: "bash",
+				input: { command: "ls" },
+				status: "skipped",
+				output: undefined,
+				durationMs: undefined,
+				details: undefined,
+			},
+		]);
+	});
+
+	it("内容为空的中止消息不占一行", () => {
+		const items = toTranscript(viewWith([historyItem("e1", assistant([], "aborted"))]));
+		expect(items).toEqual([]);
+	});
+
 	it("定位字段直接用视图上的 entryId，与标识前缀无关", () => {
 		const [promoted] = toTranscript(
 			viewWith([

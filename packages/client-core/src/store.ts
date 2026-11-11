@@ -9,10 +9,12 @@ import { makeChannel, parseChannel } from "@facet/protocol";
 import { historyMessageId, isHistoryMessageId } from "./message-id.ts";
 import { reduceChat, reduceSession } from "./reduce.ts";
 import {
+	appendNotice,
 	type ChatView,
 	createChatView,
 	createSessionView,
 	type EntryView,
+	type NoticeView,
 	type SessionView,
 } from "./state.ts";
 
@@ -155,6 +157,20 @@ export class SessionStore {
 		slot.view = { ...slot.view, items };
 		this.markChanged();
 		return slot.view;
+	}
+
+	/**
+	 * 往对话视图追加一条提示。
+	 *
+	 * 设备拒绝一条动作时回的是带原因的动作帧,它不占通道序号,不能进归约,由调用方转成提示。
+	 */
+	addNotice(channel: Channel, notice: NoticeView): void {
+		const slot = this.chats.get(channel);
+		if (!slot) {
+			return;
+		}
+		slot.view = { ...slot.view, notices: appendNotice(slot.view.notices, notice) };
+		this.markChanged();
 	}
 
 	/** 往更早的方向补一页历史,已存在的标识跳过。 */

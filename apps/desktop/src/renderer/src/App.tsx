@@ -311,7 +311,10 @@ export function App() {
 						{chat && chat.notices.length > 0 ? (
 							<div className="notices">
 								{chat.notices.map((notice) => (
-									<span key={`${notice.level}:${notice.message}`} className="chip">
+									<span
+										key={`${notice.level}:${notice.message}`}
+										className={notice.level === "error" ? "chip is-error" : "chip"}
+									>
 										{notice.message}
 									</span>
 								))}

@@ -21,6 +21,7 @@ import type {
 	SessionSnapshot,
 	SessionSummary,
 } from "@facet/protocol";
+import { makeChannel, parseChannel } from "@facet/protocol";
 import { debugLog } from "./log.ts";
 import type { ChatView, SessionView } from "./state.ts";
 import type { ChannelGap } from "./store.ts";
@@ -334,14 +335,21 @@ export class SessionClient {
 	/**
 	 * 处理设备拒绝的动作。
 	 *
-	 * 拒绝帧不进序号流,也不参与归约;原因目前只写进控制台,界面提示还没有做。
+	 * 拒绝帧不进序号流,也不参与归约:这里把原因转成对话视图上的一条错误提示,并让对应的
+	 * 发送不再等确认,草稿留在输入框。
 	 */
 	private handleRejection(frame: ActionFrame, reason: string): void {
 		const clientSeq = frame.origin?.clientSeq;
 		if (clientSeq !== undefined && this.pendingSend?.clientSeq === clientSeq) {
 			this.pendingSend = undefined;
 		}
-		console.error(`[facet] 动作被设备拒绝:${frame.action.type}(${reason})`);
+		const label = frame.action.type === "chat/turnStarted" ? "发送失败" : "操作被拒绝";
+		// 提示统一挂在同一会话的对话通道上,会话通道的动作被拒也在这里显示
+		const parsed = parseChannel(frame.channel);
+		const target = parsed === undefined ? undefined : makeChannel("chat", parsed.id);
+		if (target !== undefined) {
+			this.state.addNotice(target, { level: "error", message: `${label}:${reason}` });
+		}
 	}
 
 	/**

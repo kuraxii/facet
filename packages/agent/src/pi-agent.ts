@@ -346,6 +346,19 @@ export class PiAgent {
 		return this.session.sessionManager.getLeafId();
 	}
 
+	/**
+	 * 活动分支上某个条目前一条的 id，用来把「下一轮开始处」换成「上一轮结束处」。
+	 * 条目不在分支上或是分支第一条时返回 null。
+	 */
+	entryBefore(entryId: string): string | null {
+		const branch = this.session.sessionManager.getBranch();
+		const index = branch.findIndex((entry) => entry.id === entryId);
+		if (index <= 0) {
+			return null;
+		}
+		return branch[index - 1]?.id ?? null;
+	}
+
 	/** 统计覆盖整个会话，含已被压缩掉的历史，因此 token 与成本反映实际计费。 */
 	stats(): SessionStats {
 		const stats = this.session.getSessionStats();

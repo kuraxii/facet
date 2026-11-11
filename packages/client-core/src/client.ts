@@ -22,7 +22,6 @@ import type {
 	SessionSummary,
 } from "@facet/protocol";
 import { debugLog } from "./log.ts";
-import { historyEntryId } from "./message-id.ts";
 import type { ChatView, SessionView } from "./state.ts";
 import type { ChannelGap } from "./store.ts";
 import { SessionStore } from "./store.ts";
@@ -288,23 +287,23 @@ export class SessionClient {
 	}
 
 	/**
-	 * 从某条消息分叉出新会话,并切过去。
+	 * 分叉出新会话,并切过去。
 	 *
-	 * 消息标识来自视图:历史消息带条目 id,直接用来定位;本次连接产生的消息只有设备分配的
-	 * 标识,由设备按角色与时间戳换算成条目。分叉会在设备侧建出一个新会话文件,原会话保持不动,
-	 * 新会话紧接着被打开订阅,否则它会因为没有持有者而在空闲回收的宽限期后关闭。
+	 * beforeEntryId 是下一轮开始处的条目:分叉点取它之前的那一条,这样这一轮结束后追加的
+	 * usage、session_info、compaction 也一并带到新会话。缺省表示复制整条活动分支。
+	 * 分叉会在设备侧建出一个新会话文件,原会话保持不动；新会话紧接着被打开订阅,否则它会
+	 * 因为没有持有者而在空闲回收的宽限期后关闭。
 	 *
-	 * 会话正在运行时设备会拒绝分叉:这一轮还没写盘,分叉点可能找不到条目。
+	 * 会话正在运行时设备会拒绝分叉:这一轮还没写盘,分叉点对不上。
 	 */
-	async fork(messageId: string): Promise<OpenedSession> {
+	async fork(beforeEntryId?: string): Promise<OpenedSession> {
 		const opened = this.requireOpened();
 		if (opened.file === undefined) {
 			throw new Error("当前会话没有文件,无法分叉");
 		}
-		const entryId = historyEntryId(messageId);
 		const forked = await this.transport.request("forkSession", {
 			sessionFile: opened.file,
-			...(entryId === undefined ? { messageId } : { entryId }),
+			...(beforeEntryId === undefined ? {} : { beforeEntryId }),
 		});
 		if (forked.file === undefined) {
 			throw new Error("分叉出的会话没有文件");

@@ -658,6 +658,45 @@ svg.fl {
 	word-break: break-word;
 }
 
+.row.is-fork {
+	justify-content: flex-end;
+	margin-top: -6px;
+}
+
+.fork-btn {
+	display: grid;
+	place-items: center;
+	width: 26px;
+	height: 26px;
+	padding: 0;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	background: transparent;
+	color: var(--t3);
+	opacity: 0.65;
+	transition:
+		opacity var(--dur-fast) var(--ease),
+		color var(--dur-fast) var(--ease),
+		border-color var(--dur-fast) var(--ease);
+}
+
+.row.is-fork:hover .fork-btn,
+.fork-btn:focus-visible {
+	opacity: 1;
+	color: var(--acc);
+	border-color: var(--acc);
+}
+
+.fork-btn:disabled {
+	opacity: 0.25;
+	cursor: default;
+}
+
+.fork-btn:disabled:hover {
+	color: var(--t3);
+	border-color: var(--line);
+}
+
 .row-action {
 	display: grid;
 	place-items: center;
@@ -1424,6 +1463,45 @@ svg.fl {
 
 	.md .markstream-react .code-block-container .code-block-header {
 		transition: none;
+	}
+
+	.row.is-fork {
+		justify-content: flex-end;
+		margin-top: -6px;
+	}
+
+	.fork-btn {
+		display: grid;
+		place-items: center;
+		width: 26px;
+		height: 26px;
+		padding: 0;
+		border: 1px solid var(--line);
+		border-radius: 6px;
+		background: transparent;
+		color: var(--t3);
+		opacity: 0.65;
+		transition:
+			opacity var(--dur-fast) var(--ease),
+			color var(--dur-fast) var(--ease),
+			border-color var(--dur-fast) var(--ease);
+	}
+
+	.row.is-fork:hover .fork-btn,
+	.fork-btn:focus-visible {
+		opacity: 1;
+		color: var(--acc);
+		border-color: var(--acc);
+	}
+
+	.fork-btn:disabled {
+		opacity: 0.25;
+		cursor: default;
+	}
+
+	.fork-btn:disabled:hover {
+		color: var(--t3);
+		border-color: var(--line);
 	}
 
 	.row-action {

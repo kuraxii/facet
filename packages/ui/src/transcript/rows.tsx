@@ -15,10 +15,10 @@ import { foldOutput, toolStatusText, toolTarget } from "./tool-text.ts";
 export interface ChatTranscriptProps {
 	/** 数据侧投影出的渲染单元,顺序即消息顺序 */
 	items: readonly TranscriptItem[];
-	/** 是否允许分叉,运行中不允许 */
+	/** 是否允许分叉,本轮结束前不允许 */
 	canFork: boolean;
-	/** 从某条消息分叉,传入消息标识 */
-	onFork: (messageId: string) => void;
+	/** 在某一轮结束处分叉,传入下一轮开始处条目的 id；缺省表示最后一轮 */
+	onFork: (beforeEntryId: string | undefined) => void;
 	/** 正在进行的自动重试,没有则为空 */
 	retry?: { attempt: number; maxAttempts: number } | undefined;
 	/** 没有任何内容时显示的提示 */
@@ -343,6 +343,27 @@ export function ChatTranscript({ items, canFork, onFork, retry, emptyHint, renam
 					);
 				}
 
+				if (row.kind === "fork") {
+					const fork = row.fork;
+					if (fork === undefined) {
+						return null;
+					}
+					return (
+						<Shell key={row.id} className="is-fork">
+							<button
+								type="button"
+								className="fork-btn"
+								aria-label="从这一轮往后继续"
+								title="从这一轮往后继续"
+								disabled={fork.needsSettle && !canFork}
+								onClick={() => onFork(fork.beforeEntryId)}
+							>
+								<ForkIcon size={14} />
+							</button>
+						</Shell>
+					);
+				}
+
 				if (row.kind === "divider") {
 					const text = row.items
 						.flatMap((item) => item.parts)
@@ -378,16 +399,6 @@ export function ChatTranscript({ items, canFork, onFork, retry, emptyHint, renam
 					return (
 						<Shell key={row.id} className="is-user">
 							<div className="user-line">
-								{row.forkTarget !== undefined && canFork ? (
-									<button
-										type="button"
-										className="row-action"
-										aria-label="从这里分叉"
-										onClick={() => onFork(row.forkTarget as string)}
-									>
-										<ForkIcon size={14} />
-									</button>
-								) : null}
 								<div className="bub">{text}</div>
 							</div>
 						</Shell>

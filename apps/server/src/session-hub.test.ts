@@ -41,6 +41,15 @@ class FakeAgent implements HubAgent {
 		return { entries: this.stored, leafId: null };
 	}
 
+	/** 分叉点：取给定条目在 stored 里的前一条 */
+	entryBefore(entryId: string): string | null {
+		const index = this.stored.findIndex((entry) => entry.id === entryId);
+		if (index <= 0) {
+			return null;
+		}
+		return this.stored[index - 1]?.id ?? null;
+	}
+
 	/** 取边界之后的条目，用例按 stored 尾部模拟 */
 	entriesAfter(afterEntryId: string | null): { entries: Entry[]; leafId: string | null } {
 		const index = afterEntryId === null ? -1 : this.stored.findIndex((entry) => entry.id === afterEntryId);
@@ -109,8 +118,8 @@ class FakeFactory implements AgentFactory<FakeAgent> {
 		return new FakeAgent(`new-${this.created}`, resolve(`/tmp/new-${this.created}.jsonl`));
 	}
 
-	async fork(options: { sessionFile: string; entryId: string }): Promise<FakeAgent> {
-		this.forked.push(`${options.sessionFile}#${options.entryId}`);
+	async fork(options: { sessionFile: string; entryId?: string }): Promise<FakeAgent> {
+		this.forked.push(`${options.sessionFile}#${options.entryId ?? "leaf"}`);
 		await Promise.resolve();
 		return new FakeAgent(`fork-${this.forked.length}`, resolve(`/tmp/fork-${this.forked.length}.jsonl`));
 	}
@@ -191,59 +200,57 @@ describe("会话建立与复用", () => {
 
 	it("分叉出新会话并登记", async () => {
 		const source = await hub.openSession("/tmp/s1.jsonl");
-		const forked = await hub.forkSession({ sessionFile: "/tmp/s1.jsonl", entryId: "e3" });
-		expect(factory.forked).toEqual(["/tmp/s1.jsonl#e3"]);
+		const agent = hub.agent(source.id);
+		for (const id of ["e1", "e2", "e3"]) {
+			agent.stored.push({
+				id,
+				parentId: id === "e1" ? null : `e${Number(id.slice(1)) - 1}`,
+				kind: "message",
+				timestamp: "2026-11-08T00:00:00Z",
+				message: {
+					role: "assistant",
+					content: [{ type: "text", text: id }],
+					provider: "p",
+					model: "m",
+					usage: {
+						input: 0,
+						output: 0,
+						cacheRead: 0,
+						cacheWrite: 0,
+						reasoning: 0,
+						totalTokens: 0,
+						cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+					},
+					stopReason: "stop",
+					timestamp: 1,
+				},
+			});
+		}
+		const forked = await hub.forkSession({ sessionFile: "/tmp/s1.jsonl", beforeEntryId: "e3" });
+		// 分叉点是下一轮开始处的前一条
+		expect(factory.forked).toEqual(["/tmp/s1.jsonl#e2"]);
 		expect(forked.id).not.toBe(source.id);
 		expect(hub.has(forked.id)).toBe(true);
 		expect(hub.has(source.id)).toBe(true);
 	});
 
-	it("实时消息按角色与时间戳回查条目后分叉", async () => {
-		const source = await hub.openSession("/tmp/s1.jsonl");
-		const agent = hub.agent(source.id);
-		const message = {
-			role: "assistant" as const,
-			content: [{ type: "text" as const, text: "回复" }],
-			provider: "p",
-			model: "m",
-			usage: {
-				input: 0,
-				output: 0,
-				cacheRead: 0,
-				cacheWrite: 0,
-				reasoning: 0,
-				totalTokens: 0,
-				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-			},
-			stopReason: "stop" as const,
-			timestamp: 1730,
-		};
-		await hub.subscribe(`chat:/${source.id}`, undefined, sink("a"));
-		agent.emit({ type: "message_start", message });
-		agent.emit({ type: "message_end", message });
-		agent.stored.push({
-			id: "e42",
-			parentId: null,
-			kind: "message",
-			timestamp: "2026-11-08T00:00:00Z",
-			message,
-		});
-
-		await hub.forkSession({ sessionFile: "/tmp/s1.jsonl", messageId: "m1" });
-		expect(factory.forked).toEqual(["/tmp/s1.jsonl#e42"]);
+	it("缺省分叉点取活动分支的叶子", async () => {
+		await hub.openSession("/tmp/s1.jsonl");
+		await hub.forkSession({ sessionFile: "/tmp/s1.jsonl" });
+		expect(factory.forked).toEqual(["/tmp/s1.jsonl#leaf"]);
 	});
 
 	it("运行中不允许分叉", async () => {
 		const source = await hub.openSession("/tmp/s1.jsonl");
 		hub.agent(source.id).busy = true;
-		await expect(hub.forkSession({ sessionFile: "/tmp/s1.jsonl", entryId: "e1" })).rejects.toThrow(
+		await expect(hub.forkSession({ sessionFile: "/tmp/s1.jsonl", beforeEntryId: "e1" })).rejects.toThrow(
 			"不能分叉",
 		);
 	});
 
-	it("消息找不到条目时报错", async () => {
+	it("分叉点不在分支上时报错", async () => {
 		await hub.openSession("/tmp/s1.jsonl");
-		await expect(hub.forkSession({ sessionFile: "/tmp/s1.jsonl", messageId: "m99" })).rejects.toThrow(
+		await expect(hub.forkSession({ sessionFile: "/tmp/s1.jsonl", beforeEntryId: "e99" })).rejects.toThrow(
 			"找不到消息对应的会话条目",
 		);
 	});

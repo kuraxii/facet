@@ -17,8 +17,3 @@ export function historyMessageId(entryId: string): string {
 export function isHistoryMessageId(id: string): boolean {
 	return id.startsWith(HISTORY_PREFIX);
 }
-
-/** 历史消息对应的会话条目 id,分叉时用它定位。 */
-export function historyEntryId(messageId: string): string | undefined {
-	return messageId.startsWith(HISTORY_PREFIX) ? messageId.slice(HISTORY_PREFIX.length) : undefined;
-}

@@ -35,7 +35,7 @@ export { shouldShowCodeBlock } from "./markdown/code-block-state.ts";
 export { extractLangToken, PLAIN, resolveCodeLang } from "./markdown/code-lang.ts";
 export type { MarkdownProps } from "./markdown/Markdown.tsx";
 export { Markdown } from "./markdown/Markdown.tsx";
-export type { DiffChunk, DisplayRow, RowKind } from "./transcript/group.ts";
+export type { DiffChunk, DisplayRow, ForkPoint, RowKind } from "./transcript/group.ts";
 export { formatDuration, groupRows, metaSummary } from "./transcript/group.ts";
 export { ArrowDownIcon } from "./transcript/icons.tsx";
 export type { ChatTranscriptProps } from "./transcript/rows.tsx";

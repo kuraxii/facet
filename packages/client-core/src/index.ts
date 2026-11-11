@@ -6,7 +6,7 @@
  */
 export type { DeviceHandshake, OpenedSession, SessionClientOptions, SessionTransport } from "./client.ts";
 export { SessionClient } from "./client.ts";
-export { historyEntryId, historyMessageId, isHistoryMessageId } from "./message-id.ts";
+export { historyMessageId, isHistoryMessageId } from "./message-id.ts";
 export { reduceChat, reduceSession } from "./reduce.ts";
 export type {
 	ChatView,

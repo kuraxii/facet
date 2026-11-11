@@ -243,15 +243,10 @@ async function handleRequest(
 			return await openSession(context, params);
 		case "forkSession": {
 			const source = asObject(params);
-			const entryId = optionalString(source, "entryId");
-			const messageId = optionalString(source, "messageId");
-			if (entryId === undefined && messageId === undefined) {
-				throw new RequestError("bad_params", "entryId or messageId is required");
-			}
+			const beforeEntryId = optionalString(source, "beforeEntryId");
 			return await context.hub.forkSession({
 				sessionFile: requiredString(source, "sessionFile"),
-				...(entryId === undefined ? {} : { entryId }),
-				...(messageId === undefined ? {} : { messageId }),
+				...(beforeEntryId === undefined ? {} : { beforeEntryId }),
 				cwd: optionalString(source, "cwd"),
 			});
 		}

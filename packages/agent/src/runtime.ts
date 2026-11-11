@@ -71,9 +71,9 @@ export interface OpenPiAgentOptions {
 	onError?: (error: unknown) => void;
 }
 
-/** 分叉会话的参数。entryId 指定从哪条历史分叉。 */
+/** 分叉会话的参数。entryId 缺省时复制整条活动分支。 */
 export interface ForkPiAgentOptions extends OpenPiAgentOptions {
-	entryId: string;
+	entryId?: string;
 }
 
 export class PiAgentFactory {
@@ -206,13 +206,21 @@ export class PiAgentFactory {
 		return await this.launch(sessionManager, options, {});
 	}
 
-	/** 从指定条目分叉出新会话，原会话不受影响。 */
+	/**
+	 * 分叉出新会话，原会话不受影响。
+	 *
+	 * entryId 缺省时取会话的叶子，复制整条活动分支；会话还没有任何条目时无从分叉。
+	 */
 	async fork(options: ForkPiAgentOptions): Promise<PiAgent> {
 		this.assertAlive();
 		const source = SessionManager.open(options.sessionFile, options.sessionDir, options.cwd);
-		const forked = source.createBranchedSession(options.entryId);
+		const entryId = options.entryId ?? source.getLeafId() ?? undefined;
+		if (entryId === undefined) {
+			throw new Error("会话还没有消息,无法分叉");
+		}
+		const forked = source.createBranchedSession(entryId);
 		if (!forked) {
-			throw new Error(`cannot fork session ${options.sessionFile} at entry ${options.entryId}`);
+			throw new Error(`cannot fork session ${options.sessionFile} at entry ${entryId}`);
 		}
 		return await this.open({ ...options, sessionFile: forked });
 	}

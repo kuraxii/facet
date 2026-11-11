@@ -172,9 +172,9 @@ export function App() {
 		[refreshSessions],
 	);
 
-	const forkFrom = useCallback(
-		(messageId: string) => {
-			void client.fork(messageId).then(async (forked) => {
+	const forkTurn = useCallback(
+		(beforeEntryId: string | undefined) => {
+			void client.fork(beforeEntryId).then(async (forked) => {
 				setActiveFile(forked.file);
 				await refreshSessions();
 			});
@@ -241,8 +241,8 @@ export function App() {
 					<div className="column">
 						<ChatTranscript
 							items={transcript}
-							canFork={chat?.isRunning !== true}
-							onFork={forkFrom}
+							canFork={chat !== undefined && !chat.isRunning && !chat.willRetry && chat.retry === undefined}
+							onFork={forkTurn}
 							retry={chat?.retry}
 							renames={chat?.renames}
 							emptyHint="还没有消息,输入内容开始"

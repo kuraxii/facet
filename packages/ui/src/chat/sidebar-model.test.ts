@@ -3,12 +3,15 @@ import { describe, expect, it } from "vitest";
 import {
 	baseName,
 	buildSidebar,
-	filterProjects,
+	groupSessions,
 	type SidebarHost,
+	type SidebarSession,
 	samePath,
 	sessionTitle,
 	shortTime,
 } from "./sidebar-model.ts";
+
+const NOW = new Date(2024, 10, 6, 15, 0, 0).getTime();
 
 function summary(overrides: Partial<SessionSummary> & Pick<SessionSummary, "id" | "path">): SessionSummary {
 	return {
@@ -16,7 +19,7 @@ function summary(overrides: Partial<SessionSummary> & Pick<SessionSummary, "id" 
 		name: undefined,
 		parentSessionPath: undefined,
 		created: 0,
-		modified: 1_700_000_000_000,
+		modified: NOW - 60_000,
 		messageCount: 3,
 		firstMessage: "",
 		...overrides,
@@ -29,6 +32,28 @@ function host(overrides: Partial<SidebarHost> & Pick<SidebarHost, "id" | "name">
 		state: "connected",
 		isLocal: false,
 		projects: [],
+		...overrides,
+	};
+}
+
+/** 相对今天零点前移若干天的时间戳，小时取本地时区。 */
+function dayBefore(days: number, hour = 10): number {
+	const date = new Date(NOW);
+	date.setDate(date.getDate() - days);
+	date.setHours(hour, 0, 0, 0);
+	return date.getTime();
+}
+
+function session(overrides: Partial<SidebarSession> & Pick<SidebarSession, "path">): SidebarSession {
+	return {
+		title: "会话",
+		modified: NOW - 60_000,
+		messageCount: 1,
+		isRunning: false,
+		dot: "idle",
+		project: "facet",
+		cwd: "/work/facet",
+		host: undefined,
 		...overrides,
 	};
 }
@@ -53,171 +78,123 @@ describe("路径与标题", () => {
 });
 
 describe("相对时间", () => {
-	const now = new Date(2024, 10, 6, 15, 0, 0).getTime();
-
 	it("按距离分档", () => {
-		expect(shortTime(now - 30_000, now)).toBe("刚刚");
-		expect(shortTime(now - 8 * 60_000, now)).toBe("8 分钟");
-		expect(shortTime(now - 3 * 3_600_000, now)).toBe("3 小时");
-		expect(shortTime(now - 30 * 3_600_000, now)).toBe("昨天");
-		expect(shortTime(now - 2 * 86_400_000, now)).toBe("周一");
-		expect(shortTime(new Date(2024, 9, 3).getTime(), now)).toBe("10月3日");
+		expect(shortTime(NOW - 30_000, NOW)).toBe("刚刚");
+		expect(shortTime(NOW - 8 * 60_000, NOW)).toBe("8 分钟");
+		expect(shortTime(NOW - 3 * 3_600_000, NOW)).toBe("3 小时");
+		expect(shortTime(NOW - 30 * 3_600_000, NOW)).toBe("昨天");
+		expect(shortTime(NOW - 2 * 86_400_000, NOW)).toBe("周一");
+		expect(shortTime(new Date(2024, 9, 3).getTime(), NOW)).toBe("10月3日");
+	});
+});
+
+describe("队列分组", () => {
+	it("按进行中、今天、昨天、更早分组，并按时间倒序", () => {
+		const groups = groupSessions(
+			[
+				session({ path: "/s/old.jsonl", modified: dayBefore(9) }),
+				session({ path: "/s/run.jsonl", isRunning: true, modified: dayBefore(3) }),
+				session({ path: "/s/today-a.jsonl", modified: NOW - 60_000 }),
+				session({ path: "/s/yesterday.jsonl", modified: dayBefore(1) }),
+				session({ path: "/s/today-b.jsonl", modified: NOW - 3_600_000 }),
+			],
+			NOW,
+		);
+		expect(groups.map((group) => group.key)).toEqual(["running", "today", "yesterday", "earlier"]);
+		expect(groups.map((group) => group.label)).toEqual(["进行中", "今天", "昨天", "更早"]);
+		expect(groups[1]?.sessions.map((item) => item.path)).toEqual(["/s/today-a.jsonl", "/s/today-b.jsonl"]);
+	});
+
+	it("空组不出现", () => {
+		const groups = groupSessions([session({ path: "/s/today.jsonl" })], NOW);
+		expect(groups.map((group) => group.key)).toEqual(["today"]);
 	});
 });
 
 describe("组装侧栏", () => {
 	const sessions = [
-		summary({ id: "a", path: "/s/a.jsonl", cwd: "/work/facet", modified: 300, name: "压测脚本调整" }),
-		summary({ id: "b", path: "/s/b.jsonl", cwd: "/work/facet", modified: 100, firstMessage: "重构审批流程" }),
-		summary({ id: "c", path: "/s/c.jsonl", cwd: "/work/linx-icp", modified: 200 }),
-	];
-
-	it("会话按目录归到项目下", () => {
-		const data = buildSidebar({
-			sessions,
-			hosts: [host({ id: "local", name: "facet", isLocal: true })],
-			projects: [
-				{ id: "p1", cwd: "/work/facet", name: undefined, createdAt: 1 },
-				{ id: "p2", cwd: "/work/linx-icp", name: "icp 项目", createdAt: 2 },
-			],
-			activeFile: "/s/a.jsonl",
-			runningFile: "/s/a.jsonl",
-		});
-		expect(data.projects.map((project) => project.name)).toEqual(["facet", "icp 项目"]);
-		expect(data.projects[0]?.sessions.map((session) => session.title)).toEqual([
-			"压测脚本调整",
-			"重构审批流程",
-		]);
-		expect(data.projects[0]?.sessions[0]?.isRunning).toBe(true);
-		expect(data.recents.map((session) => session.path)).toEqual(["/s/a.jsonl", "/s/c.jsonl", "/s/b.jsonl"]);
-		expect(data.remotes).toEqual([]);
-	});
-
-	it("未添加过的会话目录也成组，排在已添加项目之后", () => {
-		const data = buildSidebar({
-			sessions,
-			hosts: [],
-			projects: [{ id: "p1", cwd: "/work/docs-site", name: undefined, createdAt: 1 }],
-			activeFile: undefined,
-			runningFile: undefined,
-		});
-		expect(data.projects.map((project) => project.cwd)).toEqual([
-			"/work/docs-site",
-			"/work/facet",
-			"/work/linx-icp",
-		]);
-		expect(data.projects[0]?.sessions).toEqual([]);
-		expect(data.projects[1]?.sessions.map((session) => session.path)).toEqual(["/s/a.jsonl", "/s/b.jsonl"]);
-		expect(data.recents).toHaveLength(3);
-	});
-
-	it("项目清单为空时启动目录的会话照样成组", () => {
-		const data = buildSidebar({
-			sessions,
-			hosts: [],
-			projects: [],
-			activeFile: "/s/c.jsonl",
-			runningFile: undefined,
-		});
-		expect(data.projects.map((project) => project.name)).toEqual(["facet", "linx-icp"]);
-		expect(data.projects[1]?.sessions.map((session) => session.path)).toEqual(["/s/c.jsonl"]);
-		expect(data.recents.map((session) => session.path)).toEqual(["/s/a.jsonl", "/s/c.jsonl", "/s/b.jsonl"]);
-	});
-
-	it("同一目录既已添加又有会话时只成一组", () => {
-		const data = buildSidebar({
-			sessions,
-			hosts: [],
-			projects: [{ id: "p1", cwd: "/work/facet/", name: "facet 主仓", createdAt: 1 }],
-			activeFile: undefined,
-			runningFile: undefined,
-		});
-		expect(data.projects.map((project) => project.name)).toEqual(["facet 主仓", "linx-icp"]);
-		expect(data.projects[0]?.sessions).toHaveLength(2);
-	});
-
-	it("最近会话包含远端主机的会话，带主机名", () => {
-		const remote = host({
-			id: "dev-box",
-			name: "dev-box",
-			projects: [
-				{
-					cwd: "/srv/gateway",
-					name: "gateway",
-					sessions: [
-						{
-							path: "placeholder://gateway",
-							title: "限流策略评审",
-							modified: 400,
-							messageCount: 12,
-							isRunning: false,
-							project: "gateway",
-							host: "dev-box",
-							isPlaceholder: true,
-						},
-					],
-				},
-			],
-		});
-		const data = buildSidebar({
-			sessions,
-			hosts: [host({ id: "local", name: "facet", isLocal: true }), remote],
-			projects: [],
-			activeFile: undefined,
-			runningFile: undefined,
-		});
-		expect(data.remotes.map((item) => item.id)).toEqual(["dev-box"]);
-		expect(data.recents[0]?.host).toBe("dev-box");
-	});
-});
-
-describe("搜索", () => {
-	const projects = [
-		{
+		summary({
+			id: "a",
+			path: "/s/a.jsonl",
 			cwd: "/work/facet",
-			name: "facet",
-			sessions: [
-				{
-					path: "/s/a.jsonl",
-					title: "修复重连缺口",
-					modified: 300,
-					messageCount: 1,
-					isRunning: false,
-					project: "facet",
-					host: undefined,
-				},
-			],
-		},
-		{
-			cwd: "/work/linx-icp",
-			name: "linx-icp",
-			sessions: [
-				{
-					path: "/s/b.jsonl",
-					title: "压测脚本调整",
-					modified: 200,
-					messageCount: 1,
-					isRunning: false,
-					project: "linx-icp",
-					host: undefined,
-				},
-			],
-		},
+			modified: NOW - 60_000,
+			name: "压测脚本调整",
+		}),
+		summary({
+			id: "b",
+			path: "/s/b.jsonl",
+			cwd: "/work/facet",
+			modified: NOW - 3_600_000,
+			firstMessage: "修复重连缺口",
+		}),
+		summary({ id: "c", path: "/s/c.jsonl", cwd: "/work/linx-icp", modified: dayBefore(1) }),
+		summary({ id: "d", path: "/s/d.jsonl", cwd: "/work/linx-icp", modified: dayBefore(9) }),
 	];
 
-	it("命中项目名保留整个项目", () => {
-		expect(filterProjects(projects, "IC P".replace(" ", "")).map((project) => project.name)).toEqual([
-			"linx-icp",
+	const base = {
+		sessions,
+		projects: [],
+		runningFile: "/s/a.jsonl",
+		now: NOW,
+	};
+
+	it("运行中的会话单独成组并带运行状态点", () => {
+		const data = buildSidebar({ ...base, hosts: [] });
+		expect(data.groups[0]?.sessions.map((item) => item.path)).toEqual(["/s/a.jsonl"]);
+		expect(data.groups[0]?.sessions[0]?.dot).toBe("running");
+		expect(data.groups[0]?.sessions[0]?.isRunning).toBe(true);
+		expect(data.groups[1]?.sessions[0]?.dot).toBe("idle");
+	});
+
+	it("项目选项合并已添加的项目与会话目录，按会话数倒序", () => {
+		const data = buildSidebar({
+			...base,
+			hosts: [],
+			projects: [
+				{ id: "p1", cwd: "/work/facet/", name: "facet 主仓", createdAt: 1 },
+				{ id: "p2", cwd: "/work/docs-site", name: undefined, createdAt: 2 },
+			],
+		});
+		expect(data.projects.map((project) => [project.name, project.sessionCount])).toEqual([
+			["facet 主仓", 2],
+			["linx-icp", 2],
+			["docs-site", 0],
 		]);
 	});
 
-	it("只命中会话标题时保留命中的会话", () => {
-		const visible = filterProjects(projects, "重连");
-		expect(visible).toHaveLength(1);
-		expect(visible[0]?.sessions.map((session) => session.title)).toEqual(["修复重连缺口"]);
+	it("限定项目时只列该目录的会话，项目选项数字按全部会话统计", () => {
+		const data = buildSidebar({ ...base, hosts: [], projectCwd: "/work/facet/" });
+		expect(data.total).toBe(4);
+		expect(data.groups.flatMap((group) => group.sessions).map((item) => item.path)).toEqual([
+			"/s/a.jsonl",
+			"/s/b.jsonl",
+		]);
+		expect(data.projects.map((project) => project.sessionCount)).toEqual([2, 2]);
 	});
 
-	it("关键词为空时原样返回", () => {
-		expect(filterProjects(projects, "   ")).toBe(projects);
+	it("关键词过滤会话标题", () => {
+		const data = buildSidebar({ ...base, hosts: [], keyword: "重连" });
+		expect(data.groups.flatMap((group) => group.sessions).map((item) => item.path)).toEqual(["/s/b.jsonl"]);
+	});
+
+	it("设备条按全部会话统计，未知数量留空", () => {
+		const data = buildSidebar({
+			...base,
+			hosts: [
+				host({ id: "local", name: "facet", isLocal: true }),
+				host({
+					id: "dev-box",
+					name: "dev-box",
+					projects: [{ cwd: "/srv/gateway", name: "gateway", host: "dev-box", sessionCount: 3 }],
+				}),
+				host({ id: "staging", name: "staging", state: "connecting" }),
+			],
+		});
+		expect(data.devices.map((device) => [device.id, device.sessionCount])).toEqual([
+			["local", 4],
+			["dev-box", 3],
+			["staging", undefined],
+		]);
+		expect(data.devices[0]?.isLocal).toBe(true);
 	});
 });

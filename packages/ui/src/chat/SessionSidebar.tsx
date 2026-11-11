@@ -1,16 +1,18 @@
 /**
  * 会话侧栏。
  *
- * 三段内容：最近会话、本机项目、远程主机。会话按项目目录分组，项目与主机都能折叠。
- * 主机清单、项目位置选择只提供界面，远端读写接入前以占位数据呈现。
+ * 自上而下四块：标题与全局操作、新建会话、项目过滤器、会话队列；底部是设备状态条与页脚。
+ * 项目过滤器同时决定队列的范围与新建会话的目录，队列按时间分组，分组规则见 sidebar-model。
  */
 import type { ProjectInfo, SessionSummary } from "@facet/protocol";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FolderIcon, MonitorIcon, PlusIcon, SearchIcon } from "../transcript/icons.tsx";
+import { FolderIcon, FolderPlusIcon, MoonIcon, PlusIcon, SearchIcon, SunIcon } from "../transcript/icons.tsx";
 import {
 	baseName,
 	buildSidebar,
-	filterProjects,
+	type HostState,
+	type SessionDot,
+	type SidebarDevice,
 	type SidebarHost,
 	type SidebarProject,
 	type SidebarSession,
@@ -18,20 +20,25 @@ import {
 	shortTime,
 } from "./sidebar-model.ts";
 
+/** 界面主题。切换写入根节点的 data-theme，样式按此选择变量组。 */
+export type ThemeName = "dark" | "light";
+
 /** 侧栏参数。 */
 export interface SessionSidebarProps {
 	/** 当前设备的会话列表，已按时间倒序 */
 	sessions: readonly SessionSummary[];
-	/** 可连接的主机，第一项为当前设备 */
+	/** 设备清单，第一项为当前设备 */
 	hosts: readonly SidebarHost[];
-	/** 用户添加的项目，项目段按它分组与命名，其余会话目录补在后面 */
+	/** 用户添加的项目 */
 	projects: readonly ProjectInfo[];
 	/** 当前会话的文件路径，没有打开会话时为空 */
 	activeFile: string | undefined;
 	/** 正在运行的会话文件路径 */
 	runningFile: string | undefined;
-	/** 新建会话落在的目录 */
+	/** 没有选中项目时新建会话落在的目录 */
 	createCwd: string;
+	/** 当前主题 */
+	theme: ThemeName;
 	/** 选择一条会话 */
 	onSelect: (path: string) => void;
 	/** 在指定目录新建会话 */
@@ -40,12 +47,33 @@ export interface SessionSidebarProps {
 	canCreate: boolean;
 	/** 打开添加项目 */
 	onAddProject: () => void;
+	/** 切换深浅色 */
+	onToggleTheme: () => void;
 }
 
-/** 最近会话最多显示的条数，点「全部」后放开。 */
-const RECENT_LIMIT = 4;
+/** 会话行状态点的样式类。 */
+function dotClass(dot: SessionDot): string {
+	return dot === "running" ? "dot is-warn pulse" : "dot is-off";
+}
 
-/** 点击组件外部或按 Esc 时关闭浮层。 */
+/** 设备状态点的样式类。 */
+function deviceDotClass(state: HostState): string {
+	if (state === "connected") {
+		return "dot";
+	}
+	return state === "connecting" ? "dot is-warn pulse" : "dot is-off";
+}
+
+/** 设备的连接说明，用作悬浮提示。 */
+function deviceHint(device: SidebarDevice): string {
+	if (device.state === "connected") {
+		return device.detail.length > 0 ? device.detail : device.name;
+	}
+	const reason = device.state === "connecting" ? "连接中" : "离线";
+	return `${reason} · ${device.lastSeen ?? device.detail}`;
+}
+
+/** 点击组件外部时关闭浮层，点击触发器本身不算外部。 */
 function useDismiss(ref: React.RefObject<HTMLElement | null>, isOpen: boolean, close: () => void): void {
 	useEffect(() => {
 		if (!isOpen) {
@@ -58,53 +86,9 @@ function useDismiss(ref: React.RefObject<HTMLElement | null>, isOpen: boolean, c
 			}
 			close();
 		};
-		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key === "Escape") {
-				close();
-			}
-		};
 		document.addEventListener("pointerdown", onPointerDown);
-		document.addEventListener("keydown", onKeyDown);
-		return () => {
-			document.removeEventListener("pointerdown", onPointerDown);
-			document.removeEventListener("keydown", onKeyDown);
-		};
+		return () => document.removeEventListener("pointerdown", onPointerDown);
 	}, [ref, isOpen, close]);
-}
-
-/** 会话标签：本机只写项目名，远端写成「主机:项目」。 */
-function tagOf(session: SidebarSession): string {
-	return session.host === undefined ? session.project : `${session.host}:${session.project}`;
-}
-
-/** 状态点：运行中带呼吸，连接中转为等待色，空闲与离线为空心。 */
-type DotState = "running" | "idle" | "connecting" | "offline";
-
-/** 状态点的样式类。 */
-function dotClass(state: DotState): string {
-	if (state === "running") {
-		return "dot pulse";
-	}
-	if (state === "connecting") {
-		return "dot is-warn pulse";
-	}
-	return "dot is-off";
-}
-
-/** 主机状态对应的点。 */
-function hostDot(host: SidebarHost): DotState {
-	if (host.state === "connected") {
-		return "running";
-	}
-	return host.state === "connecting" ? "connecting" : "offline";
-}
-
-/** 主机行的状态说明。 */
-function hostStatus(host: SidebarHost): string {
-	if (host.state === "connected") {
-		return host.latencyMs === undefined ? "已连接" : `已连接 · ${host.latencyMs}ms`;
-	}
-	return host.state === "connecting" ? "连接中…" : "离线";
 }
 
 export function SessionSidebar({
@@ -114,36 +98,73 @@ export function SessionSidebar({
 	activeFile,
 	runningFile,
 	createCwd,
+	theme,
 	onSelect,
 	onCreate,
 	canCreate,
 	onAddProject,
+	onToggleTheme,
 }: SessionSidebarProps) {
-	const data = useMemo(
-		() => buildSidebar({ sessions, hosts, projects: storedProjects, activeFile, runningFile }),
-		[sessions, hosts, storedProjects, activeFile, runningFile],
-	);
-
 	const [keyword, setKeyword] = useState("");
 	const [isSearchOpen, setIsSearchOpen] = useState(false);
-	const [showsAllRecents, setShowsAllRecents] = useState(false);
-	const [openProjects, setOpenProjects] = useState<Record<string, boolean>>({});
-	const [isHostsOpen, setIsHostsOpen] = useState(false);
-	const [isHostMenuOpen, setIsHostMenuOpen] = useState(false);
-	const [isLocationOpen, setIsLocationOpen] = useState(false);
-	const [locationKeyword, setLocationKeyword] = useState("");
-	const [activeHostId, setActiveHostId] = useState<string | undefined>(data.remotes[0]?.id);
+	const [projectKeyword, setProjectKeyword] = useState("");
+	const [isFilterOpen, setIsFilterOpen] = useState(false);
+	const [isFilterUp, setIsFilterUp] = useState(false);
+	/** 用户在过滤器里选过的目录，未选过时跟随当前会话 */
+	const [pickedCwd, setPickedCwd] = useState<string | undefined>(undefined);
+	/** 过滤器是否切到全部项目 */
+	const [showsAll, setShowsAll] = useState(false);
 
+	const filterRef = useRef<HTMLDivElement>(null);
+	const panelRef = useRef<HTMLDivElement>(null);
+	const triggerRef = useRef<HTMLButtonElement>(null);
+	const projectSearchRef = useRef<HTMLInputElement>(null);
 	const searchRef = useRef<HTMLInputElement>(null);
-	const hostMenuRef = useRef<HTMLDivElement>(null);
-	const locationRef = useRef<HTMLDivElement>(null);
 
-	const closeHostMenu = useCallback(() => setIsHostMenuOpen(false), []);
-	const closeLocation = useCallback(() => setIsLocationOpen(false), []);
-	useDismiss(hostMenuRef, isHostMenuOpen, closeHostMenu);
-	useDismiss(locationRef, isLocationOpen, closeLocation);
+	const activeCwd = sessions.find((session) => session.path === activeFile)?.cwd;
+	const scopeCwd = showsAll ? undefined : (pickedCwd ?? activeCwd);
 
-	// ⌘K 聚焦搜索，与提示的快捷键一致
+	const data = useMemo(
+		() =>
+			buildSidebar({
+				sessions,
+				hosts,
+				projects: storedProjects,
+				runningFile,
+				projectCwd: scopeCwd,
+				keyword,
+			}),
+		[sessions, hosts, storedProjects, runningFile, scopeCwd, keyword],
+	);
+
+	const currentProject: SidebarProject | undefined =
+		scopeCwd === undefined ? undefined : data.projects.find((item) => samePath(item.cwd, scopeCwd));
+	const filterLabel = currentProject?.name ?? (scopeCwd === undefined ? "全部项目" : baseName(scopeCwd));
+	const filterCount = currentProject?.sessionCount ?? data.total;
+	const localHost = hosts.find((host) => host.isLocal);
+	const newSessionCwd = scopeCwd ?? createCwd;
+
+	const projectMatches = useMemo(() => {
+		const query = projectKeyword.trim().toLowerCase();
+		if (query.length === 0) {
+			return data.projects;
+		}
+		return data.projects.filter(
+			(project) => project.name.toLowerCase().includes(query) || project.cwd.toLowerCase().includes(query),
+		);
+	}, [data.projects, projectKeyword]);
+
+	const closeFilter = useCallback((restoreFocus: boolean) => {
+		setIsFilterOpen(false);
+		if (restoreFocus) {
+			triggerRef.current?.focus();
+		}
+	}, []);
+
+	const dismissFilter = useCallback(() => closeFilter(false), [closeFilter]);
+	useDismiss(filterRef, isFilterOpen, dismissFilter);
+
+	// ⌘K 聚焦会话搜索，与页脚提示的快捷键一致
 	useEffect(() => {
 		const onKeyDown = (event: KeyboardEvent) => {
 			if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
@@ -163,22 +184,65 @@ export function SessionSidebar({
 		return () => cancelAnimationFrame(frame);
 	}, [isSearchOpen]);
 
-	const isSearching = keyword.trim().length > 0;
-	const projects = isSearching ? filterProjects(data.projects, keyword) : data.projects;
-	const recentPool = showsAllRecents ? data.recents : data.recents.slice(0, RECENT_LIMIT);
-	const recents = isSearching
-		? recentPool.filter((session) => session.title.toLowerCase().includes(keyword.trim().toLowerCase()))
-		: recentPool;
-	const activeHost = data.remotes.find((host) => host.id === activeHostId) ?? data.remotes[0];
-	const targetName = baseName(createCwd);
+	// 浮层打开时量一次可用空间：下方放不下且上方更宽裕就向上弹出，焦点移进搜索框
+	useEffect(() => {
+		if (!isFilterOpen) {
+			return;
+		}
+		const trigger = triggerRef.current;
+		const panel = panelRef.current;
+		if (trigger !== null && panel !== null) {
+			const rect = trigger.getBoundingClientRect();
+			const below = window.innerHeight - rect.bottom;
+			const above = rect.top;
+			setIsFilterUp(below < Math.min(panel.scrollHeight + 12, 320) && above > below);
+		}
+		const frame = requestAnimationFrame(() => projectSearchRef.current?.focus());
+		return () => cancelAnimationFrame(frame);
+	}, [isFilterOpen]);
 
-	const isProjectOpen = (project: SidebarProject): boolean =>
-		isSearching ||
-		(openProjects[project.cwd] ??
-			(samePath(project.cwd, createCwd) || project.sessions.some((session) => session.path === activeFile)));
+	/** 浮层内循环焦点，打开期间不把焦点交给对话框之外。 */
+	const trapFocus = useCallback(
+		(event: React.KeyboardEvent<HTMLDivElement>) => {
+			if (event.key === "Escape") {
+				event.stopPropagation();
+				closeFilter(true);
+				return;
+			}
+			if (event.key !== "Tab") {
+				return;
+			}
+			const panel = panelRef.current;
+			if (panel === null) {
+				return;
+			}
+			const items = [...panel.querySelectorAll<HTMLElement>("button:not([disabled]), input")].filter(
+				(element) => element.offsetParent !== null,
+			);
+			const first = items[0];
+			const last = items[items.length - 1];
+			if (first === undefined || last === undefined) {
+				return;
+			}
+			if (event.shiftKey && document.activeElement === first) {
+				event.preventDefault();
+				last.focus();
+				return;
+			}
+			if (!event.shiftKey && document.activeElement === last) {
+				event.preventDefault();
+				first.focus();
+			}
+		},
+		[closeFilter],
+	);
 
-	const toggleProject = (project: SidebarProject): void => {
-		setOpenProjects((current) => ({ ...current, [project.cwd]: !isProjectOpen(project) }));
+	const selectProject = (cwd: string | undefined): void => {
+		setPickedCwd(cwd);
+		setShowsAll(cwd === undefined);
+		setIsFilterOpen(false);
+		setProjectKeyword("");
+		triggerRef.current?.focus();
 	};
 
 	const openSession = (session: SidebarSession): void => {
@@ -187,169 +251,131 @@ export function SessionSidebar({
 		}
 	};
 
-	const sessionRow = (session: SidebarSession) => (
-		<button
-			type="button"
-			key={session.path}
-			className={session.path === activeFile ? "ps is-active" : "ps"}
-			onClick={() => openSession(session)}
-			disabled={session.isPlaceholder === true}
-		>
-			{session.isRunning ? <i className={dotClass("running")} /> : <span className="dot-space" />}
-			<span className="ell">{session.title}</span>
-			<span className="when">{shortTime(session.modified)}</span>
-		</button>
-	);
-
-	const projectRow = (project: SidebarProject) => {
-		const isOpen = isProjectOpen(project);
-
-		return (
-			<div key={project.cwd}>
-				<button
-					type="button"
-					className={isOpen ? "pj is-open" : "pj t2"}
-					onClick={() => toggleProject(project)}
-					aria-expanded={isOpen}
-				>
-					<i className={isOpen ? "chev is-open" : "chev"} />
-					<FolderIcon size={15} />
-					<span className="ell">{project.name}</span>
-					<span className="cnt">{project.sessions.length}</span>
-				</button>
-				{isOpen ? <div className="tree">{project.sessions.map(sessionRow)}</div> : null}
-			</div>
-		);
-	};
+	const isSearching = keyword.trim().length > 0;
+	const emptyHint = isSearching
+		? "没有匹配的会话"
+		: scopeCwd === undefined
+			? "还没有会话"
+			: "这个项目还没有会话";
 
 	return (
-		<aside className="sidebar">
-			<div className="sb-head">
+		<aside className="sb">
+			<header className="sb-head">
 				<span className="sb-title">Facet</span>
-				<span className="sb-head-right">
+				<span className="sb-tools">
 					<button
 						type="button"
-						className="sb-icon"
-						aria-label="搜索会话与消息"
-						onClick={() => setIsSearchOpen((open) => !open)}
+						className="sb-tool"
+						aria-label="搜索会话"
+						aria-pressed={isSearchOpen}
+						onClick={() => {
+							setIsSearchOpen((open) => {
+								if (open) {
+									setKeyword("");
+								}
+								return !open;
+							});
+						}}
 					>
 						<SearchIcon size={15} />
 					</button>
-					<span className="sb-hint">⌘B</span>
+					<button type="button" className="sb-tool" aria-label="添加项目" onClick={onAddProject}>
+						<FolderPlusIcon size={15} />
+					</button>
 				</span>
-			</div>
+			</header>
 
-			<div className="nav-wrap" ref={locationRef}>
-				<div className="nav is-primary">
-					<button
-						type="button"
-						className="nav-main"
-						onClick={() => onCreate(createCwd)}
-						disabled={!canCreate}
-					>
-						<PlusIcon size={15} />
-						新建会话
-					</button>
-					<button
-						type="button"
-						className="nav-pick"
-						aria-label="选择新建位置"
-						aria-haspopup="dialog"
-						onClick={() => {
-							setLocationKeyword("");
-							setIsLocationOpen((open) => !open);
-						}}
-					>
-						<span className="mono">{targetName}</span>
-						<i className="chev is-open" />
-					</button>
-				</div>
+			<button
+				type="button"
+				className="sb-new"
+				onClick={() => onCreate(newSessionCwd)}
+				disabled={!canCreate || newSessionCwd.length === 0}
+				title={newSessionCwd.length === 0 ? "先添加项目" : `在 ${newSessionCwd} 新建`}
+			>
+				<PlusIcon size={14} />
+				新建会话
+			</button>
 
-				{isLocationOpen ? (
-					<div className="card pop is-location" role="dialog" aria-label="选择新建位置">
-						<label className="nav is-field pop-search">
-							<SearchIcon size={14} />
+			<div className="sb-filter" ref={filterRef}>
+				<button
+					type="button"
+					ref={triggerRef}
+					className={isFilterOpen ? "sb-filter-btn is-open" : "sb-filter-btn"}
+					aria-haspopup="dialog"
+					aria-expanded={isFilterOpen}
+					onClick={() => setIsFilterOpen((open) => !open)}
+				>
+					<FolderIcon size={14} />
+					<span className="sb-filter-name ell">{filterLabel}</span>
+					<span className="sb-filter-meta mono">{filterCount}</span>
+					<i className={isFilterOpen ? "chev is-open" : "chev"} />
+				</button>
+
+				{isFilterOpen ? (
+					<div
+						ref={panelRef}
+						className={isFilterUp ? "sb-pop is-up" : "sb-pop"}
+						role="dialog"
+						aria-label="选择项目"
+						onKeyDown={trapFocus}
+					>
+						<label className="sb-search">
+							<SearchIcon size={13} />
 							<input
-								value={locationKeyword}
-								onChange={(event) => setLocationKeyword(event.target.value)}
-								placeholder="搜索项目…"
+								ref={projectSearchRef}
+								value={projectKeyword}
+								onChange={(event) => setProjectKeyword(event.target.value)}
+								placeholder="搜索项目"
 								aria-label="搜索项目"
 							/>
 						</label>
-						<p className="sec is-tight">
-							<span className="sec-row">
-								<i className={dotClass("running")} />
-								本机
-							</span>
-						</p>
-						{filterProjects(data.projects, locationKeyword).length === 0 ? (
-							<div className="ps t3">
-								<span className="ell">
-									{locationKeyword.trim().length > 0 ? "没有匹配的项目" : "还没有项目"}
-								</span>
-							</div>
-						) : (
-							filterProjects(data.projects, locationKeyword).map((project) => (
-								<button
-									type="button"
-									key={project.cwd}
-									className={samePath(project.cwd, createCwd) ? "ps is-current" : "ps"}
-									onClick={() => {
-										onCreate(project.cwd);
-										setIsLocationOpen(false);
-									}}
-								>
-									<span className="ell">{project.name}</span>
-									{samePath(project.cwd, createCwd) ? <span>当前</span> : <span />}
-								</button>
-							))
-						)}
-						{data.remotes.map((host) => (
-							<div key={host.id}>
-								<p className="sec is-tight">
-									<span className="sec-row">
-										<i className={dotClass(hostDot(host))} />
-										{host.name}
-									</span>
-								</p>
-								{host.state === "connected" ? (
-									filterProjects(host.projects, locationKeyword).length === 0 ? (
-										<div className="ps t3">
-											<span className="ell">没有项目</span>
-										</div>
-									) : (
-										filterProjects(host.projects, locationKeyword).map((project) => (
-											<button
-												type="button"
-												key={project.cwd}
-												className="ps t2"
-												onClick={() => {
-													onCreate(project.cwd);
-													setIsLocationOpen(false);
-												}}
-												disabled={project.isPlaceholder === true}
-											>
-												<span className="ell">{project.name}</span>
-												<span />
-											</button>
-										))
-									)
-								) : (
-									<div className="ps t3">
-										<span className="ell">
-											{host.state === "connecting" ? "连接中，暂不可选" : "离线，无法新建"}
-										</span>
-									</div>
-								)}
-							</div>
-						))}
+						<div className="sb-opts">
+							<button
+								type="button"
+								className={scopeCwd === undefined ? "sb-opt is-on" : "sb-opt"}
+								aria-pressed={scopeCwd === undefined}
+								onClick={() => selectProject(undefined)}
+							>
+								<span className="sb-opt-name ell">全部项目</span>
+								<span className="sb-opt-meta mono">{data.total}</span>
+							</button>
+							{projectMatches.map((project) => {
+								const isOn = !showsAll && scopeCwd !== undefined && samePath(project.cwd, scopeCwd);
+								return (
+									<button
+										type="button"
+										key={project.cwd}
+										className={isOn ? "sb-opt is-on" : "sb-opt"}
+										aria-pressed={isOn}
+										title={project.cwd}
+										onClick={() => selectProject(project.cwd)}
+									>
+										<FolderIcon size={13} />
+										<span className="sb-opt-name ell">{project.name}</span>
+										<span className="sb-opt-meta mono">{project.sessionCount}</span>
+									</button>
+								);
+							})}
+							{projectMatches.length === 0 ? <p className="sb-opt-empty">没有匹配的项目</p> : null}
+						</div>
+						<button
+							type="button"
+							className="sb-opt is-add"
+							onClick={() => {
+								closeFilter(true);
+								onAddProject();
+							}}
+						>
+							<PlusIcon size={13} />
+							<span className="sb-opt-name">添加项目</span>
+						</button>
 					</div>
 				) : null}
 			</div>
 
 			{isSearchOpen ? (
-				<label className="nav is-field">
-					<SearchIcon size={14} />
+				<label className="sb-search is-inline">
+					<SearchIcon size={13} />
 					<input
 						ref={searchRef}
 						value={keyword}
@@ -365,163 +391,74 @@ export function SessionSidebar({
 								setIsSearchOpen(false);
 							}
 						}}
-						placeholder="搜索会话与消息"
-						aria-label="搜索会话与消息"
+						placeholder="搜索会话"
+						aria-label="搜索会话"
 					/>
 					<span className="kbd mono">⌘K</span>
 				</label>
 			) : null}
 
-			<div className="sb-body">
-				<div className="sec">
-					<span>项目</span>
-					<button type="button" className="sec-icon" aria-label="添加项目" onClick={onAddProject}>
-						<PlusIcon size={14} />
-					</button>
-				</div>
-
-				<div className="projects">
-					{projects.length === 0 ? (
-						<p className="ps t3">{isSearching ? "没有匹配的项目" : "还没有项目"}</p>
-					) : null}
-					{projects.map(projectRow)}
-				</div>
-
-				{data.remotes.length > 0 ? (
-					<div className="hosts">
-						<div className="sec is-hosts">
+			<div className="sb-queue">
+				{data.groups.length === 0 ? <p className="sb-empty">{emptyHint}</p> : null}
+				{data.groups.map((group) => (
+					<section key={group.key} className="sb-group">
+						<h2 className="sb-group-head">
+							<span>{group.label}</span>
+							<span className="mono">{group.sessions.length}</span>
+						</h2>
+						{group.sessions.map((session) => (
 							<button
 								type="button"
-								className="sec-toggle"
-								onClick={() => setIsHostsOpen((open) => !open)}
-								aria-expanded={isHostsOpen}
+								key={session.path}
+								className={session.path === activeFile ? "sb-row is-active" : "sb-row"}
+								aria-current={session.path === activeFile}
+								onClick={() => openSession(session)}
+								disabled={session.isPlaceholder === true}
+								title={session.title}
 							>
-								远程主机
-								<i className={isHostsOpen ? "chev is-open" : "chev"} />
+								<i className={dotClass(session.dot)} />
+								<span className="sb-row-title ell">{session.title}</span>
+								{scopeCwd === undefined && session.host === undefined ? (
+									<span className="sb-row-proj ell">{session.project}</span>
+								) : null}
+								<span className="sb-row-time mono">{shortTime(session.modified)}</span>
 							</button>
-							{isHostsOpen && activeHost ? (
-								<div className="pop-wrap" ref={hostMenuRef}>
-									<button
-										type="button"
-										className="hsel"
-										aria-haspopup="listbox"
-										aria-label="选择远程主机"
-										onClick={() => setIsHostMenuOpen((open) => !open)}
-									>
-										<i className={dotClass(hostDot(activeHost))} />
-										{activeHost.name}
-										<i className="chev is-open t3" />
-									</button>
-									{isHostMenuOpen ? (
-										<div className="card pop is-hosts" role="listbox" aria-label="远程主机">
-											{data.remotes.map((host) => (
-												<button
-													type="button"
-													key={host.id}
-													className={host.id === activeHost.id ? "hr is-active" : "hr"}
-													role="option"
-													aria-selected={host.id === activeHost.id}
-													onClick={() => {
-														if (host.state === "offline") {
-															return;
-														}
-														setActiveHostId(host.id);
-														setIsHostMenuOpen(false);
-													}}
-													disabled={host.state === "offline"}
-												>
-													<i className={dotClass(hostDot(host))} />
-													<div className="hr-main">
-														<b className="ell">{host.name}</b>
-														<span className={host.state === "offline" ? "t3" : "mono t3"}>
-															{host.state === "offline"
-																? `上次连接 ${host.lastSeen ?? "一段时间前"}`
-																: host.detail}
-														</span>
-													</div>
-													{host.state === "offline" ? (
-														<span className="mini">重连</span>
-													) : (
-														<span className={`hr-state ${host.state}`}>{hostStatus(host)}</span>
-													)}
-												</button>
-											))}
-											<button type="button" className="nav is-new-host" disabled>
-												<PlusIcon size={14} />
-												连接新主机
-											</button>
-										</div>
-									) : null}
-								</div>
-							) : (
-								<span className="host-dots">
-									{data.remotes.map((host) => (
-										<i key={host.id} className={dotClass(hostDot(host))} />
-									))}
-								</span>
-							)}
-						</div>
-
-						{isHostsOpen && activeHost ? (
-							activeHost.state === "connected" ? (
-								<div className="projects">
-									{filterProjects(activeHost.projects, keyword).length === 0 ? (
-										<p className="ps t3">这台主机还没有项目</p>
-									) : (
-										filterProjects(activeHost.projects, keyword).map(projectRow)
-									)}
-								</div>
-							) : (
-								<p className="ps t3">
-									{activeHost.state === "connecting"
-										? "正在连接…"
-										: `离线 · ${activeHost.lastSeen ?? "一段时间前"}`}
-								</p>
-							)
-						) : null}
-					</div>
-				) : null}
-				<div className="sec">
-					<span>最近</span>
-					<button type="button" className="sec-act" onClick={() => setShowsAllRecents((show) => !show)}>
-						{showsAllRecents ? "收起" : "全部"}
-					</button>
-				</div>
-
-				<div className="recents">
-					{recents.length === 0 ? <p className="ps t3">还没有会话</p> : null}
-					{recents.map((session) => (
-						<button
-							type="button"
-							key={`recent:${session.path}`}
-							className={session.path === activeFile ? "rc is-active" : "rc"}
-							onClick={() => openSession(session)}
-							disabled={session.isPlaceholder === true}
-						>
-							<i className={`${dotClass(session.isRunning ? "running" : "idle")} rc-dot`} />
-							<div className="rc-main">
-								<b>{session.title}</b>
-								<small>
-									<span className="tag">
-										{session.host === undefined ? null : <MonitorIcon size={10} />}
-										{tagOf(session)}
-									</span>
-									<span>
-										{session.isRunning ? "运行中 · " : ""}
-										{shortTime(session.modified)}
-									</span>
-								</small>
-							</div>
-						</button>
-					))}
-				</div>
+						))}
+					</section>
+				))}
 			</div>
 
-			<div className="sidebar-foot">
-				<button type="button" className="foot-act" disabled title="尚未实现">
+			<ul className="sb-devices" aria-label="设备">
+				{data.devices.map((device) => (
+					<li
+						key={device.id}
+						className={device.isLocal ? "sb-device is-local" : "sb-device"}
+						title={deviceHint(device)}
+					>
+						<i className={deviceDotClass(device.state)} />
+						<span className="ell">{device.name}</span>
+						{device.sessionCount === undefined ? null : (
+							<span className="sb-device-count mono">{device.sessionCount}</span>
+						)}
+					</li>
+				))}
+			</ul>
+
+			<footer className="sb-foot">
+				<button type="button" className="sb-foot-btn" disabled title="尚未实现">
 					设置
 				</button>
-			</div>
+				<button
+					type="button"
+					className="sb-foot-btn is-icon"
+					aria-label={theme === "dark" ? "切换到浅色主题" : "切换到深色主题"}
+					title={theme === "dark" ? "切换到浅色主题" : "切换到深色主题"}
+					onClick={onToggleTheme}
+				>
+					{theme === "dark" ? <SunIcon size={14} /> : <MoonIcon size={14} />}
+				</button>
+				<span className="sb-foot-hint">{localHost?.name ?? "本机"}</span>
+			</footer>
 		</aside>
 	);
 }

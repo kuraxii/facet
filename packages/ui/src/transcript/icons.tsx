@@ -107,6 +107,25 @@ export function StopIcon({ size, ...rest }: IconProps) {
 	);
 }
 
+/** 浅色主题。 */
+export function SunIcon({ size, ...rest }: IconProps) {
+	return (
+		<Icon size={size} {...rest}>
+			<circle cx="12" cy="12" r="4.2" />
+			<path d="M12 2v2.4M12 19.6V22M2 12h2.4M19.6 12H22M4.9 4.9l1.7 1.7M17.4 17.4l1.7 1.7M19.1 4.9l-1.7 1.7M6.6 17.4l-1.7 1.7" />
+		</Icon>
+	);
+}
+
+/** 深色主题。 */
+export function MoonIcon({ size, ...rest }: IconProps) {
+	return (
+		<Icon size={size} {...rest}>
+			<path d="M20 14.5A8 8 0 019.5 4a8.5 8.5 0 1010.5 10.5z" />
+		</Icon>
+	);
+}
+
 /** 附件。 */
 export function ClipIcon({ size, ...rest }: IconProps) {
 	return (

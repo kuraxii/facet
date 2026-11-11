@@ -53,7 +53,12 @@ export type SessionEvent =
 	/** 追加了一个持久化条目,entryId 可作为读取游标 */
 	| { type: "entry"; entryId: string; parentId: string | null; kind: EntryKind }
 	| { type: "name"; name: string | undefined }
-	| { type: "model"; model: ModelInfo | undefined }
+	| {
+			type: "model";
+			model: ModelInfo | undefined;
+			/** 换模型之后可选的思考档位，界面据此禁用不可选的档 */
+			availableThinkingLevels: ThinkingLevel[];
+	  }
 	| { type: "thinking_level"; level: ThinkingLevel }
 	/** 直接执行的命令的流式输出 */
 	| { type: "bash_output"; id: string | undefined; delta: string }

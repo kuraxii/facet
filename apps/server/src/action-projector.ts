@@ -38,7 +38,13 @@ export class ActionProjector {
 			case "phase":
 				return [session({ type: "session/phase", phase: event.phase, maintenance: event.maintenance })];
 			case "model":
-				return [session({ type: "session/modelChanged", model: event.model })];
+				return [
+					session({
+						type: "session/modelChanged",
+						model: event.model,
+						availableThinkingLevels: event.availableThinkingLevels,
+					}),
+				];
 			case "thinking_level":
 				return [session({ type: "session/thinkingLevelChanged", level: event.level })];
 			case "name":

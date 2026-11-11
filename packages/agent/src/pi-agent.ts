@@ -268,7 +268,7 @@ export class PiAgent {
 		}
 		await this.session.setModel(model, { persist: options.persist });
 		const info = toModelInfo(model);
-		this.emit({ type: "model", model: info });
+		this.emit({ type: "model", model: info, availableThinkingLevels: this.availableThinkingLevels() });
 		return info;
 	}
 
@@ -282,7 +282,7 @@ export class PiAgent {
 			return undefined;
 		}
 		const info = toModelInfo(result.model);
-		this.emit({ type: "model", model: info });
+		this.emit({ type: "model", model: info, availableThinkingLevels: this.availableThinkingLevels() });
 		return info;
 	}
 

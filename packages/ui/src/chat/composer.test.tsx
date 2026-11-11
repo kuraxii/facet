@@ -63,3 +63,55 @@ describe("排队条", () => {
 		expect(html).toContain("收回");
 	});
 });
+
+describe("模型与思考档位芯片", () => {
+	it("给出可选模型时芯片可以打开菜单", () => {
+		const html = renderToStaticMarkup(
+			createElement(Composer, {
+				value: "",
+				onChange: () => {},
+				onSend: () => {},
+				onStop: () => {},
+				activity: "idle",
+				model: {
+					provider: "p",
+					id: "m1",
+					name: "模型一",
+					api: "openai-responses",
+					reasoning: true,
+					contextWindow: 1000,
+					maxTokens: 100,
+					input: ["text"],
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+				},
+				thinkingLevel: "medium",
+				models: [],
+				onModelChange: () => {},
+			}),
+		);
+		const modelChip = html.match(/<button[^>]*class="chip"[^>]*>m1/);
+		expect(modelChip?.[0]).toBeDefined();
+		expect(modelChip?.[0]).not.toContain("disabled");
+	});
+
+	it("不给回调时模型芯片只展示", () => {
+		const html = renderComposer("idle", "");
+		expect(html).toMatch(/<button[^>]*class="chip"[^>]*disabled[^>]*>无模型/);
+	});
+
+	it("换行发送时占位符写明 Shift+回车", () => {
+		const html = renderToStaticMarkup(
+			createElement(Composer, {
+				value: "",
+				onChange: () => {},
+				onSend: () => {},
+				onStop: () => {},
+				activity: "idle",
+				model: undefined,
+				thinkingLevel: undefined,
+				shiftEnterToSend: true,
+			}),
+		);
+		expect(html).toContain("Shift+回车发送");
+	});
+});

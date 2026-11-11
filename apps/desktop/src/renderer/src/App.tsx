@@ -3,6 +3,7 @@ import {
 	DEFAULT_SETTINGS,
 	type FacetSettings,
 	type Maintenance,
+	type ModelInfo,
 	type ProjectInfo,
 	type SessionSummary,
 } from "@facet/protocol";
@@ -366,6 +367,15 @@ export function App() {
 			await refreshProjects();
 			// 设置读不到时用缺省值，界面照常可用
 			setSettings(await client.getSettings().catch(() => DEFAULT_SETTINGS));
+			// 模型目录与凭证状态供输入区的模型选择使用，取不到时选择器只展示当前模型
+			const [models, providers] = await Promise.all([
+				client.listModels().catch(() => []),
+				client.listProviders().catch(() => []),
+			]);
+			setCatalog({
+				models,
+				auth: Object.fromEntries(providers.map((provider) => [provider.id, provider.authenticated])),
+			});
 			const pool = (await refreshSessions()) ?? [];
 			const newest = pickStartupSession(pool, bridge.projectDir);
 			if (newest) {
@@ -513,6 +523,18 @@ export function App() {
 		},
 		[runSessionAction, session?.state.cwd, withTrust],
 	);
+
+	/** 设备的模型目录与各提供方的凭证状态，供输入区的模型选择使用。 */
+	const [catalog, setCatalog] = useState<{ models: readonly ModelInfo[]; auth: Record<string, boolean> }>({
+		models: [],
+		auth: {},
+	});
+	/** 输入区可选的模型：去掉设置里隐藏的那些。 */
+	const visibleModels = useMemo(
+		() => catalog.models.filter((model) => !settings.hiddenModels.includes(`${model.provider}/${model.id}`)),
+		[catalog.models, settings.hiddenModels],
+	);
+	const providerAuth = catalog.auth;
 
 	/** 没有打开会话时新建落在的目录：优先上次用过的，其次第一个项目。 */
 	const emptyCreateCwd = createCwd.length > 0 ? createCwd : projects[0]?.cwd;
@@ -662,6 +684,27 @@ export function App() {
 									activity={activity}
 									model={session.state.model}
 									thinkingLevel={session.state.thinkingLevel}
+									thinkingLevels={session.state.availableThinkingLevels}
+									models={visibleModels}
+									providerAuth={providerAuth}
+									onModelChange={(next) => client.setModel({ provider: next.provider, id: next.id })}
+									onThinkingLevelChange={(level) => client.setThinkingLevel(level)}
+									onSetDefaultModel={(next) =>
+										void client
+											.saveSettings({
+												...settings,
+												defaultModel: { provider: next.provider, id: next.id },
+											})
+											.then(setSettings)
+											.catch(() => undefined)
+									}
+									onSetDefaultThinkingLevel={(level) =>
+										void client
+											.saveSettings({ ...settings, defaultThinkingLevel: level })
+											.then(setSettings)
+											.catch(() => undefined)
+									}
+									shiftEnterToSend={settings.input.sendKey === "shiftEnter"}
 								/>
 
 								{chat && chat.notices.length > 0 ? (

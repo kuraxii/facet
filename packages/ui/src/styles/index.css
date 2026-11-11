@@ -2006,6 +2006,98 @@ svg.fl {
 	font-size: 12px;
 }
 
+.chip-wrap {
+	position: relative;
+	display: inline-flex;
+}
+
+.chip-pop {
+	position: absolute;
+	bottom: calc(100% + 6px);
+	left: 0;
+	z-index: 30;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 240px;
+	max-height: 320px;
+	overflow-y: auto;
+	padding: 6px;
+	border: 1px solid var(--line2);
+	border-radius: 10px;
+	background: var(--card2);
+	box-shadow: 0 12px 32px rgb(0 0 0 / 35%);
+}
+
+.chip-pop-group {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+
+.chip-pop-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	margin: 4px 0 2px;
+	padding: 0 8px;
+	color: var(--t3);
+	font-size: 11px;
+}
+
+.chip-pop-note {
+	color: var(--warn);
+}
+
+.chip-pop-item {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	height: 26px;
+	padding: 0 8px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--t2);
+	font-size: 12px;
+	text-align: left;
+}
+
+.chip-pop-item:hover {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+.chip-pop-item.is-on {
+	background: var(--surface3);
+	color: var(--t1);
+}
+
+.chip-pop-meta {
+	flex: none;
+	color: var(--t3);
+	font-size: 10.5px;
+}
+
+.chip-pop-empty {
+	margin: 4px 8px;
+	color: var(--t3);
+	font-size: 11.5px;
+}
+
+.chip-pop-action {
+	margin-top: 4px;
+	padding: 6px 8px 2px;
+	border: 0;
+	border-top: 1px solid var(--line);
+	background: transparent;
+	color: var(--acc);
+	font-size: 11.5px;
+	text-align: left;
+}
+
 .set-page {
 	display: flex;
 	flex: 1;
@@ -2470,4 +2562,9 @@ svg.fl {
 .dialog-primary:disabled {
 	cursor: default;
 	opacity: 0.4;
+}
+
+.chip-pop-item:disabled {
+	opacity: 0.45;
+	cursor: default;
 }

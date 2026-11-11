@@ -86,6 +86,8 @@ export interface SessionState {
 	readonly title: string | undefined;
 	readonly model: ModelInfo | undefined;
 	readonly thinkingLevel: ThinkingLevel;
+	/** 当前模型可选的思考档位，换模型时随 session/modelChanged 一起更新 */
+	readonly availableThinkingLevels: ThinkingLevel[];
 	/** 本轮的生命周期 */
 	readonly phase: TurnPhase;
 	/** 与本轮并行的维护动作 */
@@ -152,6 +154,7 @@ export function createSessionView(channel: Channel, snapshot?: SessionSnapshot):
 			title: snapshot?.name,
 			model: snapshot?.model,
 			thinkingLevel: snapshot?.thinkingLevel ?? "off",
+			availableThinkingLevels: snapshot?.availableThinkingLevels ?? [],
 			phase: snapshot?.phase ?? "idle",
 			maintenance: snapshot?.maintenance,
 			queued: snapshot?.queued ?? { steering: [], followUp: [] },

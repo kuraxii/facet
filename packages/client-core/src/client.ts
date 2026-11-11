@@ -23,6 +23,7 @@ import type {
 	RequestResults,
 	SessionSnapshot,
 	SessionSummary,
+	ThinkingLevel,
 } from "@facet/protocol";
 import { makeChannel, parseChannel } from "@facet/protocol";
 import { debugLog } from "./log.ts";
@@ -584,6 +585,15 @@ export class SessionClient {
 		return this.transport.dispatch(this.requireOpened().sessionChannel, {
 			type: "session/configChanged",
 			model,
+			persist,
+		});
+	}
+
+	/** 切换思考档位,结果通过 session/thinkingLevelChanged 回到视图。 */
+	setThinkingLevel(level: ThinkingLevel, persist = false): number {
+		return this.transport.dispatch(this.requireOpened().sessionChannel, {
+			type: "session/configChanged",
+			thinkingLevel: level,
 			persist,
 		});
 	}

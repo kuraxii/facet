@@ -9,8 +9,12 @@ import type { Maintenance, TurnPhase } from "./session.ts";
 export type SessionAction =
 	/** 设备侧:阶段或维护动作变化 */
 	| { type: "session/phase"; phase: TurnPhase; maintenance: Maintenance | undefined }
-	/** 设备侧:当前模型变化 */
-	| { type: "session/modelChanged"; model: ModelInfo | undefined }
+	/** 设备侧:当前模型变化，同时给出换模型之后可选的思考档位 */
+	| {
+			type: "session/modelChanged";
+			model: ModelInfo | undefined;
+			availableThinkingLevels: ThinkingLevel[];
+	  }
 	/** 设备侧:思考档位变化 */
 	| { type: "session/thinkingLevelChanged"; level: ThinkingLevel }
 	/** 设备侧:排队内容变化 */

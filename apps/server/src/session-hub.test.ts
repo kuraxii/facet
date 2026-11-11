@@ -11,6 +11,33 @@ import {
 
 const IDLE_MS = 1000;
 
+/** 最小可用的消息条目，用例只需要 id 与顺序。 */
+function messageEntry(id: string, parentId: string | null): Entry {
+	return {
+		id,
+		parentId,
+		kind: "message",
+		timestamp: "2026-11-08T00:00:00Z",
+		message: {
+			role: "assistant",
+			content: [{ type: "text", text: id }],
+			provider: "p",
+			model: "m",
+			usage: {
+				input: 0,
+				output: 0,
+				cacheRead: 0,
+				cacheWrite: 0,
+				reasoning: 0,
+				totalTokens: 0,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			stopReason: "stop",
+			timestamp: 1,
+		},
+	};
+}
+
 class FakeAgent implements HubAgent {
 	readonly id: string;
 	readonly file: string | undefined;
@@ -37,8 +64,25 @@ class FakeAgent implements HubAgent {
 	/** 已写盘的条目,用例按需填 */
 	readonly stored: Entry[] = [];
 
-	entries(_since?: string): { entries: Entry[]; leafId: string | null } {
-		return { entries: this.stored, leafId: null };
+	/** 按页取条目，游标为空表示从末尾开始 */
+	entryPage(cursor: string | undefined, limit: number): { entries: Entry[]; nextCursor: string | undefined } {
+		const size = Math.max(1, limit);
+		if (cursor === undefined) {
+			const start = Math.max(0, this.stored.length - size);
+			return {
+				entries: this.stored.slice(start),
+				nextCursor: start > 0 ? this.stored[start]?.id : undefined,
+			};
+		}
+		const index = this.stored.findIndex((entry) => entry.id === cursor);
+		if (index < 0) {
+			throw new Error(`unknown session entry: ${cursor}`);
+		}
+		const start = Math.max(0, index - size);
+		return {
+			entries: this.stored.slice(start, index),
+			nextCursor: start > 0 ? this.stored[start]?.id : undefined,
+		};
 	}
 
 	/** 分叉点：取给定条目在 stored 里的前一条 */
@@ -324,6 +368,24 @@ describe("空闲回收", () => {
 		agent.emit({ type: "settled", aborted: false });
 		await vi.advanceTimersByTimeAsync(IDLE_MS + 1);
 		expect(hub.has(snapshot.id)).toBe(false);
+	});
+
+	it("历史分页从末尾往更早取，游标缺失时报错", async () => {
+		const snapshot = await hub.openSession("/tmp/s1.jsonl");
+		const agent = hub.agent(snapshot.id);
+		for (const id of ["e1", "e2", "e3", "e4", "e5"]) {
+			agent.stored.push(messageEntry(id, id === "e1" ? null : `e${Number(id.slice(1)) - 1}`));
+		}
+		const first = await hub.entries(snapshot.id, undefined, 2);
+		expect(first.entries.map((entry) => entry.id)).toEqual(["e4", "e5"]);
+		expect(first.nextCursor).toBe("e4");
+		const second = await hub.entries(snapshot.id, first.nextCursor, 2);
+		expect(second.entries.map((entry) => entry.id)).toEqual(["e2", "e3"]);
+		expect(second.nextCursor).toBe("e2");
+		const last = await hub.entries(snapshot.id, second.nextCursor, 2);
+		expect(last.entries.map((entry) => entry.id)).toEqual(["e1"]);
+		expect(last.nextCursor).toBeUndefined();
+		await expect(hub.entries(snapshot.id, "nope", 2)).rejects.toThrow("找不到消息对应的会话条目");
 	});
 
 	it("取边界之后的条目只返回这一段", async () => {

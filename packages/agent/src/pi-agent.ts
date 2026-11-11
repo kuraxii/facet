@@ -25,6 +25,7 @@ import type {
 } from "@facet/protocol";
 import { toMessage, toMessages, toModelInfo } from "./convert.ts";
 import { toSessionEvents } from "./events.ts";
+import { pageOf } from "./paging.ts";
 import type { ModelMutationOptions, PromptOptions } from "./types.ts";
 
 /** 构造 PiAgent 所需的会话与共享资源。 */
@@ -294,22 +295,18 @@ export class PiAgent {
 	}
 
 	/**
-	 * 读取持久化条目。
+	 * 按页读取活动分支的条目。
 	 *
-	 * 条目 id 稳定且只追加，传入上次见过的 id 即可增量拉取，跨进程重启仍然有效。
-	 * leafId 指出活跃分支的末端，用于判断分支是否移动。
+	 * 分页从 cursor 指向的条目往更早取，cursor 缺省表示从叶子开始；nextCursor 为空表示
+	 * 已经到最早。只在窗口内做 toEntry 映射，整份历史的映射不发生在分页里。
+	 * 条目 id 稳定且只追加，因此游标跨进程重启仍然有效。
 	 */
-	entries(since?: string): { entries: Entry[]; leafId: string | null } {
-		const all = this.session.sessionManager.getEntries();
-		const leafId = this.session.sessionManager.getLeafId();
-		if (since === undefined) {
-			return { entries: all.map(toEntry), leafId };
+	entryPage(cursor: string | undefined, limit: number): { entries: Entry[]; nextCursor: string | undefined } {
+		const page = pageOf(this.session.sessionManager.getBranch(), cursor, limit);
+		if (page.missing) {
+			throw new Error(`unknown session entry: ${cursor}`);
 		}
-		const index = all.findIndex((entry) => entry.id === since);
-		if (index < 0) {
-			throw new Error(`unknown session entry: ${since}`);
-		}
-		return { entries: all.slice(index + 1).map(toEntry), leafId };
+		return { entries: page.window.map(toEntry), nextCursor: page.nextCursor };
 	}
 
 	contextUsage(): ContextUsage | undefined {

@@ -19,7 +19,15 @@ import { debugLog } from "./log.ts";
 /** 会话登记表用到的 agent 能力,收窄成结构类型以便测试注入假实现。 */
 export type HubAgent = Pick<
 	PiAgent,
-	"id" | "file" | "isBusy" | "subscribe" | "entries" | "entriesAfter" | "entryBefore" | "snapshot" | "dispose"
+	| "id"
+	| "file"
+	| "isBusy"
+	| "subscribe"
+	| "entryPage"
+	| "entriesAfter"
+	| "entryBefore"
+	| "snapshot"
+	| "dispose"
 >;
 
 /** 建会话用的工厂,收窄成登记表需要的三个入口,便于测试注入假实现。 */
@@ -358,23 +366,19 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		sessionId: string,
 		cursor: string | undefined,
 		limit: number | undefined,
-	): Promise<{ entries: ReturnType<A["entries"]>["entries"]; nextCursor: string | undefined }> {
+	): Promise<{ entries: ReturnType<A["entryPage"]>["entries"]; nextCursor: string | undefined }> {
 		const row = await this.requireReady(sessionId);
 		this.touch(row);
-		const all = row.agent?.entries().entries ?? [];
-		const size = Math.min(Math.max(limit ?? this.pageSize.default, 1), this.pageSize.max);
-		let end = all.length;
-		if (cursor !== undefined) {
-			const index = all.findIndex((entry) => entry.id === cursor);
-			if (index < 0) {
-				throw new SessionNotFoundError(sessionId);
-			}
-			end = index;
+		const agent = row.agent;
+		if (!agent) {
+			throw new SessionNotFoundError(sessionId);
 		}
-		const start = Math.max(0, end - size);
-		const window = all.slice(start, end);
-		const first = window[0];
-		return { entries: window, nextCursor: start > 0 && first ? first.id : undefined };
+		const size = Math.min(Math.max(limit ?? this.pageSize.default, 1), this.pageSize.max);
+		try {
+			return agent.entryPage(cursor, size);
+		} catch {
+			throw new SessionEntryNotFoundError(cursor ?? "");
+		}
 	}
 
 	/**

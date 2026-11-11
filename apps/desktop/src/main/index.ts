@@ -4,6 +4,9 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 
 const isDev = !app.isPackaged;
 
+/** `npm run dev` 启动时 electron-vite 会给出渲染进程地址，用它区分开发启动与打包运行 */
+const isDevServer = isDev && process.env.ELECTRON_RENDERER_URL !== undefined;
+
 /** 默认打开的项目目录,可用 FACET_PROJECT_DIR 覆盖 */
 const projectDir = process.env.FACET_PROJECT_DIR?.trim() || process.cwd();
 
@@ -76,7 +79,7 @@ ipcMain.handle("facet:pick-directory", async (event) => {
 });
 
 app.whenReady().then(async () => {
-	server = await startServer({ port: 0, host: "127.0.0.1" });
+	server = await startServer({ port: 0, host: "127.0.0.1", debug: isDevServer });
 	const endpoint = `ws://${server.host}:${server.port}/endpoint`;
 	console.log(`设备 ${server.hostId} 监听 ${endpoint}`);
 	console.log(`数据目录 ${server.agentDir}`);

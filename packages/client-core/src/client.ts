@@ -21,6 +21,7 @@ import type {
 	SessionSnapshot,
 	SessionSummary,
 } from "@facet/protocol";
+import { debugLog } from "./log.ts";
 import { historyEntryId } from "./message-id.ts";
 import type { ChatView, SessionView } from "./state.ts";
 import type { ChannelGap } from "./store.ts";
@@ -82,6 +83,10 @@ export class SessionClient {
 	private isGapWatched = false;
 	/** 下一页更早历史的游标,为空表示已经到最早 */
 	private olderCursor: string | undefined;
+	/** 已提交到视图的末条目 id,提升实时消息时作为边界传给设备 */
+	private lastEntryId: string | undefined;
+	/** 串行执行提升,避免连续 settled 时请求交错 */
+	private commitChain: Promise<void> = Promise.resolve();
 
 	constructor(options: SessionClientOptions) {
 		this.transport = options.transport;
@@ -123,7 +128,10 @@ export class SessionClient {
 	attach(handshake: DeviceHandshake): void {
 		this.handshake = handshake;
 		this.stopActions?.();
-		this.stopActions = this.transport.onAction((frame) => this.state.apply(frame));
+		this.stopActions = this.transport.onAction((frame) => {
+			this.state.apply(frame);
+			this.observe(frame);
+		});
 		this.stopState ??= this.transport.onStateChange?.((state) => {
 			if (state === "ready") {
 				void this.resume();
@@ -183,6 +191,7 @@ export class SessionClient {
 		this.state.ensureSession(channels.session, snapshot);
 		this.state.ensureChat(channels.chat);
 		this.olderCursor = undefined;
+		this.lastEntryId = undefined;
 
 		const sessionSub = await this.transport.request("subscribe", { channel: channels.session });
 		this.state.markSeq(channels.session, sessionSub.seq);
@@ -323,6 +332,7 @@ export class SessionClient {
 		const opened = this.opened;
 		this.opened = undefined;
 		this.olderCursor = undefined;
+		this.lastEntryId = undefined;
 		if (!opened) {
 			return;
 		}
@@ -395,6 +405,8 @@ export class SessionClient {
 			);
 			if (index === 0 && replace) {
 				this.state.replaceChat(channel, page.entries);
+				const newest = page.entries[page.entries.length - 1];
+				this.lastEntryId = newest?.id;
 			} else {
 				this.state.prependHistory(channel, page.entries);
 			}
@@ -404,6 +416,71 @@ export class SessionClient {
 			}
 		}
 		this.olderCursor = cursor;
+	}
+
+	/**
+	 * 观察已应用的动作。
+	 *
+	 * 本轮 settle 之后向设备要一次「边界之后的条目」，把实时消息提升为历史消息：
+	 * 之后界面上的消息都带条目 id，分叉、定位这类操作不再区分历史与实时。
+	 */
+	private observe(frame: ActionFrame): void {
+		const opened = this.opened;
+		if (!opened || frame.channel !== opened.chatChannel) {
+			return;
+		}
+		if (frame.action.type !== "chat/settled") {
+			return;
+		}
+		debugLog("commit", "本轮结束，准备提升实时消息", { sessionId: opened.sessionId });
+		this.commitChain = this.commitChain.then(() => this.runCommit()).catch(() => undefined);
+	}
+
+	/**
+	 * 拉取边界之后的条目并提升视图。
+	 *
+	 * 边界是上一次提交到的末条目；设备从叶子沿 parentId 回溯到它为止。条目数量与实时
+	 * 消息对不上（漏了事件）或设备拒绝时，整体重新装载历史。
+	 */
+	private async runCommit(): Promise<void> {
+		const opened = this.opened;
+		if (!opened) {
+			return;
+		}
+		try {
+			debugLog("commit", "请求边界之后的条目", {
+				sessionId: opened.sessionId,
+				afterEntryId: this.lastEntryId,
+			});
+			const result = await this.transport.request("entriesAfter", {
+				sessionId: opened.sessionId,
+				...(this.lastEntryId === undefined ? {} : { afterEntryId: this.lastEntryId }),
+			});
+			if (this.opened !== opened) {
+				return;
+			}
+			const promoted = this.state.promote(opened.chatChannel, result.entries);
+			if (result.leafId !== null) {
+				this.lastEntryId = result.leafId;
+			}
+			debugLog("commit", promoted ? "提升成功" : "提升被拒：条目数与实时消息不符", {
+				count: result.entries.length,
+				leafId: result.leafId,
+				boundary: this.lastEntryId,
+				messageIds: this.state
+					.chatView(opened.chatChannel)
+					?.items.map((item) => `${item.id}${item.entry === undefined ? "" : `→${item.entry.id}`}`),
+			});
+			if (!promoted) {
+				debugLog("commit", "条目数与实时消息不符，重新装载历史");
+				await this.reloadHistory(opened.chatChannel, opened.sessionId);
+			}
+		} catch (error) {
+			debugLog("commit", "提升失败，重新装载历史", { error: String(error) });
+			if (this.opened === opened) {
+				await this.reloadHistory(opened.chatChannel, opened.sessionId);
+			}
+		}
 	}
 
 	/** 重新装载全部历史。 */

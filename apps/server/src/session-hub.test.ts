@@ -41,6 +41,16 @@ class FakeAgent implements HubAgent {
 		return { entries: this.stored, leafId: null };
 	}
 
+	/** 取边界之后的条目，用例按 stored 尾部模拟 */
+	entriesAfter(afterEntryId: string | null): { entries: Entry[]; leafId: string | null } {
+		const index = afterEntryId === null ? -1 : this.stored.findIndex((entry) => entry.id === afterEntryId);
+		if (afterEntryId !== null && index < 0) {
+			throw new Error(`unknown session entry: ${afterEntryId}`);
+		}
+		const leaf = this.stored[this.stored.length - 1];
+		return { entries: this.stored.slice(index + 1), leafId: leaf?.id ?? null };
+	}
+
 	snapshot(): SessionSnapshot {
 		return {
 			id: this.id,
@@ -307,6 +317,40 @@ describe("空闲回收", () => {
 		agent.emit({ type: "settled", aborted: false });
 		await vi.advanceTimersByTimeAsync(IDLE_MS + 1);
 		expect(hub.has(snapshot.id)).toBe(false);
+	});
+
+	it("取边界之后的条目只返回这一段", async () => {
+		const snapshot = await hub.openSession("/tmp/s1.jsonl");
+		const agent = hub.agent(snapshot.id);
+		for (const id of ["e1", "e2", "e3"]) {
+			agent.stored.push({
+				id,
+				parentId: id === "e1" ? null : `e${Number(id.slice(1)) - 1}`,
+				kind: "message",
+				timestamp: "2026-11-08T00:00:00Z",
+				message: {
+					role: "assistant",
+					content: [{ type: "text", text: id }],
+					provider: "p",
+					model: "m",
+					usage: {
+						input: 0,
+						output: 0,
+						cacheRead: 0,
+						cacheWrite: 0,
+						reasoning: 0,
+						totalTokens: 0,
+						cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+					},
+					stopReason: "stop",
+					timestamp: 1,
+				},
+			});
+		}
+		const result = await hub.entriesAfter(snapshot.id, "e1");
+		expect(result.entries.map((entry) => entry.id)).toEqual(["e2", "e3"]);
+		expect(result.leafId).toBe("e3");
+		await expect(hub.entriesAfter(snapshot.id, "e9")).rejects.toThrow("条目不在活动分支上");
 	});
 
 	it("读历史或取快照会续期", async () => {

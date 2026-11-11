@@ -244,6 +244,7 @@ export function App() {
 							canFork={chat?.isRunning !== true}
 							onFork={forkFrom}
 							retry={chat?.retry}
+							renames={chat?.renames}
 							emptyHint="还没有消息,输入内容开始"
 						/>
 					</div>

@@ -14,11 +14,12 @@ import type { Action, ActionFrame, Channel, SessionSnapshot } from "@facet/proto
 import { makeChannel, parseChannel } from "@facet/protocol";
 import { ActionProjector } from "./action-projector.ts";
 import { EventLog } from "./event-log.ts";
+import { debugLog } from "./log.ts";
 
 /** 会话登记表用到的 agent 能力,收窄成结构类型以便测试注入假实现。 */
 export type HubAgent = Pick<
 	PiAgent,
-	"id" | "file" | "isBusy" | "subscribe" | "entries" | "snapshot" | "dispose"
+	"id" | "file" | "isBusy" | "subscribe" | "entries" | "entriesAfter" | "snapshot" | "dispose"
 >;
 
 /** 建会话用的工厂,收窄成登记表需要的三个入口,便于测试注入假实现。 */
@@ -73,6 +74,16 @@ export class SessionEntryNotFoundError extends Error {
 	constructor(messageId: string) {
 		super(`找不到消息对应的会话条目:${messageId}`);
 		this.messageId = messageId;
+	}
+}
+
+/** 提升实时消息时给的边界条目不在活动分支上。 */
+export class SessionBoundaryNotFoundError extends Error {
+	readonly entryId: string;
+
+	constructor(entryId: string) {
+		super(`条目不在活动分支上:${entryId}`);
+		this.entryId = entryId;
 	}
 }
 
@@ -375,6 +386,38 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		const window = all.slice(start, end);
 		const first = window[0];
 		return { entries: window, nextCursor: start > 0 && first ? first.id : undefined };
+	}
+
+	/**
+	 * 取 afterEntryId 之后到叶子的条目，端点在本轮结束后用它把实时消息提升为历史消息。
+	 *
+	 * 与 entries 一样顺带续期：刚 settle 过的会话仍算在用。
+	 */
+	async entriesAfter(
+		sessionId: string,
+		afterEntryId: string | null,
+	): Promise<{ entries: ReturnType<A["entriesAfter"]>["entries"]; leafId: string | null }> {
+		const row = await this.requireReady(sessionId);
+		this.touch(row);
+		const agent = row.agent;
+		if (!agent) {
+			throw new SessionNotFoundError(sessionId);
+		}
+		// 边界不在活动分支上时 agent 抛普通错误，这里换成端点认识的分类
+		try {
+			const result = agent.entriesAfter(afterEntryId);
+			debugLog("commit", "返回边界之后的条目", {
+				sessionId,
+				afterEntryId,
+				leafId: result.leafId,
+				count: result.entries.length,
+				kinds: result.entries.map((entry) => `${entry.kind}:${entry.id}`),
+			});
+			return result;
+		} catch (error) {
+			debugLog("commit", "边界条目不在活动分支上", { sessionId, afterEntryId, error: String(error) });
+			throw new SessionBoundaryNotFoundError(afterEntryId ?? "");
+		}
 	}
 
 	/**

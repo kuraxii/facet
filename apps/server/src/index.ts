@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { PiAgentFactory } from "@facet/agent";
 import { loadServerConfig, type ServerConfig } from "./config.ts";
 import { type EndpointHandle, startEndpoint } from "./endpoint.ts";
+import { debugLog, setDebugLog } from "./log.ts";
 import { ProjectCatalog } from "./project-catalog.ts";
 import { ProjectStore } from "./project-store.ts";
 import { SessionHub } from "./session-hub.ts";
@@ -35,6 +36,7 @@ export interface ServerHandle extends EndpointHandle {
  */
 export async function startServer(options: Partial<ServerConfig> = {}): Promise<ServerHandle> {
 	const config: ServerConfig = { ...loadServerConfig(), ...options };
+	setDebugLog(config.debug);
 	const factory = await PiAgentFactory.create({
 		agentDir: config.agentDir,
 		sessionDir: config.sessionDir,
@@ -51,6 +53,7 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 	const projectStore = await ProjectStore.open({ file: join(config.dataDir, "projects.json") });
 	const hostId = randomUUID();
 	const endpoint = await startEndpoint({ config, factory, hub, projectStore, hostId });
+	debugLog("server", "设备端点就绪", { endpoint: `ws://${endpoint.host}:${endpoint.port}/endpoint`, hostId });
 
 	return {
 		...endpoint,
@@ -73,9 +76,15 @@ export type { ServerConfig } from "./config.ts";
 export { loadServerConfig } from "./config.ts";
 export type { EndpointHandle } from "./endpoint.ts";
 export { EventLog } from "./event-log.ts";
+export { debugLog, isDebugLogEnabled, setDebugLog } from "./log.ts";
 export type { ProjectSource } from "./project-catalog.ts";
 export { ProjectCatalog } from "./project-catalog.ts";
 export type { ProjectStoreOptions, StoredProject } from "./project-store.ts";
 export { ProjectExistsError, ProjectNotFoundError, ProjectStore } from "./project-store.ts";
 export type { ActionSink, HubAgent, Subscription } from "./session-hub.ts";
-export { ChannelNotFoundError, SessionHub, SessionNotFoundError } from "./session-hub.ts";
+export {
+	ChannelNotFoundError,
+	SessionBoundaryNotFoundError,
+	SessionHub,
+	SessionNotFoundError,
+} from "./session-hub.ts";

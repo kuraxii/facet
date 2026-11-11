@@ -137,6 +137,14 @@ export interface RequestParams {
 	 * nextCursor 缺省表示已经到最早。limit 缺省由设备决定。
 	 */
 	entries: { sessionId: string; cursor?: string; limit?: number };
+	/**
+	 * 取 afterEntryId 之后到叶子的条目,按从早到晚排列。
+	 *
+	 * 端点在本轮 settled 之后用它把实时消息提升为历史消息:设备从叶子沿 parentId 往回
+	 * 走到 afterEntryId,再把这一段反转返回。afterEntryId 缺省表示整条分支。
+	 * afterEntryId 不在活动分支上时设备侧拒绝,端点据此重新装载历史。
+	 */
+	entriesAfter: { sessionId: string; afterEntryId?: string };
 	/** 订阅通道。since 为该通道上一条已收到的序号。 */
 	subscribe: { channel: Channel; since?: number };
 	/** 取消订阅。 */
@@ -163,6 +171,8 @@ export interface RequestResults {
 	forkSession: SessionSnapshot;
 	snapshot: SessionSnapshot;
 	entries: { entries: Entry[]; nextCursor: string | undefined };
+	/** 末端为当前叶子,按从早到晚排列 */
+	entriesAfter: { entries: Entry[]; leafId: string | null };
 	subscribe: SubscribeResult;
 	unsubscribe: Record<string, never>;
 	models: { models: ModelInfo[] };

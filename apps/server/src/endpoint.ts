@@ -29,6 +29,7 @@ import { ProjectExistsError, ProjectNotFoundError, type ProjectStore } from "./p
 import {
 	type ActionSink,
 	ChannelNotFoundError,
+	SessionBoundaryNotFoundError,
 	SessionBusyError,
 	SessionEntryNotFoundError,
 	type SessionHub,
@@ -266,6 +267,13 @@ async function handleRequest(
 				optionalNumber(source, "limit"),
 			);
 		}
+		case "entriesAfter": {
+			const source = asObject(params);
+			return await context.hub.entriesAfter(
+				requiredString(source, "sessionId"),
+				optionalString(source, "afterEntryId") ?? null,
+			);
+		}
 		case "subscribe": {
 			const source = asObject(params);
 			const channel = requiredChannel(source, "channel");
@@ -330,7 +338,11 @@ function toProtocolError(error: unknown): { code: ErrorCode; message: string } {
 	if (error instanceof ProjectExistsError || error instanceof ProjectNotFoundError) {
 		return { code: "rejected", message: error.message };
 	}
-	if (error instanceof SessionEntryNotFoundError || error instanceof SessionBusyError) {
+	if (
+		error instanceof SessionEntryNotFoundError ||
+		error instanceof SessionBoundaryNotFoundError ||
+		error instanceof SessionBusyError
+	) {
 		return { code: "rejected", message: error.message };
 	}
 	return { code: "internal", message: error instanceof Error ? error.message : String(error) };

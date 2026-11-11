@@ -6,13 +6,13 @@
  */
 import type { ActionFrame, Channel, Entry, Message, SessionSnapshot } from "@facet/protocol";
 import { makeChannel, parseChannel } from "@facet/protocol";
-import { historyMessageId } from "./message-id.ts";
+import { historyMessageId, isHistoryMessageId } from "./message-id.ts";
 import { reduceChat, reduceSession } from "./reduce.ts";
 import {
 	type ChatView,
 	createChatView,
 	createSessionView,
-	type MessageView,
+	type EntryView,
 	type SessionView,
 } from "./state.ts";
 
@@ -142,23 +142,13 @@ export class SessionStore {
 	/**
 	 * 用历史条目替换对话内容。
 	 *
-	 * 条目按时间升序传入。历史消息的标识用条目 id 加前缀,与设备实时分配的标识不相撞。
+	 * 条目按时间升序传入，全部类型都进视图；目前只有带 message 的条目参与渲染，其余留给
+	 * 以后的事件展示。历史条目的标识用条目 id 加前缀，与设备实时分配的标识不相撞。
 	 */
 	replaceChat(channel: Channel, entries: readonly Entry[]): ChatView {
 		const slot = this.chats.get(channel) ?? this.createChatSlot(channel);
-		const messages: MessageView[] = [];
-		for (const entry of entries) {
-			if (entry.kind !== "message" || entry.message === undefined) {
-				continue;
-			}
-			messages.push({
-				id: historyMessageId(entry.id),
-				message: entry.message,
-				streaming: {},
-				isStreaming: false,
-			});
-		}
-		slot.view = { ...slot.view, messages };
+		const items = entries.map(toEntryView);
+		slot.view = { ...slot.view, items };
 		this.markChanged();
 		return slot.view;
 	}
@@ -166,24 +156,62 @@ export class SessionStore {
 	/** 往更早的方向补一页历史,已存在的标识跳过。 */
 	prependHistory(channel: Channel, entries: readonly Entry[]): ChatView {
 		const slot = this.chats.get(channel) ?? this.createChatSlot(channel);
-		const known = new Set(slot.view.messages.map((item) => item.id));
-		const older: MessageView[] = [];
+		const known = new Set(slot.view.items.map((item) => item.id));
+		const older: EntryView[] = [];
 		for (const entry of entries) {
-			if (entry.kind !== "message" || entry.message === undefined) {
+			const view = toEntryView(entry);
+			if (known.has(view.id)) {
 				continue;
 			}
-			const id = historyMessageId(entry.id);
-			if (known.has(id)) {
-				continue;
-			}
-			older.push({ id, message: entry.message, streaming: {}, isStreaming: false });
+			older.push(view);
 		}
 		if (older.length === 0) {
 			return slot.view;
 		}
-		slot.view = { ...slot.view, messages: [...older, ...slot.view.messages] };
+		slot.view = { ...slot.view, items: [...older, ...slot.view.items] };
 		this.markChanged();
 		return slot.view;
+	}
+
+	/**
+	 * 把实时消息提升为历史消息。
+	 *
+	 * entries 是设备返回的、本轮新写入的条目，按从早到晚排列。实时消息都是带 message 的
+	 * 条目，与其中的消息条目一一对应、顺序相同，因此按位置配对；非消息条目没有实时对应物，
+	 * 只留在视图里供以后扩展展示。整段实时视图换成这一段条目，消息内容用写盘后的版本。
+	 * 消息条目数与实时消息数对不上说明漏了事件，返回 false，调用方重新装载历史。
+	 */
+	promote(channel: Channel, entries: readonly Entry[]): boolean {
+		const slot = this.chats.get(channel);
+		if (!slot) {
+			return false;
+		}
+		const live = slot.view.items.filter((item) => !isHistoryMessageId(item.id));
+		const committed = entries.filter((entry) => entry.kind === "message" && entry.message !== undefined);
+		if (live.length !== committed.length) {
+			return false;
+		}
+		const renames: Record<string, string> = { ...slot.view.renames };
+		const promoted = entries.map(toEntryView);
+		let liveIndex = 0;
+		for (const view of promoted) {
+			if (view.message === undefined) {
+				continue;
+			}
+			const source = live[liveIndex];
+			liveIndex += 1;
+			if (source === undefined) {
+				return false;
+			}
+			renames[source.id] = view.id;
+		}
+		slot.view = {
+			...slot.view,
+			items: [...slot.view.items.slice(0, slot.view.items.length - live.length), ...promoted],
+			renames,
+		};
+		this.markChanged();
+		return true;
 	}
 
 	/** 通道已应用到的序号,从未收到动作时为 0。 */
@@ -262,6 +290,17 @@ export class SessionStore {
 	}
 }
 
+/** 把一条历史条目转成视图。非消息条目保留在视图里，目前不参与渲染。 */
+function toEntryView(entry: Entry): EntryView {
+	return {
+		id: historyMessageId(entry.id),
+		entry,
+		message: entry.message,
+		streaming: {},
+		isStreaming: false,
+	};
+}
+
 /** 取消息的纯文本,供列表预览与复制使用。 */
 export function messageText(message: Message): string {
 	switch (message.role) {
@@ -283,7 +322,10 @@ export function messageText(message: Message): string {
 }
 
 /** 消息当前的展示文本:流式期间用累积的增量,否则用完整内容。 */
-export function messageDisplayText(view: MessageView): string {
+export function messageDisplayText(view: EntryView): string {
+	if (view.message === undefined) {
+		return "";
+	}
 	const streamed = Object.keys(view.streaming)
 		.map(Number)
 		.sort((left, right) => left - right)

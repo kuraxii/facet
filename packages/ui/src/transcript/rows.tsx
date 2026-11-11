@@ -23,6 +23,8 @@ export interface ChatTranscriptProps {
 	retry?: { attempt: number; maxAttempts: number } | undefined;
 	/** 没有任何内容时显示的提示 */
 	emptyHint?: string;
+	/** 实时消息提升为历史消息时的标识迁移，用来搬动按行标识保存的收起状态 */
+	renames?: Readonly<Record<string, string>> | undefined;
 }
 
 /**
@@ -287,11 +289,33 @@ function Shell({ className, children }: { className: string; children: ReactNode
 /**
  * 对话面板。把渲染单元聚合成分行,并维护每行的收起状态。
  */
-export function ChatTranscript({ items, canFork, onFork, retry, emptyHint }: ChatTranscriptProps) {
+export function ChatTranscript({ items, canFork, onFork, retry, emptyHint, renames }: ChatTranscriptProps) {
 	const rows = useMemo(() => groupRows(items), [items]);
 	const [overrides, setOverrides] = useState<ReadonlyMap<string, boolean>>(() => new Map());
 	const isTicking = rows.some((row) => row.isStreaming && row.startedAt !== undefined);
 	const now = useNow(isTicking);
+
+	// 一轮结束、消息提升为历史消息后行标识会变，把按旧标识保存的收起状态搬到新标识上
+	useEffect(() => {
+		if (renames === undefined) {
+			return;
+		}
+		setOverrides((previous) => {
+			let next: Map<string, boolean> | undefined;
+			for (const [from, to] of Object.entries(renames)) {
+				const value = previous.get(from);
+				if (value === undefined) {
+					continue;
+				}
+				next ??= new Map(previous);
+				next.delete(from);
+				if (!next.has(to)) {
+					next.set(to, value);
+				}
+			}
+			return next ?? previous;
+		});
+	}, [renames]);
 
 	const toggle = useCallback((row: DisplayRow) => {
 		setOverrides((previous) => {

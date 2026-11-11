@@ -9,7 +9,7 @@ import type {
 	RequestResults,
 	SessionSnapshot,
 } from "@facet/protocol";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { type DeviceHandshake, SessionClient, type SessionTransport } from "./client.ts";
 
 const CHAT = "chat:/s1" as const;
@@ -33,6 +33,12 @@ function assistant(text: string): Message {
 		stopReason: "stop",
 		timestamp: 1,
 	};
+}
+
+/** 带工具调用的助手消息。 */
+function assistantCalling(block: Extract<Message, { role: "assistant" }>["content"][number]): Message {
+	const base = assistant("") as Extract<Message, { role: "assistant" }>;
+	return { ...base, content: [block] };
 }
 
 function snapshot(): SessionSnapshot {
@@ -117,6 +123,16 @@ class FakeTransport implements SessionTransport {
 					};
 				case "unsubscribe":
 					return {};
+				case "entriesAfter": {
+					const { afterEntryId } = params as { afterEntryId?: string };
+					const index =
+						afterEntryId === undefined ? -1 : this.entries.findIndex((entry) => entry.id === afterEntryId);
+					if (index < 0 && afterEntryId !== undefined) {
+						throw new Error(`unknown session entry: ${afterEntryId}`);
+					}
+					const leaf = this.entries[this.entries.length - 1];
+					return { entries: this.entries.slice(index + 1), leafId: leaf?.id ?? null };
+				}
 				case "entries": {
 					const { cursor, limit } = params as { cursor?: string; limit?: number };
 					const size = limit ?? 50;
@@ -211,7 +227,7 @@ describe("SessionClient", () => {
 	it("首次装载按页取最近历史且顺序为时间升序", async () => {
 		const { client } = createClient(12, { initialPages: 2, pageSize: 5 });
 		await client.openSession("/tmp/s1.jsonl");
-		const messages = client.chatView()?.messages ?? [];
+		const messages = client.chatView()?.items ?? [];
 		expect(messages).toHaveLength(10);
 		expect(messages[0]?.message && "content" in (messages[0].message ?? {})).toBe(true);
 		expect(JSON.stringify(messages[0]?.id)).toBe('"e:e3"');
@@ -222,7 +238,7 @@ describe("SessionClient", () => {
 	it("缺省装载全部历史", async () => {
 		const { client } = createClient(12, { pageSize: 5 });
 		await client.openSession("/tmp/s1.jsonl");
-		const messages = client.chatView()?.messages ?? [];
+		const messages = client.chatView()?.items ?? [];
 		expect(messages).toHaveLength(12);
 		expect(messages[0]?.id).toBe("e:e1");
 		expect(client.hasMore).toBe(false);
@@ -231,11 +247,11 @@ describe("SessionClient", () => {
 	it("继续往更早翻页时补在前面且不重复", async () => {
 		const { client } = createClient(12, { initialPages: 1, pageSize: 5 });
 		await client.openSession("/tmp/s1.jsonl");
-		expect(client.chatView()?.messages).toHaveLength(5);
+		expect(client.chatView()?.items).toHaveLength(5);
 		const result = await client.loadOlder();
 		expect(result.loaded).toBe(5);
-		expect(client.chatView()?.messages).toHaveLength(10);
-		const ids = (client.chatView()?.messages ?? []).map((message) => message.id);
+		expect(client.chatView()?.items).toHaveLength(10);
+		const ids = (client.chatView()?.items ?? []).map((message) => message.id);
 		expect(new Set(ids).size).toBe(ids.length);
 		expect(ids[0]).toBe("e:e3");
 		expect(ids[9]).toBe("e:e12");
@@ -270,7 +286,202 @@ describe("SessionClient", () => {
 		await new Promise((resolve) => setTimeout(resolve, 10));
 		const after = transport.calls.filter((call) => call.method === "entries").length;
 		expect(after).toBeGreaterThan(before);
-		expect(client.chatView()?.messages.length).toBe(12);
+		expect(client.chatView()?.items.length).toBe(12);
+	});
+
+	it("settled 之后把实时消息提升为历史消息并记下边界", async () => {
+		const { transport, client } = createClient(2, { pageSize: 10 });
+		await client.openSession("/tmp/s1.jsonl");
+		const opened = client.current as { chatChannel: Channel; sessionId: string };
+		transport.entries.push(
+			{
+				id: "e3",
+				parentId: "e2",
+				kind: "message",
+				timestamp: "2026-11-08T00:00:03Z",
+				message: assistant("问题"),
+			},
+			{
+				id: "e4",
+				parentId: "e3",
+				kind: "message",
+				timestamp: "2026-11-08T00:00:04Z",
+				message: assistant("答复"),
+			},
+		);
+		transport.emit(opened.chatChannel, {
+			type: "chat/messageAppended",
+			messageId: "m1",
+			message: assistant("问题"),
+		});
+		transport.emit(opened.chatChannel, {
+			type: "chat/messageAppended",
+			messageId: "m2",
+			message: assistant("答复"),
+		});
+		transport.emit(opened.chatChannel, { type: "chat/settled", aborted: false });
+
+		await vi.waitFor(() => {
+			const messages = client.chatView()?.items ?? [];
+			expect(messages.map((item) => item.id)).toEqual(["e:e1", "e:e2", "e:e3", "e:e4"]);
+		});
+		const messages = client.chatView()?.items ?? [];
+		expect(messages.map((item) => item.entry?.id)).toEqual(["e1", "e2", "e3", "e4"]);
+		expect(client.chatView()?.renames).toEqual({ m1: "e:e3", m2: "e:e4" });
+		expect(transport.calls.filter((call) => call.method === "entriesAfter")).toEqual([
+			{ method: "entriesAfter", params: { sessionId: opened.sessionId, afterEntryId: "e2" } },
+		]);
+	});
+
+	it("工具结果与流式增量都在本轮内一并提升", async () => {
+		const { transport, client } = createClient(2, { pageSize: 10 });
+		await client.openSession("/tmp/s1.jsonl");
+		const opened = client.current as { chatChannel: Channel };
+		const call = {
+			type: "toolCall" as const,
+			id: "c1",
+			name: "bash",
+			arguments: { command: "ls" },
+		};
+		const live: { messageId: string; message: Message }[] = [
+			{
+				messageId: "m1",
+				message: { role: "user", content: [{ type: "text", text: "列一下" }], timestamp: 10 },
+			},
+			{ messageId: "m2", message: assistantCalling(call) },
+			{
+				messageId: "m3",
+				message: {
+					role: "toolResult",
+					callId: "c1",
+					toolName: "bash",
+					content: [{ type: "text", text: "a.ts" }],
+					isError: false,
+					timestamp: 12,
+				},
+			},
+			{ messageId: "m4", message: assistant("一共一个文件") },
+		];
+		transport.entries.push(
+			...live.map((item, index) => ({
+				id: `e${index + 3}`,
+				parentId: index === 0 ? "e2" : `e${index + 2}`,
+				kind: "message" as const,
+				timestamp: "2026-11-08T00:00:00Z",
+				message: item.message,
+			})),
+		);
+		for (const [index, item] of live.entries()) {
+			transport.emit(
+				opened.chatChannel,
+				{ type: "chat/messageAppended", messageId: item.messageId, message: item.message },
+				index + 1,
+			);
+		}
+		transport.emit(opened.chatChannel, { type: "chat/settled", aborted: false });
+
+		await vi.waitFor(() => {
+			expect(client.chatView()?.items.map((item) => item.id)).toEqual([
+				"e:e1",
+				"e:e2",
+				"e:e3",
+				"e:e4",
+				"e:e5",
+				"e:e6",
+			]);
+		});
+		expect(client.chatView()?.items.map((item) => item.entry?.id)).toEqual([
+			"e1",
+			"e2",
+			"e3",
+			"e4",
+			"e5",
+			"e6",
+		]);
+	});
+
+	it("第二轮只提升新增的一段，边界随叶子推进", async () => {
+		const { transport, client } = createClient(2, { pageSize: 10 });
+		await client.openSession("/tmp/s1.jsonl");
+		const opened = client.current as { chatChannel: Channel; sessionId: string };
+
+		const turn = (startId: number, messageIds: [string, string]): void => {
+			transport.entries.push(
+				...messageIds.map((_, index) => ({
+					id: `e${startId + index}`,
+					parentId: index === 0 ? `e${startId - 1}` : `e${startId + index - 1}`,
+					kind: "message" as const,
+					timestamp: "2026-11-08T00:00:00Z",
+					message: assistant(`第 ${startId + index} 条`),
+				})),
+			);
+			for (const [index, messageId] of messageIds.entries()) {
+				transport.emit(opened.chatChannel, {
+					type: "chat/messageAppended",
+					messageId,
+					message: assistant(`第 ${startId + index} 条`),
+				});
+			}
+		};
+
+		turn(3, ["m1", "m2"]);
+		transport.emit(opened.chatChannel, { type: "chat/settled", aborted: false });
+		await vi.waitFor(() => {
+			expect(client.chatView()?.items.map((item) => item.id)).toEqual(["e:e1", "e:e2", "e:e3", "e:e4"]);
+		});
+
+		turn(5, ["m3", "m4"]);
+		transport.emit(opened.chatChannel, { type: "chat/settled", aborted: false });
+		await vi.waitFor(() => {
+			expect(client.chatView()?.items.map((item) => item.id)).toEqual([
+				"e:e1",
+				"e:e2",
+				"e:e3",
+				"e:e4",
+				"e:e5",
+				"e:e6",
+			]);
+		});
+		const requests = transport.calls.filter((call) => call.method === "entriesAfter");
+		expect(requests.map((call) => (call.params as { afterEntryId?: string }).afterEntryId)).toEqual([
+			"e2",
+			"e4",
+		]);
+		expect(client.chatView()?.renames).toEqual({
+			m1: "e:e3",
+			m2: "e:e4",
+			m3: "e:e5",
+			m4: "e:e6",
+		});
+	});
+
+	it("提升时条目数与实时消息不符则重新装载历史", async () => {
+		const { transport, client } = createClient(2, { pageSize: 10 });
+		await client.openSession("/tmp/s1.jsonl");
+		const opened = client.current as { chatChannel: Channel };
+		transport.entries.push({
+			id: "e3",
+			parentId: "e2",
+			kind: "message",
+			timestamp: "2026-11-08T00:00:03Z",
+			message: assistant("问题"),
+		});
+		transport.emit(opened.chatChannel, {
+			type: "chat/messageAppended",
+			messageId: "m1",
+			message: assistant("问题"),
+		});
+		transport.emit(opened.chatChannel, {
+			type: "chat/messageAppended",
+			messageId: "m2",
+			message: assistant("多出来的一条"),
+		});
+		const before = transport.calls.filter((call) => call.method === "entries").length;
+		transport.emit(opened.chatChannel, { type: "chat/settled", aborted: false });
+
+		await vi.waitFor(() => {
+			expect(transport.calls.filter((call) => call.method === "entries").length).toBeGreaterThan(before);
+		});
 	});
 
 	it("状态通道缺口重取快照,不动历史", async () => {
@@ -350,7 +561,7 @@ describe("SessionClient", () => {
 		transport.emit(CHAT, { type: "chat/messageAppended", messageId: "m1", message: assistant("") }, 1);
 		transport.emit(CHAT, { type: "chat/delta", messageId: "m1", partIndex: 0, kind: "text", delta: "你" }, 2);
 		transport.emit(CHAT, { type: "chat/delta", messageId: "m1", partIndex: 0, kind: "text", delta: "好" }, 3);
-		const live = client.chatView()?.messages ?? [];
+		const live = client.chatView()?.items ?? [];
 		const last = live[live.length - 1];
 		expect(last?.id).toBe("m1");
 		expect(last?.streaming[0]?.text).toBe("你好");

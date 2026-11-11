@@ -316,6 +316,36 @@ export class PiAgent {
 		return this.session.getContextUsage();
 	}
 
+	/**
+	 * 取 afterEntryId 之后到叶子的条目，按从早到晚排列。
+	 *
+	 * 从叶子沿 parentId 往回走，遇到 afterEntryId 即停，所以只走过活动分支，
+	 * 条目数上限是分支深度。afterEntryId 给 null 表示整条分支。
+	 * 给定了却走不到叶子上时抛错，调用方据此重新装载历史。
+	 */
+	entriesAfter(afterEntryId: string | null): { entries: Entry[]; leafId: string | null } {
+		const manager = this.session.sessionManager;
+		const leafId = manager.getLeafId();
+		const collected: SessionEntry[] = [];
+		let current = manager.getLeafEntry();
+		while (current) {
+			if (current.id === afterEntryId) {
+				return { entries: collected.reverse().map(toEntry), leafId };
+			}
+			collected.push(current);
+			current = current.parentId ? manager.getEntry(current.parentId) : undefined;
+		}
+		if (afterEntryId !== null) {
+			throw new Error(`unknown session entry: ${afterEntryId}`);
+		}
+		return { entries: collected.reverse().map(toEntry), leafId };
+	}
+
+	/** 活动分支的末条目 id，空会话为空。 */
+	leafEntryId(): string | null {
+		return this.session.sessionManager.getLeafId();
+	}
+
 	/** 统计覆盖整个会话，含已被压缩掉的历史，因此 token 与成本反映实际计费。 */
 	stats(): SessionStats {
 		const stats = this.session.getSessionStats();

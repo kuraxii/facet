@@ -1,7 +1,7 @@
 import type { AssistantMessage, Entry, ToolResultMessage } from "@facet/protocol";
 import { describe, expect, it } from "vitest";
 import { historyMessageId } from "./message-id.ts";
-import { createChatView, type MessageView } from "./state.ts";
+import { createChatView, type EntryView } from "./state.ts";
 import { toTranscript } from "./transcript.ts";
 
 function assistant(
@@ -38,12 +38,24 @@ function toolResult(callId: string, text: string, isError = false): ToolResultMe
 	};
 }
 
-function viewWith(messages: MessageView[], toolCalls = {}) {
-	return { ...createChatView("chat:/s1"), messages, toolCalls };
+function viewWith(items: EntryView[], toolCalls = {}) {
+	return { ...createChatView("chat:/s1"), items, toolCalls };
 }
 
-function historyItem(entryId: string, message: MessageView["message"]): MessageView {
-	return { id: historyMessageId(entryId), message, streaming: {}, isStreaming: false };
+function historyItem(entryId: string, message: EntryView["message"]): EntryView {
+	return {
+		id: historyMessageId(entryId),
+		entry: {
+			id: entryId,
+			parentId: null,
+			kind: "message",
+			timestamp: "2026-11-08T00:00:00Z",
+			...(message === undefined ? {} : { message }),
+		},
+		message,
+		streaming: {},
+		isStreaming: false,
+	};
 }
 
 describe("toTranscript", () => {
@@ -121,12 +133,61 @@ describe("toTranscript", () => {
 		expect(items[0]?.parts[0]).toMatchObject({ status: "failed", output: "拒绝执行" });
 	});
 
+	it("定位字段直接用视图上的 entryId，与标识前缀无关", () => {
+		const [promoted] = toTranscript(
+			viewWith([
+				{
+					id: "e:e7",
+					entry: {
+						id: "e7",
+						parentId: null,
+						kind: "message",
+						timestamp: "2026-11-08T00:00:00Z",
+					},
+					message: assistant([{ type: "text", text: "提升后的回复" }]),
+					streaming: {},
+					isStreaming: false,
+				},
+			]),
+		);
+		expect(promoted?.entryId).toBe("e7");
+		const [live] = toTranscript(
+			viewWith([
+				{
+					id: "m1",
+					entry: undefined,
+					message: assistant([], "pending"),
+					streaming: {},
+					isStreaming: true,
+				},
+			]),
+		);
+		expect(live?.entryId).toBeUndefined();
+	});
+
+	it("没有消息的条目留在视图里但不参与渲染", () => {
+		const items = toTranscript(
+			viewWith([
+				{
+					id: "e:e1",
+					entry: { id: "e1", parentId: null, kind: "usage", timestamp: "2026-11-08T00:00:00Z" },
+					message: undefined,
+					streaming: {},
+					isStreaming: false,
+				},
+				historyItem("e2", assistant([{ type: "text", text: "正文" }])),
+			]),
+		);
+		expect(items.map((item) => item.id)).toEqual(["e:e2"]);
+	});
+
 	it("实时工具状态并入工具段", () => {
 		const items = toTranscript(
 			viewWith(
 				[
 					{
 						id: "m1",
+						entry: undefined,
 						message: assistant([{ type: "toolCall", id: "c1", name: "bash", arguments: { command: "ls" } }]),
 						streaming: {},
 						isStreaming: false,
@@ -189,6 +250,7 @@ describe("toTranscript", () => {
 			viewWith([
 				{
 					id: "m1",
+					entry: undefined,
 					message: assistant([], "pending"),
 					streaming: {
 						1: { kind: "thinking", text: "想一想" },
@@ -269,7 +331,7 @@ describe("条目顺序", () => {
 			},
 		];
 		const view = viewWith(
-			entries.map((entry) => historyItem(entry.id, entry.message as MessageView["message"])),
+			entries.map((entry) => historyItem(entry.id, entry.message as EntryView["message"])),
 		);
 		const items = toTranscript(view);
 		expect(items.map((item) => item.entryId)).toEqual(["e1", "e3"]);

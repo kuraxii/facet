@@ -1,0 +1,33 @@
+/*
+ * 自带字体。
+ *
+ * Inter 是界面字体，随 @fontsource 装进构建产物；Maple Mono 是代码字体，woff2 与许可文本
+ * 放在 src/assets/fonts 里，由打包器一起打进应用，不依赖系统装没装这两个字体。
+ *
+ * Maple 只保留等宽部分与非 CJK 符号：中文由界面字体兜底，CJK 字形会让每个字重多出五兆。
+ * 字体来源与再生成方式见 scripts/build-fonts.sh。
+ */
+
+@font-face {
+	font-family: "Maple Mono";
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url("../assets/fonts/maple-mono-400.woff2") format("woff2");
+}
+
+@font-face {
+	font-family: "Maple Mono";
+	font-style: normal;
+	font-weight: 500;
+	font-display: swap;
+	src: url("../assets/fonts/maple-mono-500.woff2") format("woff2");
+}
+
+@font-face {
+	font-family: "Maple Mono";
+	font-style: normal;
+	font-weight: 600;
+	font-display: swap;
+	src: url("../assets/fonts/maple-mono-600.woff2") format("woff2");
+}

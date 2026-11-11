@@ -59,6 +59,24 @@ npm run dist -w @facet/desktop # 出安装包
 
 依赖方向单向：`protocol ← services / agent / client-core / transport ← ui ← apps`。
 
+## 字体
+
+界面字体与代码字体都打进构建产物，不依赖系统装没装：
+
+| 用途 | 字体 | 来源 |
+|---|---|---|
+| 界面 | Inter（400 / 500 / 600） | `@fontsource/inter`，随构建打包 |
+| 代码 | Maple Mono（400 / 500 / 600） | `packages/ui/src/assets/fonts/` 下的 woff2，OFL-1.1，许可文本同目录 |
+
+Maple Mono 取自本机的 Maple Mono NL NF CN v7.9，只保留等宽部分与非 CJK 符号，中文由界面字体兜底。要重新生成：
+
+```bash
+scripts/build-fonts.sh            # 缺省读 ~/.fonts
+scripts/build-fonts.sh <字体目录>
+```
+
+设置页的外观分类可以把这两项改成别的字体，留空即回到上面两个默认值。
+
 ## 数据放在哪
 
 | 路径 | 内容 | 覆盖方式 |

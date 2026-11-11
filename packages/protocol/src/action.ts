@@ -63,7 +63,15 @@ export type ChatAction =
 	/** 客户端可派发:发送一条消息 */
 	| { type: "chat/turnStarted"; text: string; images?: ImageBlock[]; streamingBehavior?: StreamingBehavior }
 	/** 客户端可派发:中止当前运行 */
-	| { type: "chat/turnCancelled" };
+	| { type: "chat/turnCancelled" }
+	/**
+	 * 客户端可派发:回退到这条用户消息之前。
+	 *
+	 * 分支指针挪到它的前一条,会话文件保持只追加;之后的消息在文件里另成一条分支。
+	 */
+	| { type: "chat/revertTo"; entryId: string }
+	/** 设备侧:分支指针移动过,客户端据此重新装载历史 */
+	| { type: "chat/branchMoved"; leafId: string | null };
 
 /** 动作联合。按 `type` 前缀决定归属通道。 */
 export type Action = SessionAction | ChatAction;

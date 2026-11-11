@@ -575,14 +575,12 @@ export function App() {
 	 */
 	const revertTo = useCallback(
 		(entryId: string, text: string) => {
-			withTrust(session?.state.cwd, () => {
-				runSessionAction(
-					async () => (await client.fork(entryId)).file,
-					() => updateDraft(() => text),
-				);
-			});
+			// 回退在同一个会话里改分支指针，不新建会话；文本先放回输入框，历史由设备推的
+			// chat/branchMoved 触发重装
+			client.revert(entryId);
+			updateDraft(() => text);
 		},
-		[runSessionAction, session?.state.cwd, updateDraft, withTrust],
+		[updateDraft],
 	);
 
 	/**

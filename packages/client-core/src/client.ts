@@ -663,6 +663,19 @@ export class SessionClient {
 		});
 	}
 
+	/**
+	 * 回退到某条用户消息之前。
+	 *
+	 * 设备只挪分支指针,会话文件不动;历史在收到 chat/branchMoved 之后重新装载,调用方不必
+	 * 处理返回值。
+	 */
+	revert(entryId: string): number {
+		return this.transport.dispatch(this.requireOpened().chatChannel, {
+			type: "chat/revertTo",
+			entryId,
+		});
+	}
+
 	/** 退出当前会话:取消订阅并丢掉视图。 */
 	async release(): Promise<void> {
 		await this.exclusive(() => this.releaseUnlocked());
@@ -778,6 +791,19 @@ export class SessionClient {
 	private observe(frame: ActionFrame): void {
 		const opened = this.opened;
 		if (!opened || frame.channel !== opened.chatChannel) {
+			return;
+		}
+		// 分支指针挪过之后，活动分支换成另一条，已装载的历史整段作废
+		if (frame.action.type === "chat/branchMoved") {
+			this.lastEntryId = frame.action.leafId ?? undefined;
+			this.commitChain = this.commitChain
+				.then(async () => {
+					this.state.resetChat(opened.chatChannel);
+					if (this.opened === opened) {
+						await this.reloadHistory(opened.chatChannel, opened.sessionId);
+					}
+				})
+				.catch(() => undefined);
 			return;
 		}
 		if (frame.action.type !== "chat/settled") {

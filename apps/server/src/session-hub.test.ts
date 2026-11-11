@@ -7,6 +7,7 @@ import {
 	type ActionSink,
 	type AgentFactory,
 	type HubAgent,
+	SessionBusyError,
 	SessionConflictError,
 	SessionHub,
 } from "./session-hub.ts";
@@ -138,9 +139,26 @@ class FakeAgent implements HubAgent {
 
 	/** 用例调用 setName 之后记录下来的名字 */
 	renamed: string | undefined;
+	/** 回退到过的条目 */
+	revertedTo: string | undefined;
 
 	setName(name: string): void {
 		this.renamed = name;
+	}
+
+	/** 回退：把 stored 截到目标条目之前，模拟分支指针移动 */
+	async revertTo(entryId: string): Promise<string | undefined> {
+		this.revertedTo = entryId;
+		const index = this.stored.findIndex((entry) => entry.id === entryId);
+		if (index < 0) {
+			throw new Error(`unknown session entry: ${entryId}`);
+		}
+		this.stored.splice(index);
+		return undefined;
+	}
+
+	leafEntryId(): string | null {
+		return this.stored[this.stored.length - 1]?.id ?? null;
 	}
 
 	dispose(): void {
@@ -298,7 +316,7 @@ describe("会话建立与复用", () => {
 		const source = await hub.openSession("/tmp/s1.jsonl");
 		hub.agent(source.id).busy = true;
 		await expect(hub.forkSession({ sessionFile: "/tmp/s1.jsonl", beforeEntryId: "e1" })).rejects.toThrow(
-			"不能分叉",
+			"不能执行这个操作",
 		);
 	});
 
@@ -635,5 +653,59 @@ describe("退出前的检查", () => {
 
 		hub.agent(first.id).busy = true;
 		expect(hub.busyFiles()).toEqual([resolve("/tmp/s1.jsonl")]);
+	});
+});
+
+describe("会话回退", () => {
+	it("挪分支指针并广播 chat/branchMoved", async () => {
+		const snapshot = await hub.openSession("/tmp/s1.jsonl");
+		const agent = hub.agent(snapshot.id);
+		agent.stored.push(
+			{
+				id: "e1",
+				parentId: null,
+				kind: "message",
+				timestamp: "2026-11-08T00:00:00Z",
+				message: { role: "user", content: [{ type: "text", text: "一" }], timestamp: 1 },
+			},
+			{
+				id: "e2",
+				parentId: "e1",
+				kind: "message",
+				timestamp: "2026-11-08T00:00:01Z",
+				message: {
+					role: "assistant",
+					content: [{ type: "text", text: "二" }],
+					provider: "p",
+					model: "m",
+					usage: {
+						input: 0,
+						output: 0,
+						cacheRead: 0,
+						cacheWrite: 0,
+						reasoning: 0,
+						totalTokens: 0,
+						cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+					},
+					stopReason: "stop",
+					timestamp: 2,
+				},
+			},
+		);
+		const frames: { type: string; leafId?: string | null }[] = [];
+		await hub.subscribe(`chat:/${snapshot.id}`, undefined, {
+			id: "a",
+			send: (frame) => frames.push(frame.action as never),
+		});
+
+		await hub.revertTo(snapshot.id, "e1");
+		expect(agent.revertedTo).toBe("e1");
+		expect(frames.at(-1)).toEqual({ type: "chat/branchMoved", leafId: null });
+	});
+
+	it("运行中不允许回退", async () => {
+		const snapshot = await hub.openSession("/tmp/s1.jsonl");
+		hub.agent(snapshot.id).busy = true;
+		await expect(hub.revertTo(snapshot.id, "e1")).rejects.toBeInstanceOf(SessionBusyError);
 	});
 });

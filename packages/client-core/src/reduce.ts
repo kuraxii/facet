@@ -85,6 +85,9 @@ export function reduceSession(view: SessionView, action: Action): SessionView {
 		case "chat/notice":
 		case "chat/turnStarted":
 		case "chat/turnCancelled":
+		// 回退由设备改分支指针，历史在收到 chat/branchMoved 后重新装载
+		case "chat/revertTo":
+		case "chat/branchMoved":
 			return view;
 		default:
 			return unhandled(action);
@@ -184,6 +187,9 @@ export function reduceChat(view: ChatView, action: Action): ChatView {
 				notices: appendNotice(view.notices, { level: action.level, message: action.message }),
 			};
 		case "chat/settled":
+			return view;
+		case "chat/revertTo":
+		case "chat/branchMoved":
 			return view;
 		// 发出消息与中止请求都由设备回过来,这里不需要改视图
 		case "chat/turnStarted":

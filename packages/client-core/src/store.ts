@@ -239,6 +239,21 @@ export class SessionStore {
 		return this.sessions.get(channel)?.lastSeq ?? this.chats.get(channel)?.lastSeq ?? 0;
 	}
 
+	/**
+	 * 清空对话通道里的内容，保留序号。
+	 *
+	 * 分支指针移动之后，已装载的历史属于另一条分支；序号仍然连续，所以只清内容不重置序号，
+	 * 免得后续动作被当成缺口。
+	 */
+	resetChat(channel: Channel): void {
+		const slot = this.chats.get(channel);
+		if (!slot) {
+			return;
+		}
+		this.chats.set(channel, { view: createChatView(channel), lastSeq: slot.lastSeq });
+		this.markChanged();
+	}
+
 	/** 丢掉一个通道的状态,用于取消订阅或会话释放。 */
 	drop(channel: Channel): void {
 		const removed = this.sessions.delete(channel) || this.chats.delete(channel);

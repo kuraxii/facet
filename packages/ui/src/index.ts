@@ -30,6 +30,8 @@ export {
 	sessionTitle,
 	shortTime,
 } from "./chat/sidebar-model.ts";
+export type { TrustDialogProps } from "./chat/TrustDialog.tsx";
+export { TrustDialog } from "./chat/TrustDialog.tsx";
 export type { StickToBottom } from "./chat/use-stick-to-bottom.ts";
 export { useStickToBottom } from "./chat/use-stick-to-bottom.ts";
 export type { CodeBlockShape } from "./markdown/code-block-state.ts";

@@ -162,6 +162,15 @@ export interface RequestParams {
 	renameProject: { id: string; name?: string };
 	/** 移除项目。 */
 	removeProject: { id: string };
+	/**
+	 * 查某个目录的项目级资源需不需要信任。
+	 *
+	 * hasProjectResources 为假时目录里没有需要信任的资源，直接打开即可；为真而 trusted 缺省
+	 * 表示还没做过决定，界面要先问一次。
+	 */
+	projectTrust: { cwd: string };
+	/** 记下某个目录的信任决定。 */
+	setProjectTrust: { cwd: string; trusted: boolean };
 }
 
 /** 每条请求的应答数据。 */
@@ -182,6 +191,8 @@ export interface RequestResults {
 	addProject: ProjectInfo;
 	renameProject: ProjectInfo;
 	removeProject: Record<string, never>;
+	projectTrust: { hasProjectResources: boolean; trusted: boolean | undefined };
+	setProjectTrust: Record<string, never>;
 }
 
 /** 请求方法名。 */

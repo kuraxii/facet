@@ -20,6 +20,15 @@ export function PlusIcon({ size, ...rest }: IconProps) {
 	);
 }
 
+/** 项目信任。 */
+export function ShieldIcon({ size, ...rest }: IconProps) {
+	return (
+		<Icon size={size} {...rest}>
+			<path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z" />
+		</Icon>
+	);
+}
+
 /** 搜索。 */
 export function SearchIcon({ size, ...rest }: IconProps) {
 	return (

@@ -12,6 +12,7 @@ import {
 	type SidebarHost,
 	samePath,
 	type ThemeName,
+	TrustDialog,
 	useStickToBottom,
 } from "@facet/ui";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -107,6 +108,8 @@ export function App() {
 	const [sessionError, setSessionError] = useState<{ message: string; retry: () => void } | undefined>(
 		undefined,
 	);
+	/** 等待用户决定信任的目录,与决定之后要执行的动作 */
+	const [trustPrompt, setTrustPrompt] = useState<{ cwd: string; run: () => void } | undefined>(undefined);
 	const started = useRef(false);
 	/** 会话切换的序号,只有最后一次选择的结果会落到界面上 */
 	const switchSeq = useRef(0);
@@ -117,6 +120,16 @@ export function App() {
 	}, [theme]);
 
 	const listSeq = useRef(0);
+
+	/** 拉一次项目清单。失败只标脏,已经显示的项目保持原样。 */
+	const refreshProjects = useCallback(async (): Promise<void> => {
+		try {
+			setProjects(await client.listProjects());
+			setIsProjectsStale(false);
+		} catch {
+			setIsProjectsStale(true);
+		}
+	}, []);
 
 	/** 拉一次全部会话。并发调用时只采用最后一次的结果,避免旧结果覆盖新结果。 */
 	const refreshSessions = useCallback(async (): Promise<readonly SessionSummary[] | undefined> => {
@@ -133,29 +146,6 @@ export function App() {
 			return undefined;
 		}
 	}, []);
-
-	useEffect(() => {
-		if (started.current) {
-			return;
-		}
-		started.current = true;
-		void (async () => {
-			const handshake = await transport.connect();
-			client.attach(handshake);
-			setDevice(handshake);
-			setProjects(await client.listProjects());
-			const pool = (await refreshSessions()) ?? [];
-			const newest = pickStartupSession(pool, bridge.projectDir);
-			if (newest) {
-				await client.openSession(newest.path);
-				setActiveFile(newest.path);
-			}
-			setPhase("ready");
-		})().catch((error: unknown) => {
-			setFailure(error instanceof Error ? error.message : String(error));
-			setPhase("failed");
-		});
-	}, [refreshSessions]);
 
 	void version;
 
@@ -200,25 +190,97 @@ export function App() {
 		[refreshSessions],
 	);
 
+	/**
+	 * 先确认目录信任,再执行打开类动作。
+	 *
+	 * 目录里有项目级资源且还没做过决定时先问一次,决定之后再往下走;没有这类资源或已有决定
+	 * 时直接执行。查询失败按未信任处理,不拦动作。
+	 */
+	const withTrust = useCallback((cwd: string | undefined, run: () => void) => {
+		if (cwd === undefined) {
+			run();
+			return;
+		}
+		void (async () => {
+			try {
+				const state = await client.projectTrust(cwd);
+				if (state.hasProjectResources && state.trusted === undefined) {
+					setTrustPrompt({ cwd, run });
+					return;
+				}
+			} catch {
+				// 查不到就不拦,交给设备按未信任处理
+			}
+			run();
+		})();
+	}, []);
+
+	/** 记下信任决定并继续被挡住的那次打开。 */
+	const decideTrust = useCallback(
+		(trusted: boolean) => {
+			const prompt = trustPrompt;
+			if (prompt === undefined) {
+				return;
+			}
+			setTrustPrompt(undefined);
+			void (async () => {
+				try {
+					await client.setProjectTrust(prompt.cwd, trusted);
+				} catch {
+					// 决定没记下时仍按未信任继续,下次打开会再问
+				}
+				prompt.run();
+			})();
+		},
+		[trustPrompt],
+	);
+
 	const openSession = useCallback(
-		(path: string) => {
-			runSessionAction(async () => {
-				await client.switchSession(path);
-				return path;
+		(path: string, knownCwd?: string) => {
+			const cwd = knownCwd ?? sessions.find((session) => session.path === path)?.cwd;
+			withTrust(cwd, () => {
+				runSessionAction(async () => {
+					await client.switchSession(path);
+					return path;
+				});
 			});
 		},
-		[runSessionAction],
+		[runSessionAction, sessions, withTrust],
 	);
 
 	const createSession = useCallback(
 		(cwd: string) => {
-			runSessionAction(async () => {
-				const opened = await client.createSession({ ...(cwd.length > 0 ? { cwd } : {}) });
-				return opened.file;
+			withTrust(cwd, () => {
+				runSessionAction(async () => {
+					const opened = await client.createSession({ ...(cwd.length > 0 ? { cwd } : {}) });
+					return opened.file;
+				});
 			});
 		},
-		[runSessionAction],
+		[runSessionAction, withTrust],
 	);
+
+	useEffect(() => {
+		if (started.current) {
+			return;
+		}
+		started.current = true;
+		void (async () => {
+			const handshake = await transport.connect();
+			client.attach(handshake);
+			setDevice(handshake);
+			await refreshProjects();
+			const pool = (await refreshSessions()) ?? [];
+			const newest = pickStartupSession(pool, bridge.projectDir);
+			if (newest) {
+				openSession(newest.path, newest.cwd);
+			}
+			setPhase("ready");
+		})().catch((error: unknown) => {
+			setFailure(error instanceof Error ? error.message : String(error));
+			setPhase("failed");
+		});
+	}, [openSession, refreshProjects, refreshSessions]);
 
 	const send = useCallback(() => {
 		const text = draft.trim();
@@ -264,23 +326,15 @@ export function App() {
 	 */
 	const revertTo = useCallback(
 		(entryId: string, text: string) => {
-			runSessionAction(
-				async () => (await client.fork(entryId)).file,
-				() => setDraft(text),
-			);
+			withTrust(session?.state.cwd, () => {
+				runSessionAction(
+					async () => (await client.fork(entryId)).file,
+					() => setDraft(text),
+				);
+			});
 		},
-		[runSessionAction],
+		[runSessionAction, session?.state.cwd, withTrust],
 	);
-
-	/** 拉一次项目清单。失败只标脏，已经显示的项目保持原样。 */
-	const refreshProjects = useCallback(async (): Promise<void> => {
-		try {
-			setProjects(await client.listProjects());
-			setIsProjectsStale(false);
-		} catch {
-			setIsProjectsStale(true);
-		}
-	}, []);
 
 	/**
 	 * 添加项目。
@@ -304,9 +358,11 @@ export function App() {
 
 	const forkTurn = useCallback(
 		(beforeEntryId: string | undefined) => {
-			runSessionAction(async () => (await client.fork(beforeEntryId)).file);
+			withTrust(session?.state.cwd, () => {
+				runSessionAction(async () => (await client.fork(beforeEntryId)).file);
+			});
 		},
-		[runSessionAction],
+		[runSessionAction, session?.state.cwd, withTrust],
 	);
 
 	const transcript = useMemo(() => (chat ? toTranscript(chat) : []), [chat]);
@@ -442,6 +498,14 @@ export function App() {
 				onCreate={createProject}
 				onClose={() => setIsProjectDialogOpen(false)}
 			/>
+
+			{trustPrompt ? (
+				<TrustDialog
+					cwd={trustPrompt.cwd}
+					onDecide={decideTrust}
+					onCancel={() => setTrustPrompt(undefined)}
+				/>
+			) : null}
 		</div>
 	);
 }

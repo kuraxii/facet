@@ -6,6 +6,7 @@
  * 断线时该端的订阅全部解除,会话本身继续在设备上运行。
  */
 import { randomUUID } from "node:crypto";
+import { realpath, stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import { isAbsolute } from "node:path";
 import type { PiAgentFactory } from "@facet/agent";
@@ -297,10 +298,7 @@ async function handleRequest(
 			return { projects: [...context.projectStore.list()] };
 		case "addProject": {
 			const source = asObject(params);
-			const cwd = requiredString(source, "cwd");
-			if (!isAbsolute(cwd)) {
-				throw new RequestError("bad_params", "cwd must be an absolute path");
-			}
+			const cwd = await resolveProjectDirectory(requiredString(source, "cwd"));
 			return await context.projectStore.add({ cwd, name: optionalString(source, "name") });
 		}
 		case "renameProject": {
@@ -312,9 +310,44 @@ async function handleRequest(
 			await context.projectStore.remove(requiredString(source, "id"));
 			return {};
 		}
+		case "projectTrust": {
+			const source = asObject(params);
+			return context.factory.projectTrust(await resolveProjectDirectory(requiredString(source, "cwd")));
+		}
+		case "setProjectTrust": {
+			const source = asObject(params);
+			const trusted = source.trusted;
+			if (typeof trusted !== "boolean") {
+				throw new RequestError("bad_params", "trusted must be a boolean");
+			}
+			context.factory.setProjectTrust(await resolveProjectDirectory(requiredString(source, "cwd")), trusted);
+			return {};
+		}
 		default:
 			throw new RequestError("unknown_method", `unknown method: ${method}`);
 	}
+}
+
+/**
+ * 校验并统一项目目录。
+ *
+ * 目录不存在或不是目录时直接拒绝；符号链接与 `..` 一律换成实际路径，同一个目录只认一个标识。
+ */
+async function resolveProjectDirectory(cwd: string): Promise<string> {
+	if (!isAbsolute(cwd)) {
+		throw new RequestError("bad_params", `项目目录必须是绝对路径:${cwd}`);
+	}
+	let target: string;
+	try {
+		target = await realpath(cwd);
+	} catch {
+		throw new RequestError("rejected", `项目目录不存在:${cwd}`);
+	}
+	const info = await stat(target).catch(() => undefined);
+	if (info === undefined || !info.isDirectory()) {
+		throw new RequestError("rejected", `不是目录:${cwd}`);
+	}
+	return target;
 }
 
 function toProtocolError(error: unknown): { code: ErrorCode; message: string } {

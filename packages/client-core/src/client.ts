@@ -176,6 +176,16 @@ export class SessionClient {
 		await this.transport.request("removeProject", { id });
 	}
 
+	/** 查目录的项目级资源需不需要信任，以及此前的决定。 */
+	async projectTrust(cwd: string): Promise<{ hasProjectResources: boolean; trusted: boolean | undefined }> {
+		return await this.transport.request("projectTrust", { cwd });
+	}
+
+	/** 记下目录的信任决定。 */
+	async setProjectTrust(cwd: string, trusted: boolean): Promise<void> {
+		await this.transport.request("setProjectTrust", { cwd, trusted });
+	}
+
 	/**
 	 * 会话级操作排队执行。
 	 *

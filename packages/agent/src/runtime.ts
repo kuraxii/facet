@@ -11,8 +11,10 @@ import {
 	createAgentSession,
 	DefaultResourceLoader,
 	type ExtensionUIContext,
+	hasTrustRequiringProjectResources,
 	type InlineExtension,
 	ModelRuntime,
+	ProjectTrustStore,
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import type { ModelInfo, ModelRef, ProviderInfo, SessionSummary, ThinkingLevel } from "@facet/protocol";
@@ -83,6 +85,8 @@ export class PiAgentFactory {
 	readonly sessionDir: string | undefined;
 	private readonly modelRuntime: ModelRuntime;
 	private readonly onError: ((error: unknown) => void) | undefined;
+	/** 项目信任记录，与 pi 命令行共用同一份 */
+	private readonly trustStore: ProjectTrustStore;
 	private disposed = false;
 
 	private constructor(modelRuntime: ModelRuntime, options: PiAgentFactoryOptions, agentDir: string) {
@@ -90,6 +94,7 @@ export class PiAgentFactory {
 		this.agentDir = agentDir;
 		this.sessionDir = options.sessionDir;
 		this.onError = options.onError;
+		this.trustStore = new ProjectTrustStore(agentDir);
 	}
 
 	/** 建立共享资源。凭证与模型配置的路径由 agentDir 推出。 */
@@ -101,6 +106,25 @@ export class PiAgentFactory {
 			allowModelNetwork: options.allowModelNetwork,
 		});
 		return new PiAgentFactory(modelRuntime, options, agentDir);
+	}
+
+	/**
+	 * 某个目录的项目级资源需不需要信任。
+	 *
+	 * 目录里没有需要信任的资源(项目级扩展、MCP 配置、项目内的 skill)时不必询问；有这类资源
+	 * 但还没做过决定时，需要界面先问一次。
+	 */
+	projectTrust(cwd: string): { hasProjectResources: boolean; trusted: boolean | undefined } {
+		const decision = this.trustStore.get(cwd);
+		return {
+			hasProjectResources: hasTrustRequiringProjectResources(cwd),
+			trusted: decision === null ? undefined : decision,
+		};
+	}
+
+	/** 记下某个目录的信任决定，之后建会话按它决定是否加载项目级资源。 */
+	setProjectTrust(cwd: string, trusted: boolean): void {
+		this.trustStore.set(cwd, trusted);
 	}
 
 	/** 提供方清单，附带是否已配置凭证，用于设置面板与模型选择器分组。 */
@@ -277,7 +301,8 @@ export class PiAgentFactory {
 			extensionFactories: [...(options.extensionFactories ?? [])],
 			noExtensions: options.noExtensions,
 		});
-		await resourceLoader.reload();
+		// 项目级扩展与 MCP 配置只在目录被信任时加载；没做过决定的一律按不信任处理
+		await resourceLoader.reload({ resolveProjectTrust: async () => this.trustStore.get(cwd) === true });
 
 		const { session, extensionsResult, modelFallbackMessage } = await createAgentSession({
 			cwd,

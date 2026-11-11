@@ -9,6 +9,7 @@ import {
 	SessionSidebar,
 	type SidebarHost,
 	samePath,
+	type ThemeName,
 	useStickToBottom,
 } from "@facet/ui";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -35,6 +36,14 @@ const transport = new WsTransport({ url: bridge.endpoint });
 const client = new SessionClient({ transport, pageSize: 200 });
 
 type Phase = "connecting" | "ready" | "failed";
+
+/** 主题在本地保存键 */
+const THEME_KEY = "facet.theme";
+
+/** 读取上次选择的主题，缺省深色 */
+function readTheme(): ThemeName {
+	return localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark";
+}
 
 /** 启动时打开的会话：启动目录里最近更新的一条，没有则取全部会话里最近的一条。 */
 function pickStartupSession(
@@ -71,7 +80,13 @@ export function App() {
 	const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
 	const [createCwd, setCreateCwd] = useState(bridge.projectDir);
 	const [draft, setDraft] = useState("");
+	const [theme, setTheme] = useState<ThemeName>(readTheme);
 	const started = useRef(false);
+
+	useEffect(() => {
+		document.documentElement.dataset.theme = theme;
+		localStorage.setItem(THEME_KEY, theme);
+	}, [theme]);
 
 	const listSeq = useRef(0);
 
@@ -210,6 +225,7 @@ export function App() {
 				activeFile={activeFile}
 				runningFile={chat?.isRunning === true ? activeFile : undefined}
 				createCwd={createCwd}
+				theme={theme}
 				onSelect={(path) => void openSession(path)}
 				onCreate={(cwd) => {
 					setCreateCwd(cwd);
@@ -217,6 +233,7 @@ export function App() {
 				}}
 				canCreate={phase === "ready"}
 				onAddProject={() => setIsProjectDialogOpen(true)}
+				onToggleTheme={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
 			/>
 
 			<main className="main">

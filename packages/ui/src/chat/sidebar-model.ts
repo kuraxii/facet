@@ -1,13 +1,24 @@
 /**
  * 侧栏的数据模型。
  *
- * 把会话列表与主机清单整理成展示用的分组与排序，组件只负责渲染。
- * 纯函数，不依赖 React，可单独测。
+ * 侧栏由项目过滤器、按时间分组的会话队列、设备状态条组成。过滤器决定队列的范围与新建
+ * 会话的目录，队列按「进行中 / 今天 / 昨天 / 更早」分组。这里只做纯函数变换，组件负责渲染。
  */
 import type { ProjectInfo, SessionSummary } from "@facet/protocol";
 
 /** 主机的连接状态。 */
 export type HostState = "connected" | "connecting" | "offline";
+
+/**
+ * 会话行左侧的状态点。
+ *
+ * 设计稿上的完成与未读两态需要设备侧的未读标记与待应答信息，当前只有运行与空闲两态，
+ * 取值确定后才加入新值。
+ */
+export type SessionDot = "running" | "idle";
+
+/** 队列分组的键，数组顺序即展示顺序。 */
+export type GroupKey = "running" | "today" | "yesterday" | "earlier";
 
 /** 一条会话在侧栏里的展示数据。 */
 export interface SidebarSession {
@@ -21,23 +32,59 @@ export interface SidebarSession {
 	messageCount: number;
 	/** 是否正在运行 */
 	isRunning: boolean;
-	/** 所属项目名，显示在会话标签里 */
+	/** 行首状态点 */
+	dot: SessionDot;
+	/** 所属项目名，队列过滤到单个项目时不重复显示 */
 	project: string;
+	/** 所属项目目录 */
+	cwd: string;
 	/** 所属主机名，本机为空 */
 	host: string | undefined;
 	/** 占位数据，接入真实来源前不可选中 */
 	isPlaceholder?: boolean;
 }
 
-/** 一个工作目录分组。 */
+/** 队列里的一组会话。 */
+export interface SidebarGroup {
+	key: GroupKey;
+	/** 组标题 */
+	label: string;
+	/** 组内会话，按修改时间倒序 */
+	sessions: readonly SidebarSession[];
+}
+
+/** 项目下拉里的一项。 */
 export interface SidebarProject {
-	/** 项目目录，作为分组标识 */
+	/** 项目目录，作为标识 */
 	cwd: string;
 	/** 项目名，用户设置过时用设置值，否则取目录末段 */
 	name: string;
-	/** 项目下的会话，按修改时间倒序 */
-	sessions: readonly SidebarSession[];
+	/** 所属设备名，本机为空 */
+	host: string | undefined;
+	/** 该项目下的会话数 */
+	sessionCount: number;
 	/** 占位数据，接入远端读取前不可交互 */
+	isPlaceholder?: boolean;
+}
+
+/** 设备状态条上的一项。 */
+export interface SidebarDevice {
+	/** 设备标识 */
+	id: string;
+	/** 设备名 */
+	name: string;
+	/** 连接地址或上次连接说明 */
+	detail: string;
+	state: HostState;
+	/** 是否为当前设备 */
+	isLocal: boolean;
+	/** 已测得的往返时延，单位毫秒 */
+	latencyMs?: number;
+	/** 断开设备的上次连接时间描述 */
+	lastSeen?: string;
+	/** 该设备上的会话数，未知为空 */
+	sessionCount: number | undefined;
+	/** 占位数据，接入多设备前不可交互 */
 	isPlaceholder?: boolean;
 }
 
@@ -45,9 +92,9 @@ export interface SidebarProject {
 export interface SidebarHost {
 	/** 主机标识 */
 	id: string;
-	/** 主机名，显示在主机选择按钮上 */
+	/** 主机名 */
 	name: string;
-	/** 连接地址，已连接时显示在主机行下方 */
+	/** 连接地址 */
 	detail: string;
 	/** 连接状态 */
 	state: HostState;
@@ -67,25 +114,40 @@ export interface SidebarHost {
 export interface SidebarInput {
 	/** 当前设备的会话列表 */
 	sessions: readonly SessionSummary[];
-	/** 当前设备之后的全部主机，第一项为本机 */
+	/** 第一项为当前设备，其余为远程设备 */
 	hosts: readonly SidebarHost[];
-	/** 用户添加的项目，项目段按它分组与命名，其余会话目录补在后面 */
+	/** 用户添加的项目 */
 	projects: readonly ProjectInfo[];
-	/** 当前会话的文件路径 */
-	activeFile: string | undefined;
 	/** 正在运行的会话文件路径 */
 	runningFile: string | undefined;
+	/** 队列的范围：给出时只列该目录的会话，缺省列出全部 */
+	projectCwd?: string | undefined;
+	/** 会话标题关键词，空串表示不过滤 */
+	keyword?: string | undefined;
+	/** 当前时间，缺省取系统时间 */
+	now?: number;
 }
 
 /** 侧栏的展示数据。 */
 export interface SidebarData {
-	/** 跨项目的最近会话，按修改时间倒序 */
-	recents: readonly SidebarSession[];
-	/** 本机的项目分组 */
+	/** 队列分组，空组不出现 */
+	groups: readonly SidebarGroup[];
+	/** 项目下拉的选项，按会话数倒序 */
 	projects: readonly SidebarProject[];
-	/** 本机之外的主机 */
-	remotes: readonly SidebarHost[];
+	/** 设备状态条 */
+	devices: readonly SidebarDevice[];
+	/** 全部会话数，供「全部项目」选项展示 */
+	total: number;
 }
+
+/** 分组顺序与标题。 */
+const GROUP_ORDER: readonly GroupKey[] = ["running", "today", "yesterday", "earlier"];
+const GROUP_LABELS: Record<GroupKey, string> = {
+	running: "进行中",
+	today: "今天",
+	yesterday: "昨天",
+	earlier: "更早",
+};
 
 /** 取路径末段作名称，末段为空时回退成原值。 */
 export function baseName(path: string): string {
@@ -138,103 +200,163 @@ export function shortTime(value: number, now: number = Date.now()): string {
 	return `${date.getMonth() + 1}月${date.getDate()}日`;
 }
 
-function newestFirst(sessions: readonly SidebarSession[]): SidebarSession[] {
-	return [...sessions].sort((left, right) => right.modified - left.modified);
+/** 本地时区当天零点的时间戳，分组边界按本地日期划分。 */
+function startOfDay(now: number): number {
+	const date = new Date(now);
+	date.setHours(0, 0, 0, 0);
+	return date.getTime();
 }
 
-/** 一条会话来自某台主机的哪个项目。 */
-function toSession(
-	summary: SessionSummary,
-	runningFile: string | undefined,
-	hostName: string | undefined,
-): SidebarSession {
+/** 相对某天零点平移若干天，跨月由日期运算处理。 */
+function shiftDay(dayStart: number, days: number): number {
+	const date = new Date(dayStart);
+	date.setDate(date.getDate() + days);
+	return date.getTime();
+}
+
+/** 一条会话的展示数据。 */
+function toSession(summary: SessionSummary, runningFile: string | undefined): SidebarSession {
+	const isRunning = summary.path === runningFile;
 	return {
 		path: summary.path,
 		title: sessionTitle(summary.name, summary.firstMessage),
 		modified: summary.modified,
 		messageCount: summary.messageCount,
-		isRunning: summary.path === runningFile,
+		isRunning,
+		dot: isRunning ? "running" : "idle",
 		project: baseName(summary.cwd),
-		host: hostName,
+		cwd: summary.cwd,
+		host: undefined,
 	};
 }
 
-/** 一组会话里最近的活动时间，没有会话时为 0。 */
-function latestModified(sessions: readonly SidebarSession[]): number {
-	return sessions.reduce((latest, session) => Math.max(latest, session.modified), 0);
+/** 按时间分组。运行中的会话单独成组，其余按本地日期落进今天、昨天、更早。 */
+export function groupSessions(sessions: readonly SidebarSession[], now: number): SidebarGroup[] {
+	const today = startOfDay(now);
+	const yesterday = shiftDay(today, -1);
+	const buckets: Record<GroupKey, SidebarSession[]> = {
+		running: [],
+		today: [],
+		yesterday: [],
+		earlier: [],
+	};
+	for (const session of sessions) {
+		if (session.isRunning) {
+			buckets.running.push(session);
+		} else if (session.modified >= today) {
+			buckets.today.push(session);
+		} else if (session.modified >= yesterday) {
+			buckets.yesterday.push(session);
+		} else {
+			buckets.earlier.push(session);
+		}
+	}
+	const groups: SidebarGroup[] = [];
+	for (const key of GROUP_ORDER) {
+		const items = buckets[key];
+		if (items.length === 0) {
+			continue;
+		}
+		groups.push({ key, label: GROUP_LABELS[key], sessions: items });
+	}
+	return groups;
+}
+
+/**
+ * 项目下拉的选项。
+ *
+ * 用户添加的项目排在前面，会话目录里出现但没添加过的目录补在后面，这样启动目录里的
+ * 历史会话不必先添加就能过滤到。
+ */
+function listProjects(added: readonly ProjectInfo[], sessions: readonly SessionSummary[]): SidebarProject[] {
+	const counts = new Map<string, { cwd: string; count: number }>();
+	for (const session of sessions) {
+		const key = pathKey(session.cwd);
+		const entry = counts.get(key);
+		if (entry) {
+			entry.count += 1;
+		} else {
+			counts.set(key, { cwd: session.cwd, count: 1 });
+		}
+	}
+
+	const options: SidebarProject[] = [];
+	const claimed = new Set<string>();
+	for (const project of added) {
+		const key = pathKey(project.cwd);
+		claimed.add(key);
+		options.push({
+			cwd: project.cwd,
+			name: project.name ?? baseName(project.cwd),
+			host: undefined,
+			sessionCount: counts.get(key)?.count ?? 0,
+		});
+	}
+	for (const [key, entry] of counts) {
+		if (claimed.has(key)) {
+			continue;
+		}
+		options.push({
+			cwd: entry.cwd,
+			name: baseName(entry.cwd),
+			host: undefined,
+			sessionCount: entry.count,
+		});
+	}
+
+	return options.sort((left, right) => {
+		if (right.sessionCount !== left.sessionCount) {
+			return right.sessionCount - left.sessionCount;
+		}
+		return left.name.localeCompare(right.name);
+	});
+}
+
+/** 设备状态条：本机在前，其余按连接状态排列。 */
+function listDevices(hosts: readonly SidebarHost[], sessions: readonly SessionSummary[]): SidebarDevice[] {
+	return hosts.map((host) => ({
+		id: host.id,
+		name: host.name,
+		detail: host.detail,
+		state: host.state,
+		isLocal: host.isLocal,
+		latencyMs: host.latencyMs,
+		lastSeen: host.lastSeen,
+		sessionCount: host.isLocal
+			? sessions.length
+			: host.projects.length === 0
+				? undefined
+				: host.projects.reduce((sum, project) => sum + project.sessionCount, 0),
+		isPlaceholder: host.isPlaceholder,
+	}));
 }
 
 /**
  * 组装侧栏数据。
  *
- * 项目段先按用户添加的项目成组，再把只有会话的目录按最近活动补在后面。
- * 会话目录里扫描出的目录因此不必先添加就能成组，启动目录里的历史会话也直接可见。
+ * 先按项目范围与关键词筛出一份会话，再分组；项目选项与设备条始终按全部会话统计，
+ * 切换范围时下拉里的数字不会跟着变小。
  */
 export function buildSidebar(input: SidebarInput): SidebarData {
-	const groups = new Map<string, { cwd: string; sessions: SidebarSession[] }>();
-	for (const summary of input.sessions) {
-		const entry = toSession(summary, input.runningFile, undefined);
-		const key = pathKey(summary.cwd);
-		const bucket = groups.get(key);
-		if (bucket) {
-			bucket.sessions.push(entry);
-		} else {
-			groups.set(key, { cwd: summary.cwd, sessions: [entry] });
-		}
-	}
+	const now = input.now ?? Date.now();
+	const keyword = (input.keyword ?? "").trim().toLowerCase();
+	const all = input.sessions
+		.map((summary) => toSession(summary, input.runningFile))
+		.sort((left, right) => right.modified - left.modified);
 
-	const projects: SidebarProject[] = [];
-	const claimed = new Set<string>();
-	for (const project of input.projects) {
-		const key = pathKey(project.cwd);
-		claimed.add(key);
-		projects.push({
-			cwd: project.cwd,
-			name: project.name ?? baseName(project.cwd),
-			sessions: newestFirst(groups.get(key)?.sessions ?? []),
-		});
-	}
+	const inScope =
+		input.projectCwd === undefined
+			? all
+			: all.filter((session) => samePath(session.cwd, input.projectCwd as string));
+	const matched =
+		keyword.length === 0
+			? inScope
+			: inScope.filter((session) => session.title.toLowerCase().includes(keyword));
 
-	const unclaimed = [...groups.entries()].filter(([key]) => !claimed.has(key));
-	unclaimed.sort((left, right) => {
-		const diff = latestModified(right[1].sessions) - latestModified(left[1].sessions);
-		return diff !== 0 ? diff : left[0].localeCompare(right[0]);
-	});
-	for (const [, group] of unclaimed) {
-		projects.push({
-			cwd: group.cwd,
-			name: baseName(group.cwd),
-			sessions: newestFirst(group.sessions),
-		});
-	}
-
-	const remotes = input.hosts.filter((host) => !host.isLocal);
-	const recents = [
-		...[...groups.values()].flatMap((group) => group.sessions),
-		...remotes.flatMap((host) => host.projects.flatMap((project) => project.sessions)),
-	].sort((left, right) => right.modified - left.modified);
-
-	return { recents, projects, remotes };
-}
-
-/** 按关键词筛选项目：命中项目名时保留整个项目，否则只留标题命中的会话。 */
-export function filterProjects(
-	projects: readonly SidebarProject[],
-	keyword: string,
-): readonly SidebarProject[] {
-	const trimmed = keyword.trim().toLowerCase();
-	if (trimmed.length === 0) {
-		return projects;
-	}
-	const visible: SidebarProject[] = [];
-	for (const project of projects) {
-		const nameHit = project.name.toLowerCase().includes(trimmed);
-		const sessions = nameHit
-			? project.sessions
-			: project.sessions.filter((session) => session.title.toLowerCase().includes(trimmed));
-		if (nameHit || sessions.length > 0) {
-			visible.push({ ...project, sessions });
-		}
-	}
-	return visible;
+	return {
+		groups: groupSessions(matched, now),
+		projects: listProjects(input.projects, input.sessions),
+		devices: listDevices(input.hosts, input.sessions),
+		total: all.length,
+	};
 }

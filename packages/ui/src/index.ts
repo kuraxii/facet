@@ -7,11 +7,15 @@ export type { ComposerProps } from "./chat/Composer.tsx";
 export { Composer } from "./chat/Composer.tsx";
 export type { CreateProjectDialogProps } from "./chat/CreateProjectDialog.tsx";
 export { CreateProjectDialog } from "./chat/CreateProjectDialog.tsx";
-export type { SessionSidebarProps } from "./chat/SessionSidebar.tsx";
+export type { SessionSidebarProps, ThemeName } from "./chat/SessionSidebar.tsx";
 export { SessionSidebar } from "./chat/SessionSidebar.tsx";
 export type {
+	GroupKey,
 	HostState,
+	SessionDot,
 	SidebarData,
+	SidebarDevice,
+	SidebarGroup,
 	SidebarHost,
 	SidebarProject,
 	SidebarSession,
@@ -19,7 +23,7 @@ export type {
 export {
 	baseName,
 	buildSidebar,
-	filterProjects,
+	groupSessions,
 	samePath,
 	sessionTitle,
 	shortTime,

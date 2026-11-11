@@ -1,3 +1,4 @@
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type ServerHandle, startServer } from "@facet/server";
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
@@ -77,6 +78,20 @@ ipcMain.handle("facet:pick-directory", async (event) => {
 		? await dialog.showOpenDialog(window, { ...options, properties: [...options.properties] })
 		: await dialog.showOpenDialog({ ...options, properties: [...options.properties] });
 	return result.canceled ? undefined : result.filePaths[0];
+});
+
+ipcMain.handle("facet:save-text", async (event, suggestedName: string, text: string) => {
+	const window = BrowserWindow.fromWebContents(event.sender);
+	const options = {
+		title: "保存文件",
+		defaultPath: suggestedName,
+	};
+	const result = window ? await dialog.showSaveDialog(window, options) : await dialog.showSaveDialog(options);
+	if (result.canceled || result.filePath === undefined) {
+		return false;
+	}
+	await writeFile(result.filePath, text, "utf8");
+	return true;
 });
 
 app.whenReady().then(async () => {

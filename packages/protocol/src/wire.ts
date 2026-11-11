@@ -196,6 +196,8 @@ export interface RequestParams {
 	saveCredential: { providerId: string; apiKey: string };
 	/** 删除提供方凭证。 */
 	deleteCredential: { providerId: string };
+	/** 生成一份诊断文本，用于附在问题反馈里。凭证与令牌不在其中。 */
+	diagnostics: Record<string, never>;
 }
 
 /** 每条请求的应答数据。 */
@@ -225,6 +227,7 @@ export interface RequestResults {
 	updateSettings: { settings: FacetSettings };
 	saveCredential: { providers: ProviderInfo[] };
 	deleteCredential: { providers: ProviderInfo[] };
+	diagnostics: { text: string };
 }
 
 /** 请求方法名。 */

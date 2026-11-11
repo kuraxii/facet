@@ -38,6 +38,8 @@ interface FacetBridge {
 	appVersion: string;
 	/** 打开系统的目录选择窗口,取消时返回空 */
 	pickDirectory: () => Promise<string | undefined>;
+	/** 用系统的保存窗口写一段文本,取消时返回 false */
+	saveText: (suggestedName: string, text: string) => Promise<boolean>;
 }
 
 declare global {
@@ -213,6 +215,8 @@ export function App() {
 			loadModels: () => client.listModels(),
 			saveCredential: (providerId, apiKey) => client.saveCredential(providerId, apiKey),
 			deleteCredential: (providerId) => client.deleteCredential(providerId),
+			diagnostics: () => client.diagnostics(),
+			saveText: (suggestedName, text) => window.facet.saveText(suggestedName, text),
 		}),
 		[],
 	);

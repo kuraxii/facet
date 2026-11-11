@@ -228,6 +228,12 @@ export class SessionClient {
 		return result.models;
 	}
 
+	/** 取一份诊断文本，由宿主决定写到哪个文件。 */
+	async diagnostics(): Promise<string> {
+		const result = await this.transport.request("diagnostics", {});
+		return result.text;
+	}
+
 	/** 读设备上保存的界面偏好设置。 */
 	async getSettings(): Promise<FacetSettings> {
 		const result = await this.transport.request("getSettings", {});

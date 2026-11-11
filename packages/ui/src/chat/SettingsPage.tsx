@@ -34,6 +34,10 @@ export interface SettingsDataSource {
 	saveCredential: (providerId: string, apiKey: string) => Promise<ProviderInfo[]>;
 	/** 删除提供方凭证，返回更新后的提供方清单 */
 	deleteCredential: (providerId: string) => Promise<ProviderInfo[]>;
+	/** 生成诊断文本 */
+	diagnostics: () => Promise<string>;
+	/** 保存一段文本到用户选定的文件，取消时返回 false */
+	saveText: (suggestedName: string, text: string) => Promise<boolean>;
 }
 
 /** 设置页参数。 */
@@ -191,7 +195,7 @@ export function SettingsPage({
 						/>
 					) : null}
 
-					{section === "about" ? <AboutSection about={about} /> : null}
+					{section === "about" ? <AboutSection about={about} data={data} /> : null}
 
 					{section === "models" || section === "appearance" || section === "input" ? (
 						<section className="set-section">
@@ -684,8 +688,32 @@ function InputSection({
 	);
 }
 
-/** 关于与诊断。 */
-function AboutSection({ about }: { about: SettingsPageProps["about"] }) {
+/**
+ * 关于与诊断。
+ *
+ * 诊断文本由设备生成，凭证与令牌不在其中；导出走宿主的保存对话框，用户自己挑位置。
+ */
+function AboutSection({ about, data }: { about: SettingsPageProps["about"]; data: SettingsDataSource }) {
+	const [isExporting, setIsExporting] = useState(false);
+	const [result, setResult] = useState<{ tone: "ok" | "error"; message: string } | undefined>(undefined);
+
+	const exportDiagnostics = async () => {
+		setIsExporting(true);
+		setResult(undefined);
+		try {
+			const text = await data.diagnostics();
+			const saved = await data.saveText(
+				`facet-diagnostic-${new Date().toISOString().slice(0, 19)}.json`,
+				text,
+			);
+			setResult(saved ? { tone: "ok", message: "诊断已导出" } : { tone: "ok", message: "已取消" });
+		} catch (error) {
+			setResult({ tone: "error", message: error instanceof Error ? error.message : String(error) });
+		} finally {
+			setIsExporting(false);
+		}
+	};
+
 	return (
 		<section className="set-section">
 			<h2 className="set-section-title">关于</h2>
@@ -703,6 +731,20 @@ function AboutSection({ about }: { about: SettingsPageProps["about"] }) {
 					<span className="set-row-meta mono">{about.endpoint}</span>
 				</li>
 			</ul>
+			<p className="set-hint">诊断包含版本、平台、数据目录与模型状态，凭证与令牌不会写进去。</p>
+			<div className="set-actions">
+				<button
+					type="button"
+					className="set-save"
+					disabled={isExporting}
+					onClick={() => void exportDiagnostics()}
+				>
+					{isExporting ? "导出中…" : "导出诊断"}
+				</button>
+			</div>
+			{result === undefined ? null : (
+				<p className={result.tone === "error" ? "set-row-error" : "set-hint"}>{result.message}</p>
+			)}
 		</section>
 	);
 }

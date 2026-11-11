@@ -27,6 +27,7 @@ import {
 } from "@facet/protocol";
 import { WebSocket, WebSocketServer } from "ws";
 import type { ServerConfig } from "./config.ts";
+import { buildDiagnostics } from "./diagnostics.ts";
 import { ProjectExistsError, ProjectNotFoundError, type ProjectStore } from "./project-store.ts";
 import { RevealFailedError, revealInFileManager } from "./reveal.ts";
 import {
@@ -337,6 +338,27 @@ async function handleRequest(
 				throw new RequestError("bad_params", "settings must be an object");
 			}
 			return { settings: await context.settingsStore.save(settings as FacetSettings) };
+		}
+		case "diagnostics": {
+			const [sessions, settings] = await Promise.all([
+				context.factory.listSessions(),
+				Promise.resolve(context.settingsStore.get()),
+			]);
+			return {
+				text: await buildDiagnostics({
+					protocolVersion: PROTOCOL_VERSION,
+					hostId: context.hostId,
+					hostName: context.config.hostName,
+					agentDir: context.factory.agentDir,
+					dataDir: context.config.dataDir,
+					sessionDir: context.factory.sessionDir,
+					sessionCount: sessions.length,
+					projects: context.projectStore.list().map((project) => ({ cwd: project.cwd, name: project.name })),
+					providers: context.factory.providers(),
+					settings,
+					now: Date.now(),
+				}),
+			};
 		}
 		case "saveCredential": {
 			const source = asObject(params);

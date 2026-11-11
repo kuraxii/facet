@@ -20,6 +20,7 @@ import {
 import type { ModelInfo, ModelRef, ProviderInfo, SessionSummary, ThinkingLevel } from "@facet/protocol";
 import { toModelInfo } from "./convert.ts";
 import { FileCredentialStore } from "./credential-store.ts";
+import { ModelConfigStore } from "./model-config-store.ts";
 import { applyAgentDir } from "./paths.ts";
 import { PiAgent } from "./pi-agent.ts";
 import { normalizeProjectPath, type SessionProject, scanSessionProjects } from "./projects.ts";
@@ -116,16 +117,24 @@ export class PiAgentFactory {
 	private readonly trustStore: ProjectTrustStore;
 	/** 凭证文件，写盘与运行态更新都经过它 */
 	private readonly credentials: FileCredentialStore;
+	/** 模型配置里的提供方地址，写盘之后立刻作用到运行态 */
+	private readonly modelConfig: ModelConfigStore;
+	/** 已生效的地址覆写，键为提供方 id */
+	private baseUrlOverrides: Record<string, string>;
 	private disposed = false;
 
 	private constructor(
 		modelRuntime: ModelRuntime,
 		credentials: FileCredentialStore,
+		modelConfig: ModelConfigStore,
+		baseUrlOverrides: Record<string, string>,
 		options: PiAgentFactoryOptions,
 		agentDir: string,
 	) {
 		this.modelRuntime = modelRuntime;
 		this.credentials = credentials;
+		this.modelConfig = modelConfig;
+		this.baseUrlOverrides = baseUrlOverrides;
 		this.agentDir = agentDir;
 		this.sessionDir = options.sessionDir;
 		this.onError = options.onError;
@@ -136,12 +145,18 @@ export class PiAgentFactory {
 	static async create(options: PiAgentFactoryOptions = {}): Promise<PiAgentFactory> {
 		const agentDir = applyAgentDir(options.agentDir);
 		const credentials = new FileCredentialStore(join(agentDir, "auth.json"));
+		const modelConfig = new ModelConfigStore({ file: join(agentDir, "models.json") });
 		const modelRuntime = await ModelRuntime.create({
 			credentials,
 			modelsPath: join(agentDir, "models.json"),
 			allowModelNetwork: options.allowModelNetwork,
 		});
-		return new PiAgentFactory(modelRuntime, credentials, options, agentDir);
+		// models.json 里写了地址的提供方启动时就按它生效，与重启之前的行为保持一致
+		const baseUrlOverrides = await modelConfig.overrides();
+		for (const [providerId, baseUrl] of Object.entries(baseUrlOverrides)) {
+			modelRuntime.registerProvider(providerId, { baseUrl });
+		}
+		return new PiAgentFactory(modelRuntime, credentials, modelConfig, baseUrlOverrides, options, agentDir);
 	}
 
 	/**
@@ -169,6 +184,8 @@ export class PiAgentFactory {
 			const status = this.modelRuntime.getProviderAuthStatus(provider.id);
 			const source =
 				status.label ?? (status.source === undefined ? undefined : AUTH_SOURCE_LABELS[status.source]);
+			const effective = provider.getModels()[0]?.baseUrl;
+			const override = this.baseUrlOverrides[provider.id];
 			return {
 				id: provider.id,
 				name: provider.name,
@@ -176,8 +193,29 @@ export class PiAgentFactory {
 				modelCount: provider.getModels().length,
 				...(source === undefined ? {} : { authSource: source }),
 				...(this.modelRuntime.isUsingSubscription(provider.id) ? { subscription: true } : {}),
+				...(effective === undefined ? {} : { baseUrl: effective }),
+				...(override === undefined ? {} : { baseUrlOverride: override }),
 			};
 		});
+	}
+
+	/**
+	 * 设置某个提供方的接口地址。
+	 *
+	 * 空串恢复默认地址。地址写进 models.json，再注册到运行态，之后的请求立刻按新地址走；
+	 * 已经在跑的会话切换模型后同样生效。
+	 */
+	async setProviderBaseUrl(providerId: string, value: string): Promise<void> {
+		const applied = await this.modelConfig.setBaseUrl(providerId, value);
+		if (applied === undefined) {
+			delete this.baseUrlOverrides[providerId];
+			this.modelRuntime.unregisterProvider(providerId);
+			// 撤掉覆写之后模型目录要重新组合一次,否则读到的仍是旧地址
+			await this.modelRuntime.refresh({ allowNetwork: false });
+			return;
+		}
+		this.baseUrlOverrides[providerId] = applied;
+		this.modelRuntime.registerProvider(providerId, { baseUrl: applied });
 	}
 
 	/**

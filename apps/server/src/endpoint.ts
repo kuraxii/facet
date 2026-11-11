@@ -360,6 +360,14 @@ async function handleRequest(
 				}),
 			};
 		}
+		case "setProviderBaseUrl": {
+			const source = asObject(params);
+			await context.factory.setProviderBaseUrl(
+				requiredString(source, "providerId"),
+				optionalString(source, "baseUrl") ?? "",
+			);
+			return { providers: context.factory.providers() };
+		}
 		case "testModel": {
 			const source = asObject(params);
 			return await context.factory.testModel({

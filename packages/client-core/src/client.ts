@@ -228,6 +228,12 @@ export class SessionClient {
 		return result.models;
 	}
 
+	/** 设置提供方的接口地址，空串恢复默认，返回更新后的提供方清单。 */
+	async setProviderBaseUrl(providerId: string, baseUrl: string): Promise<ProviderInfo[]> {
+		const result = await this.transport.request("setProviderBaseUrl", { providerId, baseUrl });
+		return result.providers;
+	}
+
 	/** 用指定模型发一次最小请求，返回是否成功、耗时与失败原因。 */
 	async testModel(ref: ModelRef): Promise<{ ok: boolean; latencyMs: number; message?: string }> {
 		return await this.transport.request("testModel", { provider: ref.provider, id: ref.id });

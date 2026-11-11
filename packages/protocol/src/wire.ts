@@ -200,6 +200,8 @@ export interface RequestParams {
 	diagnostics: Record<string, never>;
 	/** 用指定模型发一次最小请求，确认凭证、地址与网络是否可用。 */
 	testModel: { provider: string; id: string };
+	/** 设置提供方的接口地址，空串恢复默认。返回更新后的提供方清单。 */
+	setProviderBaseUrl: { providerId: string; baseUrl: string };
 }
 
 /** 每条请求的应答数据。 */
@@ -231,6 +233,7 @@ export interface RequestResults {
 	deleteCredential: { providers: ProviderInfo[] };
 	diagnostics: { text: string };
 	testModel: { ok: boolean; latencyMs: number; message?: string };
+	setProviderBaseUrl: { providers: ProviderInfo[] };
 }
 
 /** 请求方法名。 */

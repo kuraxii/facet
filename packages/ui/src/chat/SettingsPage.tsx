@@ -34,6 +34,8 @@ export interface SettingsDataSource {
 	saveCredential: (providerId: string, apiKey: string) => Promise<ProviderInfo[]>;
 	/** 删除提供方凭证，返回更新后的提供方清单 */
 	deleteCredential: (providerId: string) => Promise<ProviderInfo[]>;
+	/** 设置提供方的接口地址，空串恢复默认，返回更新后的提供方清单 */
+	setProviderBaseUrl: (providerId: string, baseUrl: string) => Promise<ProviderInfo[]>;
 	/** 用指定模型发一次最小请求 */
 	testModel: (model: ModelRef) => Promise<{ ok: boolean; latencyMs: number; message?: string }>;
 	/** 生成诊断文本 */
@@ -263,6 +265,9 @@ function ProvidersSection({
 }) {
 	/** 展开凭证输入的提供方 */
 	const [editingId, setEditingId] = useState<string | undefined>(undefined);
+	/** 展开地址输入的提供方 */
+	const [addressId, setAddressId] = useState<string | undefined>(undefined);
+	const [address, setAddress] = useState("");
 	const [key, setKey] = useState("");
 	const [busyId, setBusyId] = useState<string | undefined>(undefined);
 	const [failure, setFailure] = useState<{ providerId: string; message: string } | undefined>(undefined);
@@ -291,6 +296,24 @@ function ProvidersSection({
 			onChanged(await data.saveCredential(providerId, key));
 			setEditingId(undefined);
 			setKey("");
+		} catch (saveError) {
+			setFailure({
+				providerId,
+				message: saveError instanceof Error ? saveError.message : String(saveError),
+			});
+		} finally {
+			setBusyId(undefined);
+		}
+	};
+
+	/** 保存接口地址，空串表示恢复默认。 */
+	const saveAddress = async (providerId: string) => {
+		setBusyId(providerId);
+		setFailure(undefined);
+		try {
+			onChanged(await data.setProviderBaseUrl(providerId, address));
+			setAddressId(undefined);
+			setAddress("");
 		} catch (saveError) {
 			setFailure({
 				providerId,
@@ -350,6 +373,17 @@ function ProvidersSection({
 								>
 									{provider.authenticated ? "替换凭证" : "添加凭证"}
 								</button>
+								<button
+									type="button"
+									className="set-row-action"
+									onClick={() => {
+										setFailure(undefined);
+										setAddress(provider.baseUrlOverride ?? "");
+										setAddressId(addressId === provider.id ? undefined : provider.id);
+									}}
+								>
+									地址
+								</button>
 								{provider.authenticated ? (
 									<button
 										type="button"
@@ -388,6 +422,36 @@ function ProvidersSection({
 								</div>
 							) : null}
 
+							{addressId === provider.id ? (
+								<p className="set-hint mono">
+									当前生效:{provider.baseUrl ?? "由提供方决定"}
+									{provider.baseUrlOverride === undefined ? "" : "（已覆写）"}
+								</p>
+							) : null}
+							{addressId === provider.id ? (
+								<div className="set-row-edit">
+									<input
+										className="set-input mono"
+										value={address}
+										onChange={(event) => setAddress(event.target.value)}
+										onKeyDown={(event) => {
+											if (event.key === "Enter") {
+												void saveAddress(provider.id);
+											}
+										}}
+										placeholder="接口地址,留空恢复默认"
+										aria-label={`${provider.name} 的接口地址`}
+									/>
+									<button
+										type="button"
+										className="set-save"
+										disabled={isBusy}
+										onClick={() => void saveAddress(provider.id)}
+									>
+										{isBusy ? "保存中…" : "保存"}
+									</button>
+								</div>
+							) : null}
 							{failure?.providerId === provider.id ? (
 								<p className="set-row-error">{failure.message}</p>
 							) : null}

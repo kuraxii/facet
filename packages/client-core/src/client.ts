@@ -186,6 +186,11 @@ export class SessionClient {
 		await this.transport.request("setProjectTrust", { cwd, trusted });
 	}
 
+	/** 在设备的文件管理器里打开项目目录。 */
+	async revealProject(id: string): Promise<void> {
+		await this.transport.request("revealProject", { id });
+	}
+
 	/**
 	 * 会话级操作排队执行。
 	 *

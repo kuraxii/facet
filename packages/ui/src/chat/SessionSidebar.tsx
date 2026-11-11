@@ -51,6 +51,12 @@ export interface SessionSidebarProps {
 	isProjectsStale?: boolean;
 	/** 重新拉取项目列表 */
 	onRefreshProjects?: () => void;
+	/** 重命名项目，名称为空时恢复目录名，失败时抛错 */
+	onRenameProject?: (id: string, name: string | undefined) => Promise<void>;
+	/** 移除项目，失败时抛错 */
+	onRemoveProject?: (id: string) => Promise<void>;
+	/** 在设备的文件管理器里打开项目目录，失败时抛错 */
+	onRevealProject?: (id: string) => Promise<void>;
 	/** 切换深浅色 */
 	onToggleTheme: () => void;
 }
@@ -109,6 +115,9 @@ export function SessionSidebar({
 	onAddProject,
 	isProjectsStale = false,
 	onRefreshProjects,
+	onRenameProject,
+	onRemoveProject,
+	onRevealProject,
 	onToggleTheme,
 }: SessionSidebarProps) {
 	const [keyword, setKeyword] = useState("");
@@ -120,6 +129,16 @@ export function SessionSidebar({
 	const [pickedCwd, setPickedCwd] = useState<string | undefined>(undefined);
 	/** 过滤器是否切到全部项目 */
 	const [showsAll, setShowsAll] = useState(false);
+	/** 展开了操作面板的项目标识 */
+	const [menuId, setMenuId] = useState<string | undefined>(undefined);
+	/** 正在改名的项目与输入中的名字 */
+	const [renaming, setRenaming] = useState<{ id: string; value: string } | undefined>(undefined);
+	/** 正在确认移除的项目标识 */
+	const [removingId, setRemovingId] = useState<string | undefined>(undefined);
+	/** 项目操作进行中，期间不接受重复提交 */
+	const [isProjectBusy, setIsProjectBusy] = useState(false);
+	/** 项目操作失败的提示，显示在操作面板里 */
+	const [projectError, setProjectError] = useState<string | undefined>(undefined);
 
 	const filterRef = useRef<HTMLDivElement>(null);
 	const panelRef = useRef<HTMLDivElement>(null);
@@ -162,6 +181,10 @@ export function SessionSidebar({
 
 	const closeFilter = useCallback((restoreFocus: boolean) => {
 		setIsFilterOpen(false);
+		setMenuId(undefined);
+		setRenaming(undefined);
+		setRemovingId(undefined);
+		setProjectError(undefined);
 		if (restoreFocus) {
 			triggerRef.current?.focus();
 		}
@@ -247,8 +270,42 @@ export function SessionSidebar({
 		setPickedCwd(cwd);
 		setShowsAll(cwd === undefined);
 		setIsFilterOpen(false);
+		setMenuId(undefined);
 		setProjectKeyword("");
 		triggerRef.current?.focus();
+	};
+
+	/**
+	 * 跑一次项目操作。
+	 *
+	 * 失败时把错误留在操作面板里，面板与列表都不动；成功后收起面板。
+	 */
+	const runProjectAction = async (work: () => Promise<void>): Promise<void> => {
+		setIsProjectBusy(true);
+		setProjectError(undefined);
+		try {
+			await work();
+			setMenuId(undefined);
+			setRenaming(undefined);
+			setRemovingId(undefined);
+		} catch (error) {
+			setProjectError(error instanceof Error ? error.message : String(error));
+		} finally {
+			setIsProjectBusy(false);
+		}
+	};
+
+	const submitRename = async (cwd: string): Promise<void> => {
+		const target = renaming;
+		if (target === undefined) {
+			return;
+		}
+		const trimmed = target.value.trim();
+		await runProjectAction(async () => {
+			await onRenameProject?.(target.id, trimmed.length > 0 ? trimmed : undefined);
+		});
+		// 改名后过滤器上的名字跟着变，当前范围保持在这个目录
+		setPickedCwd(cwd);
 	};
 
 	const openSession = (session: SidebarSession): void => {
@@ -347,19 +404,140 @@ export function SessionSidebar({
 							</button>
 							{projectMatches.map((project) => {
 								const isOn = !showsAll && scopeCwd !== undefined && samePath(project.cwd, scopeCwd);
+								// 操作面板只对添加过的项目开放，会话目录里顺带出现的目录没有可改的记录
+								const canManage = project.id !== undefined && project.host === undefined;
+								const isMenuOpen = canManage && menuId === project.id;
 								return (
-									<button
-										type="button"
-										key={project.cwd}
-										className={isOn ? "sb-opt is-on" : "sb-opt"}
-										aria-pressed={isOn}
-										title={project.cwd}
-										onClick={() => selectProject(project.cwd)}
-									>
-										<FolderIcon size={13} />
-										<span className="sb-opt-name ell">{project.name}</span>
-										<span className="sb-opt-meta mono">{project.sessionCount}</span>
-									</button>
+									<div key={project.cwd} className="sb-opt-item">
+										<div className="sb-opt-row">
+											<button
+												type="button"
+												className={isOn ? "sb-opt is-on" : "sb-opt"}
+												aria-pressed={isOn}
+												title={project.cwd}
+												onClick={() => selectProject(project.cwd)}
+											>
+												<FolderIcon size={13} />
+												<span className="sb-opt-name ell">{project.name}</span>
+												<span className="sb-opt-meta mono">{project.sessionCount}</span>
+											</button>
+											{canManage ? (
+												<button
+													type="button"
+													className="sb-opt-more"
+													aria-label="项目操作"
+													aria-expanded={isMenuOpen}
+													onClick={() => {
+														setProjectError(undefined);
+														setRenaming(undefined);
+														setRemovingId(undefined);
+														setMenuId(isMenuOpen ? undefined : project.id);
+													}}
+												>
+													⋯
+												</button>
+											) : null}
+										</div>
+
+										{isMenuOpen ? (
+											<div className="sb-opt-menu">
+												{renaming === undefined ? null : (
+													<label className="sb-rename">
+														<input
+															className="sb-rename-input"
+															value={renaming.value}
+															onChange={(event) =>
+																setRenaming({ id: renaming.id, value: event.target.value })
+															}
+															onKeyDown={(event) => {
+																if (event.key === "Enter") {
+																	void submitRename(project.cwd);
+																}
+																if (event.key === "Escape") {
+																	setRenaming(undefined);
+																}
+															}}
+															placeholder="项目名称"
+															aria-label="项目名称"
+														/>
+														<button
+															type="button"
+															className="sb-opt-action"
+															disabled={isProjectBusy}
+															onClick={() => void submitRename(project.cwd)}
+														>
+															保存
+														</button>
+													</label>
+												)}
+
+												{removingId === project.id ? (
+													<div className="sb-confirm">
+														<span className="sb-confirm-text">移除后会话文件保留,项目可以重新添加</span>
+														<div className="sb-confirm-actions">
+															<button
+																type="button"
+																className="sb-opt-action is-danger"
+																disabled={isProjectBusy}
+																onClick={() => {
+																	const id = project.id;
+																	if (id === undefined) {
+																		return;
+																	}
+																	void runProjectAction(async () => {
+																		await onRemoveProject?.(id);
+																		// 移除的正好是当前范围时退回全部项目
+																		if (scopeCwd !== undefined && samePath(project.cwd, scopeCwd)) {
+																			setPickedCwd(undefined);
+																			setShowsAll(true);
+																		}
+																	});
+																}}
+															>
+																移除
+															</button>
+															<button
+																type="button"
+																className="sb-opt-action"
+																onClick={() => setRemovingId(undefined)}
+															>
+																取消
+															</button>
+														</div>
+													</div>
+												) : (
+													<div className="sb-menu-actions">
+														<button
+															type="button"
+															className="sb-menu-item"
+															onClick={() => setRenaming({ id: project.id ?? "", value: project.name })}
+														>
+															重命名
+														</button>
+														<button
+															type="button"
+															className="sb-menu-item"
+															disabled={isProjectBusy}
+															onClick={() =>
+																void runProjectAction(async () => onRevealProject?.(project.id ?? ""))
+															}
+														>
+															在文件管理器中打开
+														</button>
+														<button
+															type="button"
+															className="sb-menu-item is-danger"
+															onClick={() => setRemovingId(project.id)}
+														>
+															移除
+														</button>
+													</div>
+												)}
+
+												{projectError === undefined ? null : <p className="sb-menu-error">{projectError}</p>}
+											</div>
+										) : null}
+									</div>
 								);
 							})}
 							{projectMatches.length === 0 ? <p className="sb-opt-empty">没有匹配的项目</p> : null}

@@ -27,6 +27,7 @@ import {
 import { WebSocket, WebSocketServer } from "ws";
 import type { ServerConfig } from "./config.ts";
 import { ProjectExistsError, ProjectNotFoundError, type ProjectStore } from "./project-store.ts";
+import { RevealFailedError, revealInFileManager } from "./reveal.ts";
 import {
 	type ActionSink,
 	ChannelNotFoundError,
@@ -323,6 +324,16 @@ async function handleRequest(
 			context.factory.setProjectTrust(await resolveProjectDirectory(requiredString(source, "cwd")), trusted);
 			return {};
 		}
+		case "revealProject": {
+			const source = asObject(params);
+			const id = requiredString(source, "id");
+			const project = context.projectStore.get(id);
+			if (project === undefined) {
+				throw new ProjectNotFoundError(id);
+			}
+			await revealInFileManager(project.cwd);
+			return {};
+		}
 		default:
 			throw new RequestError("unknown_method", `unknown method: ${method}`);
 	}
@@ -360,7 +371,11 @@ function toProtocolError(error: unknown): { code: ErrorCode; message: string } {
 	if (error instanceof ChannelNotFoundError) {
 		return { code: "unknown_channel", message: error.message };
 	}
-	if (error instanceof ProjectExistsError || error instanceof ProjectNotFoundError) {
+	if (
+		error instanceof ProjectExistsError ||
+		error instanceof ProjectNotFoundError ||
+		error instanceof RevealFailedError
+	) {
 		return { code: "rejected", message: error.message };
 	}
 	if (

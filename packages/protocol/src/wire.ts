@@ -171,6 +171,8 @@ export interface RequestParams {
 	projectTrust: { cwd: string };
 	/** 记下某个目录的信任决定。 */
 	setProjectTrust: { cwd: string; trusted: boolean };
+	/** 在设备的文件管理器里打开某个已添加项目的目录。 */
+	revealProject: { id: string };
 }
 
 /** 每条请求的应答数据。 */
@@ -193,6 +195,7 @@ export interface RequestResults {
 	removeProject: Record<string, never>;
 	projectTrust: { hasProjectResources: boolean; trusted: boolean | undefined };
 	setProjectTrust: Record<string, never>;
+	revealProject: Record<string, never>;
 }
 
 /** 请求方法名。 */

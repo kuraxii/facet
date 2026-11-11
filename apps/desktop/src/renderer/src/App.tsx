@@ -356,6 +356,27 @@ export function App() {
 		[refreshProjects, refreshSessions],
 	);
 
+	/** 改名结果直接替换列表里那一条，名字在过滤器与新建提示里同步变化。 */
+	const renameProject = useCallback(async (id: string, name: string | undefined) => {
+		const updated = await client.renameProject(id, name);
+		setProjects((current) => mergeProject(current, updated));
+	}, []);
+
+	/** 移除项目。会话文件与项目目录都不动，只从清单里去掉。 */
+	const removeProject = useCallback(
+		async (id: string) => {
+			await client.removeProject(id);
+			setProjects((current) => current.filter((item) => item.id !== id));
+			await refreshProjects();
+			await refreshSessions();
+		},
+		[refreshProjects, refreshSessions],
+	);
+
+	const revealProject = useCallback(async (id: string) => {
+		await client.revealProject(id);
+	}, []);
+
 	const forkTurn = useCallback(
 		(beforeEntryId: string | undefined) => {
 			withTrust(session?.state.cwd, () => {
@@ -418,6 +439,9 @@ export function App() {
 				onAddProject={() => setIsProjectDialogOpen(true)}
 				isProjectsStale={isProjectsStale}
 				onRefreshProjects={() => void refreshProjects()}
+				onRenameProject={renameProject}
+				onRemoveProject={removeProject}
+				onRevealProject={revealProject}
 				onToggleTheme={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
 			/>
 

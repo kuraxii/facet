@@ -55,6 +55,8 @@ export interface SidebarGroup {
 
 /** 项目下拉里的一项。 */
 export interface SidebarProject {
+	/** 用户添加的项目标识；只在会话目录里出现、没有添加过的目录为空 */
+	id?: string;
 	/** 项目目录，作为标识 */
 	cwd: string;
 	/** 项目名，用户设置过时用设置值，否则取目录末段 */
@@ -286,6 +288,7 @@ function listProjects(added: readonly ProjectInfo[], sessions: readonly SessionS
 		const key = pathKey(project.cwd);
 		claimed.add(key);
 		options.push({
+			id: project.id,
 			cwd: project.cwd,
 			name: project.name ?? baseName(project.cwd),
 			host: undefined,

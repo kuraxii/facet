@@ -60,7 +60,7 @@ export class SessionNotFoundError extends Error {
 	readonly sessionId: string;
 
 	constructor(sessionId: string) {
-		super(`unknown session: ${sessionId}`);
+		super(`会话不存在:${sessionId}`);
 		this.sessionId = sessionId;
 	}
 }

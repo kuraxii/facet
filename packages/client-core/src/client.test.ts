@@ -78,6 +78,10 @@ class FakeTransport implements SessionTransport {
 	private seq = 0;
 	/** 每个通道已发出的最大序号,订阅时作为基线返回 */
 	private readonly lastSeq = new Map<Channel, number>();
+	/** 下一个该方法名的请求直接失败,用例按需设置 */
+	failNext: RequestMethod | undefined;
+	/** 这些通道的订阅直接失败,用例按需设置 */
+	readonly failSubscribe = new Set<Channel>();
 
 	constructor(entryCount: number) {
 		this.entries = Array.from({ length: entryCount }, (_, index) => ({
@@ -91,6 +95,10 @@ class FakeTransport implements SessionTransport {
 
 	async request<M extends RequestMethod>(method: M, params?: RequestParams[M]): Promise<RequestResults[M]> {
 		this.calls.push({ method, params });
+		if (this.failNext === method) {
+			this.failNext = undefined;
+			throw new Error(`${method} 失败`);
+		}
 		const result = (() => {
 			switch (method) {
 				case "openSession": {
@@ -116,12 +124,13 @@ class FakeTransport implements SessionTransport {
 				}
 				case "removeProject":
 					return {};
-				case "subscribe":
-					return {
-						seq: 0,
-						resync: false,
-						session: (params as { channel: Channel }).channel === SESSION ? snapshot() : undefined,
-					};
+				case "subscribe": {
+					const channel = (params as { channel: Channel }).channel;
+					if (this.failSubscribe.has(channel)) {
+						throw new Error("subscribe 失败");
+					}
+					return { seq: 0, resync: false, session: channel.startsWith("session:") ? snapshot() : undefined };
+				}
 				case "unsubscribe":
 					return {};
 				case "entriesAfter": {
@@ -322,6 +331,39 @@ describe("SessionClient", () => {
 		expect(client.chatView()?.notices).toEqual([
 			{ level: "error", message: "操作被拒绝:unknown model: nope/nope" },
 		]);
+	});
+
+	it("快速切换时只采用最后一次选择", async () => {
+		const { client } = createClient(2);
+		await client.openSession("/tmp/a.jsonl");
+		const [, last] = await Promise.all([
+			client.switchSession("/tmp/b.jsonl"),
+			client.switchSession("/tmp/c.jsonl"),
+		]);
+		expect(last.file).toBe("/tmp/c.jsonl");
+		expect(client.current?.file).toBe("/tmp/c.jsonl");
+		expect(client.current?.sessionId).toBe("c");
+	});
+
+	it("切换失败时退掉半个订阅,原来的会话仍然可用,可以重试", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/a.jsonl");
+		// 新会话的会话通道订上,对话通道失败
+		transport.failSubscribe.add("chat:/b");
+		await expect(client.switchSession("/tmp/b.jsonl")).rejects.toThrow("subscribe 失败");
+		expect(
+			transport.calls
+				.filter((call) => call.method === "unsubscribe")
+				.map((call) => (call.params as { channel: Channel }).channel)
+				.filter((channel) => channel.endsWith(":/b")),
+		).toEqual(["session:/b"]);
+		expect(client.current?.file).toBe("/tmp/a.jsonl");
+		expect(client.sessionView()?.channel).toBe("session:/a");
+
+		transport.failSubscribe.clear();
+		const opened = await client.switchSession("/tmp/b.jsonl");
+		expect(opened.file).toBe("/tmp/b.jsonl");
+		expect(client.sessionView()?.channel).toBe("session:/b");
 	});
 
 	it("项目请求带上参数", async () => {

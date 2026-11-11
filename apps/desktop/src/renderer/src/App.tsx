@@ -4,6 +4,7 @@ import { WsTransport } from "@facet/transport/ws";
 import {
 	ArrowDownIcon,
 	ChatTranscript,
+	CloseIcon,
 	Composer,
 	CreateProjectDialog,
 	QueueStrip,
@@ -89,7 +90,13 @@ export function App() {
 	const [createCwd, setCreateCwd] = useState(bridge.projectDir);
 	const [draft, setDraft] = useState("");
 	const [theme, setTheme] = useState<ThemeName>(readTheme);
+	/** 打开、新建、分叉失败时的提示,带重试入口 */
+	const [sessionError, setSessionError] = useState<{ message: string; retry: () => void } | undefined>(
+		undefined,
+	);
 	const started = useRef(false);
+	/** 会话切换的序号,只有最后一次选择的结果会落到界面上 */
+	const switchSeq = useRef(0);
 
 	useEffect(() => {
 		document.documentElement.dataset.theme = theme;
@@ -146,20 +153,58 @@ export function App() {
 	const queued = session?.state.queued ?? { steering: [], followUp: [] };
 	const canFork = activity === "idle" && session?.state.maintenance === undefined;
 
-	const openSession = useCallback(async (path: string) => {
-		await client.release();
-		await client.openSession(path);
-		setActiveFile(path);
-	}, []);
-
-	const createSession = useCallback(
-		async (cwd: string) => {
-			await client.release();
-			const opened = await client.createSession({ ...(cwd.length > 0 ? { cwd } : {}) });
-			setActiveFile(opened.file);
-			await refreshSessions();
+	/**
+	 * 跑一次会话切换类操作。
+	 *
+	 * 只采用最后一次选择的文件:后发起的操作会推进序号,先前那次的成功或失败都不再落到界面上。
+	 * 失败留下带重试的提示,成功则清掉旧提示并刷新列表。
+	 */
+	const runSessionAction = useCallback(
+		(action: () => Promise<string | undefined>, onDone?: () => void) => {
+			switchSeq.current += 1;
+			const seq = switchSeq.current;
+			void (async () => {
+				try {
+					const file = await action();
+					if (seq !== switchSeq.current) {
+						return;
+					}
+					onDone?.();
+					setActiveFile(file);
+					setSessionError(undefined);
+					await refreshSessions();
+				} catch (error) {
+					if (seq !== switchSeq.current) {
+						return;
+					}
+					setSessionError({
+						message: error instanceof Error ? error.message : String(error),
+						retry: () => runSessionAction(action, onDone),
+					});
+				}
+			})();
 		},
 		[refreshSessions],
+	);
+
+	const openSession = useCallback(
+		(path: string) => {
+			runSessionAction(async () => {
+				await client.switchSession(path);
+				return path;
+			});
+		},
+		[runSessionAction],
+	);
+
+	const createSession = useCallback(
+		(cwd: string) => {
+			runSessionAction(async () => {
+				const opened = await client.createSession({ ...(cwd.length > 0 ? { cwd } : {}) });
+				return opened.file;
+			});
+		},
+		[runSessionAction],
 	);
 
 	const send = useCallback(() => {
@@ -206,13 +251,12 @@ export function App() {
 	 */
 	const revertTo = useCallback(
 		(entryId: string, text: string) => {
-			void client.fork(entryId).then(async (forked) => {
-				setActiveFile(forked.file);
-				setDraft(text);
-				await refreshSessions();
-			});
+			runSessionAction(
+				async () => (await client.fork(entryId)).file,
+				() => setDraft(text),
+			);
 		},
-		[refreshSessions],
+		[runSessionAction],
 	);
 
 	const createProject = useCallback(
@@ -230,12 +274,9 @@ export function App() {
 
 	const forkTurn = useCallback(
 		(beforeEntryId: string | undefined) => {
-			void client.fork(beforeEntryId).then(async (forked) => {
-				setActiveFile(forked.file);
-				await refreshSessions();
-			});
+			runSessionAction(async () => (await client.fork(beforeEntryId)).file);
 		},
-		[refreshSessions],
+		[runSessionAction],
 	);
 
 	const transcript = useMemo(() => (chat ? toTranscript(chat) : []), [chat]);
@@ -320,6 +361,22 @@ export function App() {
 						</button>
 					)}
 					<div className="footer-column">
+						{sessionError ? (
+							<div className="session-error">
+								<span className="session-error-text">{sessionError.message}</span>
+								<button type="button" className="btn" onClick={sessionError.retry}>
+									重试
+								</button>
+								<button
+									type="button"
+									className="ib"
+									aria-label="关闭提示"
+									onClick={() => setSessionError(undefined)}
+								>
+									<CloseIcon size={12} />
+								</button>
+							</div>
+						) : null}
 						<QueueStrip queued={queued} onClear={takeBackQueue} />
 						<Composer
 							value={draft}

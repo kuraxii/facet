@@ -520,7 +520,7 @@ describe("动作的持有与串行", () => {
 	});
 
 	it("会话不存在时报错", async () => {
-		await expect(hub.withSession("nope", async () => {})).rejects.toThrow("unknown session");
+		await expect(hub.withSession("nope", async () => {})).rejects.toThrow("会话不存在");
 	});
 });
 
@@ -579,6 +579,6 @@ describe("查询", () => {
 	});
 
 	it("未登记的会话取快照报不存在", async () => {
-		await expect(hub.snapshot("nope")).rejects.toThrow("unknown session");
+		await expect(hub.snapshot("nope")).rejects.toThrow("会话不存在");
 	});
 });

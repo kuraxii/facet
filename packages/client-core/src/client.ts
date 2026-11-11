@@ -90,6 +90,8 @@ export class SessionClient {
 	private lastEntryId: string | undefined;
 	/** 串行执行提升,避免连续 settled 时请求交错 */
 	private commitChain: Promise<void> = Promise.resolve();
+	/** 会话级操作排队执行,快速切换时按到达顺序收尾 */
+	private lifecycle: Promise<unknown> = Promise.resolve();
 
 	constructor(options: SessionClientOptions) {
 		this.transport = options.transport;
@@ -175,13 +177,45 @@ export class SessionClient {
 	}
 
 	/**
+	 * 会话级操作排队执行。
+	 *
+	 * 快速切换时后一次进入要等前一次收尾,最后一次选择的打开结果就是留在界面上的那份;
+	 * 上一次失败也不影响下一次进入。
+	 */
+	private async exclusive<T>(work: () => Promise<T>): Promise<T> {
+		const run = this.lifecycle.then(work, work);
+		this.lifecycle = run.then(
+			() => undefined,
+			() => undefined,
+		);
+		return await run;
+	}
+
+	/**
+	 * 切到另一个会话。
+	 *
+	 * 先打开新的,成功之后才放掉旧的:打开失败时原来的会话仍然可用,界面不会变成空白。
+	 * 两步在同一次排队里完成,中途不会有另一个切换插进来。
+	 */
+	async switchSession(sessionFile: string): Promise<OpenedSession> {
+		return await this.exclusive(async () => {
+			const previous = this.opened;
+			const opened = await this.openUnlocked(sessionFile);
+			if (previous !== undefined && previous.sessionChannel !== opened.sessionChannel) {
+				await this.releaseChannels(previous);
+			}
+			return opened;
+		});
+	}
+
+	/**
 	 * 打开已有会话。
 	 *
 	 * 先订阅再取历史:订阅返回的序号作为基线,此后的动作按序应用,历史只补进视图。
 	 * 设备报告缓冲缺口时,快照与最近一页历史会重新装载。
 	 */
 	async openSession(sessionFile: string): Promise<OpenedSession> {
-		return await this.beginSession(await this.transport.request("openSession", { sessionFile }));
+		return await this.exclusive(() => this.openUnlocked(sessionFile));
 	}
 
 	/**
@@ -190,11 +224,54 @@ export class SessionClient {
 	 * 参数缺省时由设备取默认工作目录与模型;返回与打开会话相同的句柄。
 	 */
 	async createSession(params: RequestParams["createSession"] = {}): Promise<OpenedSession> {
-		return await this.beginSession(await this.transport.request("createSession", params));
+		return await this.exclusive(async () => {
+			const snapshot = await this.transport.request("createSession", params);
+			return await this.beginSession(snapshot);
+		});
 	}
 
-	/** 订阅两条通道并从基线开始装载历史。打开与新建共用。 */
+	private async openUnlocked(sessionFile: string): Promise<OpenedSession> {
+		const snapshot = await this.transport.request("openSession", { sessionFile });
+		return await this.beginSession(snapshot);
+	}
+
+	/**
+	 * 订阅两条通道并从基线开始装载历史。打开与新建共用。
+	 *
+	 * 中途任何一步失败都把已建立的订阅退掉、视图丢掉,不留半个打开状态,调用方可以直接重试。
+	 */
 	private async beginSession(snapshot: SessionSnapshot): Promise<OpenedSession> {
+		// 记下已经订上的通道,失败时逐个退掉,不留半个打开状态
+		const subscribed: Channel[] = [];
+		const previous = this.opened;
+		try {
+			return await this.beginSubscribed(snapshot, subscribed);
+		} catch (error) {
+			await this.abandonSession(snapshot.id, subscribed);
+			// 失败不牵连已经打开的会话
+			this.opened = previous;
+			this.olderCursor = undefined;
+			this.lastEntryId = undefined;
+			this.pendingSend = undefined;
+			throw error;
+		}
+	}
+
+	/** 退掉已建立的订阅并丢掉这个会话的视图。 */
+	private async abandonSession(sessionId: string, subscribed: readonly Channel[]): Promise<void> {
+		const channels = SessionStore.channelsFor(sessionId);
+		for (const channel of subscribed) {
+			try {
+				await this.transport.request("unsubscribe", { channel });
+			} catch {
+				// 退订失败不阻塞清理:连接已经断了,设备侧会按无订阅者回收
+			}
+		}
+		this.state.drop(channels.session);
+		this.state.drop(channels.chat);
+	}
+
+	private async beginSubscribed(snapshot: SessionSnapshot, subscribed: Channel[]): Promise<OpenedSession> {
 		const channels = SessionStore.channelsFor(snapshot.id);
 		this.state.ensureSession(channels.session, snapshot);
 		this.state.ensureChat(channels.chat);
@@ -202,11 +279,13 @@ export class SessionClient {
 		this.lastEntryId = undefined;
 
 		const sessionSub = await this.transport.request("subscribe", { channel: channels.session });
+		subscribed.push(channels.session);
 		this.state.markSeq(channels.session, sessionSub.seq);
 		if (sessionSub.session) {
 			this.state.ensureSession(channels.session, sessionSub.session);
 		}
 		const chatSub = await this.transport.request("subscribe", { channel: channels.chat });
+		subscribed.push(channels.chat);
 		this.state.markSeq(channels.chat, chatSub.seq);
 
 		this.opened = {
@@ -403,8 +482,7 @@ export class SessionClient {
 		if (forked.file === undefined) {
 			throw new Error("分叉出的会话没有文件");
 		}
-		await this.release();
-		return await this.openSession(forked.file);
+		return await this.switchSession(forked.file);
 	}
 
 	/**
@@ -427,6 +505,23 @@ export class SessionClient {
 
 	/** 退出当前会话:取消订阅并丢掉视图。 */
 	async release(): Promise<void> {
+		await this.exclusive(() => this.releaseUnlocked());
+	}
+
+	/** 退掉这两个通道的订阅并丢掉它们的视图。 */
+	private async releaseChannels(opened: OpenedSession): Promise<void> {
+		for (const channel of [opened.sessionChannel, opened.chatChannel]) {
+			try {
+				await this.transport.request("unsubscribe", { channel });
+			} catch {
+				// 连接已经断开时退订会失败,视图照样丢掉
+			}
+		}
+		this.state.drop(opened.sessionChannel);
+		this.state.drop(opened.chatChannel);
+	}
+
+	private async releaseUnlocked(): Promise<void> {
 		const opened = this.opened;
 		this.opened = undefined;
 		this.olderCursor = undefined;
@@ -435,10 +530,7 @@ export class SessionClient {
 		if (!opened) {
 			return;
 		}
-		await this.transport.request("unsubscribe", { channel: opened.sessionChannel });
-		await this.transport.request("unsubscribe", { channel: opened.chatChannel });
-		this.state.drop(opened.sessionChannel);
-		this.state.drop(opened.chatChannel);
+		await this.releaseChannels(opened);
 	}
 
 	/** 停掉全部监听。 */

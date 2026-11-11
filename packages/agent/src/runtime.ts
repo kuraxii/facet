@@ -183,13 +183,27 @@ export class PiAgentFactory {
 	 * 文件不是会话文件时抛错。
 	 */
 	async peekSessionId(file: string): Promise<string> {
-		const handle = await open(file, "r");
+		let handle: Awaited<ReturnType<typeof open>>;
+		try {
+			handle = await open(file, "r");
+		} catch (error) {
+			// 文件被删或路径写错是最常见的原因,给一句能看懂的说明
+			if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+				throw new Error(`会话文件不存在:${file}`);
+			}
+			throw error;
+		}
 		try {
 			const buffer = Buffer.alloc(4096);
 			const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
 			const text = buffer.subarray(0, bytesRead).toString("utf8");
 			const line = text.slice(0, text.indexOf("\n") < 0 ? text.length : text.indexOf("\n"));
-			const header = JSON.parse(line) as { type?: unknown; id?: unknown };
+			let header: { type?: unknown; id?: unknown };
+			try {
+				header = JSON.parse(line) as { type?: unknown; id?: unknown };
+			} catch {
+				throw new Error(`不是会话文件:${file}`);
+			}
 			if (header.type !== "session" || typeof header.id !== "string") {
 				throw new Error(`不是会话文件:${file}`);
 			}

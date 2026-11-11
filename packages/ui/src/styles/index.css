@@ -648,6 +648,26 @@ svg.fl {
 	width: 100%;
 }
 
+.session-error {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 8px;
+	padding: 8px 10px;
+	border: 1px solid var(--err);
+	border-radius: 8px;
+	background: var(--errbg);
+	color: var(--err);
+	font-size: 12px;
+}
+
+.session-error-text {
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 .queue-strip {
 	display: flex;
 	align-items: center;
@@ -1222,6 +1242,17 @@ svg.fl {
 
 .btn:disabled:hover {
 	border-color: var(--line2);
+}
+
+.session-error .btn {
+	height: 24px;
+	padding: 0 10px;
+	color: var(--err);
+	border-color: var(--err);
+}
+
+.session-error .ib {
+	color: var(--err);
 }
 
 .btn.pri {

@@ -39,7 +39,7 @@ export type { MarkdownProps } from "./markdown/Markdown.tsx";
 export { Markdown } from "./markdown/Markdown.tsx";
 export type { DiffChunk, DisplayRow, ForkPoint, RowKind } from "./transcript/group.ts";
 export { formatDuration, groupRows, metaSummary } from "./transcript/group.ts";
-export { ArrowDownIcon } from "./transcript/icons.tsx";
+export { ArrowDownIcon, CloseIcon } from "./transcript/icons.tsx";
 export type { ChatTranscriptProps } from "./transcript/rows.tsx";
 export { ChatTranscript } from "./transcript/rows.tsx";
 export { foldOutput, toolStatusText, toolTarget } from "./transcript/tool-text.ts";

@@ -9,6 +9,7 @@ import type {
 	Channel,
 	CompactionReason,
 	DeltaKind,
+	Entry,
 	Message,
 	ModelInfo,
 	NoticeLevel,
@@ -47,12 +48,19 @@ export interface StreamedPart {
 	text: string;
 }
 
-/** 一条消息在客户端的呈现状态。 */
-export interface MessageView {
-	/** 设备分配的标识;历史投影出来的消息用条目 id 加前缀区分 */
+/**
+ * 对话视图里的一项。
+ *
+ * 视图接收全部类型的会话条目，目前只有带 message 的条目参与渲染；其余条目保留在视图里，
+ * 供以后扩展事件展示。实时消息在提升为历史消息之前没有 entry，只有 message。
+ */
+export interface EntryView {
+	/** 视图标识;历史与提升后的消息用条目 id 加前缀,实时消息用设备分配的标识 */
 	id: string;
-	/** 最近一次收到的完整消息 */
-	message: Message;
+	/** 会话条目;实时消息在本轮 settled 之后由设备补上 */
+	entry: Entry | undefined;
+	/** 消息内容;usage、session_info 这类条目没有 */
+	message: Message | undefined;
 	/** 按内容块下标累积的流式片段,收到完整消息后清空 */
 	streaming: Readonly<Record<number, StreamedPart>>;
 	/** 是否仍在流式写入 */
@@ -91,7 +99,7 @@ export interface SessionView {
 /** 对话通道的客户端状态。 */
 export interface ChatView {
 	readonly channel: Channel;
-	readonly messages: readonly MessageView[];
+	readonly items: readonly EntryView[];
 	readonly toolCalls: Readonly<Record<string, ToolCallView>>;
 	readonly queue: QueuedInput;
 	/** 是否有运行中的回合 */
@@ -101,6 +109,8 @@ export interface ChatView {
 	/** 正在进行的一次自动重试 */
 	readonly retry: { attempt: number; maxAttempts: number } | undefined;
 	readonly notices: readonly NoticeView[];
+	/** 提升为历史消息时的标识迁移:旧视图标识到新标识,界面据此搬动按行保存的状态 */
+	readonly renames: Readonly<Record<string, string>>;
 }
 
 /** 提示条保留的条数 */
@@ -123,13 +133,14 @@ export function createSessionView(channel: Channel, snapshot?: SessionSnapshot):
 export function createChatView(channel: Channel): ChatView {
 	return {
 		channel,
-		messages: [],
+		items: [],
 		toolCalls: {},
 		queue: { steering: [], followUp: [] },
 		isRunning: false,
 		willRetry: false,
 		retry: undefined,
 		notices: [],
+		renames: {},
 	};
 }
 

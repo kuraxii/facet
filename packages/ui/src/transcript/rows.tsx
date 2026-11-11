@@ -15,14 +15,16 @@ import { foldOutput, toolStatusText, toolTarget } from "./tool-text.ts";
 export interface ChatTranscriptProps {
 	/** 数据侧投影出的渲染单元,顺序即消息顺序 */
 	items: readonly TranscriptItem[];
-	/** 是否允许分叉,运行中不允许 */
+	/** 是否允许分叉,本轮结束前不允许 */
 	canFork: boolean;
-	/** 从某条消息分叉,传入消息标识 */
-	onFork: (messageId: string) => void;
+	/** 在某一轮结束处分叉,传入下一轮开始处条目的 id；缺省表示最后一轮 */
+	onFork: (beforeEntryId: string | undefined) => void;
 	/** 正在进行的自动重试,没有则为空 */
 	retry?: { attempt: number; maxAttempts: number } | undefined;
 	/** 没有任何内容时显示的提示 */
 	emptyHint?: string;
+	/** 实时消息提升为历史消息时的标识迁移，用来搬动按行标识保存的收起状态 */
+	renames?: Readonly<Record<string, string>> | undefined;
 }
 
 /**
@@ -287,11 +289,33 @@ function Shell({ className, children }: { className: string; children: ReactNode
 /**
  * 对话面板。把渲染单元聚合成分行,并维护每行的收起状态。
  */
-export function ChatTranscript({ items, canFork, onFork, retry, emptyHint }: ChatTranscriptProps) {
+export function ChatTranscript({ items, canFork, onFork, retry, emptyHint, renames }: ChatTranscriptProps) {
 	const rows = useMemo(() => groupRows(items), [items]);
 	const [overrides, setOverrides] = useState<ReadonlyMap<string, boolean>>(() => new Map());
 	const isTicking = rows.some((row) => row.isStreaming && row.startedAt !== undefined);
 	const now = useNow(isTicking);
+
+	// 一轮结束、消息提升为历史消息后行标识会变，把按旧标识保存的收起状态搬到新标识上
+	useEffect(() => {
+		if (renames === undefined) {
+			return;
+		}
+		setOverrides((previous) => {
+			let next: Map<string, boolean> | undefined;
+			for (const [from, to] of Object.entries(renames)) {
+				const value = previous.get(from);
+				if (value === undefined) {
+					continue;
+				}
+				next ??= new Map(previous);
+				next.delete(from);
+				if (!next.has(to)) {
+					next.set(to, value);
+				}
+			}
+			return next ?? previous;
+		});
+	}, [renames]);
 
 	const toggle = useCallback((row: DisplayRow) => {
 		setOverrides((previous) => {
@@ -315,6 +339,27 @@ export function ChatTranscript({ items, canFork, onFork, retry, emptyHint }: Cha
 					return (
 						<Shell key={row.id} className="is-files">
 							<FilesRow diffs={row.diffs} />
+						</Shell>
+					);
+				}
+
+				if (row.kind === "fork") {
+					const fork = row.fork;
+					if (fork === undefined) {
+						return null;
+					}
+					return (
+						<Shell key={row.id} className="is-fork">
+							<button
+								type="button"
+								className="fork-btn"
+								aria-label="从这一轮往后继续"
+								title="从这一轮往后继续"
+								disabled={fork.needsSettle && !canFork}
+								onClick={() => onFork(fork.beforeEntryId)}
+							>
+								<ForkIcon size={14} />
+							</button>
 						</Shell>
 					);
 				}
@@ -354,16 +399,6 @@ export function ChatTranscript({ items, canFork, onFork, retry, emptyHint }: Cha
 					return (
 						<Shell key={row.id} className="is-user">
 							<div className="user-line">
-								{row.forkTarget !== undefined && canFork ? (
-									<button
-										type="button"
-										className="row-action"
-										aria-label="从这里分叉"
-										onClick={() => onFork(row.forkTarget as string)}
-									>
-										<ForkIcon size={14} />
-									</button>
-								) : null}
 								<div className="bub">{text}</div>
 							</div>
 						</Shell>

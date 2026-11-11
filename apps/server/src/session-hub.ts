@@ -14,11 +14,20 @@ import type { Action, ActionFrame, Channel, SessionSnapshot } from "@facet/proto
 import { makeChannel, parseChannel } from "@facet/protocol";
 import { ActionProjector } from "./action-projector.ts";
 import { EventLog } from "./event-log.ts";
+import { debugLog } from "./log.ts";
 
 /** 会话登记表用到的 agent 能力,收窄成结构类型以便测试注入假实现。 */
 export type HubAgent = Pick<
 	PiAgent,
-	"id" | "file" | "isBusy" | "subscribe" | "entries" | "snapshot" | "dispose"
+	| "id"
+	| "file"
+	| "isBusy"
+	| "subscribe"
+	| "entryPage"
+	| "entriesAfter"
+	| "entryBefore"
+	| "snapshot"
+	| "dispose"
 >;
 
 /** 建会话用的工厂,收窄成登记表需要的三个入口,便于测试注入假实现。 */
@@ -73,6 +82,16 @@ export class SessionEntryNotFoundError extends Error {
 	constructor(messageId: string) {
 		super(`找不到消息对应的会话条目:${messageId}`);
 		this.messageId = messageId;
+	}
+}
+
+/** 提升实时消息时给的边界条目不在活动分支上。 */
+export class SessionBoundaryNotFoundError extends Error {
+	readonly entryId: string;
+
+	constructor(entryId: string) {
+		super(`条目不在活动分支上:${entryId}`);
+		this.entryId = entryId;
 	}
 }
 
@@ -216,15 +235,15 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 	}
 
 	/**
-	 * 从会话的某条消息分叉出新会话并登记。原会话不受影响。
+	 * 分叉出新会话并登记，原会话不受影响。
 	 *
-	 * 运行中的会话不允许分叉:这一轮还没写盘,分叉点可能找不到对应的条目。
-	 * 历史消息用 entryId 定位;本次连接产生的消息用 messageId,按角色与时间戳在条目里回查。
+	 * beforeEntryId 给出时复制到它之前的条目为止，界面用它按轮分叉：一轮结束后可能还会
+	 * 追加 usage、session_info、compaction 等条目，所以分叉点取下一轮开始处的前一条。
+	 * 缺省时复制整条活动分支。运行中的会话不允许分叉：这一轮还没写盘，分叉点对不上。
 	 */
 	async forkSession(options: {
 		sessionFile: string;
-		entryId?: string;
-		messageId?: string;
+		beforeEntryId?: string;
 		cwd?: string;
 	}): Promise<SessionSnapshot> {
 		const opened = this.sessionIdByFile(options.sessionFile);
@@ -232,13 +251,10 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		if (source?.agent?.isBusy === true) {
 			throw new SessionBusyError(source.sessionId);
 		}
-		const entryId = options.entryId ?? this.resolveEntryId(source, options.messageId);
-		if (entryId === undefined) {
-			throw new SessionEntryNotFoundError(options.messageId ?? "");
-		}
+		const entryId = this.forkPoint(source, options.beforeEntryId);
 		const agent = await this.factory.fork({
 			sessionFile: options.sessionFile,
-			entryId,
+			...(entryId === undefined ? {} : { entryId }),
 			...(options.cwd === undefined ? {} : { cwd: options.cwd }),
 		});
 		this.attach(agent);
@@ -246,33 +262,25 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 	}
 
 	/**
-	 * 把实时消息换算成会话条目 id。
+	 * 分叉点：给出 beforeEntryId 时取它在活动分支上的前一条，缺省留空由工厂取叶子。
 	 *
-	 * 消息写盘晚于事件,所以要按角色与时间戳在条目里从尾部往前找,时间戳是消息自带的,不靠猜。
+	 * beforeEntryId 需要会话已在设备上打开才能定位；没打开或不在分支上时报错。
 	 */
-	private resolveEntryId(
+	private forkPoint(
 		source: SessionState<A> | undefined,
-		messageId: string | undefined,
+		beforeEntryId: string | undefined,
 	): string | undefined {
-		if (!source?.agent || messageId === undefined) {
+		if (beforeEntryId === undefined) {
 			return undefined;
 		}
-		const stamp = source.projector.messageStamp(messageId);
-		if (!stamp) {
-			return undefined;
+		if (!source?.agent) {
+			throw new SessionEntryNotFoundError(beforeEntryId);
 		}
-		const entries = source.agent.entries().entries;
-		for (let index = entries.length - 1; index >= 0; index -= 1) {
-			const entry = entries[index];
-			if (entry?.kind !== "message" || entry.message === undefined) {
-				continue;
-			}
-			if (entry.message.role !== stamp.role || entry.message.timestamp !== stamp.timestamp) {
-				continue;
-			}
-			return entry.id;
+		const entryId = source.agent.entryBefore(beforeEntryId);
+		if (entryId === null) {
+			throw new SessionEntryNotFoundError(beforeEntryId);
 		}
-		return undefined;
+		return entryId;
 	}
 
 	/** 登记一个已建好的会话。同一会话已有另一份状态时保留先登记的,丢弃新的。 */
@@ -358,23 +366,51 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		sessionId: string,
 		cursor: string | undefined,
 		limit: number | undefined,
-	): Promise<{ entries: ReturnType<A["entries"]>["entries"]; nextCursor: string | undefined }> {
+	): Promise<{ entries: ReturnType<A["entryPage"]>["entries"]; nextCursor: string | undefined }> {
 		const row = await this.requireReady(sessionId);
 		this.touch(row);
-		const all = row.agent?.entries().entries ?? [];
-		const size = Math.min(Math.max(limit ?? this.pageSize.default, 1), this.pageSize.max);
-		let end = all.length;
-		if (cursor !== undefined) {
-			const index = all.findIndex((entry) => entry.id === cursor);
-			if (index < 0) {
-				throw new SessionNotFoundError(sessionId);
-			}
-			end = index;
+		const agent = row.agent;
+		if (!agent) {
+			throw new SessionNotFoundError(sessionId);
 		}
-		const start = Math.max(0, end - size);
-		const window = all.slice(start, end);
-		const first = window[0];
-		return { entries: window, nextCursor: start > 0 && first ? first.id : undefined };
+		const size = Math.min(Math.max(limit ?? this.pageSize.default, 1), this.pageSize.max);
+		try {
+			return agent.entryPage(cursor, size);
+		} catch {
+			throw new SessionEntryNotFoundError(cursor ?? "");
+		}
+	}
+
+	/**
+	 * 取 afterEntryId 之后到叶子的条目，端点在本轮结束后用它把实时消息提升为历史消息。
+	 *
+	 * 与 entries 一样顺带续期：刚 settle 过的会话仍算在用。
+	 */
+	async entriesAfter(
+		sessionId: string,
+		afterEntryId: string | null,
+	): Promise<{ entries: ReturnType<A["entriesAfter"]>["entries"]; leafId: string | null }> {
+		const row = await this.requireReady(sessionId);
+		this.touch(row);
+		const agent = row.agent;
+		if (!agent) {
+			throw new SessionNotFoundError(sessionId);
+		}
+		// 边界不在活动分支上时 agent 抛普通错误，这里换成端点认识的分类
+		try {
+			const result = agent.entriesAfter(afterEntryId);
+			debugLog("commit", "返回边界之后的条目", {
+				sessionId,
+				afterEntryId,
+				leafId: result.leafId,
+				count: result.entries.length,
+				kinds: result.entries.map((entry) => `${entry.kind}:${entry.id}`),
+			});
+			return result;
+		} catch (error) {
+			debugLog("commit", "边界条目不在活动分支上", { sessionId, afterEntryId, error: String(error) });
+			throw new SessionBoundaryNotFoundError(afterEntryId ?? "");
+		}
 	}
 
 	/**

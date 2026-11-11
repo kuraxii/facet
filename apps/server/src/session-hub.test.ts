@@ -11,6 +11,33 @@ import {
 
 const IDLE_MS = 1000;
 
+/** 最小可用的消息条目，用例只需要 id 与顺序。 */
+function messageEntry(id: string, parentId: string | null): Entry {
+	return {
+		id,
+		parentId,
+		kind: "message",
+		timestamp: "2026-11-08T00:00:00Z",
+		message: {
+			role: "assistant",
+			content: [{ type: "text", text: id }],
+			provider: "p",
+			model: "m",
+			usage: {
+				input: 0,
+				output: 0,
+				cacheRead: 0,
+				cacheWrite: 0,
+				reasoning: 0,
+				totalTokens: 0,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			stopReason: "stop",
+			timestamp: 1,
+		},
+	};
+}
+
 class FakeAgent implements HubAgent {
 	readonly id: string;
 	readonly file: string | undefined;
@@ -37,8 +64,44 @@ class FakeAgent implements HubAgent {
 	/** 已写盘的条目,用例按需填 */
 	readonly stored: Entry[] = [];
 
-	entries(_since?: string): { entries: Entry[]; leafId: string | null } {
-		return { entries: this.stored, leafId: null };
+	/** 按页取条目，游标为空表示从末尾开始 */
+	entryPage(cursor: string | undefined, limit: number): { entries: Entry[]; nextCursor: string | undefined } {
+		const size = Math.max(1, limit);
+		if (cursor === undefined) {
+			const start = Math.max(0, this.stored.length - size);
+			return {
+				entries: this.stored.slice(start),
+				nextCursor: start > 0 ? this.stored[start]?.id : undefined,
+			};
+		}
+		const index = this.stored.findIndex((entry) => entry.id === cursor);
+		if (index < 0) {
+			throw new Error(`unknown session entry: ${cursor}`);
+		}
+		const start = Math.max(0, index - size);
+		return {
+			entries: this.stored.slice(start, index),
+			nextCursor: start > 0 ? this.stored[start]?.id : undefined,
+		};
+	}
+
+	/** 分叉点：取给定条目在 stored 里的前一条 */
+	entryBefore(entryId: string): string | null {
+		const index = this.stored.findIndex((entry) => entry.id === entryId);
+		if (index <= 0) {
+			return null;
+		}
+		return this.stored[index - 1]?.id ?? null;
+	}
+
+	/** 取边界之后的条目，用例按 stored 尾部模拟 */
+	entriesAfter(afterEntryId: string | null): { entries: Entry[]; leafId: string | null } {
+		const index = afterEntryId === null ? -1 : this.stored.findIndex((entry) => entry.id === afterEntryId);
+		if (afterEntryId !== null && index < 0) {
+			throw new Error(`unknown session entry: ${afterEntryId}`);
+		}
+		const leaf = this.stored[this.stored.length - 1];
+		return { entries: this.stored.slice(index + 1), leafId: leaf?.id ?? null };
 	}
 
 	snapshot(): SessionSnapshot {
@@ -99,8 +162,8 @@ class FakeFactory implements AgentFactory<FakeAgent> {
 		return new FakeAgent(`new-${this.created}`, resolve(`/tmp/new-${this.created}.jsonl`));
 	}
 
-	async fork(options: { sessionFile: string; entryId: string }): Promise<FakeAgent> {
-		this.forked.push(`${options.sessionFile}#${options.entryId}`);
+	async fork(options: { sessionFile: string; entryId?: string }): Promise<FakeAgent> {
+		this.forked.push(`${options.sessionFile}#${options.entryId ?? "leaf"}`);
 		await Promise.resolve();
 		return new FakeAgent(`fork-${this.forked.length}`, resolve(`/tmp/fork-${this.forked.length}.jsonl`));
 	}
@@ -181,59 +244,57 @@ describe("会话建立与复用", () => {
 
 	it("分叉出新会话并登记", async () => {
 		const source = await hub.openSession("/tmp/s1.jsonl");
-		const forked = await hub.forkSession({ sessionFile: "/tmp/s1.jsonl", entryId: "e3" });
-		expect(factory.forked).toEqual(["/tmp/s1.jsonl#e3"]);
+		const agent = hub.agent(source.id);
+		for (const id of ["e1", "e2", "e3"]) {
+			agent.stored.push({
+				id,
+				parentId: id === "e1" ? null : `e${Number(id.slice(1)) - 1}`,
+				kind: "message",
+				timestamp: "2026-11-08T00:00:00Z",
+				message: {
+					role: "assistant",
+					content: [{ type: "text", text: id }],
+					provider: "p",
+					model: "m",
+					usage: {
+						input: 0,
+						output: 0,
+						cacheRead: 0,
+						cacheWrite: 0,
+						reasoning: 0,
+						totalTokens: 0,
+						cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+					},
+					stopReason: "stop",
+					timestamp: 1,
+				},
+			});
+		}
+		const forked = await hub.forkSession({ sessionFile: "/tmp/s1.jsonl", beforeEntryId: "e3" });
+		// 分叉点是下一轮开始处的前一条
+		expect(factory.forked).toEqual(["/tmp/s1.jsonl#e2"]);
 		expect(forked.id).not.toBe(source.id);
 		expect(hub.has(forked.id)).toBe(true);
 		expect(hub.has(source.id)).toBe(true);
 	});
 
-	it("实时消息按角色与时间戳回查条目后分叉", async () => {
-		const source = await hub.openSession("/tmp/s1.jsonl");
-		const agent = hub.agent(source.id);
-		const message = {
-			role: "assistant" as const,
-			content: [{ type: "text" as const, text: "回复" }],
-			provider: "p",
-			model: "m",
-			usage: {
-				input: 0,
-				output: 0,
-				cacheRead: 0,
-				cacheWrite: 0,
-				reasoning: 0,
-				totalTokens: 0,
-				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-			},
-			stopReason: "stop" as const,
-			timestamp: 1730,
-		};
-		await hub.subscribe(`chat:/${source.id}`, undefined, sink("a"));
-		agent.emit({ type: "message_start", message });
-		agent.emit({ type: "message_end", message });
-		agent.stored.push({
-			id: "e42",
-			parentId: null,
-			kind: "message",
-			timestamp: "2026-11-08T00:00:00Z",
-			message,
-		});
-
-		await hub.forkSession({ sessionFile: "/tmp/s1.jsonl", messageId: "m1" });
-		expect(factory.forked).toEqual(["/tmp/s1.jsonl#e42"]);
+	it("缺省分叉点取活动分支的叶子", async () => {
+		await hub.openSession("/tmp/s1.jsonl");
+		await hub.forkSession({ sessionFile: "/tmp/s1.jsonl" });
+		expect(factory.forked).toEqual(["/tmp/s1.jsonl#leaf"]);
 	});
 
 	it("运行中不允许分叉", async () => {
 		const source = await hub.openSession("/tmp/s1.jsonl");
 		hub.agent(source.id).busy = true;
-		await expect(hub.forkSession({ sessionFile: "/tmp/s1.jsonl", entryId: "e1" })).rejects.toThrow(
+		await expect(hub.forkSession({ sessionFile: "/tmp/s1.jsonl", beforeEntryId: "e1" })).rejects.toThrow(
 			"不能分叉",
 		);
 	});
 
-	it("消息找不到条目时报错", async () => {
+	it("分叉点不在分支上时报错", async () => {
 		await hub.openSession("/tmp/s1.jsonl");
-		await expect(hub.forkSession({ sessionFile: "/tmp/s1.jsonl", messageId: "m99" })).rejects.toThrow(
+		await expect(hub.forkSession({ sessionFile: "/tmp/s1.jsonl", beforeEntryId: "e99" })).rejects.toThrow(
 			"找不到消息对应的会话条目",
 		);
 	});
@@ -307,6 +368,58 @@ describe("空闲回收", () => {
 		agent.emit({ type: "settled", aborted: false });
 		await vi.advanceTimersByTimeAsync(IDLE_MS + 1);
 		expect(hub.has(snapshot.id)).toBe(false);
+	});
+
+	it("历史分页从末尾往更早取，游标缺失时报错", async () => {
+		const snapshot = await hub.openSession("/tmp/s1.jsonl");
+		const agent = hub.agent(snapshot.id);
+		for (const id of ["e1", "e2", "e3", "e4", "e5"]) {
+			agent.stored.push(messageEntry(id, id === "e1" ? null : `e${Number(id.slice(1)) - 1}`));
+		}
+		const first = await hub.entries(snapshot.id, undefined, 2);
+		expect(first.entries.map((entry) => entry.id)).toEqual(["e4", "e5"]);
+		expect(first.nextCursor).toBe("e4");
+		const second = await hub.entries(snapshot.id, first.nextCursor, 2);
+		expect(second.entries.map((entry) => entry.id)).toEqual(["e2", "e3"]);
+		expect(second.nextCursor).toBe("e2");
+		const last = await hub.entries(snapshot.id, second.nextCursor, 2);
+		expect(last.entries.map((entry) => entry.id)).toEqual(["e1"]);
+		expect(last.nextCursor).toBeUndefined();
+		await expect(hub.entries(snapshot.id, "nope", 2)).rejects.toThrow("找不到消息对应的会话条目");
+	});
+
+	it("取边界之后的条目只返回这一段", async () => {
+		const snapshot = await hub.openSession("/tmp/s1.jsonl");
+		const agent = hub.agent(snapshot.id);
+		for (const id of ["e1", "e2", "e3"]) {
+			agent.stored.push({
+				id,
+				parentId: id === "e1" ? null : `e${Number(id.slice(1)) - 1}`,
+				kind: "message",
+				timestamp: "2026-11-08T00:00:00Z",
+				message: {
+					role: "assistant",
+					content: [{ type: "text", text: id }],
+					provider: "p",
+					model: "m",
+					usage: {
+						input: 0,
+						output: 0,
+						cacheRead: 0,
+						cacheWrite: 0,
+						reasoning: 0,
+						totalTokens: 0,
+						cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+					},
+					stopReason: "stop",
+					timestamp: 1,
+				},
+			});
+		}
+		const result = await hub.entriesAfter(snapshot.id, "e1");
+		expect(result.entries.map((entry) => entry.id)).toEqual(["e2", "e3"]);
+		expect(result.leafId).toBe("e3");
+		await expect(hub.entriesAfter(snapshot.id, "e9")).rejects.toThrow("条目不在活动分支上");
 	});
 
 	it("读历史或取快照会续期", async () => {

@@ -6,8 +6,7 @@
  * 判定规则只写一份,避免界面在两条链路上各写一遍。
  */
 import type { ContentBlock, InputBlock, Message, ToolOutput } from "@facet/protocol";
-import { historyEntryId } from "./message-id.ts";
-import type { ChatView, MessageView, StreamedPart, ToolCallView } from "./state.ts";
+import type { ChatView, EntryView, StreamedPart, ToolCallView } from "./state.ts";
 
 /** 工具调用在投影里的状态。 */
 export type ToolPartStatus = "running" | "done" | "failed";
@@ -123,11 +122,12 @@ function streamParts(streaming: Readonly<Record<number, StreamedPart>>): Part[] 
 }
 
 /** 用户消息的正文段。图片没有可读文本,占一个标记。 */
-function userParts(message: MessageView): Part[] {
-	if (message.message.role !== "user") {
+function userParts(entryView: EntryView): Part[] {
+	const message = entryView.message;
+	if (message === undefined || message.role !== "user") {
 		return [];
 	}
-	return message.message.content.map((block, index) =>
+	return message.content.map((block, index) =>
 		block.type === "text"
 			? { kind: "text" as const, partId: `text:${index}`, text: block.text }
 			: { kind: "text" as const, partId: `text:${index}`, text: `[图片 ${block.mimeType}]` },
@@ -135,12 +135,13 @@ function userParts(message: MessageView): Part[] {
 }
 
 /** 正文与工具调用的排布:内容块按原顺序展开,工具调用位置即它在消息里的位置。 */
-function assistantParts(message: MessageView, calls: Readonly<Record<string, ToolCallView>>): Part[] {
-	if (message.message.role !== "assistant") {
+function assistantParts(entryView: EntryView, calls: Readonly<Record<string, ToolCallView>>): Part[] {
+	const message = entryView.message;
+	if (message === undefined || message.role !== "assistant") {
 		return [];
 	}
 	const parts: Part[] = [];
-	const blocks = message.message.content;
+	const blocks = message.content;
 	for (const block of blocks) {
 		if (block.type === "toolCall") {
 			const call = calls[block.id];
@@ -167,8 +168,8 @@ function assistantParts(message: MessageView, calls: Readonly<Record<string, Too
 		}
 	}
 	// 流式期间内容块还没到,用累积的增量补上
-	if (message.isStreaming && parts.length === 0) {
-		parts.push(...streamParts(message.streaming));
+	if (entryView.isStreaming && parts.length === 0) {
+		parts.push(...streamParts(entryView.streaming));
 	}
 	return parts;
 }
@@ -207,83 +208,89 @@ function mergeToolResult(item: TranscriptItem, message: Message): TranscriptItem
 export function toTranscript(view: ChatView): TranscriptItem[] {
 	const items: TranscriptItem[] = [];
 	const merged = new Map<string, number>();
-	for (const message of view.messages) {
-		const startedAt = message.message.timestamp > 0 ? message.message.timestamp : undefined;
-		const callDuration = message.message.role === "assistant" ? (message.message.durationMs ?? 0) : 0;
+	for (const entryView of view.items) {
+		// 视图接收全部类型的条目，目前只有带 message 的才参与渲染；其余条目留给以后的事件展示
+		if (entryView.message === undefined) {
+			continue;
+		}
+		const startedAt = entryView.message.timestamp > 0 ? entryView.message.timestamp : undefined;
+		const callDuration = entryView.message.role === "assistant" ? (entryView.message.durationMs ?? 0) : 0;
 		const base: TranscriptItem = {
 			kind: "message",
-			id: message.id,
-			entryId: historyEntryId(message.id),
-			role: message.message.role === "toolResult" ? "tool" : roleOf(message.message),
+			id: entryView.id,
+			entryId: entryView.entry?.id,
+			role: entryView.message.role === "toolResult" ? "tool" : roleOf(entryView.message),
 			parts: [],
-			isStreaming: message.isStreaming,
+			isStreaming: entryView.isStreaming,
 			startedAt,
 			endedAt: startedAt === undefined ? undefined : startedAt + callDuration,
 		};
 
-		if (message.message.role === "toolResult") {
-			const targetIndex = merged.get(message.message.callId);
+		if (entryView.message.role === "toolResult") {
+			const targetIndex = merged.get(entryView.message.callId);
 			const target = targetIndex === undefined ? undefined : items[targetIndex];
-			const patched = target ? mergeToolResult(target, message.message) : undefined;
+			const patched = target ? mergeToolResult(target, entryView.message) : undefined;
 			if (patched && targetIndex !== undefined) {
 				items[targetIndex] = patched;
 				continue;
 			}
-			items.push({ ...base, parts: [orphanToolPart(message.message)] });
+			items.push({ ...base, parts: [orphanToolPart(entryView.message)] });
 			continue;
 		}
 
-		if (message.message.role === "compactionSummary") {
+		if (entryView.message.role === "compactionSummary") {
 			items.push({
 				...base,
 				kind: "compaction",
 				role: undefined,
-				parts: [{ kind: "text", partId: "text:0", text: message.message.summary }],
+				parts: [{ kind: "text", partId: "text:0", text: entryView.message.summary }],
 			});
 			continue;
 		}
-		if (message.message.role === "branchSummary") {
+		if (entryView.message.role === "branchSummary") {
 			items.push({
 				...base,
 				kind: "branch",
 				role: undefined,
-				parts: [{ kind: "text", partId: "text:0", text: message.message.summary }],
+				parts: [{ kind: "text", partId: "text:0", text: entryView.message.summary }],
 			});
 			continue;
 		}
-		if (message.message.role === "bashExecution") {
+		if (entryView.message.role === "bashExecution") {
 			items.push({
 				...base,
 				role: "tool",
-				parts: [{ kind: "text", partId: "text:0", text: commandText(message.message) }],
+				parts: [{ kind: "text", partId: "text:0", text: commandText(entryView.message) }],
 			});
 			continue;
 		}
-		if (message.message.role === "custom") {
-			if (message.message.display) {
+		if (entryView.message.role === "custom") {
+			if (entryView.message.display) {
 				items.push({
 					...base,
 					role: "system",
-					parts: [{ kind: "text", partId: "text:0", text: message.message.content }],
+					parts: [{ kind: "text", partId: "text:0", text: entryView.message.content }],
 				});
 			}
 			continue;
 		}
-		if (message.message.role === "system" || message.message.role === "unknown") {
+		if (entryView.message.role === "system" || entryView.message.role === "unknown") {
 			continue;
 		}
 
-		if (message.message.role === "assistant" && message.message.stopReason === "error") {
+		if (entryView.message.role === "assistant" && entryView.message.stopReason === "error") {
 			items.push({
 				...base,
 				kind: "error",
-				parts: [{ kind: "text", partId: "text:0", text: message.message.errorMessage ?? "运行出错" }],
+				parts: [{ kind: "text", partId: "text:0", text: entryView.message.errorMessage ?? "运行出错" }],
 			});
 			continue;
 		}
 
 		const parts =
-			message.message.role === "assistant" ? assistantParts(message, view.toolCalls) : userParts(message);
+			entryView.message.role === "assistant"
+				? assistantParts(entryView, view.toolCalls)
+				: userParts(entryView);
 		const index = items.length;
 		items.push({ ...base, parts });
 		for (const part of parts) {

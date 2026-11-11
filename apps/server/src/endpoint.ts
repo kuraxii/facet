@@ -29,6 +29,7 @@ import { ProjectExistsError, ProjectNotFoundError, type ProjectStore } from "./p
 import {
 	type ActionSink,
 	ChannelNotFoundError,
+	SessionBoundaryNotFoundError,
 	SessionBusyError,
 	SessionEntryNotFoundError,
 	type SessionHub,
@@ -242,15 +243,10 @@ async function handleRequest(
 			return await openSession(context, params);
 		case "forkSession": {
 			const source = asObject(params);
-			const entryId = optionalString(source, "entryId");
-			const messageId = optionalString(source, "messageId");
-			if (entryId === undefined && messageId === undefined) {
-				throw new RequestError("bad_params", "entryId or messageId is required");
-			}
+			const beforeEntryId = optionalString(source, "beforeEntryId");
 			return await context.hub.forkSession({
 				sessionFile: requiredString(source, "sessionFile"),
-				...(entryId === undefined ? {} : { entryId }),
-				...(messageId === undefined ? {} : { messageId }),
+				...(beforeEntryId === undefined ? {} : { beforeEntryId }),
 				cwd: optionalString(source, "cwd"),
 			});
 		}
@@ -264,6 +260,13 @@ async function handleRequest(
 				requiredString(source, "sessionId"),
 				optionalString(source, "cursor"),
 				optionalNumber(source, "limit"),
+			);
+		}
+		case "entriesAfter": {
+			const source = asObject(params);
+			return await context.hub.entriesAfter(
+				requiredString(source, "sessionId"),
+				optionalString(source, "afterEntryId") ?? null,
 			);
 		}
 		case "subscribe": {
@@ -330,7 +333,11 @@ function toProtocolError(error: unknown): { code: ErrorCode; message: string } {
 	if (error instanceof ProjectExistsError || error instanceof ProjectNotFoundError) {
 		return { code: "rejected", message: error.message };
 	}
-	if (error instanceof SessionEntryNotFoundError || error instanceof SessionBusyError) {
+	if (
+		error instanceof SessionEntryNotFoundError ||
+		error instanceof SessionBoundaryNotFoundError ||
+		error instanceof SessionBusyError
+	) {
 		return { code: "rejected", message: error.message };
 	}
 	return { code: "internal", message: error instanceof Error ? error.message : String(error) };

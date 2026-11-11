@@ -26,12 +26,20 @@ export interface ServerConfig {
 	sessionIdleMs: number;
 	/** 设备展示名 */
 	hostName: string;
+	/** 是否输出开发期日志，由嵌入方在开发启动时打开 */
+	debug: boolean;
 }
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 0;
 const DEFAULT_REPLAY_LIMIT = 512;
 const DEFAULT_SESSION_IDLE_MS = 3000;
+
+/** 读取布尔开关，未设置或为空按关闭处理。 */
+function readFlag(value: string | undefined): boolean {
+	const normalized = value?.trim().toLowerCase();
+	return normalized === "1" || normalized === "true";
+}
 
 /** 按 XDG 规范取应用数据目录，非绝对路径的 XDG_DATA_HOME 按未设置处理。 */
 function defaultDataDir(env: Record<string, string | undefined>): string {
@@ -60,5 +68,6 @@ export function loadServerConfig(env: Record<string, string | undefined> = proce
 		replayLimit: readInt(env.FACET_REPLAY_LIMIT, DEFAULT_REPLAY_LIMIT) || DEFAULT_REPLAY_LIMIT,
 		sessionIdleMs: readInt(env.FACET_SESSION_IDLE_MS, DEFAULT_SESSION_IDLE_MS),
 		hostName: hostName && hostName.length > 0 ? hostName : "facet",
+		debug: readFlag(env.FACET_DEBUG),
 	};
 }

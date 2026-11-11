@@ -44,7 +44,7 @@ describe("分行", () => {
 			item({ id: "m3", role: "assistant", parts: [tool("tool:c1", "c1", 120)] }),
 			item({ id: "m4", role: "assistant", parts: [text("text:0", "看完了")] }),
 		]);
-		expect(rows.map((row) => row.kind)).toEqual(["user", "meta", "assistant"]);
+		expect(rows.map((row) => row.kind)).toEqual(["user", "meta", "assistant", "fork"]);
 		expect(rows[1]?.items.map((entry) => entry.id)).toEqual(["m2", "m3"]);
 		expect(rows[1]?.thinkingCount).toBe(1);
 		expect(rows[1]?.toolCount).toBe(1);
@@ -114,7 +114,7 @@ describe("分行", () => {
 			item({ id: "m4", role: "assistant", parts: [thinking("thinking:0", "再想")] }),
 			item({ id: "m5", role: "assistant", parts: [text("text:0", "再答")] }),
 		]);
-		expect(rows.map((row) => row.kind)).toEqual(["user", "meta", "assistant", "meta", "assistant"]);
+		expect(rows.map((row) => row.kind)).toEqual(["user", "meta", "assistant", "meta", "assistant", "fork"]);
 		expect(rows[2]?.id).toBe("m3");
 		expect(rows[4]?.id).toBe("m5");
 	});
@@ -140,7 +140,7 @@ describe("分行", () => {
 			item({ id: "m1", role: "assistant", parts: [tool("tool:c1", "c1", 40, { patch })] }),
 			item({ id: "m2", role: "assistant", parts: [text("text:0", "改好了")] }),
 		]);
-		expect(rows.map((row) => row.kind)).toEqual(["meta", "assistant", "diff"]);
+		expect(rows.map((row) => row.kind)).toEqual(["meta", "assistant", "diff", "fork"]);
 		expect(rows[2]?.id).toBe("diff:c1");
 		expect(rows[2]?.diffs[0]?.files).toEqual(["src/a.ts"]);
 		expect(rows[2]?.diffs[0]?.added).toBe(2);
@@ -153,7 +153,7 @@ describe("分行", () => {
 			item({ id: "m1", role: "user", parts: [text("text:0", "改一下")] }),
 			item({ id: "m2", role: "assistant", parts: [tool("tool:c1", "c1", 5, { patch })] }),
 		]);
-		expect(rows.map((row) => row.kind)).toEqual(["user", "meta", "diff"]);
+		expect(rows.map((row) => row.kind)).toEqual(["user", "meta", "diff", "fork"]);
 	});
 
 	it("下一轮开始时先收尾上一轮未显示完的改动行", () => {
@@ -163,7 +163,7 @@ describe("分行", () => {
 			item({ id: "m2", role: "user", parts: [text("text:0", "再来")] }),
 			item({ id: "m3", role: "assistant", parts: [text("text:0", "好")] }),
 		]);
-		expect(rows.map((row) => row.kind)).toEqual(["meta", "diff", "user", "assistant"]);
+		expect(rows.map((row) => row.kind)).toEqual(["meta", "diff", "user", "assistant", "fork"]);
 	});
 
 	it("带正文的答复携带工具时,改动行排在答复行之后", () => {
@@ -175,17 +175,32 @@ describe("分行", () => {
 				parts: [text("text:0", "改好了"), tool("tool:c1", "c1", 10, { patch })],
 			}),
 		]);
-		expect(rows.map((row) => row.kind)).toEqual(["assistant", "diff"]);
+		expect(rows.map((row) => row.kind)).toEqual(["assistant", "diff", "fork"]);
 		expect(rows[0]?.toolCount).toBe(1);
 	});
 
-	it("用户行带分叉目标,其余行不带", () => {
+	it("每一轮末尾各有一个分叉点", () => {
 		const rows = groupRows([
-			item({ id: "e:u1", role: "user", parts: [text("text:0", "问")] }),
-			item({ id: "m2", role: "assistant", parts: [text("text:0", "答")] }),
+			item({ id: "e:u1", entryId: "u1", role: "user", parts: [text("text:0", "问")] }),
+			item({ id: "e:a1", entryId: "a1", role: "assistant", parts: [text("text:0", "答")] }),
+			item({ id: "e:u2", entryId: "u2", role: "user", parts: [text("text:0", "再问")] }),
+			item({ id: "e:a2", entryId: "a2", role: "assistant", parts: [text("text:0", "再答")] }),
 		]);
-		expect(rows[0]?.forkTarget).toBe("e:u1");
-		expect(rows[1]?.forkTarget).toBeUndefined();
+		expect(rows.map((row) => row.kind)).toEqual(["user", "assistant", "fork", "user", "assistant", "fork"]);
+		// 第一轮的分叉点是下一轮开始处,也就是 fork 行之前的那个 user 条目的前一条
+		expect(rows[2]?.fork).toEqual({ beforeEntryId: "u2", needsSettle: false });
+		expect(rows[5]?.fork).toEqual({ beforeEntryId: undefined, needsSettle: true });
+		expect(rows[2]?.id).toBe("fork:e:u2");
+		expect(rows[5]?.id).toBe("fork:end");
+	});
+
+	it("下一轮的起始条目还没有定位时不放分叉点", () => {
+		const rows = groupRows([
+			item({ id: "e:u1", entryId: "u1", role: "user", parts: [text("text:0", "问")] }),
+			item({ id: "e:a1", entryId: "a1", role: "assistant", parts: [text("text:0", "答")] }),
+			item({ id: "m3", role: "user", parts: [text("text:0", "刚发出的")] }),
+		]);
+		expect(rows.map((row) => row.kind)).toEqual(["user", "assistant", "user", "fork"]);
 	});
 
 	it("分界项与系统提示各成一行说明", () => {
@@ -209,7 +224,7 @@ describe("思考段的归属", () => {
 			item({ id: "m1", role: "user", parts: [text("text:0", "问")] }),
 			item({ id: "m2", role: "assistant", parts: [thinking("thinking:0", "想"), text("text:1", "答")] }),
 		]);
-		expect(rows.map((row) => row.kind)).toEqual(["user", "assistant"]);
+		expect(rows.map((row) => row.kind)).toEqual(["user", "assistant", "fork"]);
 		expect(rows[1]?.items[0]?.parts.map((part) => part.kind)).toEqual(["thinking", "text"]);
 		expect(rows[1]?.thinkingCount).toBe(1);
 	});
@@ -228,7 +243,7 @@ describe("思考段的归属", () => {
 				parts: [thinking("thinking:0", "改好了"), text("text:1", "完成")],
 			}),
 		]);
-		expect(rows.map((row) => row.kind)).toEqual(["user", "meta", "assistant"]);
+		expect(rows.map((row) => row.kind)).toEqual(["user", "meta", "assistant", "fork"]);
 		expect(rows[1]?.thinkingCount).toBe(2);
 		expect(rows[1]?.toolCount).toBe(1);
 		expect(rows[2]?.items[0]?.parts.map((part) => part.kind)).toEqual(["text"]);
@@ -244,7 +259,7 @@ describe("思考段的归属", () => {
 				parts: [thinking("thinking:0", "再想"), text("text:1", "答"), tool("tool:c2", "c2", 5)],
 			}),
 		]);
-		expect(rows.map((row) => row.kind)).toEqual(["meta", "assistant"]);
+		expect(rows.map((row) => row.kind)).toEqual(["meta", "assistant", "fork"]);
 		expect(rows[1]?.items[0]?.parts.map((part) => part.kind)).toEqual(["text", "toolCall"]);
 	});
 
@@ -255,7 +270,7 @@ describe("思考段的归属", () => {
 			item({ id: "m3", role: "user", parts: [text("text:0", "再问")] }),
 			item({ id: "m4", role: "assistant", parts: [thinking("thinking:0", "想"), text("text:1", "再答")] }),
 		]);
-		expect(rows.map((row) => row.kind)).toEqual(["meta", "assistant", "user", "assistant"]);
+		expect(rows.map((row) => row.kind)).toEqual(["meta", "assistant", "user", "assistant", "fork"]);
 		expect(rows[3]?.thinkingCount).toBe(1);
 	});
 });

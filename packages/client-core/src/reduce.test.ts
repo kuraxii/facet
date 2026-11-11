@@ -37,8 +37,8 @@ describe("reduceChat", () => {
 			messageId: "m1",
 			message: assistantMessage("", "pending"),
 		});
-		expect(view.messages).toHaveLength(1);
-		expect(view.messages[0]?.isStreaming).toBe(true);
+		expect(view.items).toHaveLength(1);
+		expect(view.items[0]?.isStreaming).toBe(true);
 	});
 
 	it("按内容块下标累积增量", () => {
@@ -49,7 +49,7 @@ describe("reduceChat", () => {
 		});
 		view = reduceChat(view, { type: "chat/delta", messageId: "m1", partIndex: 0, kind: "text", delta: "你" });
 		view = reduceChat(view, { type: "chat/delta", messageId: "m1", partIndex: 0, kind: "text", delta: "好" });
-		expect(view.messages[0]?.streaming[0]?.text).toBe("你好");
+		expect(view.items[0]?.streaming[0]?.text).toBe("你好");
 	});
 
 	it("完成事件替换内容并清空增量", () => {
@@ -64,9 +64,9 @@ describe("reduceChat", () => {
 			messageId: "m1",
 			message: assistantMessage("你好", "stop"),
 		});
-		expect(view.messages[0]?.streaming).toEqual({});
-		expect(view.messages[0]?.isStreaming).toBe(false);
-		expect(view.messages[0]?.message.role).toBe("assistant");
+		expect(view.items[0]?.streaming).toEqual({});
+		expect(view.items[0]?.isStreaming).toBe(false);
+		expect(view.items[0]?.message?.role).toBe("assistant");
 	});
 
 	it("未知标识的增量不产生变化", () => {

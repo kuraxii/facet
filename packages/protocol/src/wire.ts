@@ -123,11 +123,12 @@ export interface RequestParams {
 	/** 打开已有会话并返回初始快照。 */
 	openSession: { sessionFile: string; cwd?: string };
 	/**
-	 * 从会话的某条消息分叉出新会话，返回新会话的初始快照。
+	 * 分叉出新会话，返回新会话的初始快照。
 	 *
-	 * 历史消息用 entryId 定位；本次连接产生的消息用 messageId，由设备在写盘之后换算成条目。
+	 * beforeEntryId 给出时复制到它之前的那个条目为止，界面用它按轮分叉；缺省时复制整条
+	 * 活动分支，也就是把当前对话整段带到新会话。
 	 */
-	forkSession: { sessionFile: string; entryId?: string; messageId?: string; cwd?: string };
+	forkSession: { sessionFile: string; beforeEntryId?: string; cwd?: string };
 	/** 取会话当前状态。 */
 	snapshot: { sessionId: string };
 	/**
@@ -137,6 +138,14 @@ export interface RequestParams {
 	 * nextCursor 缺省表示已经到最早。limit 缺省由设备决定。
 	 */
 	entries: { sessionId: string; cursor?: string; limit?: number };
+	/**
+	 * 取 afterEntryId 之后到叶子的条目,按从早到晚排列。
+	 *
+	 * 端点在本轮 settled 之后用它把实时消息提升为历史消息:设备从叶子沿 parentId 往回
+	 * 走到 afterEntryId,再把这一段反转返回。afterEntryId 缺省表示整条分支。
+	 * afterEntryId 不在活动分支上时设备侧拒绝,端点据此重新装载历史。
+	 */
+	entriesAfter: { sessionId: string; afterEntryId?: string };
 	/** 订阅通道。since 为该通道上一条已收到的序号。 */
 	subscribe: { channel: Channel; since?: number };
 	/** 取消订阅。 */
@@ -163,6 +172,8 @@ export interface RequestResults {
 	forkSession: SessionSnapshot;
 	snapshot: SessionSnapshot;
 	entries: { entries: Entry[]; nextCursor: string | undefined };
+	/** 末端为当前叶子,按从早到晚排列 */
+	entriesAfter: { entries: Entry[]; leafId: string | null };
 	subscribe: SubscribeResult;
 	unsubscribe: Record<string, never>;
 	models: { models: ModelInfo[] };

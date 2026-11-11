@@ -114,9 +114,80 @@ describe("SessionStore", () => {
 			{ id: "e2", parentId: "e1", kind: "model_change", timestamp: "2026-11-08T00:00:01Z" },
 		];
 		const view = store.replaceChat(chatChannel, entries);
-		expect(view.messages).toHaveLength(1);
-		expect(view.messages[0]?.id).toBe("e:e1");
-		expect(isHistoryMessageId(view.messages[0]?.id ?? "")).toBe(true);
+		// 全部类型的条目都进视图，只有 message 条目带消息
+		expect(view.items.map((item) => item.id)).toEqual(["e:e1", "e:e2"]);
+		expect(view.items.map((item) => item.entry?.kind)).toEqual(["message", "model_change"]);
+		expect(view.items[0]?.entry?.id).toBe("e1");
+		expect(view.items[1]?.message).toBeUndefined();
+		expect(isHistoryMessageId(view.items[0]?.id ?? "")).toBe(true);
+	});
+
+	it("实时消息按位置提升为历史消息并记下标识迁移", () => {
+		const store = new SessionStore();
+		store.ensureChat(chatChannel);
+		for (const messageId of ["m1", "m2"]) {
+			store.apply({
+				type: "action",
+				channel: chatChannel,
+				serverSeq: messageId === "m1" ? 1 : 2,
+				origin: undefined,
+				action: { type: "chat/messageAppended", messageId, message: assistant(messageId) },
+			});
+		}
+		const committed: Entry[] = [
+			{
+				id: "e9",
+				parentId: null,
+				kind: "message",
+				timestamp: "2026-11-08T00:00:00Z",
+				message: assistant("m1"),
+			},
+			{ id: "e10", parentId: "e9", kind: "usage", timestamp: "2026-11-08T00:00:01Z" },
+			{
+				id: "e11",
+				parentId: "e10",
+				kind: "message",
+				timestamp: "2026-11-08T00:00:02Z",
+				message: assistant("m2"),
+			},
+		];
+		expect(store.promote(chatChannel, committed)).toBe(true);
+		const view = store.chatView(chatChannel);
+		// usage 条目没有实时对应物，但同样留在视图里
+		expect(view?.items.map((item) => item.id)).toEqual(["e:e9", "e:e10", "e:e11"]);
+		expect(view?.items.map((item) => item.entry?.id)).toEqual(["e9", "e10", "e11"]);
+		expect(view?.items.map((item) => item.message === undefined)).toEqual([false, true, false]);
+		expect(view?.renames).toEqual({ m1: "e:e9", m2: "e:e11" });
+	});
+
+	it("条目数与实时消息不符时不提升", () => {
+		const store = new SessionStore();
+		store.ensureChat(chatChannel);
+		store.apply({
+			type: "action",
+			channel: chatChannel,
+			serverSeq: 1,
+			origin: undefined,
+			action: { type: "chat/messageAppended", messageId: "m1", message: assistant("一条") },
+		});
+		const committed: Entry[] = [
+			{
+				id: "e9",
+				parentId: null,
+				kind: "message",
+				timestamp: "2026-11-08T00:00:00Z",
+				message: assistant("一条"),
+			},
+			{
+				id: "e10",
+				parentId: "e9",
+				kind: "message",
+				timestamp: "2026-11-08T00:00:01Z",
+				message: assistant("多出来的"),
+			},
+		];
+		expect(store.promote(chatChannel, committed)).toBe(false);
+		expect(store.chatView(chatChannel)?.items.map((item) => item.id)).toEqual(["m1"]);
 	});
 
 	it("视图变化时通知订阅者并递增版本", () => {
@@ -167,6 +238,7 @@ describe("文本提取", () => {
 	it("流式期间优先用增量", () => {
 		const view = {
 			id: "m1",
+			entry: undefined,
 			message: assistant(""),
 			streaming: { 0: { kind: "text" as const, text: "写到一半" } },
 			isStreaming: true,

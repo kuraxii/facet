@@ -8,7 +8,15 @@
 import type { Part, ToolCallPart, TranscriptItem } from "@facet/client-core";
 
 /** 面板里一行的种类。 */
-export type RowKind = "user" | "assistant" | "meta" | "diff" | "error" | "divider";
+export type RowKind = "user" | "assistant" | "meta" | "diff" | "error" | "divider" | "fork";
+
+/** 一轮结束处的分叉点。 */
+export interface ForkPoint {
+	/** 下一轮第一条用户消息的 entry.id；缺省表示最后一轮，分叉取会话叶子 */
+	beforeEntryId: string | undefined;
+	/** 最后一轮的分叉要等本轮结束才能用 */
+	needsSettle: boolean;
+}
 
 /** 一次文件改动,来自带补丁的工具结果。 */
 export interface DiffChunk {
@@ -33,8 +41,8 @@ export interface DisplayRow {
 	id: string;
 	/** 组成这一行的渲染单元,只有一个时也保留数组 */
 	items: readonly TranscriptItem[];
-	/** 分叉目标的消息标识,只有用户行有 */
-	forkTarget: string | undefined;
+	/** 分叉点,只有分叉行有 */
+	fork: ForkPoint | undefined;
 	/** 组内工具调用次数,过程行的摘要素材 */
 	toolCount: number;
 	/** 组内思考段数 */
@@ -161,7 +169,7 @@ function metaRow(draft: GroupDraft): DisplayRow | undefined {
 		kind: "meta",
 		id: first.id,
 		items: draft.items,
-		forkTarget: undefined,
+		fork: undefined,
 		toolCount: draft.toolCount,
 		thinkingCount: draft.thinkingCount,
 		// 时长由这一轮的起止时间决定,不用工具耗时之和
@@ -182,12 +190,28 @@ function diffRow(diffs: readonly DiffChunk[]): DisplayRow | undefined {
 		kind: "diff",
 		id: `diff:${first.callId}`,
 		items: [],
-		forkTarget: undefined,
+		fork: undefined,
 		toolCount: 0,
 		thinkingCount: 0,
 		durationMs: undefined,
 		startedAt: undefined,
 		diffs,
+		isStreaming: false,
+	};
+}
+
+/** 一轮结束处的分叉行。标识按下一轮的起始项固定,流式追加时不变。 */
+function forkRow(id: string, fork: ForkPoint): DisplayRow {
+	return {
+		kind: "fork",
+		id,
+		items: [],
+		fork,
+		toolCount: 0,
+		thinkingCount: 0,
+		durationMs: undefined,
+		startedAt: undefined,
+		diffs: [],
 		isStreaming: false,
 	};
 }
@@ -200,7 +224,7 @@ function singleton(item: TranscriptItem, kind: RowKind): DisplayRow {
 		kind,
 		id: item.id,
 		items: [item],
-		forkTarget: kind === "user" ? item.id : undefined,
+		fork: undefined,
 		toolCount: draft.toolCount,
 		thinkingCount: draft.thinkingCount,
 		durationMs: undefined,
@@ -226,6 +250,8 @@ export function groupRows(items: readonly TranscriptItem[]): DisplayRow[] {
 	let turnEnd: number | undefined;
 	/** 已输出的过程行下标,答复行到了之后回头补上这一轮的总时长 */
 	let metaIndex: number | undefined;
+	/** 本轮已经输出的行数,为 0 时不产生分叉行 */
+	let turnRows = 0;
 
 	/** 记录一条的时间范围。 */
 	const track = (item: TranscriptItem): void => {
@@ -266,6 +292,7 @@ export function groupRows(items: readonly TranscriptItem[]): DisplayRow[] {
 		if (row) {
 			metaIndex = rows.length;
 			rows.push({ ...row, startedAt: turnStart });
+			turnRows += 1;
 			pending.push(...row.diffs);
 		}
 		group = undefined;
@@ -275,6 +302,7 @@ export function groupRows(items: readonly TranscriptItem[]): DisplayRow[] {
 		const row = diffRow(pending);
 		if (row) {
 			rows.push(row);
+			turnRows += 1;
 		}
 		pending = [];
 	};
@@ -284,6 +312,8 @@ export function groupRows(items: readonly TranscriptItem[]): DisplayRow[] {
 			flush();
 			endTurn();
 			flushDiffs();
+			// 压缩与分支摘要是一道分界,不在它们前面放分叉点
+			turnRows = 0;
 			rows.push(singleton(item, "divider"));
 			continue;
 		}
@@ -293,14 +323,21 @@ export function groupRows(items: readonly TranscriptItem[]): DisplayRow[] {
 			endTurn();
 			flushDiffs();
 			rows.push(singleton(item, "error"));
+			turnRows += 1;
 			continue;
 		}
 		if (item.role === "user") {
 			flush();
 			endTurn();
 			flushDiffs();
+			// 上一轮已经结束,这一轮还没开始:在这里放这一轮的分叉点
+			if (turnRows > 0 && item.entryId !== undefined) {
+				rows.push(forkRow(`fork:${item.id}`, { beforeEntryId: item.entryId, needsSettle: false }));
+			}
+			turnRows = 0;
 			track(item);
 			rows.push(singleton(item, "user"));
+			turnRows += 1;
 			continue;
 		}
 		if (item.role === "assistant" && hasText(item.parts)) {
@@ -316,6 +353,7 @@ export function groupRows(items: readonly TranscriptItem[]): DisplayRow[] {
 			endTurn();
 			const row = singleton(moved ? withoutThinking(item) : item, "assistant");
 			rows.push({ ...row, diffs: [] });
+			turnRows += 1;
 			pending.push(...row.diffs);
 			flushDiffs();
 			continue;
@@ -327,6 +365,10 @@ export function groupRows(items: readonly TranscriptItem[]): DisplayRow[] {
 	flush();
 	endTurn();
 	flushDiffs();
+	// 最后一轮的分叉点取会话叶子,要等这一轮结束才能用
+	if (turnRows > 0) {
+		rows.push(forkRow("fork:end", { beforeEntryId: undefined, needsSettle: true }));
+	}
 	return rows;
 }
 

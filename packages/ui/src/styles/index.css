@@ -2376,6 +2376,12 @@ svg.fl {
 	font-size: 11px;
 }
 
+.set-badge.is-custom {
+	border-color: var(--line2);
+	background: var(--surface3);
+	color: var(--t2);
+}
+
 .set-badge.is-off {
 	border-color: var(--err);
 	color: var(--err);

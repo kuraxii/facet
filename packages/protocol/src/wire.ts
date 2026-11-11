@@ -10,6 +10,7 @@ import type { Channel } from "./channel.ts";
 import type { ModelInfo, ModelRef, ProviderInfo, ThinkingLevel } from "./model.ts";
 import type { ProjectInfo } from "./project.ts";
 import type { Entry, SessionSnapshot, SessionSummary } from "./session.ts";
+import type { FacetSettings } from "./settings.ts";
 
 /** 线格式版本。不兼容的改动递增此值,端点据此拒绝握手。 */
 export const PROTOCOL_VERSION = 1;
@@ -182,6 +183,10 @@ export interface RequestParams {
 	renameSession: { sessionFile: string; name?: string };
 	/** 删除会话文件。不可恢复。 */
 	deleteSession: { sessionFile: string };
+	/** 读一整份界面偏好设置。 */
+	getSettings: Record<string, never>;
+	/** 整份替换界面偏好设置，返回设备实际存下的那份。 */
+	updateSettings: { settings: FacetSettings };
 }
 
 /** 每条请求的应答数据。 */
@@ -207,6 +212,8 @@ export interface RequestResults {
 	revealProject: Record<string, never>;
 	renameSession: Record<string, never>;
 	deleteSession: Record<string, never>;
+	getSettings: { settings: FacetSettings };
+	updateSettings: { settings: FacetSettings };
 }
 
 /** 请求方法名。 */

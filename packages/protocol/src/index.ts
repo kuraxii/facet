@@ -13,4 +13,5 @@ export type * from "./model.ts";
 export type * from "./project.ts";
 export type * from "./request.ts";
 export type * from "./session.ts";
+export * from "./settings.ts";
 export * from "./wire.ts";

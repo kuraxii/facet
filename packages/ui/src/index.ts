@@ -14,6 +14,12 @@ export { QueueStrip } from "./chat/QueueStrip.tsx";
 export type { SessionSidebarProps, ThemeName } from "./chat/SessionSidebar.tsx";
 export { SessionSidebar } from "./chat/SessionSidebar.tsx";
 export type {
+	SettingsDataSource,
+	SettingsPageProps,
+	SettingsSection,
+} from "./chat/SettingsPage.tsx";
+export { SettingsPage } from "./chat/SettingsPage.tsx";
+export type {
 	GroupKey,
 	HostState,
 	SessionDot,

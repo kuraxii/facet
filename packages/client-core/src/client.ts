@@ -13,8 +13,11 @@ import type {
 	Capability,
 	Channel,
 	Entry,
+	FacetSettings,
+	ModelInfo,
 	ModelRef,
 	ProjectInfo,
+	ProviderInfo,
 	RequestMethod,
 	RequestParams,
 	RequestResults,
@@ -184,6 +187,30 @@ export class SessionClient {
 	/** 记下目录的信任决定。 */
 	async setProjectTrust(cwd: string, trusted: boolean): Promise<void> {
 		await this.transport.request("setProjectTrust", { cwd, trusted });
+	}
+
+	/** 提供方清单，含是否已配置凭证与模型数量。 */
+	async listProviders(): Promise<ProviderInfo[]> {
+		const result = await this.transport.request("providers", {});
+		return result.providers;
+	}
+
+	/** 模型清单，指定提供方时只列该提供方的模型。 */
+	async listModels(providerId?: string): Promise<ModelInfo[]> {
+		const result = await this.transport.request("models", providerId === undefined ? {} : { providerId });
+		return result.models;
+	}
+
+	/** 读设备上保存的界面偏好设置。 */
+	async getSettings(): Promise<FacetSettings> {
+		const result = await this.transport.request("getSettings", {});
+		return result.settings;
+	}
+
+	/** 整份保存界面偏好设置，返回设备实际存下的那份。 */
+	async saveSettings(settings: FacetSettings): Promise<FacetSettings> {
+		const result = await this.transport.request("updateSettings", { settings });
+		return result.settings;
 	}
 
 	/** 在设备的文件管理器里打开项目目录。 */

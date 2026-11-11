@@ -13,6 +13,8 @@ const api = {
 	/** 默认打开的项目目录 */
 	projectDir: readArgument("facet-project"),
 	platform: readArgument("facet-platform") || process.platform,
+	/** 应用版本，关于页展示用 */
+	appVersion: readArgument("facet-version"),
 	/** 打开系统的目录选择窗口,取消时返回空 */
 	pickDirectory: (): Promise<string | undefined> => ipcRenderer.invoke("facet:pick-directory"),
 };

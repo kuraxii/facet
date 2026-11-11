@@ -30,6 +30,7 @@ function createWindow(endpoint: string): BrowserWindow {
 				`--facet-endpoint=${endpoint}`,
 				`--facet-project=${projectDir}`,
 				`--facet-platform=${process.platform}`,
+				`--facet-version=${app.getVersion()}`,
 			],
 		},
 	});

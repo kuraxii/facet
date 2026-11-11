@@ -16,6 +16,7 @@ import {
 	type Capability,
 	type Channel,
 	type ErrorCode,
+	type FacetSettings,
 	type HelloFrame,
 	PROTOCOL_VERSION,
 	parseChannel,
@@ -38,6 +39,7 @@ import {
 	type SessionHub,
 	SessionNotFoundError,
 } from "./session-hub.ts";
+import type { SettingsStore } from "./settings-store.ts";
 
 const ENDPOINT_PATH = "/endpoint";
 const MAX_FRAME_BYTES = 32 * 1024 * 1024;
@@ -68,6 +70,7 @@ interface EndpointContext {
 	readonly factory: PiAgentFactory;
 	readonly hub: SessionHub;
 	readonly projectStore: ProjectStore;
+	readonly settingsStore: SettingsStore;
 	readonly hostId: string;
 	readonly connections: Set<Connection>;
 }
@@ -325,6 +328,16 @@ async function handleRequest(
 			context.factory.setProjectTrust(await resolveProjectDirectory(requiredString(source, "cwd")), trusted);
 			return {};
 		}
+		case "getSettings":
+			return { settings: context.settingsStore.get() };
+		case "updateSettings": {
+			const source = asObject(params);
+			const settings = source.settings;
+			if (typeof settings !== "object" || settings === null) {
+				throw new RequestError("bad_params", "settings must be an object");
+			}
+			return { settings: await context.settingsStore.save(settings as FacetSettings) };
+		}
 		case "renameSession": {
 			const source = asObject(params);
 			await context.hub.renameSession(requiredString(source, "sessionFile"), optionalString(source, "name"));
@@ -471,6 +484,7 @@ export async function startEndpoint(options: {
 	factory: PiAgentFactory;
 	hub: SessionHub;
 	projectStore: ProjectStore;
+	settingsStore: SettingsStore;
 	hostId: string;
 }): Promise<EndpointHandle> {
 	const context: EndpointContext = {
@@ -478,6 +492,7 @@ export async function startEndpoint(options: {
 		factory: options.factory,
 		hub: options.hub,
 		projectStore: options.projectStore,
+		settingsStore: options.settingsStore,
 		hostId: options.hostId,
 		connections: new Set(),
 	};

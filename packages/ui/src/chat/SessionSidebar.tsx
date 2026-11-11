@@ -63,6 +63,10 @@ export interface SessionSidebarProps {
 	onDeleteSession?: (path: string) => Promise<void>;
 	/** 切换深浅色 */
 	onToggleTheme: () => void;
+	/** 打开设置页 */
+	onOpenSettings?: () => void;
+	/** 当前是否停在设置页 */
+	isSettingsOpen?: boolean;
 }
 
 /** 会话行状态点的样式类。 */
@@ -125,6 +129,8 @@ export function SessionSidebar({
 	onRenameSession,
 	onDeleteSession,
 	onToggleTheme,
+	onOpenSettings,
+	isSettingsOpen = false,
 }: SessionSidebarProps) {
 	const [keyword, setKeyword] = useState("");
 	const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -787,7 +793,12 @@ export function SessionSidebar({
 			</ul>
 
 			<footer className="sb-foot">
-				<button type="button" className="sb-foot-btn" disabled title="尚未实现">
+				<button
+					type="button"
+					className={isSettingsOpen ? "sb-foot-btn is-on" : "sb-foot-btn"}
+					aria-pressed={isSettingsOpen}
+					onClick={() => onOpenSettings?.()}
+				>
 					设置
 				</button>
 				<button

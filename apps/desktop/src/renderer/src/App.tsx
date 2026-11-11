@@ -1,5 +1,11 @@
 import { chatActivity, type DeviceHandshake, SessionClient, toTranscript } from "@facet/client-core";
-import type { Maintenance, ProjectInfo, SessionSummary } from "@facet/protocol";
+import {
+	DEFAULT_SETTINGS,
+	type FacetSettings,
+	type Maintenance,
+	type ProjectInfo,
+	type SessionSummary,
+} from "@facet/protocol";
 import { WsTransport } from "@facet/transport/ws";
 import {
 	ArrowDownIcon,
@@ -10,6 +16,9 @@ import {
 	EmptyState,
 	QueueStrip,
 	SessionSidebar,
+	type SettingsDataSource,
+	SettingsPage,
+	type SettingsSection,
 	type SidebarHost,
 	samePath,
 	type ThemeName,
@@ -24,6 +33,8 @@ interface FacetBridge {
 	endpoint: string;
 	projectDir: string;
 	platform: string;
+	/** 应用版本 */
+	appVersion: string;
 	/** 打开系统的目录选择窗口,取消时返回空 */
 	pickDirectory: () => Promise<string | undefined>;
 }
@@ -41,7 +52,7 @@ const client = new SessionClient({ transport, pageSize: 200 });
 
 type Phase = "connecting" | "ready" | "failed";
 
-/** 主题在本地保存键 */
+/** 主题在本地保存键，设备上的设置读不到时先用它，避免启动时闪一下 */
 const THEME_KEY = "facet.theme";
 
 /** 等重试期间给对话面板的提示,其余维护动作不显示。 */
@@ -53,7 +64,46 @@ function retryOf(maintenance: Maintenance | undefined): { attempt: number; maxAt
 
 /** 读取上次选择的主题，缺省深色 */
 function readTheme(): ThemeName {
-	return localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark";
+	const stored = localStorage.getItem(THEME_KEY);
+	if (stored === "light") {
+		return "light";
+	}
+	if (stored === "system") {
+		return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+	}
+	return "dark";
+}
+
+/**
+ * 把外观设置写到根节点。
+ *
+ * 主题、字体与字号通过 CSS 变量下发，正文、代码块与差异视图都读同一组变量；减少动效时
+ * 根节点带 data-motion="reduced"，样式据此关掉过渡。
+ */
+function applyAppearance(appearance: FacetSettings["appearance"]): void {
+	const root = document.documentElement;
+	root.dataset.theme = appearance.theme === "light" ? "light" : "dark";
+	root.dataset.motion = appearance.reducedMotion ? "reduced" : "full";
+	if (appearance.bodyFont.trim().length > 0) {
+		root.style.setProperty("--font-sans", appearance.bodyFont.trim());
+	} else {
+		root.style.removeProperty("--font-sans");
+	}
+	if (appearance.codeFont.trim().length > 0) {
+		root.style.setProperty("--font-mono", appearance.codeFont.trim());
+	} else {
+		root.style.removeProperty("--font-mono");
+	}
+	root.style.setProperty("--text-size", `${appearance.fontSize}px`);
+	localStorage.setItem(THEME_KEY, appearance.theme);
+}
+
+/** 把设置里的主题换成实际生效的深浅色。 */
+function resolveTheme(mode: FacetSettings["appearance"]["theme"]): ThemeName {
+	if (mode === "system") {
+		return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+	}
+	return mode;
 }
 
 /** 把一条项目并进列表：同一个标识就替换，没有就追加，保持原有顺序。 */
@@ -105,6 +155,11 @@ export function App() {
 	const [createCwd, setCreateCwd] = useState(bridge.projectDir);
 	const [draft, setDraft] = useState("");
 	const [theme, setTheme] = useState<ThemeName>(readTheme);
+	/** 设备上的偏好设置；没读到之前先用缺省值 */
+	const [settings, setSettings] = useState<FacetSettings>(DEFAULT_SETTINGS);
+	/** 主区域显示对话还是设置 */
+	const [view, setView] = useState<"chat" | "settings">("chat");
+	const [settingsSection, setSettingsSection] = useState<SettingsSection>("providers");
 	/** 打开、新建、分叉失败时的提示,带重试入口 */
 	const [sessionError, setSessionError] = useState<{ message: string; retry: () => void } | undefined>(
 		undefined,
@@ -115,12 +170,40 @@ export function App() {
 	/** 会话切换的序号,只有最后一次选择的结果会落到界面上 */
 	const switchSeq = useRef(0);
 
+	// 设置变化时应用外观，并把有效主题同步给侧栏的切换按钮
 	useEffect(() => {
-		document.documentElement.dataset.theme = theme;
-		localStorage.setItem(THEME_KEY, theme);
-	}, [theme]);
+		applyAppearance(settings.appearance);
+		setTheme(resolveTheme(settings.appearance.theme));
+	}, [settings.appearance]);
 
 	const listSeq = useRef(0);
+
+	/** 设置页的数据来源，接到设备上。 */
+	const settingsData = useMemo<SettingsDataSource>(
+		() => ({
+			loadSettings: () => client.getSettings(),
+			saveSettings: (next) => client.saveSettings(next),
+			loadProviders: () => client.listProviders(),
+		}),
+		[],
+	);
+
+	/**
+	 * 切换深浅色。
+	 *
+	 * 外观立刻生效，同时写回设置；写不进去时界面按新主题显示，下次启动回到原来的值。
+	 */
+	const toggleTheme = useCallback(() => {
+		const next = theme === "dark" ? "light" : "dark";
+		setTheme(next);
+		const changed: FacetSettings = {
+			...settings,
+			appearance: { ...settings.appearance, theme: next },
+		};
+		setSettings(changed);
+		applyAppearance(changed.appearance);
+		void client.saveSettings(changed).catch(() => undefined);
+	}, [settings, theme]);
 
 	/** 拉一次项目清单。失败只标脏,已经显示的项目保持原样。 */
 	const refreshProjects = useCallback(async (): Promise<void> => {
@@ -271,6 +354,8 @@ export function App() {
 			client.attach(handshake);
 			setDevice(handshake);
 			await refreshProjects();
+			// 设置读不到时用缺省值，界面照常可用
+			setSettings(await client.getSettings().catch(() => DEFAULT_SETTINGS));
 			const pool = (await refreshSessions()) ?? [];
 			const newest = pickStartupSession(pool, bridge.projectDir);
 			if (newest) {
@@ -493,11 +578,28 @@ export function App() {
 				onRevealProject={revealProject}
 				onRenameSession={renameSession}
 				onDeleteSession={deleteSession}
-				onToggleTheme={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
+				onToggleTheme={toggleTheme}
+				onOpenSettings={() => {
+					setView("settings");
+				}}
+				isSettingsOpen={view === "settings"}
 			/>
 
 			<main className="main">
-				{session === undefined ? (
+				{view === "settings" ? (
+					<SettingsPage
+						section={settingsSection}
+						onSectionChange={setSettingsSection}
+						onClose={() => setView("chat")}
+						data={settingsData}
+						onSettingsApplied={setSettings}
+						about={{
+							appVersion: bridge.appVersion,
+							runtime: `Electron ${bridge.platform}`,
+							endpoint: bridge.endpoint,
+						}}
+					/>
+				) : session === undefined ? (
 					<div className="empty-wrap">
 						{errorBar}
 						<EmptyState

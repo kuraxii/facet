@@ -7,9 +7,17 @@
  */
 import type { Action, ActionOrigin } from "./action.ts";
 import type { Channel } from "./channel.ts";
-import type { ModelInfo, ModelRef, ProviderInfo, ThinkingLevel } from "./model.ts";
+import type {
+	CustomProviderInfo,
+	CustomProviderInput,
+	ModelInfo,
+	ModelRef,
+	ProviderInfo,
+	ThinkingLevel,
+} from "./model.ts";
 import type { ProjectInfo } from "./project.ts";
 import type { Entry, SessionSnapshot, SessionSummary } from "./session.ts";
+import type { FacetSettings } from "./settings.ts";
 
 /** 线格式版本。不兼容的改动递增此值,端点据此拒绝握手。 */
 export const PROTOCOL_VERSION = 1;
@@ -162,6 +170,51 @@ export interface RequestParams {
 	renameProject: { id: string; name?: string };
 	/** 移除项目。 */
 	removeProject: { id: string };
+	/**
+	 * 查某个目录的项目级资源需不需要信任。
+	 *
+	 * hasProjectResources 为假时目录里没有需要信任的资源，直接打开即可；为真而 trusted 缺省
+	 * 表示还没做过决定，界面要先问一次。
+	 */
+	projectTrust: { cwd: string };
+	/** 记下某个目录的信任决定。 */
+	setProjectTrust: { cwd: string; trusted: boolean };
+	/** 在设备的文件管理器里打开某个已添加项目的目录。 */
+	revealProject: { id: string };
+	/**
+	 * 会话改名。
+	 *
+	 * 已打开的会话直接改运行态；没有打开的会话离线追加一条会话信息条目，不为此启动会话。
+	 * 名称为空时去掉自定义名。
+	 */
+	renameSession: { sessionFile: string; name?: string };
+	/** 删除会话文件。不可恢复。 */
+	deleteSession: { sessionFile: string };
+	/** 读一整份界面偏好设置。 */
+	getSettings: Record<string, never>;
+	/** 整份替换界面偏好设置，返回设备实际存下的那份。 */
+	updateSettings: { settings: FacetSettings };
+	/**
+	 * 保存提供方凭证。
+	 *
+	 * 只接受 API key 形式的凭证，密钥写入 pi 的凭证文件，读回来时只给出是否已配置与来源，
+	 * 不回传密钥内容。
+	 */
+	saveCredential: { providerId: string; apiKey: string };
+	/** 删除提供方凭证。 */
+	deleteCredential: { providerId: string };
+	/** 生成一份诊断文本，用于附在问题反馈里。凭证与令牌不在其中。 */
+	diagnostics: Record<string, never>;
+	/** 用指定模型发一次最小请求，确认凭证、地址与网络是否可用。 */
+	testModel: { provider: string; id: string };
+	/** 设置提供方的接口地址，空串恢复默认。返回更新后的提供方清单。 */
+	setProviderBaseUrl: { providerId: string; baseUrl: string };
+	/** 列出用户自己添加的提供方。 */
+	listCustomProviders: Record<string, never>;
+	/** 新增或修改一个自定义提供方，返回更新后的清单。 */
+	saveCustomProvider: { provider: CustomProviderInput };
+	/** 删除一个自定义提供方，连同它的凭证，返回更新后的清单。 */
+	removeCustomProvider: { providerId: string };
 }
 
 /** 每条请求的应答数据。 */
@@ -182,6 +235,21 @@ export interface RequestResults {
 	addProject: ProjectInfo;
 	renameProject: ProjectInfo;
 	removeProject: Record<string, never>;
+	projectTrust: { hasProjectResources: boolean; trusted: boolean | undefined };
+	setProjectTrust: Record<string, never>;
+	revealProject: Record<string, never>;
+	renameSession: Record<string, never>;
+	deleteSession: Record<string, never>;
+	getSettings: { settings: FacetSettings };
+	updateSettings: { settings: FacetSettings };
+	saveCredential: { providers: ProviderInfo[] };
+	deleteCredential: { providers: ProviderInfo[] };
+	diagnostics: { text: string };
+	testModel: { ok: boolean; latencyMs: number; message?: string };
+	setProviderBaseUrl: { providers: ProviderInfo[] };
+	listCustomProviders: { providers: CustomProviderInfo[] };
+	saveCustomProvider: { providers: CustomProviderInfo[] };
+	removeCustomProvider: { providers: CustomProviderInfo[] };
 }
 
 /** 请求方法名。 */

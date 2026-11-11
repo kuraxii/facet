@@ -3,8 +3,9 @@
  *
  * 居中的对话框：填写名称，用系统文件管理器选目录，提交后由宿主写入项目清单。
  */
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CloseIcon, FolderIcon, FolderPlusIcon } from "../transcript/icons.tsx";
+import { RequestEpoch } from "./request-epoch.ts";
 
 /** 对话框参数。 */
 export interface CreateProjectDialogProps {
@@ -27,10 +28,13 @@ export function CreateProjectDialog({ isOpen, onPickFolder, onCreate, onClose }:
 	const [error, setError] = useState<string | undefined>(undefined);
 	const nameRef = useRef<HTMLInputElement>(null);
 	const cardRef = useRef<HTMLDivElement>(null);
+	/** 本次打开的轮次，关闭或重开都会推进它 */
+	const epoch = useRef(new RequestEpoch());
 
-	// 每次打开都从空白开始
+	// 每次打开都从空白开始，并换一个新的轮次
 	useEffect(() => {
 		if (isOpen) {
+			epoch.current.advance();
 			setName("");
 			setCwd(undefined);
 			setIsNameFocused(false);
@@ -40,6 +44,12 @@ export function CreateProjectDialog({ isOpen, onPickFolder, onCreate, onClose }:
 			nameRef.current?.focus();
 		}
 	}, [isOpen]);
+
+	/** 关闭并作废在途请求。 */
+	const close = useCallback(() => {
+		epoch.current.advance();
+		onClose();
+	}, [onClose]);
 
 	// 点对话框外面关闭
 	useEffect(() => {
@@ -51,11 +61,11 @@ export function CreateProjectDialog({ isOpen, onPickFolder, onCreate, onClose }:
 			if (card !== null && event.target instanceof Node && card.contains(event.target)) {
 				return;
 			}
-			onClose();
+			close();
 		};
 		document.addEventListener("pointerdown", onPointerDown);
 		return () => document.removeEventListener("pointerdown", onPointerDown);
-	}, [isOpen, onClose]);
+	}, [isOpen, close]);
 
 	useEffect(() => {
 		if (!isOpen) {
@@ -63,46 +73,64 @@ export function CreateProjectDialog({ isOpen, onPickFolder, onCreate, onClose }:
 		}
 		const onKeyDown = (event: KeyboardEvent) => {
 			if (event.key === "Escape") {
-				onClose();
+				close();
 			}
 		};
 		document.addEventListener("keydown", onKeyDown);
 		return () => document.removeEventListener("keydown", onKeyDown);
-	}, [isOpen, onClose]);
+	}, [isOpen, close]);
 
 	if (!isOpen) {
 		return null;
 	}
 
 	const pickFolder = async () => {
+		const mine = epoch.current.advance();
 		setIsPicking(true);
 		setError(undefined);
 		try {
 			const picked = await onPickFolder();
-			if (picked !== undefined) {
+			if (epoch.current.matches(mine) && picked !== undefined) {
 				setCwd(picked);
 			}
 		} catch (pickError) {
-			setError(pickError instanceof Error ? pickError.message : String(pickError));
+			if (epoch.current.matches(mine)) {
+				setError(pickError instanceof Error ? pickError.message : String(pickError));
+			}
 		} finally {
-			setIsPicking(false);
+			if (epoch.current.matches(mine)) {
+				setIsPicking(false);
+			}
 		}
 	};
 
+	/**
+	 * 提交。
+	 *
+	 * 成功后只在轮次未变时关掉窗口：等待期间关掉又重开时，这次结果属于上一个对话框。
+	 * 失败时错误只写回发起它的那一次。
+	 */
 	const submit = async () => {
 		if (cwd === undefined || isSubmitting) {
 			return;
 		}
+		const mine = epoch.current.advance();
 		setIsSubmitting(true);
 		setError(undefined);
 		try {
 			const trimmed = name.trim();
 			await onCreate({ cwd, name: trimmed.length > 0 ? trimmed : undefined });
-			onClose();
+			if (epoch.current.matches(mine)) {
+				close();
+			}
 		} catch (createError) {
-			setError(createError instanceof Error ? createError.message : String(createError));
+			if (epoch.current.matches(mine)) {
+				setError(createError instanceof Error ? createError.message : String(createError));
+			}
 		} finally {
-			setIsSubmitting(false);
+			if (epoch.current.matches(mine)) {
+				setIsSubmitting(false);
+			}
 		}
 	};
 
@@ -111,7 +139,7 @@ export function CreateProjectDialog({ isOpen, onPickFolder, onCreate, onClose }:
 			<div ref={cardRef} className="dialog" role="dialog" aria-modal="true" aria-label="创建项目">
 				<div className="dialog-head">
 					<h2 className="dialog-title">创建项目</h2>
-					<button type="button" className="dialog-close" aria-label="关闭" onClick={onClose}>
+					<button type="button" className="dialog-close" aria-label="关闭" onClick={close}>
 						<CloseIcon size={18} />
 					</button>
 				</div>
@@ -157,7 +185,7 @@ export function CreateProjectDialog({ isOpen, onPickFolder, onCreate, onClose }:
 				{error === undefined ? null : <p className="dialog-error">{error}</p>}
 
 				<div className="dialog-actions">
-					<button type="button" className="dialog-cancel" onClick={onClose}>
+					<button type="button" className="dialog-cancel" onClick={close}>
 						取消
 					</button>
 					<button

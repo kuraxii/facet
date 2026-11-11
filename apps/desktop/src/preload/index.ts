@@ -13,8 +13,13 @@ const api = {
 	/** 默认打开的项目目录 */
 	projectDir: readArgument("facet-project"),
 	platform: readArgument("facet-platform") || process.platform,
+	/** 应用版本，关于页展示用 */
+	appVersion: readArgument("facet-version"),
 	/** 打开系统的目录选择窗口,取消时返回空 */
 	pickDirectory: (): Promise<string | undefined> => ipcRenderer.invoke("facet:pick-directory"),
+	/** 用系统的保存窗口把一段文本写到文件,取消时返回 false */
+	saveText: (suggestedName: string, text: string): Promise<boolean> =>
+		ipcRenderer.invoke("facet:save-text", suggestedName, text),
 };
 
 contextBridge.exposeInMainWorld("facet", api);

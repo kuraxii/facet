@@ -6,6 +6,7 @@ function item(overrides: Partial<TranscriptItem> & Pick<TranscriptItem, "id" | "
 	return {
 		kind: "message",
 		entryId: undefined,
+		stopReason: undefined,
 		parts: [],
 		isStreaming: false,
 		startedAt: undefined,

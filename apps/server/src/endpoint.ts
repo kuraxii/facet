@@ -6,15 +6,18 @@
  * 断线时该端的订阅全部解除,会话本身继续在设备上运行。
  */
 import { randomUUID } from "node:crypto";
+import { realpath, stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import { isAbsolute } from "node:path";
-import type { PiAgentFactory } from "@facet/agent";
+import { InvalidProviderError, type PiAgentFactory } from "@facet/agent";
 import {
 	type Action,
 	type ActionFrame,
 	type Capability,
 	type Channel,
+	type CustomProviderInfo,
 	type ErrorCode,
+	type FacetSettings,
 	type HelloFrame,
 	PROTOCOL_VERSION,
 	parseChannel,
@@ -25,16 +28,20 @@ import {
 } from "@facet/protocol";
 import { WebSocket, WebSocketServer } from "ws";
 import type { ServerConfig } from "./config.ts";
+import { buildDiagnostics } from "./diagnostics.ts";
 import { ProjectExistsError, ProjectNotFoundError, type ProjectStore } from "./project-store.ts";
+import { RevealFailedError, revealInFileManager } from "./reveal.ts";
 import {
 	type ActionSink,
 	ChannelNotFoundError,
 	SessionBoundaryNotFoundError,
 	SessionBusyError,
 	SessionEntryNotFoundError,
+	SessionFileMissingError,
 	type SessionHub,
 	SessionNotFoundError,
 } from "./session-hub.ts";
+import type { SettingsStore } from "./settings-store.ts";
 
 const ENDPOINT_PATH = "/endpoint";
 const MAX_FRAME_BYTES = 32 * 1024 * 1024;
@@ -65,6 +72,7 @@ interface EndpointContext {
 	readonly factory: PiAgentFactory;
 	readonly hub: SessionHub;
 	readonly projectStore: ProjectStore;
+	readonly settingsStore: SettingsStore;
 	readonly hostId: string;
 	readonly connections: Set<Connection>;
 }
@@ -177,53 +185,50 @@ async function applyAction(context: EndpointContext, channel: Channel, action: A
 	if (!parsed) {
 		throw new RequestError("unknown_channel", `unsupported channel: ${channel}`);
 	}
-	const sessionId = parsed.id;
-	switch (action.type) {
-		case "chat/turnStarted": {
-			const agent = context.hub.agent(sessionId);
-			if (agent.isStreaming && action.streamingBehavior === undefined) {
-				throw new RequestError("rejected", "session is running, streamingBehavior is required");
-			}
-			await agent.prompt(action.text, {
-				images: action.images,
-				streamingBehavior: action.streamingBehavior,
-			});
-			return;
+	// 同一会话的动作串行执行,执行期间持有会话,不会被空闲回收
+	await context.hub.withSession(parsed.id, async (agent) => {
+		switch (action.type) {
+			case "chat/turnStarted":
+				if (agent.isStreaming && action.streamingBehavior === undefined) {
+					throw new RequestError("rejected", "session is running, streamingBehavior is required");
+				}
+				// prompt 在运行开始后返回,这里不会挂到整轮结束
+				await agent.prompt(action.text, {
+					images: action.images,
+					streamingBehavior: action.streamingBehavior,
+				});
+				return;
+			case "chat/turnCancelled":
+				await agent.abort();
+				return;
+			case "session/pendingMessageSet":
+				if (action.kind === "steering") {
+					await agent.steer(action.text);
+				} else {
+					await agent.followUp(action.text);
+				}
+				return;
+			case "session/queueCleared":
+				agent.clearQueue();
+				return;
+			case "session/titleChanged":
+				agent.setName(action.title);
+				return;
+			case "session/configChanged":
+				if (action.model) {
+					await agent.setModel(action.model, { persist: action.persist });
+				}
+				if (action.thinkingLevel) {
+					agent.setThinkingLevel(action.thinkingLevel, { persist: action.persist });
+				}
+				if (action.activeToolNames) {
+					agent.setActiveTools(action.activeToolNames);
+				}
+				return;
+			default:
+				throw new RequestError("unknown_method", `action is produced by the device: ${action.type}`);
 		}
-		case "chat/turnCancelled":
-			await context.hub.agent(sessionId).abort();
-			return;
-		case "chat/pendingMessageSet": {
-			const agent = context.hub.agent(sessionId);
-			if (action.kind === "steering") {
-				await agent.steer(action.text);
-			} else {
-				await agent.followUp(action.text);
-			}
-			return;
-		}
-		case "chat/queueCleared":
-			context.hub.agent(sessionId).clearQueue();
-			return;
-		case "session/titleChanged":
-			context.hub.agent(sessionId).setName(action.title);
-			return;
-		case "session/configChanged": {
-			const agent = context.hub.agent(sessionId);
-			if (action.model) {
-				await agent.setModel(action.model, { persist: action.persist });
-			}
-			if (action.thinkingLevel) {
-				agent.setThinkingLevel(action.thinkingLevel, { persist: action.persist });
-			}
-			if (action.activeToolNames) {
-				agent.setActiveTools(action.activeToolNames);
-			}
-			return;
-		}
-		default:
-			throw new RequestError("unknown_method", `action is produced by the device: ${action.type}`);
-	}
+	});
 }
 
 async function handleRequest(
@@ -300,10 +305,7 @@ async function handleRequest(
 			return { projects: [...context.projectStore.list()] };
 		case "addProject": {
 			const source = asObject(params);
-			const cwd = requiredString(source, "cwd");
-			if (!isAbsolute(cwd)) {
-				throw new RequestError("bad_params", "cwd must be an absolute path");
-			}
+			const cwd = await resolveProjectDirectory(requiredString(source, "cwd"));
 			return await context.projectStore.add({ cwd, name: optionalString(source, "name") });
 		}
 		case "renameProject": {
@@ -315,9 +317,142 @@ async function handleRequest(
 			await context.projectStore.remove(requiredString(source, "id"));
 			return {};
 		}
+		case "projectTrust": {
+			const source = asObject(params);
+			return context.factory.projectTrust(await resolveProjectDirectory(requiredString(source, "cwd")));
+		}
+		case "setProjectTrust": {
+			const source = asObject(params);
+			const trusted = source.trusted;
+			if (typeof trusted !== "boolean") {
+				throw new RequestError("bad_params", "trusted must be a boolean");
+			}
+			context.factory.setProjectTrust(await resolveProjectDirectory(requiredString(source, "cwd")), trusted);
+			return {};
+		}
+		case "getSettings":
+			return { settings: context.settingsStore.get() };
+		case "updateSettings": {
+			const source = asObject(params);
+			const settings = source.settings;
+			if (typeof settings !== "object" || settings === null) {
+				throw new RequestError("bad_params", "settings must be an object");
+			}
+			return { settings: await context.settingsStore.save(settings as FacetSettings) };
+		}
+		case "diagnostics": {
+			const [sessions, settings] = await Promise.all([
+				context.factory.listSessions(),
+				Promise.resolve(context.settingsStore.get()),
+			]);
+			return {
+				text: await buildDiagnostics({
+					protocolVersion: PROTOCOL_VERSION,
+					hostId: context.hostId,
+					hostName: context.config.hostName,
+					agentDir: context.factory.agentDir,
+					dataDir: context.config.dataDir,
+					sessionDir: context.factory.sessionDir,
+					sessionCount: sessions.length,
+					projects: context.projectStore.list().map((project) => ({ cwd: project.cwd, name: project.name })),
+					providers: context.factory.providers(),
+					settings,
+					now: Date.now(),
+				}),
+			};
+		}
+		case "listCustomProviders":
+			return { providers: await context.factory.customProviders() };
+		case "saveCustomProvider": {
+			const source = asObject(params);
+			const provider = asObject(source.provider);
+			await context.factory.saveCustomProvider({
+				id: requiredString(provider, "id"),
+				name: requiredString(provider, "name"),
+				baseUrl: requiredString(provider, "baseUrl"),
+				api: requiredString(provider, "api"),
+				models: Array.isArray(provider.models) ? (provider.models as CustomProviderInfo["models"]) : [],
+			});
+			return { providers: await context.factory.customProviders() };
+		}
+		case "removeCustomProvider": {
+			const source = asObject(params);
+			await context.factory.removeCustomProvider(requiredString(source, "providerId"));
+			return { providers: await context.factory.customProviders() };
+		}
+		case "setProviderBaseUrl": {
+			const source = asObject(params);
+			await context.factory.setProviderBaseUrl(
+				requiredString(source, "providerId"),
+				optionalString(source, "baseUrl") ?? "",
+			);
+			return { providers: context.factory.providers() };
+		}
+		case "testModel": {
+			const source = asObject(params);
+			return await context.factory.testModel({
+				provider: requiredString(source, "provider"),
+				id: requiredString(source, "id"),
+			});
+		}
+		case "saveCredential": {
+			const source = asObject(params);
+			await context.factory.saveCredential(
+				requiredString(source, "providerId"),
+				requiredString(source, "apiKey"),
+			);
+			return { providers: context.factory.providers() };
+		}
+		case "deleteCredential": {
+			const source = asObject(params);
+			await context.factory.deleteCredential(requiredString(source, "providerId"));
+			return { providers: context.factory.providers() };
+		}
+		case "renameSession": {
+			const source = asObject(params);
+			await context.hub.renameSession(requiredString(source, "sessionFile"), optionalString(source, "name"));
+			return {};
+		}
+		case "deleteSession": {
+			const source = asObject(params);
+			await context.hub.deleteSession(requiredString(source, "sessionFile"));
+			return {};
+		}
+		case "revealProject": {
+			const source = asObject(params);
+			const id = requiredString(source, "id");
+			const project = context.projectStore.get(id);
+			if (project === undefined) {
+				throw new ProjectNotFoundError(id);
+			}
+			await revealInFileManager(project.cwd);
+			return {};
+		}
 		default:
 			throw new RequestError("unknown_method", `unknown method: ${method}`);
 	}
+}
+
+/**
+ * 校验并统一项目目录。
+ *
+ * 目录不存在或不是目录时直接拒绝；符号链接与 `..` 一律换成实际路径，同一个目录只认一个标识。
+ */
+async function resolveProjectDirectory(cwd: string): Promise<string> {
+	if (!isAbsolute(cwd)) {
+		throw new RequestError("bad_params", `项目目录必须是绝对路径:${cwd}`);
+	}
+	let target: string;
+	try {
+		target = await realpath(cwd);
+	} catch {
+		throw new RequestError("rejected", `项目目录不存在:${cwd}`);
+	}
+	const info = await stat(target).catch(() => undefined);
+	if (info === undefined || !info.isDirectory()) {
+		throw new RequestError("rejected", `不是目录:${cwd}`);
+	}
+	return target;
 }
 
 function toProtocolError(error: unknown): { code: ErrorCode; message: string } {
@@ -330,13 +465,21 @@ function toProtocolError(error: unknown): { code: ErrorCode; message: string } {
 	if (error instanceof ChannelNotFoundError) {
 		return { code: "unknown_channel", message: error.message };
 	}
-	if (error instanceof ProjectExistsError || error instanceof ProjectNotFoundError) {
+	if (error instanceof InvalidProviderError) {
+		return { code: "rejected", message: error.message };
+	}
+	if (
+		error instanceof ProjectExistsError ||
+		error instanceof ProjectNotFoundError ||
+		error instanceof RevealFailedError
+	) {
 		return { code: "rejected", message: error.message };
 	}
 	if (
 		error instanceof SessionEntryNotFoundError ||
 		error instanceof SessionBoundaryNotFoundError ||
-		error instanceof SessionBusyError
+		error instanceof SessionBusyError ||
+		error instanceof SessionFileMissingError
 	) {
 		return { code: "rejected", message: error.message };
 	}
@@ -414,6 +557,7 @@ export async function startEndpoint(options: {
 	factory: PiAgentFactory;
 	hub: SessionHub;
 	projectStore: ProjectStore;
+	settingsStore: SettingsStore;
 	hostId: string;
 }): Promise<EndpointHandle> {
 	const context: EndpointContext = {
@@ -421,6 +565,7 @@ export async function startEndpoint(options: {
 		factory: options.factory,
 		hub: options.hub,
 		projectStore: options.projectStore,
+		settingsStore: options.settingsStore,
 		hostId: options.hostId,
 		connections: new Set(),
 	};

@@ -7,8 +7,20 @@ export type { ComposerProps } from "./chat/Composer.tsx";
 export { Composer } from "./chat/Composer.tsx";
 export type { CreateProjectDialogProps } from "./chat/CreateProjectDialog.tsx";
 export { CreateProjectDialog } from "./chat/CreateProjectDialog.tsx";
+export type { EmptyStateProps } from "./chat/EmptyState.tsx";
+export { EmptyState } from "./chat/EmptyState.tsx";
+export type { ProviderFormProps } from "./chat/ProviderForm.tsx";
+export { ProviderForm } from "./chat/ProviderForm.tsx";
+export type { QueueStripProps } from "./chat/QueueStrip.tsx";
+export { QueueStrip } from "./chat/QueueStrip.tsx";
 export type { SessionSidebarProps, ThemeName } from "./chat/SessionSidebar.tsx";
 export { SessionSidebar } from "./chat/SessionSidebar.tsx";
+export type {
+	SettingsDataSource,
+	SettingsPageProps,
+	SettingsSection,
+} from "./chat/SettingsPage.tsx";
+export { SettingsPage } from "./chat/SettingsPage.tsx";
 export type {
 	GroupKey,
 	HostState,
@@ -28,6 +40,8 @@ export {
 	sessionTitle,
 	shortTime,
 } from "./chat/sidebar-model.ts";
+export type { TrustDialogProps } from "./chat/TrustDialog.tsx";
+export { TrustDialog } from "./chat/TrustDialog.tsx";
 export type { StickToBottom } from "./chat/use-stick-to-bottom.ts";
 export { useStickToBottom } from "./chat/use-stick-to-bottom.ts";
 export type { CodeBlockShape } from "./markdown/code-block-state.ts";
@@ -37,7 +51,7 @@ export type { MarkdownProps } from "./markdown/Markdown.tsx";
 export { Markdown } from "./markdown/Markdown.tsx";
 export type { DiffChunk, DisplayRow, ForkPoint, RowKind } from "./transcript/group.ts";
 export { formatDuration, groupRows, metaSummary } from "./transcript/group.ts";
-export { ArrowDownIcon } from "./transcript/icons.tsx";
+export { ArrowDownIcon, CloseIcon } from "./transcript/icons.tsx";
 export type { ChatTranscriptProps } from "./transcript/rows.tsx";
 export { ChatTranscript } from "./transcript/rows.tsx";
 export { foldOutput, toolStatusText, toolTarget } from "./transcript/tool-text.ts";

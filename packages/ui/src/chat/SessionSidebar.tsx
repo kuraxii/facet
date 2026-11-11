@@ -35,6 +35,8 @@ export interface SessionSidebarProps {
 	activeFile: string | undefined;
 	/** 正在运行的会话文件路径 */
 	runningFile: string | undefined;
+	/** 这个会话此刻的状态点：运行中或压缩中 */
+	runningDot?: SessionDot | undefined;
 	/** 没有选中项目时新建会话落在的目录 */
 	createCwd: string;
 	/** 当前主题 */
@@ -47,13 +49,34 @@ export interface SessionSidebarProps {
 	canCreate: boolean;
 	/** 打开添加项目 */
 	onAddProject: () => void;
+	/** 项目列表上一次刷新失败，过滤器里给出重试入口 */
+	isProjectsStale?: boolean;
+	/** 重新拉取项目列表 */
+	onRefreshProjects?: () => void;
+	/** 重命名项目，名称为空时恢复目录名，失败时抛错 */
+	onRenameProject?: (id: string, name: string | undefined) => Promise<void>;
+	/** 移除项目，失败时抛错 */
+	onRemoveProject?: (id: string) => Promise<void>;
+	/** 在设备的文件管理器里打开项目目录，失败时抛错 */
+	onRevealProject?: (id: string) => Promise<void>;
+	/** 会话改名，失败时抛错 */
+	onRenameSession?: (path: string, name: string | undefined) => Promise<void>;
+	/** 删除会话，失败时抛错 */
+	onDeleteSession?: (path: string) => Promise<void>;
 	/** 切换深浅色 */
 	onToggleTheme: () => void;
+	/** 打开设置页 */
+	onOpenSettings?: () => void;
+	/** 当前是否停在设置页 */
+	isSettingsOpen?: boolean;
 }
 
-/** 会话行状态点的样式类。 */
+/** 会话行状态点的样式类。压缩中用强调色常亮，运行中用警告色呼吸。 */
 function dotClass(dot: SessionDot): string {
-	return dot === "running" ? "dot is-warn pulse" : "dot is-off";
+	if (dot === "running") {
+		return "dot is-warn pulse";
+	}
+	return dot === "compacting" ? "dot is-acc" : "dot is-off";
 }
 
 /** 设备状态点的样式类。 */
@@ -97,13 +120,23 @@ export function SessionSidebar({
 	projects: storedProjects,
 	activeFile,
 	runningFile,
+	runningDot,
 	createCwd,
 	theme,
 	onSelect,
 	onCreate,
 	canCreate,
 	onAddProject,
+	isProjectsStale = false,
+	onRefreshProjects,
+	onRenameProject,
+	onRemoveProject,
+	onRevealProject,
+	onRenameSession,
+	onDeleteSession,
 	onToggleTheme,
+	onOpenSettings,
+	isSettingsOpen = false,
 }: SessionSidebarProps) {
 	const [keyword, setKeyword] = useState("");
 	const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -114,6 +147,26 @@ export function SessionSidebar({
 	const [pickedCwd, setPickedCwd] = useState<string | undefined>(undefined);
 	/** 过滤器是否切到全部项目 */
 	const [showsAll, setShowsAll] = useState(false);
+	/** 展开了操作面板的项目标识 */
+	const [menuId, setMenuId] = useState<string | undefined>(undefined);
+	/** 正在改名的项目与输入中的名字 */
+	const [renaming, setRenaming] = useState<{ id: string; value: string } | undefined>(undefined);
+	/** 正在确认移除的项目标识 */
+	const [removingId, setRemovingId] = useState<string | undefined>(undefined);
+	/** 项目操作进行中，期间不接受重复提交 */
+	const [isProjectBusy, setIsProjectBusy] = useState(false);
+	/** 项目操作失败的提示，显示在操作面板里 */
+	const [projectError, setProjectError] = useState<string | undefined>(undefined);
+	/** 展开了操作面板的会话文件 */
+	const [sessionMenuPath, setSessionMenuPath] = useState<string | undefined>(undefined);
+	/** 正在改名的会话与输入中的名字 */
+	const [sessionRename, setSessionRename] = useState<{ path: string; value: string } | undefined>(undefined);
+	/** 正在确认删除的会话文件 */
+	const [sessionDeletePath, setSessionDeletePath] = useState<string | undefined>(undefined);
+	/** 会话操作进行中 */
+	const [isSessionBusy, setIsSessionBusy] = useState(false);
+	/** 会话操作失败的提示 */
+	const [sessionMenuError, setSessionMenuError] = useState<string | undefined>(undefined);
 
 	const filterRef = useRef<HTMLDivElement>(null);
 	const panelRef = useRef<HTMLDivElement>(null);
@@ -131,10 +184,11 @@ export function SessionSidebar({
 				hosts,
 				projects: storedProjects,
 				runningFile,
+				runningDot,
 				projectCwd: scopeCwd,
 				keyword,
 			}),
-		[sessions, hosts, storedProjects, runningFile, scopeCwd, keyword],
+		[sessions, hosts, storedProjects, runningFile, runningDot, scopeCwd, keyword],
 	);
 
 	const currentProject: SidebarProject | undefined =
@@ -156,6 +210,10 @@ export function SessionSidebar({
 
 	const closeFilter = useCallback((restoreFocus: boolean) => {
 		setIsFilterOpen(false);
+		setMenuId(undefined);
+		setRenaming(undefined);
+		setRemovingId(undefined);
+		setProjectError(undefined);
 		if (restoreFocus) {
 			triggerRef.current?.focus();
 		}
@@ -241,8 +299,75 @@ export function SessionSidebar({
 		setPickedCwd(cwd);
 		setShowsAll(cwd === undefined);
 		setIsFilterOpen(false);
+		setMenuId(undefined);
 		setProjectKeyword("");
 		triggerRef.current?.focus();
+	};
+
+	/**
+	 * 跑一次项目操作。
+	 *
+	 * 失败时把错误留在操作面板里，面板与列表都不动；成功后收起面板。
+	 */
+	const runProjectAction = async (work: () => Promise<void>): Promise<void> => {
+		setIsProjectBusy(true);
+		setProjectError(undefined);
+		try {
+			await work();
+			setMenuId(undefined);
+			setRenaming(undefined);
+			setRemovingId(undefined);
+		} catch (error) {
+			setProjectError(error instanceof Error ? error.message : String(error));
+		} finally {
+			setIsProjectBusy(false);
+		}
+	};
+
+	/** 收起会话操作面板并清掉其中的临时状态。 */
+	const closeSessionMenu = (): void => {
+		setSessionMenuPath(undefined);
+		setSessionRename(undefined);
+		setSessionDeletePath(undefined);
+		setSessionMenuError(undefined);
+	};
+
+	/** 跑一次会话操作，失败时把错误留在面板里。 */
+	const runSessionMenuAction = async (work: () => Promise<void>): Promise<void> => {
+		setIsSessionBusy(true);
+		setSessionMenuError(undefined);
+		try {
+			await work();
+			closeSessionMenu();
+		} catch (error) {
+			setSessionMenuError(error instanceof Error ? error.message : String(error));
+		} finally {
+			setIsSessionBusy(false);
+		}
+	};
+
+	const submitSessionRename = async (): Promise<void> => {
+		const target = sessionRename;
+		if (target === undefined) {
+			return;
+		}
+		const trimmed = target.value.trim();
+		await runSessionMenuAction(async () => {
+			await onRenameSession?.(target.path, trimmed.length > 0 ? trimmed : undefined);
+		});
+	};
+
+	const submitRename = async (cwd: string): Promise<void> => {
+		const target = renaming;
+		if (target === undefined) {
+			return;
+		}
+		const trimmed = target.value.trim();
+		await runProjectAction(async () => {
+			await onRenameProject?.(target.id, trimmed.length > 0 ? trimmed : undefined);
+		});
+		// 改名后过滤器上的名字跟着变，当前范围保持在这个目录
+		setPickedCwd(cwd);
 	};
 
 	const openSession = (session: SidebarSession): void => {
@@ -341,22 +466,151 @@ export function SessionSidebar({
 							</button>
 							{projectMatches.map((project) => {
 								const isOn = !showsAll && scopeCwd !== undefined && samePath(project.cwd, scopeCwd);
+								// 操作面板只对添加过的项目开放，会话目录里顺带出现的目录没有可改的记录
+								const canManage = project.id !== undefined && project.host === undefined;
+								const isMenuOpen = canManage && menuId === project.id;
 								return (
-									<button
-										type="button"
-										key={project.cwd}
-										className={isOn ? "sb-opt is-on" : "sb-opt"}
-										aria-pressed={isOn}
-										title={project.cwd}
-										onClick={() => selectProject(project.cwd)}
-									>
-										<FolderIcon size={13} />
-										<span className="sb-opt-name ell">{project.name}</span>
-										<span className="sb-opt-meta mono">{project.sessionCount}</span>
-									</button>
+									<div key={project.cwd} className="sb-opt-item">
+										<div className="sb-opt-row">
+											<button
+												type="button"
+												className={isOn ? "sb-opt is-on" : "sb-opt"}
+												aria-pressed={isOn}
+												title={project.cwd}
+												onClick={() => selectProject(project.cwd)}
+											>
+												<FolderIcon size={13} />
+												<span className="sb-opt-name ell">{project.name}</span>
+												<span className="sb-opt-meta mono">{project.sessionCount}</span>
+											</button>
+											{canManage ? (
+												<button
+													type="button"
+													className="sb-opt-more"
+													aria-label="项目操作"
+													aria-expanded={isMenuOpen}
+													onClick={() => {
+														setProjectError(undefined);
+														setRenaming(undefined);
+														setRemovingId(undefined);
+														setMenuId(isMenuOpen ? undefined : project.id);
+													}}
+												>
+													⋯
+												</button>
+											) : null}
+										</div>
+
+										{isMenuOpen ? (
+											<div className="sb-opt-menu">
+												{renaming === undefined ? null : (
+													<label className="sb-rename">
+														<input
+															className="sb-rename-input"
+															value={renaming.value}
+															onChange={(event) =>
+																setRenaming({ id: renaming.id, value: event.target.value })
+															}
+															onKeyDown={(event) => {
+																if (event.key === "Enter") {
+																	void submitRename(project.cwd);
+																}
+																if (event.key === "Escape") {
+																	setRenaming(undefined);
+																}
+															}}
+															placeholder="项目名称"
+															aria-label="项目名称"
+														/>
+														<button
+															type="button"
+															className="sb-opt-action"
+															disabled={isProjectBusy}
+															onClick={() => void submitRename(project.cwd)}
+														>
+															保存
+														</button>
+													</label>
+												)}
+
+												{removingId === project.id ? (
+													<div className="sb-confirm">
+														<span className="sb-confirm-text">移除后会话文件保留,项目可以重新添加</span>
+														<div className="sb-confirm-actions">
+															<button
+																type="button"
+																className="sb-opt-action is-danger"
+																disabled={isProjectBusy}
+																onClick={() => {
+																	const id = project.id;
+																	if (id === undefined) {
+																		return;
+																	}
+																	void runProjectAction(async () => {
+																		await onRemoveProject?.(id);
+																		// 移除的正好是当前范围时退回全部项目
+																		if (scopeCwd !== undefined && samePath(project.cwd, scopeCwd)) {
+																			setPickedCwd(undefined);
+																			setShowsAll(true);
+																		}
+																	});
+																}}
+															>
+																移除
+															</button>
+															<button
+																type="button"
+																className="sb-opt-action"
+																onClick={() => setRemovingId(undefined)}
+															>
+																取消
+															</button>
+														</div>
+													</div>
+												) : (
+													<div className="sb-menu-actions">
+														<button
+															type="button"
+															className="sb-menu-item"
+															onClick={() => setRenaming({ id: project.id ?? "", value: project.name })}
+														>
+															重命名
+														</button>
+														<button
+															type="button"
+															className="sb-menu-item"
+															disabled={isProjectBusy}
+															onClick={() =>
+																void runProjectAction(async () => onRevealProject?.(project.id ?? ""))
+															}
+														>
+															在文件管理器中打开
+														</button>
+														<button
+															type="button"
+															className="sb-menu-item is-danger"
+															onClick={() => setRemovingId(project.id)}
+														>
+															移除
+														</button>
+													</div>
+												)}
+
+												{projectError === undefined ? null : <p className="sb-menu-error">{projectError}</p>}
+											</div>
+										) : null}
+									</div>
 								);
 							})}
 							{projectMatches.length === 0 ? <p className="sb-opt-empty">没有匹配的项目</p> : null}
+							{isProjectsStale ? (
+								<div className="sb-opt-stale">
+									<span className="sb-opt-name ell">项目列表没刷新成功</span>
+									<button type="button" className="sb-opt-action" onClick={() => onRefreshProjects?.()}>
+										刷新
+									</button>
+								</div>
+							) : null}
 						</div>
 						<button
 							type="button"
@@ -406,24 +660,125 @@ export function SessionSidebar({
 							<span>{group.label}</span>
 							<span className="mono">{group.sessions.length}</span>
 						</h2>
-						{group.sessions.map((session) => (
-							<button
-								type="button"
-								key={session.path}
-								className={session.path === activeFile ? "sb-row is-active" : "sb-row"}
-								aria-current={session.path === activeFile}
-								onClick={() => openSession(session)}
-								disabled={session.isPlaceholder === true}
-								title={session.title}
-							>
-								<i className={dotClass(session.dot)} />
-								<span className="sb-row-title ell">{session.title}</span>
-								{scopeCwd === undefined && session.host === undefined ? (
-									<span className="sb-row-proj ell">{session.project}</span>
-								) : null}
-								<span className="sb-row-time mono">{shortTime(session.modified)}</span>
-							</button>
-						))}
+						{group.sessions.map((session) => {
+							const isMenuOpen = sessionMenuPath === session.path;
+							const isRenaming = isMenuOpen && sessionRename !== undefined;
+							return (
+								<div key={session.path} className="sb-row-item">
+									<div className="sb-row-wrap">
+										<button
+											type="button"
+											className={session.path === activeFile ? "sb-row is-active" : "sb-row"}
+											aria-current={session.path === activeFile}
+											onClick={() => openSession(session)}
+											disabled={session.isPlaceholder === true}
+											title={session.title}
+										>
+											<i className={dotClass(session.dot)} />
+											<span className="sb-row-title ell">{session.title}</span>
+											{scopeCwd === undefined && session.host === undefined ? (
+												<span className="sb-row-proj ell">{session.project}</span>
+											) : null}
+											<span className="sb-row-time mono">{shortTime(session.modified)}</span>
+										</button>
+										<button
+											type="button"
+											className="sb-row-more"
+											aria-label="会话操作"
+											aria-expanded={isMenuOpen}
+											onClick={() => {
+												setSessionMenuError(undefined);
+												setSessionRename(undefined);
+												setSessionDeletePath(undefined);
+												setSessionMenuPath(isMenuOpen ? undefined : session.path);
+											}}
+										>
+											⋯
+										</button>
+									</div>
+
+									{isMenuOpen ? (
+										<div className="sb-opt-menu">
+											{isRenaming ? (
+												<label className="sb-rename">
+													<input
+														className="sb-rename-input"
+														value={sessionRename.value}
+														onChange={(event) =>
+															setSessionRename({ path: sessionRename.path, value: event.target.value })
+														}
+														onKeyDown={(event) => {
+															if (event.key === "Enter") {
+																void submitSessionRename();
+															}
+															if (event.key === "Escape") {
+																setSessionRename(undefined);
+															}
+														}}
+														placeholder="会话名称"
+														aria-label="会话名称"
+													/>
+													<button
+														type="button"
+														className="sb-opt-action"
+														disabled={isSessionBusy}
+														onClick={() => void submitSessionRename()}
+													>
+														保存
+													</button>
+												</label>
+											) : sessionDeletePath === session.path ? (
+												<div className="sb-confirm">
+													<span className="sb-confirm-text">删除后会话文件不可恢复</span>
+													<div className="sb-confirm-actions">
+														<button
+															type="button"
+															className="sb-opt-action is-danger"
+															disabled={isSessionBusy}
+															onClick={() =>
+																void runSessionMenuAction(async () => {
+																	await onDeleteSession?.(session.path);
+																})
+															}
+														>
+															删除
+														</button>
+														<button
+															type="button"
+															className="sb-opt-action"
+															onClick={() => setSessionDeletePath(undefined)}
+														>
+															取消
+														</button>
+													</div>
+												</div>
+											) : (
+												<div className="sb-menu-actions">
+													<button
+														type="button"
+														className="sb-menu-item"
+														onClick={() => setSessionRename({ path: session.path, value: session.title })}
+													>
+														重命名
+													</button>
+													<button
+														type="button"
+														className="sb-menu-item is-danger"
+														onClick={() => setSessionDeletePath(session.path)}
+													>
+														删除
+													</button>
+												</div>
+											)}
+
+											{sessionMenuError === undefined ? null : (
+												<p className="sb-menu-error">{sessionMenuError}</p>
+											)}
+										</div>
+									) : null}
+								</div>
+							);
+						})}
 					</section>
 				))}
 			</div>
@@ -445,7 +800,12 @@ export function SessionSidebar({
 			</ul>
 
 			<footer className="sb-foot">
-				<button type="button" className="sb-foot-btn" disabled title="尚未实现">
+				<button
+					type="button"
+					className={isSettingsOpen ? "sb-foot-btn is-on" : "sb-foot-btn"}
+					aria-pressed={isSettingsOpen}
+					onClick={() => onOpenSettings?.()}
+				>
 					设置
 				</button>
 				<button

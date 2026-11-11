@@ -1,4 +1,6 @@
-import { basename, resolve } from "node:path";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, join, resolve } from "node:path";
 import type { Entry, SessionEvent, SessionEventListener, SessionSnapshot } from "@facet/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -110,7 +112,8 @@ class FakeAgent implements HubAgent {
 			file: this.file,
 			cwd: "/tmp",
 			name: `会话 ${this.id}`,
-			status: this.busy ? "running" : "idle",
+			phase: this.busy ? "running" : "idle",
+			maintenance: undefined,
 			model: undefined,
 			thinkingLevel: "medium",
 			availableThinkingLevels: ["medium"],
@@ -131,6 +134,13 @@ class FakeAgent implements HubAgent {
 			},
 			modelFallbackMessage: undefined,
 		};
+	}
+
+	/** 用例调用 setName 之后记录下来的名字 */
+	renamed: string | undefined;
+
+	setName(name: string): void {
+		this.renamed = name;
 	}
 
 	dispose(): void {
@@ -422,6 +432,31 @@ describe("空闲回收", () => {
 		await expect(hub.entriesAfter(snapshot.id, "e9")).rejects.toThrow("条目不在活动分支上");
 	});
 
+	it("持有期间到点也不回收,归还后才回收", async () => {
+		const snapshot = await hub.createSession();
+		const agent = hub.agent(snapshot.id);
+		const lease = hub.hold(snapshot.id);
+		await vi.advanceTimersByTimeAsync(IDLE_MS * 3);
+		expect(hub.has(snapshot.id)).toBe(true);
+		expect(agent.disposed).toBe(false);
+		lease.release();
+		await vi.advanceTimersByTimeAsync(IDLE_MS + 1);
+		expect(hub.has(snapshot.id)).toBe(false);
+		expect(agent.disposed).toBe(true);
+	});
+
+	it("持有期间的显式释放等归还后再执行", async () => {
+		const snapshot = await hub.createSession();
+		const agent = hub.agent(snapshot.id);
+		const lease = hub.hold(snapshot.id);
+		hub.release(snapshot.id);
+		expect(hub.has(snapshot.id)).toBe(true);
+		expect(agent.disposed).toBe(false);
+		lease.release();
+		expect(hub.has(snapshot.id)).toBe(false);
+		expect(agent.disposed).toBe(true);
+	});
+
 	it("读历史或取快照会续期", async () => {
 		const snapshot = await hub.openSession("/tmp/s1.jsonl");
 		await vi.advanceTimersByTimeAsync(IDLE_MS - 400);
@@ -431,6 +466,70 @@ describe("空闲回收", () => {
 		await hub.snapshot(snapshot.id);
 		await vi.advanceTimersByTimeAsync(IDLE_MS + 1);
 		expect(hub.has(snapshot.id)).toBe(false);
+	});
+});
+
+describe("动作的持有与串行", () => {
+	it("同一会话的动作依次执行", async () => {
+		const snapshot = await hub.createSession();
+		const order: string[] = [];
+		let releaseFirst!: () => void;
+		const firstGate = new Promise<void>((resolve) => {
+			releaseFirst = resolve;
+		});
+		const first = hub.withSession(snapshot.id, async () => {
+			order.push("第一个开始");
+			await firstGate;
+			order.push("第一个结束");
+		});
+		const second = hub.withSession(snapshot.id, async () => {
+			order.push("第二个开始");
+		});
+		await vi.advanceTimersByTimeAsync(0);
+		expect(order).toEqual(["第一个开始"]);
+		releaseFirst();
+		await Promise.all([first, second]);
+		expect(order).toEqual(["第一个开始", "第一个结束", "第二个开始"]);
+	});
+
+	it("执行期间持有会话,到点也不回收", async () => {
+		const snapshot = await hub.createSession();
+		const agent = hub.agent(snapshot.id);
+		let release!: () => void;
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const running = hub.withSession(snapshot.id, async () => {
+			await gate;
+		});
+		await vi.advanceTimersByTimeAsync(IDLE_MS * 3);
+		expect(hub.has(snapshot.id)).toBe(true);
+		expect(agent.disposed).toBe(false);
+		release();
+		await running;
+		await vi.advanceTimersByTimeAsync(IDLE_MS + 1);
+		expect(hub.has(snapshot.id)).toBe(false);
+	});
+
+	it("动作抛错时归还持有并继续处理后面的动作", async () => {
+		const snapshot = await hub.createSession();
+		const order: string[] = [];
+		await expect(
+			hub.withSession(snapshot.id, async () => {
+				order.push("失败的动作");
+				throw new Error("boom");
+			}),
+		).rejects.toThrow("boom");
+		await hub.withSession(snapshot.id, async () => {
+			order.push("后面的动作");
+		});
+		expect(order).toEqual(["失败的动作", "后面的动作"]);
+		await vi.advanceTimersByTimeAsync(IDLE_MS + 1);
+		expect(hub.has(snapshot.id)).toBe(false);
+	});
+
+	it("会话不存在时报错", async () => {
+		await expect(hub.withSession("nope", async () => {})).rejects.toThrow("会话不存在");
 	});
 });
 
@@ -474,9 +573,9 @@ describe("通道与动作", () => {
 			id: "b",
 			send: (frame) => chatFrames.push(frame.action.type),
 		});
-		agent.emit({ type: "status", status: "running" });
+		agent.emit({ type: "phase", phase: "running", maintenance: undefined });
 		agent.emit({ type: "notice", level: "info", message: "hello" });
-		expect(sessionFrames).toEqual(["session/status"]);
+		expect(sessionFrames).toEqual(["session/phase"]);
 		expect(chatFrames.includes("chat/notice")).toBe(true);
 	});
 });
@@ -489,6 +588,52 @@ describe("查询", () => {
 	});
 
 	it("未登记的会话取快照报不存在", async () => {
-		await expect(hub.snapshot("nope")).rejects.toThrow("unknown session");
+		await expect(hub.snapshot("nope")).rejects.toThrow("会话不存在");
+	});
+});
+
+describe("会话改名与删除", () => {
+	it("已打开的会话改名走运行态", async () => {
+		const root = await mkdtemp(join(tmpdir(), "facet-hub-rename-"));
+		const file = join(root, "s1.jsonl");
+		await writeFile(file, '{"type":"session","id":"s1"}\n', "utf8");
+		factory.ids.set(resolve(file), "s1");
+		const snapshot = await hub.openSession(file);
+		const agent = hub.agent(snapshot.id);
+
+		await hub.renameSession(file, "  新名字  ");
+		expect(agent.renamed).toBe("新名字");
+		await rm(root, { recursive: true, force: true });
+	});
+
+	it("会话文件不在盘上时改名与删除都报错", async () => {
+		await expect(hub.renameSession("/tmp/missing.jsonl", "x")).rejects.toThrow("会话文件不存在");
+		await expect(hub.deleteSession("/tmp/missing.jsonl")).rejects.toThrow("会话文件不存在");
+	});
+
+	it("删除已打开的会话先释放再删文件", async () => {
+		const root = await mkdtemp(join(tmpdir(), "facet-hub-delete-"));
+		const file = join(root, "s1.jsonl");
+		await writeFile(file, '{"type":"session","id":"s1"}\n', "utf8");
+		factory.ids.set(resolve(file), "s1");
+		const snapshot = await hub.openSession(file);
+		const agent = hub.agent(snapshot.id);
+
+		await hub.deleteSession(file);
+		expect(agent.disposed).toBe(true);
+		expect(hub.sessionIdByFile(file)).toBeUndefined();
+		await expect(readFile(file, "utf8")).rejects.toThrow();
+		await rm(root, { recursive: true, force: true });
+	});
+});
+
+describe("退出前的检查", () => {
+	it("列出还在跑的会话文件", async () => {
+		const first = await hub.openSession("/tmp/s1.jsonl");
+		await hub.openSession("/tmp/s2.jsonl");
+		expect(hub.busyFiles()).toEqual([]);
+
+		hub.agent(first.id).busy = true;
+		expect(hub.busyFiles()).toEqual([resolve("/tmp/s1.jsonl")]);
 	});
 });

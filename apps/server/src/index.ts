@@ -12,6 +12,7 @@ import { debugLog, setDebugLog } from "./log.ts";
 import { ProjectCatalog } from "./project-catalog.ts";
 import { ProjectStore } from "./project-store.ts";
 import { SessionHub } from "./session-hub.ts";
+import { SettingsStore } from "./settings-store.ts";
 
 /** 设备启动后的句柄。port 为实际监听端口，hostId 是本进程的设备标识。 */
 export interface ServerHandle extends EndpointHandle {
@@ -24,6 +25,8 @@ export interface ServerHandle extends EndpointHandle {
 	readonly projects: ProjectCatalog;
 	/** 用户添加的项目清单，持久化在数据目录里 */
 	readonly projectStore: ProjectStore;
+	/** 界面偏好设置，持久化在数据目录里 */
+	readonly settingsStore: SettingsStore;
 	/** 关闭端点并释放全部会话与运行时 */
 	close(): Promise<void>;
 }
@@ -51,8 +54,9 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 		console.error("项目扫描失败", error);
 	});
 	const projectStore = await ProjectStore.open({ file: join(config.dataDir, "projects.json") });
+	const settingsStore = await SettingsStore.open({ file: join(config.dataDir, "settings.json") });
 	const hostId = randomUUID();
-	const endpoint = await startEndpoint({ config, factory, hub, projectStore, hostId });
+	const endpoint = await startEndpoint({ config, factory, hub, projectStore, settingsStore, hostId });
 	debugLog("server", "设备端点就绪", { endpoint: `ws://${endpoint.host}:${endpoint.port}/endpoint`, hostId });
 
 	return {
@@ -62,6 +66,7 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 		hub,
 		projects,
 		projectStore,
+		settingsStore,
 		close: async () => {
 			await endpoint.close();
 			hub.dispose();

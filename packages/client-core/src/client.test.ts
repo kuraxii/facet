@@ -47,7 +47,8 @@ function snapshot(): SessionSnapshot {
 		file: "/tmp/s1.jsonl",
 		cwd: "/tmp",
 		name: "既有会话",
-		status: "idle",
+		phase: "idle",
+		maintenance: undefined,
 		model: undefined,
 		thinkingLevel: "medium",
 		availableThinkingLevels: ["medium"],
@@ -77,6 +78,12 @@ class FakeTransport implements SessionTransport {
 	private seq = 0;
 	/** 每个通道已发出的最大序号,订阅时作为基线返回 */
 	private readonly lastSeq = new Map<Channel, number>();
+	/** 下一个该方法名的请求直接失败,用例按需设置 */
+	failNext: RequestMethod | undefined;
+	/** 这些通道的订阅直接失败,用例按需设置 */
+	readonly failSubscribe = new Set<Channel>();
+	/** 为真时订阅按设备不认识这个会话报错,模拟设备重启过 */
+	unknownSession = false;
 
 	constructor(entryCount: number) {
 		this.entries = Array.from({ length: entryCount }, (_, index) => ({
@@ -90,6 +97,10 @@ class FakeTransport implements SessionTransport {
 
 	async request<M extends RequestMethod>(method: M, params?: RequestParams[M]): Promise<RequestResults[M]> {
 		this.calls.push({ method, params });
+		if (this.failNext === method) {
+			this.failNext = undefined;
+			throw new Error(`${method} 失败`);
+		}
 		const result = (() => {
 			switch (method) {
 				case "openSession": {
@@ -115,12 +126,18 @@ class FakeTransport implements SessionTransport {
 				}
 				case "removeProject":
 					return {};
-				case "subscribe":
-					return {
-						seq: 0,
-						resync: false,
-						session: (params as { channel: Channel }).channel === SESSION ? snapshot() : undefined,
-					};
+				case "subscribe": {
+					const channel = (params as { channel: Channel }).channel;
+					if (this.failSubscribe.has(channel)) {
+						throw new Error("subscribe 失败");
+					}
+					if (this.unknownSession) {
+						// 设备刚重启时不认识旧会话,重新打开之后就记得了
+						this.unknownSession = false;
+						throw Object.assign(new Error("会话不存在:s1"), { code: "unknown_session" });
+					}
+					return { seq: 0, resync: false, session: channel.startsWith("session:") ? snapshot() : undefined };
+				}
 				case "unsubscribe":
 					return {};
 				case "entriesAfter": {
@@ -153,8 +170,12 @@ class FakeTransport implements SessionTransport {
 		return result as RequestResults[M];
 	}
 
-	dispatch(_channel: Channel, _action: Action): number {
+	/** 已派发的动作,用例按需断言 */
+	readonly dispatched: { channel: Channel; action: Action }[] = [];
+
+	dispatch(channel: Channel, action: Action): number {
 		this.seq += 1;
+		this.dispatched.push({ channel, action });
 		return this.seq;
 	}
 
@@ -163,6 +184,18 @@ class FakeTransport implements SessionTransport {
 		return () => {
 			this.listener = undefined;
 		};
+	}
+
+	/** 推一条带拒绝原因的动作帧,序号取通道当前值,与设备侧一致。 */
+	reject(channel: Channel, clientSeq: number, action: Action, reason: string): void {
+		this.listener?.({
+			type: "action",
+			channel,
+			action,
+			serverSeq: this.lastSeq.get(channel) ?? 0,
+			origin: { clientId: "c", clientSeq },
+			rejectionReason: reason,
+		});
 	}
 
 	/** 按通道推动作,序号自动递增。 */
@@ -200,6 +233,144 @@ describe("SessionClient", () => {
 			CHAT,
 		]);
 		expect(client.current?.sessionId).toBe("s1");
+	});
+
+	it("中止请求走对话通道,阶段由设备回报", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		client.cancel();
+		expect(transport.dispatched).toEqual([{ channel: CHAT, action: { type: "chat/turnCancelled" } }]);
+		transport.emit(SESSION, { type: "session/phase", phase: "stopping", maintenance: undefined });
+		expect(client.sessionView()?.state.phase).toBe("stopping");
+		transport.emit(SESSION, { type: "session/phase", phase: "idle", maintenance: undefined });
+		expect(client.sessionView()?.state.phase).toBe("idle");
+	});
+
+	it("用户消息进入对话后才确认发送", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		const sent: string[] = [];
+		client.onSent((text) => sent.push(text));
+		client.send("你好");
+		// 设备先回别的动作,不算确认
+		transport.emit(CHAT, { type: "chat/notice", level: "info", message: "开始" });
+		expect(sent).toEqual([]);
+		transport.emit(CHAT, { type: "chat/messageAppended", messageId: "m1", message: assistant("答复") });
+		expect(sent).toEqual([]);
+		transport.emit(CHAT, {
+			type: "chat/messageAppended",
+			messageId: "m2",
+			message: { role: "user", content: [{ type: "text", text: "你好" }], timestamp: 1 },
+		});
+		expect(sent).toEqual(["你好"]);
+	});
+
+	it("发送被拒时给出提示且不确认", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		const sent: string[] = [];
+		client.onSent((text) => sent.push(text));
+		const clientSeq = client.send("你好");
+		transport.reject(CHAT, clientSeq, { type: "chat/turnStarted", text: "你好" }, "session is running");
+		expect(sent).toEqual([]);
+		expect(client.chatView()?.notices).toEqual([{ level: "error", message: "发送失败:session is running" }]);
+		// 之后同类消息也不会再触发确认
+		transport.emit(CHAT, {
+			type: "chat/messageAppended",
+			messageId: "m3",
+			message: { role: "user", content: [{ type: "text", text: "你好" }], timestamp: 1 },
+		});
+		expect(sent).toEqual([]);
+	});
+
+	it("运行中的输入走排队,队列里出现这段文字才算收到", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		const sent: string[] = [];
+		client.onSent((text) => sent.push(text));
+		client.enqueue("补充一句");
+		expect(transport.dispatched).toEqual([
+			{
+				channel: SESSION,
+				action: { type: "session/pendingMessageSet", kind: "steering", text: "补充一句" },
+			},
+		]);
+		expect(sent).toEqual([]);
+		transport.emit(SESSION, { type: "session/queueChanged", steering: ["别的"], followUp: [] });
+		expect(sent).toEqual([]);
+		transport.emit(SESSION, { type: "session/queueChanged", steering: ["补充一句"], followUp: [] });
+		expect(sent).toEqual(["补充一句"]);
+		expect(client.sessionView()?.state.queued.steering).toEqual(["补充一句"]);
+	});
+
+	it("清空排队走会话通道", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		client.clearQueue();
+		expect(transport.dispatched).toEqual([{ channel: SESSION, action: { type: "session/queueCleared" } }]);
+	});
+
+	it("排队被拒时给出提示且不确认", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		const sent: string[] = [];
+		client.onSent((text) => sent.push(text));
+		const clientSeq = client.enqueue("补充一句");
+		transport.reject(
+			SESSION,
+			clientSeq,
+			{ type: "session/pendingMessageSet", kind: "steering", text: "补充一句" },
+			"Cannot submit a prompt while compaction is in progress",
+		);
+		expect(sent).toEqual([]);
+		expect(client.chatView()?.notices).toEqual([
+			{
+				level: "error",
+				message: "发送失败:Cannot submit a prompt while compaction is in progress",
+			},
+		]);
+	});
+
+	it("会话通道的动作被拒也提示在对话视图上", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		transport.reject(SESSION, 1, { type: "session/configChanged" }, "unknown model: nope/nope");
+		expect(client.chatView()?.notices).toEqual([
+			{ level: "error", message: "操作被拒绝:unknown model: nope/nope" },
+		]);
+	});
+
+	it("快速切换时只采用最后一次选择", async () => {
+		const { client } = createClient(2);
+		await client.openSession("/tmp/a.jsonl");
+		const [, last] = await Promise.all([
+			client.switchSession("/tmp/b.jsonl"),
+			client.switchSession("/tmp/c.jsonl"),
+		]);
+		expect(last.file).toBe("/tmp/c.jsonl");
+		expect(client.current?.file).toBe("/tmp/c.jsonl");
+		expect(client.current?.sessionId).toBe("c");
+	});
+
+	it("切换失败时退掉半个订阅,原来的会话仍然可用,可以重试", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/a.jsonl");
+		// 新会话的会话通道订上,对话通道失败
+		transport.failSubscribe.add("chat:/b");
+		await expect(client.switchSession("/tmp/b.jsonl")).rejects.toThrow("subscribe 失败");
+		expect(
+			transport.calls
+				.filter((call) => call.method === "unsubscribe")
+				.map((call) => (call.params as { channel: Channel }).channel)
+				.filter((channel) => channel.endsWith(":/b")),
+		).toEqual(["session:/b"]);
+		expect(client.current?.file).toBe("/tmp/a.jsonl");
+		expect(client.sessionView()?.channel).toBe("session:/a");
+
+		transport.failSubscribe.clear();
+		const opened = await client.switchSession("/tmp/b.jsonl");
+		expect(opened.file).toBe("/tmp/b.jsonl");
+		expect(client.sessionView()?.channel).toBe("session:/b");
 	});
 
 	it("项目请求带上参数", async () => {
@@ -487,10 +658,10 @@ describe("SessionClient", () => {
 	it("状态通道缺口重取快照,不动历史", async () => {
 		const { transport, client } = createClient(12, { initialPages: 1, pageSize: 5 });
 		await client.openSession("/tmp/s1.jsonl");
-		transport.emit(SESSION, { type: "session/status", status: "running" }, 1);
+		transport.emit(SESSION, { type: "session/phase", phase: "running", maintenance: undefined }, 1);
 		const before = transport.calls.filter((call) => call.method === "entries").length;
 		const snapshots = transport.calls.filter((call) => call.method === "snapshot").length;
-		transport.emit(SESSION, { type: "session/status", status: "idle" }, 6);
+		transport.emit(SESSION, { type: "session/phase", phase: "idle", maintenance: undefined }, 6);
 		await new Promise((resolve) => setTimeout(resolve, 10));
 		expect(transport.calls.filter((call) => call.method === "entries").length).toBe(before);
 		expect(transport.calls.filter((call) => call.method === "snapshot").length).toBeGreaterThan(snapshots);
@@ -509,7 +680,7 @@ describe("SessionClient", () => {
 	it("重连续订时带上已收到的最后序号", async () => {
 		const { transport, client } = createClient(4, { initialPages: 1, pageSize: 5 });
 		await client.openSession("/tmp/s1.jsonl");
-		transport.emit(SESSION, { type: "session/status", status: "running" }, 2);
+		transport.emit(SESSION, { type: "session/phase", phase: "running", maintenance: undefined }, 2);
 		transport.emit(CHAT, { type: "chat/turnStarted", text: "hi" }, 1);
 		const before = transport.calls.length;
 		await client.resume();
@@ -566,5 +737,26 @@ describe("SessionClient", () => {
 		expect(last?.id).toBe("m1");
 		expect(last?.streaming[0]?.text).toBe("你好");
 		expect(last?.isStreaming).toBe(true);
+	});
+});
+
+describe("重连", () => {
+	it("设备重启过时按文件重新打开会话", async () => {
+		const { client, transport } = createClient(5);
+		const opened = await client.openSession("/tmp/s1.jsonl");
+		expect(client.sessionView()?.state.file).toBe("/tmp/s1.jsonl");
+
+		transport.unknownSession = true;
+		await client.resume();
+		expect(transport.calls.filter((call) => call.method === "openSession")).toHaveLength(2);
+		expect(client.sessionView()?.state.file).toBe("/tmp/s1.jsonl");
+		expect(opened.file).toBe("/tmp/s1.jsonl");
+	});
+
+	it("其他失败照常抛出", async () => {
+		const { client, transport } = createClient(5);
+		await client.openSession("/tmp/s1.jsonl");
+		transport.failSubscribe.add("session:/s1");
+		await expect(client.resume()).rejects.toThrow("subscribe 失败");
 	});
 });

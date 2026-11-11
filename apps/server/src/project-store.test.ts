@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { projectIdOf } from "@facet/agent";
@@ -122,6 +122,71 @@ describe("项目清单", () => {
 		expect(store.list()).toEqual([]);
 		const names = await readdir(root);
 		expect(names.some((name) => name.startsWith("projects.json.broken-"))).toBe(true);
+	});
+
+	it("写入失败时内存保持原状态,修好之后可以重试", async () => {
+		const directory = join(root, "dir");
+		const nested = join(directory, "projects.json");
+		await mkdir(directory);
+		const store = await ProjectStore.open({ file: nested });
+		// 把清单路径换成目录,改名到它上面必然失败
+		await mkdir(nested, { recursive: true });
+
+		await expect(store.add({ cwd: "/work/a" })).rejects.toThrow();
+		expect(store.list()).toEqual([]);
+
+		await rm(nested, { recursive: true, force: true });
+		const project = await store.add({ cwd: "/work/a" });
+		expect(store.list().map((item) => item.id)).toEqual([project.id]);
+	});
+
+	it("改动落盘失败时保留原状态,也不留临时文件", async () => {
+		const store = await ProjectStore.open({ file });
+		const project = await store.add({ cwd: "/work/a", name: "主应用" });
+		const onDisk = await readFile(file, "utf8");
+		// 清单路径换成目录,临时文件改名到它上面必然失败
+		await rm(file);
+		await mkdir(file, { recursive: true });
+
+		await expect(store.rename(project.id, "新名字")).rejects.toThrow();
+		expect(store.get(project.id)?.name).toBe("主应用");
+		const names = await readdir(root);
+		expect(names.filter((name) => name.endsWith(".tmp"))).toEqual([]);
+
+		await rm(file, { recursive: true, force: true });
+		await writeFile(file, onDisk, "utf8");
+		expect(store.list().map((item) => item.name)).toEqual(["主应用"]);
+	});
+
+	it("并发改动按顺序落盘,不丢更新", async () => {
+		const store = await ProjectStore.open({ file });
+		const added = await Promise.all([
+			store.add({ cwd: "/work/a" }),
+			store.add({ cwd: "/work/b" }),
+			store.add({ cwd: "/work/c" }),
+		]);
+		await Promise.all([
+			store.rename(added[0].id, "甲"),
+			store.remove(added[1].id),
+			store.rename(added[2].id, "丙"),
+		]);
+
+		const reopened = await ProjectStore.open({ file });
+		expect(reopened.list().map((item) => [item.cwd, item.name])).toEqual([
+			["/work/a", "甲"],
+			["/work/c", "丙"],
+		]);
+		expect(store.list().map((item) => [item.cwd, item.name])).toEqual([
+			["/work/a", "甲"],
+			["/work/c", "丙"],
+		]);
+	});
+
+	it("并发的重复添加只有一个成功", async () => {
+		const store = await ProjectStore.open({ file });
+		const results = await Promise.allSettled([store.add({ cwd: "/work/a" }), store.add({ cwd: "/work/a" })]);
+		expect(results.filter((item) => item.status === "fulfilled")).toHaveLength(1);
+		expect(store.list()).toHaveLength(1);
 	});
 
 	it("写出的文件带版本号", async () => {

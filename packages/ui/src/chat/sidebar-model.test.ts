@@ -198,3 +198,42 @@ describe("组装侧栏", () => {
 		expect(data.devices[0]?.isLocal).toBe(true);
 	});
 });
+
+describe("状态点", () => {
+	const summary = (path: string): SessionSummary => ({
+		id: path,
+		path,
+		cwd: "/work/a",
+		name: undefined,
+		parentSessionPath: undefined,
+		created: 1,
+		modified: 2,
+		messageCount: 1,
+		firstMessage: "你好",
+	});
+
+	it("只有当前会话带运行态,其余按空闲", () => {
+		const data = buildSidebar({
+			sessions: [summary("/s1.jsonl"), summary("/s2.jsonl")],
+			hosts: [{ id: "h", name: "本机", detail: "", state: "connected", isLocal: true, projects: [] }],
+			projects: [],
+			runningFile: "/s1.jsonl",
+			runningDot: "compacting",
+		});
+		const dots = data.groups.flatMap((group) => group.sessions).map((session) => [session.path, session.dot]);
+		expect(dots).toEqual([
+			["/s1.jsonl", "compacting"],
+			["/s2.jsonl", "idle"],
+		]);
+	});
+
+	it("没给状态点时按运行中显示", () => {
+		const data = buildSidebar({
+			sessions: [summary("/s1.jsonl")],
+			hosts: [],
+			projects: [],
+			runningFile: "/s1.jsonl",
+		});
+		expect(data.groups[0]?.sessions[0]?.dot).toBe("running");
+	});
+});

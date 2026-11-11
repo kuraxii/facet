@@ -8,7 +8,7 @@ import type { Part, ToolCallPart, TranscriptItem } from "@facet/client-core";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { Markdown } from "../markdown/Markdown.tsx";
 import { type DiffChunk, type DisplayRow, groupRows, metaSummary } from "./group.ts";
-import { ForkIcon } from "./icons.tsx";
+import { ForkIcon, RevertIcon } from "./icons.tsx";
 import { foldOutput, toolStatusText, toolTarget } from "./tool-text.ts";
 
 /** 面板参数。 */
@@ -19,8 +19,18 @@ export interface ChatTranscriptProps {
 	canFork: boolean;
 	/** 在某一轮结束处分叉,传入下一轮开始处条目的 id；缺省表示最后一轮 */
 	onFork: (beforeEntryId: string | undefined) => void;
+	/** 是否允许回退到某条用户消息之前,本轮结束前不允许 */
+	canRevert: boolean;
+	/** 回退到这条用户消息之前的一轮末尾,连同这条消息的文本一起带出 */
+	onRevert: (entryId: string, text: string) => void;
 	/** 正在进行的自动重试,没有则为空 */
-	retry?: { attempt: number; maxAttempts: number } | undefined;
+	retry?: { attempt: number; maxAttempts: number; delayMs: number } | undefined;
+	/** 重试这一轮:按最后一条用户消息重新发一次,不重复添加用户消息 */
+	onRetryTurn?: ((entryId: string, text: string) => void) | undefined;
+	/** 打开设置里与错误有关的那一页 */
+	onOpenSettings?: (() => void) | undefined;
+	/** 复制错误详情 */
+	onCopyDetails?: ((text: string) => void) | undefined;
 	/** 没有任何内容时显示的提示 */
 	emptyHint?: string;
 	/** 实时消息提升为历史消息时的标识迁移，用来搬动按行标识保存的收起状态 */
@@ -32,6 +42,19 @@ export interface ChatTranscriptProps {
  *
  * 回合还在跑的时候没有结束时间,界面每秒取一次当前时间自己计时;没有运行中的行时不挂定时器。
  */
+/** 重试倒计时的文案,没有剩余时间时为空。 */
+function retryDelayText(
+	delayMs: number,
+	startedAt: number | undefined,
+	now: number | undefined,
+): string | undefined {
+	if (delayMs <= 0 || startedAt === undefined || now === undefined) {
+		return undefined;
+	}
+	const left = Math.ceil((startedAt + delayMs - now) / 1000);
+	return left <= 0 ? "正在重试…" : `${left} 秒后重试`;
+}
+
 function useNow(isTicking: boolean): number | undefined {
 	const [now, setNow] = useState<number | undefined>(undefined);
 	useEffect(() => {
@@ -239,6 +262,16 @@ function FilesRow({ diffs }: { diffs: readonly DiffChunk[] }) {
 	);
 }
 
+/** 这一行是否被用户中止。 */
+function isAborted(row: DisplayRow): boolean {
+	return row.items.some((item) => item.stopReason === "aborted");
+}
+
+/** 中止的提示,挂在被截断的那一行末尾。 */
+function StoppedNote(): ReactNode {
+	return <div className="stopped-line">已停止</div>;
+}
+
 /** 答复行的正文:相邻的正文段合成一块 Markdown,思考与工具按原位置插入。 */
 function bodyOf(row: DisplayRow): ReactNode[] {
 	const nodes: ReactNode[] = [];
@@ -289,11 +322,31 @@ function Shell({ className, children }: { className: string; children: ReactNode
 /**
  * 对话面板。把渲染单元聚合成分行,并维护每行的收起状态。
  */
-export function ChatTranscript({ items, canFork, onFork, retry, emptyHint, renames }: ChatTranscriptProps) {
+export function ChatTranscript({
+	items,
+	canFork,
+	onFork,
+	canRevert,
+	onRevert,
+	retry,
+	onRetryTurn,
+	onOpenSettings,
+	onCopyDetails,
+	emptyHint,
+	renames,
+}: ChatTranscriptProps) {
 	const rows = useMemo(() => groupRows(items), [items]);
+	// 第一条用户消息之前没有可回退的轮次
+	const firstUserRowId = rows.find((row) => row.kind === "user")?.id;
 	const [overrides, setOverrides] = useState<ReadonlyMap<string, boolean>>(() => new Map());
 	const isTicking = rows.some((row) => row.isStreaming && row.startedAt !== undefined);
 	const now = useNow(isTicking);
+	// 重试开始的时刻,倒计时以它为准;重试结束或次数变化时重新计时
+	const retryKey = retry === undefined ? undefined : `${retry.attempt}/${retry.maxAttempts}`;
+	const [retryStartedAt, setRetryStartedAt] = useState<number | undefined>(undefined);
+	useEffect(() => {
+		setRetryStartedAt(retryKey === undefined ? undefined : Date.now());
+	}, [retryKey]);
 
 	// 一轮结束、消息提升为历史消息后行标识会变，把按旧标识保存的收起状态搬到新标识上
 	useEffect(() => {
@@ -384,11 +437,43 @@ export function ChatTranscript({ items, canFork, onFork, retry, emptyHint, renam
 
 				if (row.kind === "error") {
 					const text = textOf(row.items.flatMap((item) => item.parts));
+					const message = text.length > 0 ? text : "运行出错";
+					// 重试按最后一条用户消息重发一次,失败的那条助手消息留在历史里
+					const lastUser = [...rows].reverse().find((item) => item.kind === "user");
+					const retryTarget =
+						lastUser === undefined
+							? undefined
+							: {
+									entryId: lastUser.items[0]?.entryId,
+									text: textOf(lastUser.items.flatMap((item) => item.parts)),
+								};
+					const canRetry = onRetryTurn !== undefined && canRevert && retryTarget?.entryId !== undefined;
 					return (
 						<Shell key={row.id} className="is-error">
 							<div className="error-line">
 								<b>出错</b>
-								<span className="t2">{text.length > 0 ? text : "运行出错"}</span>
+								<span className="t2">{message}</span>
+							</div>
+							<div className="error-actions">
+								{canRetry ? (
+									<button
+										type="button"
+										className="btn"
+										onClick={() => onRetryTurn(retryTarget.entryId as string, retryTarget.text)}
+									>
+										重试
+									</button>
+								) : null}
+								{onOpenSettings === undefined ? null : (
+									<button type="button" className="btn" onClick={onOpenSettings}>
+										打开设置
+									</button>
+								)}
+								{onCopyDetails === undefined ? null : (
+									<button type="button" className="btn" onClick={() => onCopyDetails(message)}>
+										复制详情
+									</button>
+								)}
 							</div>
 						</Shell>
 					);
@@ -396,11 +481,27 @@ export function ChatTranscript({ items, canFork, onFork, retry, emptyHint, renam
 
 				if (row.kind === "user") {
 					const text = textOf(row.items.flatMap((item) => item.parts));
+					// 回退要有落地过的条目:实时消息在提升之前没有条目 id
+					const entryId = row.items[0]?.entryId;
 					return (
 						<Shell key={row.id} className="is-user">
 							<div className="user-line">
 								<div className="bub">{text}</div>
 							</div>
+							{canRevert && entryId !== undefined && row.id !== firstUserRowId ? (
+								<div className="user-foot">
+									<button
+										type="button"
+										className="revert-btn"
+										aria-label="回退到这条消息之前"
+										title="回退到这条消息之前"
+										onClick={() => onRevert(entryId, text)}
+									>
+										<RevertIcon size={12} />
+										回退
+									</button>
+								</div>
+							) : null}
 						</Shell>
 					);
 				}
@@ -438,6 +539,7 @@ export function ChatTranscript({ items, canFork, onFork, retry, emptyHint, renam
 										)}
 									</div>
 								)}
+								{isAborted(row) ? <StoppedNote /> : null}
 							</div>
 						</Shell>
 					);
@@ -445,7 +547,10 @@ export function ChatTranscript({ items, canFork, onFork, retry, emptyHint, renam
 
 				return (
 					<Shell key={row.id} className="is-assistant">
-						<div className="assistant-body">{bodyOf(row)}</div>
+						<div className="assistant-body">
+							{bodyOf(row)}
+							{isAborted(row) ? <StoppedNote /> : null}
+						</div>
 					</Shell>
 				);
 			})}
@@ -456,6 +561,9 @@ export function ChatTranscript({ items, canFork, onFork, retry, emptyHint, renam
 						<span className="chip is-warn">
 							<i className="dot is-warn pulse" />第 {retry.attempt}/{retry.maxAttempts} 次重试
 						</span>
+						{retryDelayText(retry.delayMs, retryStartedAt, now) === undefined ? null : (
+							<span className="t2">{retryDelayText(retry.delayMs, retryStartedAt, now)}</span>
+						)}
 					</div>
 				</Shell>
 			) : null}

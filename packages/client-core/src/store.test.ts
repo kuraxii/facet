@@ -33,7 +33,8 @@ function _snapshot(overrides: Partial<SessionSnapshot> = {}): SessionSnapshot {
 		file: "/tmp/s1.jsonl",
 		cwd: "/tmp",
 		name: "测试会话",
-		status: "idle",
+		phase: "idle",
+		maintenance: undefined,
 		model: undefined,
 		thinkingLevel: "medium",
 		availableThinkingLevels: ["low", "medium", "high"],
@@ -68,11 +69,33 @@ function frame(
 describe("SessionStore", () => {
 	it("按通道种类分派到各自的视图", () => {
 		const store = new SessionStore();
-		store.apply(frame(sessionChannel, 1, { type: "session/status", status: "running" }));
-		store.apply(frame(chatChannel, 1, { type: "chat/turnStarted", text: "hi" }));
-		expect(store.sessionView(sessionChannel)?.status).toBe("running");
-		expect(store.chatView(chatChannel)?.isRunning).toBe(true);
+		store.apply(
+			frame(sessionChannel, 1, { type: "session/phase", phase: "running", maintenance: undefined }),
+		);
+		store.apply(frame(chatChannel, 1, { type: "chat/notice", level: "info", message: "hi" }));
+		expect(store.sessionView(sessionChannel)?.state.phase).toBe("running");
+		expect(store.chatView(chatChannel)?.notices).toHaveLength(1);
 		expect(store.sessionView(chatChannel)).toBeUndefined();
+	});
+
+	it("阶段与维护动作只落在会话视图上", () => {
+		const store = new SessionStore();
+		store.ensureSession(sessionChannel);
+		store.apply(
+			frame(sessionChannel, 1, {
+				type: "session/phase",
+				phase: "stopping",
+				maintenance: {
+					kind: "compaction",
+					reason: "manual",
+					tokensBefore: undefined,
+					estimatedTokensAfter: undefined,
+				},
+			}),
+		);
+		expect(store.sessionView(sessionChannel)?.state.phase).toBe("stopping");
+		expect(store.sessionView(sessionChannel)?.state.maintenance?.kind).toBe("compaction");
+		expect(store.chatView(sessionChannel)).toBeUndefined();
 	});
 
 	it("重复序号的帧被丢弃", () => {
@@ -80,6 +103,20 @@ describe("SessionStore", () => {
 		store.apply(frame(chatChannel, 1, { type: "chat/notice", level: "info", message: "第一次" }));
 		store.apply(frame(chatChannel, 1, { type: "chat/notice", level: "info", message: "重复" }));
 		expect(store.chatView(chatChannel)?.notices).toEqual([{ level: "info", message: "第一次" }]);
+	});
+
+	it("拒绝帧不进入归约", () => {
+		const store = new SessionStore();
+		store.ensureChat(chatChannel);
+		store.apply({
+			type: "action",
+			channel: chatChannel,
+			serverSeq: 0,
+			origin: { clientId: "c", clientSeq: 1 },
+			action: { type: "chat/notice", level: "error", message: "不该出现的提示" },
+			rejectionReason: "session is running",
+		});
+		expect(store.chatView(chatChannel)?.notices).toEqual([]);
 	});
 
 	it("序号跳跃时报出缺口并照常应用", () => {

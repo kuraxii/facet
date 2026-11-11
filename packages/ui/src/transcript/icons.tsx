@@ -20,6 +20,15 @@ export function PlusIcon({ size, ...rest }: IconProps) {
 	);
 }
 
+/** 项目信任。 */
+export function ShieldIcon({ size, ...rest }: IconProps) {
+	return (
+		<Icon size={size} {...rest}>
+			<path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z" />
+		</Icon>
+	);
+}
+
 /** 搜索。 */
 export function SearchIcon({ size, ...rest }: IconProps) {
 	return (
@@ -57,6 +66,17 @@ export function ForkIcon({ size, ...rest }: IconProps) {
 			<circle cx="6" cy="19" r="2.2" />
 			<circle cx="18" cy="8" r="2.2" />
 			<path d="M6 7.2v9.6M18 10.2c0 4-6 3-12 6" />
+		</Icon>
+	);
+}
+
+/** 发送。 */
+/** 回退。 */
+export function RevertIcon({ size, ...rest }: IconProps) {
+	return (
+		<Icon size={size} {...rest}>
+			<path d="M4 9h10a5 5 0 0 1 0 10h-4" />
+			<path d="M8 5 4 9l4 4" />
 		</Icon>
 	);
 }

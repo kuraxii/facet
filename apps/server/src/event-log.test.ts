@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { EventLog } from "./event-log.ts";
 
 function statusAction(status: "idle" | "running") {
-	return { type: "session/status" as const, status };
+	return { type: "session/phase" as const, phase: status, maintenance: undefined };
 }
 
 describe("EventLog", () => {

@@ -5,11 +5,11 @@
  * 实时是流式累积加上按调用 id 记录的工具状态。这里把两者归一成同一套渲染单元,
  * 判定规则只写一份,避免界面在两条链路上各写一遍。
  */
-import type { ContentBlock, InputBlock, Message, ToolOutput } from "@facet/protocol";
+import type { ContentBlock, InputBlock, Message, StopReason, ToolOutput } from "@facet/protocol";
 import type { ChatView, EntryView, StreamedPart, ToolCallView } from "./state.ts";
 
-/** 工具调用在投影里的状态。 */
-export type ToolPartStatus = "running" | "done" | "failed";
+/** 工具调用在投影里的状态。skipped 表示这一轮被中止,调用没有被执行。 */
+export type ToolPartStatus = "running" | "done" | "failed" | "skipped";
 
 /** 正文。 */
 export interface TextPart {
@@ -57,6 +57,8 @@ export interface TranscriptItem {
 	entryId: string | undefined;
 	/** 消息角色,分界项为空 */
 	role: "user" | "assistant" | "system" | "tool" | undefined;
+	/** 助手消息的终止原因;其余消息与分界项为空 */
+	stopReason: StopReason | undefined;
 	parts: readonly Part[];
 	/** 是否仍在流式写入 */
 	isStreaming: boolean;
@@ -134,6 +136,24 @@ function userParts(entryView: EntryView): Part[] {
 	);
 }
 
+/** 没有对应工具视图的一段调用。 */
+function bareToolPart(
+	block: Extract<ContentBlock, { type: "toolCall" }>,
+	status: ToolPartStatus,
+): ToolCallPart {
+	return {
+		kind: "toolCall",
+		partId: `tool:${block.id}`,
+		callId: block.id,
+		name: block.name,
+		input: block.arguments,
+		status,
+		output: undefined,
+		durationMs: undefined,
+		details: undefined,
+	};
+}
+
 /** 正文与工具调用的排布:内容块按原顺序展开,工具调用位置即它在消息里的位置。 */
 function assistantParts(entryView: EntryView, calls: Readonly<Record<string, ToolCallView>>): Part[] {
 	const message = entryView.message;
@@ -145,21 +165,15 @@ function assistantParts(entryView: EntryView, calls: Readonly<Record<string, Too
 	for (const block of blocks) {
 		if (block.type === "toolCall") {
 			const call = calls[block.id];
-			parts.push(
-				call
-					? toolPart(call)
-					: {
-							kind: "toolCall",
-							partId: `tool:${block.id}`,
-							callId: block.id,
-							name: block.name,
-							input: block.arguments,
-							status: "done",
-							output: undefined,
-							durationMs: undefined,
-							details: undefined,
-						},
-			);
+			if (call) {
+				parts.push(toolPart(call));
+			} else if (message.stopReason === "aborted") {
+				// 这一轮被中止:内容里的调用一条都没执行过,设备不会为它们发事件
+				parts.push(bareToolPart(block, "skipped"));
+			} else {
+				// 设备还没发工具事件时的过渡状态,按已完成呈现
+				parts.push(bareToolPart(block, "done"));
+			}
 			continue;
 		}
 		const part = blockPart(block, parts.length);
@@ -220,6 +234,7 @@ export function toTranscript(view: ChatView): TranscriptItem[] {
 			id: entryView.id,
 			entryId: entryView.entry?.id,
 			role: entryView.message.role === "toolResult" ? "tool" : roleOf(entryView.message),
+			stopReason: entryView.message.role === "assistant" ? entryView.message.stopReason : undefined,
 			parts: [],
 			isStreaming: entryView.isStreaming,
 			startedAt,
@@ -291,6 +306,10 @@ export function toTranscript(view: ChatView): TranscriptItem[] {
 			entryView.message.role === "assistant"
 				? assistantParts(entryView, view.toolCalls)
 				: userParts(entryView);
+		// 流刚开始就被打断的中止消息没有内容,不占一行
+		if (entryView.message.role === "assistant" && parts.length === 0) {
+			continue;
+		}
 		const index = items.length;
 		items.push({ ...base, parts });
 		for (const part of parts) {
@@ -311,6 +330,7 @@ export function toTranscript(view: ChatView): TranscriptItem[] {
 			id: `tool:${call.callId}`,
 			entryId: undefined,
 			role: "tool",
+			stopReason: undefined,
 			parts: [toolPart(call)],
 			isStreaming: call.isRunning,
 			startedAt: undefined,

@@ -1,15 +1,29 @@
-import { type DeviceHandshake, SessionClient, toTranscript } from "@facet/client-core";
-import type { ProjectInfo, SessionSummary } from "@facet/protocol";
+import { chatActivity, type DeviceHandshake, SessionClient, toTranscript } from "@facet/client-core";
+import {
+	DEFAULT_SETTINGS,
+	type FacetSettings,
+	type Maintenance,
+	type ModelInfo,
+	type ProjectInfo,
+	type SessionSummary,
+} from "@facet/protocol";
 import { WsTransport } from "@facet/transport/ws";
 import {
 	ArrowDownIcon,
 	ChatTranscript,
+	CloseIcon,
 	Composer,
 	CreateProjectDialog,
+	EmptyState,
+	QueueStrip,
 	SessionSidebar,
+	type SettingsDataSource,
+	SettingsPage,
+	type SettingsSection,
 	type SidebarHost,
 	samePath,
 	type ThemeName,
+	TrustDialog,
 	useStickToBottom,
 } from "@facet/ui";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -20,8 +34,12 @@ interface FacetBridge {
 	endpoint: string;
 	projectDir: string;
 	platform: string;
+	/** 应用版本 */
+	appVersion: string;
 	/** 打开系统的目录选择窗口,取消时返回空 */
 	pickDirectory: () => Promise<string | undefined>;
+	/** 用系统的保存窗口写一段文本,取消时返回 false */
+	saveText: (suggestedName: string, text: string) => Promise<boolean>;
 }
 
 declare global {
@@ -37,12 +55,91 @@ const client = new SessionClient({ transport, pageSize: 200 });
 
 type Phase = "connecting" | "ready" | "failed";
 
-/** 主题在本地保存键 */
+/** 主题在本地保存键，设备上的设置读不到时先用它，避免启动时闪一下 */
 const THEME_KEY = "facet.theme";
+
+/** 等重试期间给对话面板的提示,其余维护动作不显示。 */
+function retryOf(
+	maintenance: Maintenance | undefined,
+): { attempt: number; maxAttempts: number; delayMs: number } | undefined {
+	return maintenance?.kind === "retry"
+		? { attempt: maintenance.attempt, maxAttempts: maintenance.maxAttempts, delayMs: maintenance.delayMs }
+		: undefined;
+}
+
+/** 草稿在本地保存的键 */
+const DRAFTS_KEY = "facet.drafts";
+/** 还没打开会话时草稿用的键 */
+const NEW_DRAFT_KEY = "__new__";
+
+/** 读出保存的各会话草稿；读不懂时当作没有草稿。 */
+function readDrafts(): Record<string, string> {
+	try {
+		const parsed: unknown = JSON.parse(localStorage.getItem(DRAFTS_KEY) ?? "{}");
+		if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+			return {};
+		}
+		return Object.fromEntries(
+			Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+		);
+	} catch {
+		return {};
+	}
+}
 
 /** 读取上次选择的主题，缺省深色 */
 function readTheme(): ThemeName {
-	return localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark";
+	const stored = localStorage.getItem(THEME_KEY);
+	if (stored === "light") {
+		return "light";
+	}
+	if (stored === "system") {
+		return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+	}
+	return "dark";
+}
+
+/**
+ * 把外观设置写到根节点。
+ *
+ * 主题、字体与字号通过 CSS 变量下发，正文、代码块与差异视图都读同一组变量；减少动效时
+ * 根节点带 data-motion="reduced"，样式据此关掉过渡。
+ */
+function applyAppearance(appearance: FacetSettings["appearance"]): void {
+	const root = document.documentElement;
+	root.dataset.theme = appearance.theme === "light" ? "light" : "dark";
+	root.dataset.motion = appearance.reducedMotion ? "reduced" : "full";
+	if (appearance.bodyFont.trim().length > 0) {
+		root.style.setProperty("--font-sans", appearance.bodyFont.trim());
+	} else {
+		root.style.removeProperty("--font-sans");
+	}
+	if (appearance.codeFont.trim().length > 0) {
+		root.style.setProperty("--font-mono", appearance.codeFont.trim());
+	} else {
+		root.style.removeProperty("--font-mono");
+	}
+	root.style.setProperty("--text-size", `${appearance.fontSize}px`);
+	localStorage.setItem(THEME_KEY, appearance.theme);
+}
+
+/** 把设置里的主题换成实际生效的深浅色。 */
+function resolveTheme(mode: FacetSettings["appearance"]["theme"]): ThemeName {
+	if (mode === "system") {
+		return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+	}
+	return mode;
+}
+
+/** 把一条项目并进列表：同一个标识就替换，没有就追加，保持原有顺序。 */
+function mergeProject(list: readonly ProjectInfo[], project: ProjectInfo): ProjectInfo[] {
+	const index = list.findIndex((item) => item.id === project.id);
+	if (index < 0) {
+		return [...list, project];
+	}
+	const next = [...list];
+	next[index] = project;
+	return next;
 }
 
 /** 启动时打开的会话：启动目录里最近更新的一条，没有则取全部会话里最近的一条。 */
@@ -72,23 +169,81 @@ export function App() {
 		() => client.store.getVersion(),
 	);
 	const [phase, setPhase] = useState<Phase>("connecting");
+	/** 与设备的连接是否可用，断开时输入区说明原因并禁用发送 */
+	const [isOnline, setIsOnline] = useState(false);
 	const [failure, setFailure] = useState<string | undefined>(undefined);
 	const [sessions, setSessions] = useState<readonly SessionSummary[]>([]);
 	const [activeFile, setActiveFile] = useState<string | undefined>(undefined);
 	const [device, setDevice] = useState<DeviceHandshake | undefined>(undefined);
 	const [projects, setProjects] = useState<readonly ProjectInfo[]>([]);
+	/** 项目列表上一次拉取失败，侧栏据此给出刷新入口 */
+	const [isProjectsStale, setIsProjectsStale] = useState(false);
 	const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
 	const [createCwd, setCreateCwd] = useState(bridge.projectDir);
-	const [draft, setDraft] = useState("");
+	/** 各会话的草稿，键为会话文件路径，新会话页面用 NEW_DRAFT_KEY */
+	const [drafts, setDrafts] = useState<Record<string, string>>(readDrafts);
 	const [theme, setTheme] = useState<ThemeName>(readTheme);
+	/** 设备上的偏好设置；没读到之前先用缺省值 */
+	const [settings, setSettings] = useState<FacetSettings>(DEFAULT_SETTINGS);
+	/** 主区域显示对话还是设置 */
+	const [view, setView] = useState<"chat" | "settings">("chat");
+	const [settingsSection, setSettingsSection] = useState<SettingsSection>("providers");
+	/** 打开、新建、分叉失败时的提示,带重试入口 */
+	const [sessionError, setSessionError] = useState<{ message: string; retry: () => void } | undefined>(
+		undefined,
+	);
+	/** 等待用户决定信任的目录,与决定之后要执行的动作 */
+	const [trustPrompt, setTrustPrompt] = useState<{ cwd: string; run: () => void } | undefined>(undefined);
 	const started = useRef(false);
+	/** 会话切换的序号,只有最后一次选择的结果会落到界面上 */
+	const switchSeq = useRef(0);
+	/** 正在进行的重连,重复触发时共用同一次 */
+	const reconnecting = useRef<Promise<void> | undefined>(undefined);
 
+	// 设置变化时应用外观，并把有效主题同步给侧栏的切换按钮
 	useEffect(() => {
-		document.documentElement.dataset.theme = theme;
-		localStorage.setItem(THEME_KEY, theme);
-	}, [theme]);
+		applyAppearance(settings.appearance);
+		setTheme(resolveTheme(settings.appearance.theme));
+	}, [settings.appearance]);
 
 	const listSeq = useRef(0);
+
+	/** 设置页的数据来源，接到设备上。 */
+	const settingsData = useMemo<SettingsDataSource>(
+		() => ({
+			loadSettings: () => client.getSettings(),
+			saveSettings: (next) => client.saveSettings(next),
+			loadProviders: () => client.listProviders(),
+			loadModels: () => client.listModels(),
+			saveCredential: (providerId, apiKey) => client.saveCredential(providerId, apiKey),
+			deleteCredential: (providerId) => client.deleteCredential(providerId),
+			setProviderBaseUrl: (providerId, baseUrl) => client.setProviderBaseUrl(providerId, baseUrl),
+			listCustomProviders: () => client.listCustomProviders(),
+			saveCustomProvider: (provider) => client.saveCustomProvider(provider),
+			removeCustomProvider: (providerId) => client.removeCustomProvider(providerId),
+			testModel: (model) => client.testModel(model),
+			diagnostics: () => client.diagnostics(),
+			saveText: (suggestedName, text) => window.facet.saveText(suggestedName, text),
+		}),
+		[],
+	);
+
+	/**
+	 * 切换深浅色。
+	 *
+	 * 外观立刻生效，同时写回设置；写不进去时界面按新主题显示，下次启动回到原来的值。
+	 */
+	const toggleTheme = useCallback(() => {
+		const next = theme === "dark" ? "light" : "dark";
+		setTheme(next);
+		const changed: FacetSettings = {
+			...settings,
+			appearance: { ...settings.appearance, theme: next },
+		};
+		setSettings(changed);
+		applyAppearance(changed.appearance);
+		void client.saveSettings(changed).catch(() => undefined);
+	}, [settings, theme]);
 
 	/** 拉一次全部会话。并发调用时只采用最后一次的结果,避免旧结果覆盖新结果。 */
 	const refreshSessions = useCallback(async (): Promise<readonly SessionSummary[] | undefined> => {
@@ -106,6 +261,217 @@ export function App() {
 		}
 	}, []);
 
+	/** 拉一次项目清单。失败只标脏,已经显示的项目保持原样。 */
+	const refreshProjects = useCallback(async (): Promise<void> => {
+		try {
+			setProjects(await client.listProjects());
+			setIsProjectsStale(false);
+		} catch {
+			setIsProjectsStale(true);
+		}
+	}, []);
+
+	/**
+	 * 重连设备。
+	 *
+	 * 断线之后按退避间隔一直试，连上就续订已打开的会话、重取会话状态与会话列表；同一个
+	 * 时刻只跑一次，手动重试与自动重连共用这条路。
+	 */
+	const reconnect = useCallback(async (): Promise<void> => {
+		reconnecting.current ??= (async () => {
+			let delay = 400;
+			for (;;) {
+				try {
+					const handshake = await transport.connect();
+					client.attach(handshake);
+					setDevice(handshake);
+					// 会话回不来(例如它的文件已经不在了)时退回没有会话的状态,连接本身照常可用
+					const resumed = await client.resume().then(
+						() => true,
+						() => false,
+					);
+					if (!resumed) {
+						await client.release().catch(() => undefined);
+						setActiveFile(undefined);
+					}
+					await refreshSessions();
+					await refreshProjects();
+					return;
+				} catch {
+					await new Promise((done) => setTimeout(done, delay));
+					delay = Math.min(delay * 2, 8000);
+				}
+			}
+		})().finally(() => {
+			reconnecting.current = undefined;
+		});
+		await reconnecting.current;
+	}, [refreshProjects, refreshSessions]);
+
+	// 断线之后自动重连，期间输入区提示连接已断开
+	useEffect(() => {
+		if (!isOnline && phase === "ready") {
+			void reconnect();
+		}
+	}, [isOnline, phase, reconnect]);
+
+	void version;
+
+	const session = client.sessionView();
+	const chat = client.chatView();
+	// 对话此刻的状态由会话状态得出,界面不自己拼布尔量
+	const activity = chatActivity(session);
+
+	/** 设备的模型目录与各提供方的凭证状态，供输入区的模型选择使用。 */
+	const [catalog, setCatalog] = useState<{ models: readonly ModelInfo[]; auth: Record<string, boolean> }>({
+		models: [],
+		auth: {},
+	});
+	/** 输入区可选的模型：去掉设置里隐藏的那些。 */
+	const visibleModels = useMemo(
+		() => catalog.models.filter((model) => !settings.hiddenModels.includes(`${model.provider}/${model.id}`)),
+		[catalog.models, settings.hiddenModels],
+	);
+	const providerAuth = catalog.auth;
+
+	/**
+	 * 现在不能发送的原因。
+	 *
+	 * 依次看连接、阶段与凭证：任何一条不满足都不该把消息送出去，说明写在输入区上方，
+	 * 草稿留在输入框里。
+	 */
+	let blockedReason: string | undefined;
+	if (!isOnline) {
+		blockedReason = "与设备的连接已断开,恢复之后可以继续发送";
+	} else if (activity === "compacting") {
+		blockedReason = "正在压缩上下文,完成之后再发送";
+	} else if (activity === "stopping") {
+		blockedReason = "正在停止这一轮,稍后可以继续发送";
+	} else if (session !== undefined && session.state.model === undefined) {
+		blockedReason = "这个会话没有可用模型,到设置里配置提供方与凭证";
+	} else if (session !== undefined && providerAuth[session.state.model?.provider ?? ""] === false) {
+		blockedReason = "当前模型的提供方还没有配置凭证,到设置里补上";
+	}
+	const queued = session?.state.queued ?? { steering: [], followUp: [] };
+	const canFork = activity === "idle" && session?.state.maintenance === undefined;
+
+	/**
+	 * 跑一次会话切换类操作。
+	 *
+	 * 只采用最后一次选择的文件:后发起的操作会推进序号,先前那次的成功或失败都不再落到界面上。
+	 * 失败留下带重试的提示,成功则清掉旧提示并刷新列表。
+	 */
+	const runSessionAction = useCallback(
+		(action: () => Promise<string | undefined>, onDone?: () => void) => {
+			switchSeq.current += 1;
+			const seq = switchSeq.current;
+			void (async () => {
+				try {
+					const file = await action();
+					if (seq !== switchSeq.current) {
+						return;
+					}
+					onDone?.();
+					setActiveFile(file);
+					setSessionError(undefined);
+					await refreshSessions();
+				} catch (error) {
+					if (seq !== switchSeq.current) {
+						return;
+					}
+					setSessionError({
+						message: error instanceof Error ? error.message : String(error),
+						retry: () => runSessionAction(action, onDone),
+					});
+				}
+			})();
+		},
+		[refreshSessions],
+	);
+
+	/**
+	 * 先确认目录信任,再执行打开类动作。
+	 *
+	 * 目录里有项目级资源且还没做过决定时先问一次,决定之后再往下走;没有这类资源或已有决定
+	 * 时直接执行。查询失败按未信任处理,不拦动作。
+	 */
+	const withTrust = useCallback((cwd: string | undefined, run: () => void) => {
+		if (cwd === undefined) {
+			run();
+			return;
+		}
+		void (async () => {
+			try {
+				const state = await client.projectTrust(cwd);
+				if (state.hasProjectResources && state.trusted === undefined) {
+					setTrustPrompt({ cwd, run });
+					return;
+				}
+			} catch {
+				// 查不到就不拦,交给设备按未信任处理
+			}
+			run();
+		})();
+	}, []);
+
+	/** 记下信任决定并继续被挡住的那次打开。 */
+	const decideTrust = useCallback(
+		(trusted: boolean) => {
+			const prompt = trustPrompt;
+			if (prompt === undefined) {
+				return;
+			}
+			setTrustPrompt(undefined);
+			void (async () => {
+				try {
+					await client.setProjectTrust(prompt.cwd, trusted);
+				} catch {
+					// 决定没记下时仍按未信任继续,下次打开会再问
+				}
+				prompt.run();
+			})();
+		},
+		[trustPrompt],
+	);
+
+	const openSession = useCallback(
+		(path: string, knownCwd?: string) => {
+			const cwd = knownCwd ?? sessions.find((session) => session.path === path)?.cwd;
+			withTrust(cwd, () => {
+				runSessionAction(async () => {
+					await client.switchSession(path);
+					return path;
+				});
+			});
+		},
+		[runSessionAction, sessions, withTrust],
+	);
+
+	/** 新建会话，采用设置里的默认模型与思考档位；没有设置时交给设备决定。 */
+	const createSession = useCallback(
+		(cwd: string) => {
+			const model = settings.defaultModel;
+			const thinkingLevel = settings.defaultThinkingLevel;
+			withTrust(cwd, () => {
+				runSessionAction(async () => {
+					const opened = await client.createSession({
+						...(cwd.length > 0 ? { cwd } : {}),
+						...(model === undefined ? {} : { model }),
+						...(thinkingLevel === undefined ? {} : { thinkingLevel }),
+					});
+					return opened.file;
+				});
+			});
+		},
+		[runSessionAction, settings.defaultModel, settings.defaultThinkingLevel, withTrust],
+	);
+
+	// 连接状态：断开时输入区说明原因，恢复后自动放开
+	useEffect(() => {
+		setIsOnline(transport.state === "ready");
+		return transport.onStateChange((state) => setIsOnline(state === "ready"));
+	}, []);
+
 	useEffect(() => {
 		if (started.current) {
 			return;
@@ -115,49 +481,136 @@ export function App() {
 			const handshake = await transport.connect();
 			client.attach(handshake);
 			setDevice(handshake);
-			setProjects(await client.listProjects());
+			await refreshProjects();
+			// 设置读不到时用缺省值，界面照常可用
+			setSettings(await client.getSettings().catch(() => DEFAULT_SETTINGS));
+			// 模型目录与凭证状态供输入区的模型选择使用，取不到时选择器只展示当前模型
+			const [models, providers] = await Promise.all([
+				client.listModels().catch(() => []),
+				client.listProviders().catch(() => []),
+			]);
+			setCatalog({
+				models,
+				auth: Object.fromEntries(providers.map((provider) => [provider.id, provider.authenticated])),
+			});
 			const pool = (await refreshSessions()) ?? [];
 			const newest = pickStartupSession(pool, bridge.projectDir);
 			if (newest) {
-				await client.openSession(newest.path);
-				setActiveFile(newest.path);
+				openSession(newest.path, newest.cwd);
 			}
 			setPhase("ready");
 		})().catch((error: unknown) => {
 			setFailure(error instanceof Error ? error.message : String(error));
 			setPhase("failed");
 		});
-	}, [refreshSessions]);
+	}, [openSession, refreshProjects, refreshSessions]);
 
-	void version;
+	/** 当前草稿落在哪个键：打开的会话按文件路径分开存，没有会话时存到新会话页面。 */
+	const draftKey = activeFile ?? NEW_DRAFT_KEY;
+	const draft = drafts[draftKey] ?? "";
 
-	const session = client.sessionView();
-	const chat = client.chatView();
-
-	const openSession = useCallback(async (path: string) => {
-		await client.release();
-		await client.openSession(path);
-		setActiveFile(path);
-	}, []);
-
-	const createSession = useCallback(
-		async (cwd: string) => {
-			await client.release();
-			const opened = await client.createSession({ ...(cwd.length > 0 ? { cwd } : {}) });
-			setActiveFile(opened.file);
-			await refreshSessions();
+	/** 改当前草稿。延迟写入本地保存，切换会话时不丢。 */
+	const updateDraft = useCallback(
+		(change: string | ((current: string) => string)) => {
+			setDrafts((current) => {
+				const value = typeof change === "function" ? change(current[draftKey] ?? "") : change;
+				const next = { ...current };
+				if (value.length === 0) {
+					delete next[draftKey];
+				} else {
+					next[draftKey] = value;
+				}
+				return next;
+			});
 		},
-		[refreshSessions],
+		[draftKey],
 	);
+
+	// 草稿写进本地保存，重启之后还在
+	useEffect(() => {
+		localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts));
+	}, [drafts]);
 
 	const send = useCallback(() => {
 		const text = draft.trim();
 		if (text.length === 0) {
 			return;
 		}
-		setDraft("");
+		// 草稿留到设备确认再收,发送被拒时不用重打
+		if (activity === "running") {
+			client.enqueue(text);
+			return;
+		}
 		client.send(text);
-	}, [draft]);
+	}, [activity, draft]);
+
+	/**
+	 * 收回排队内容:清空设备侧队列,把文字拼回输入框。
+	 *
+	 * 排队条来自 session/queueChanged,清空后设备会再推一次空队列,这里只改草稿。
+	 */
+	const takeBackQueue = useCallback(() => {
+		const entries = [...queued.steering, ...queued.followUp];
+		client.clearQueue();
+		if (entries.length === 0) {
+			return;
+		}
+		updateDraft((current) => {
+			const restored = entries.join("\n\n");
+			return current.trim().length === 0 ? restored : `${restored}\n\n${current}`;
+		});
+	}, [queued, updateDraft]);
+
+	useEffect(() => {
+		return client.onSent((text) => {
+			// 只收掉刚发出的那段,等待期间新输入的内容保留
+			updateDraft((current) => (current.trim() === text ? "" : current));
+		});
+	}, [updateDraft]);
+
+	/**
+	 * 回退到某条用户消息之前:从那一轮末尾分出新会话并切过去,把这条消息的文本放回输入框。
+	 *
+	 * pi 的会话文件只追加,回退靠分叉实现,原会话保持不动。
+	 */
+	const revertTo = useCallback(
+		(entryId: string, text: string) => {
+			withTrust(session?.state.cwd, () => {
+				runSessionAction(
+					async () => (await client.fork(entryId)).file,
+					() => updateDraft(() => text),
+				);
+			});
+		},
+		[runSessionAction, session?.state.cwd, updateDraft, withTrust],
+	);
+
+	/**
+	 * 添加项目。
+	 *
+	 * 添加接口返回的数据直接并进列表，后续的列表刷新失败只标脏，已经添加成功的项目不会
+	 * 从侧栏消失；拉取会话失败同样不影响添加结果。
+	 */
+	/**
+	 * 重试失败的一轮。
+	 *
+	 * 从这条用户消息之前分叉出新会话并立刻重发同一段文本:新会话里只有一份用户消息,失败
+	 * 的那次调用留在原会话里,不会重复追加。
+	 */
+	const retryTurn = useCallback(
+		(entryId: string, text: string) => {
+			withTrust(session?.state.cwd, () => {
+				runSessionAction(
+					async () => (await client.fork(entryId)).file,
+					() => {
+						updateDraft(() => text);
+						client.send(text);
+					},
+				);
+			});
+		},
+		[runSessionAction, session?.state.cwd, updateDraft, withTrust],
+	);
 
 	const createProject = useCallback(
 		async (input: { cwd: string; name: string | undefined }) => {
@@ -165,22 +618,91 @@ export function App() {
 				cwd: input.cwd,
 				...(input.name === undefined ? {} : { name: input.name }),
 			});
-			setProjects(await client.listProjects());
+			setProjects((current) => mergeProject(current, created));
 			setCreateCwd(created.cwd);
+			await refreshProjects();
+			await refreshSessions();
+		},
+		[refreshProjects, refreshSessions],
+	);
+
+	/** 改名结果直接替换列表里那一条，名字在过滤器与新建提示里同步变化。 */
+	const renameProject = useCallback(async (id: string, name: string | undefined) => {
+		const updated = await client.renameProject(id, name);
+		setProjects((current) => mergeProject(current, updated));
+	}, []);
+
+	/** 移除项目。会话文件与项目目录都不动，只从清单里去掉。 */
+	const removeProject = useCallback(
+		async (id: string) => {
+			await client.removeProject(id);
+			setProjects((current) => current.filter((item) => item.id !== id));
+			await refreshProjects();
+			await refreshSessions();
+		},
+		[refreshProjects, refreshSessions],
+	);
+
+	const revealProject = useCallback(async (id: string) => {
+		await client.revealProject(id);
+	}, []);
+
+	/** 会话改名。改的是当前会话时名字会随会话状态一起推过来，列表在这里重拉一次。 */
+	const renameSession = useCallback(
+		async (path: string, name: string | undefined) => {
+			await client.renameSession(path, name);
 			await refreshSessions();
 		},
 		[refreshSessions],
 	);
 
+	/**
+	 * 删除会话。
+	 *
+	 * 删的是当前打开的会话时，连接会连带释放，界面回到没有会话的状态，再重新拉起一个
+	 * 可用的会话或落到空状态页。
+	 */
+	const deleteSession = useCallback(
+		async (path: string) => {
+			await client.deleteSession(path);
+			const pool = (await refreshSessions()) ?? [];
+			if (activeFile !== path) {
+				return;
+			}
+			setActiveFile(undefined);
+			// 还有别的会话就切过去,一个都不剩时留在空状态页
+			const next = pickStartupSession(pool, bridge.projectDir);
+			if (next !== undefined) {
+				openSession(next.path, next.cwd);
+			}
+		},
+		[activeFile, openSession, refreshSessions],
+	);
+
 	const forkTurn = useCallback(
 		(beforeEntryId: string | undefined) => {
-			void client.fork(beforeEntryId).then(async (forked) => {
-				setActiveFile(forked.file);
-				await refreshSessions();
+			withTrust(session?.state.cwd, () => {
+				runSessionAction(async () => (await client.fork(beforeEntryId)).file);
 			});
 		},
-		[refreshSessions],
+		[runSessionAction, session?.state.cwd, withTrust],
 	);
+
+	/** 没有打开会话时新建落在的目录：优先上次用过的，其次第一个项目。 */
+	const emptyCreateCwd = createCwd.length > 0 ? createCwd : projects[0]?.cwd;
+	/** 会话错误条，打开类操作失败时共用。 */
+	const errorBar =
+		sessionError === undefined ? null : (
+			<div className="session-error">
+				<span className="session-error-text">{sessionError.message}</span>
+				<button type="button" className="btn" onClick={sessionError.retry}>
+					重试
+				</button>
+				<button type="button" className="ib" aria-label="关闭提示" onClick={() => setSessionError(undefined)}>
+					<CloseIcon size={12} />
+				</button>
+			</div>
+		);
 
 	const transcript = useMemo(() => (chat ? toTranscript(chat) : []), [chat]);
 	const { scrollRef, isPinned, scrollToBottom } = useStickToBottom(transcript, activeFile);
@@ -203,6 +725,22 @@ export function App() {
 				<h1>连不上设备</h1>
 				<p>{failure}</p>
 				<p>{bridge.endpoint}</p>
+				<button
+					type="button"
+					className="boot-retry"
+					onClick={() => {
+						setPhase("connecting");
+						void reconnect().then(
+							() => setPhase("ready"),
+							(error: unknown) => {
+								setFailure(error instanceof Error ? error.message : String(error));
+								setPhase("failed");
+							},
+						);
+					}}
+				>
+					重试
+				</button>
 			</main>
 		);
 	}
@@ -223,7 +761,8 @@ export function App() {
 				hosts={hosts}
 				projects={projects}
 				activeFile={activeFile}
-				runningFile={chat?.isRunning === true ? activeFile : undefined}
+				runningFile={activity === "idle" ? undefined : activeFile}
+				runningDot={activity === "compacting" ? "compacting" : "running"}
 				createCwd={createCwd}
 				theme={theme}
 				onSelect={(path) => void openSession(path)}
@@ -233,56 +772,135 @@ export function App() {
 				}}
 				canCreate={phase === "ready"}
 				onAddProject={() => setIsProjectDialogOpen(true)}
-				onToggleTheme={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
+				isProjectsStale={isProjectsStale}
+				onRefreshProjects={() => void refreshProjects()}
+				onRenameProject={renameProject}
+				onRemoveProject={removeProject}
+				onRevealProject={revealProject}
+				onRenameSession={renameSession}
+				onDeleteSession={deleteSession}
+				onToggleTheme={toggleTheme}
+				onOpenSettings={() => {
+					setView("settings");
+				}}
+				isSettingsOpen={view === "settings"}
 			/>
 
 			<main className="main">
-				<section className="scroll" ref={scrollRef}>
-					<div className="column">
-						<ChatTranscript
-							items={transcript}
-							canFork={chat !== undefined && !chat.isRunning && !chat.willRetry && chat.retry === undefined}
-							onFork={forkTurn}
-							retry={chat?.retry}
-							renames={chat?.renames}
-							emptyHint="还没有消息,输入内容开始"
+				{view === "settings" ? (
+					<SettingsPage
+						section={settingsSection}
+						onSectionChange={setSettingsSection}
+						onClose={() => setView("chat")}
+						data={settingsData}
+						onSettingsApplied={setSettings}
+						about={{
+							appVersion: bridge.appVersion,
+							runtime: `Electron ${bridge.platform}`,
+							endpoint: bridge.endpoint,
+						}}
+					/>
+				) : session === undefined ? (
+					<div className="empty-wrap">
+						{errorBar}
+						<EmptyState
+							cwd={emptyCreateCwd}
+							canCreate={phase === "ready"}
+							onCreate={() => {
+								if (emptyCreateCwd !== undefined) {
+									createSession(emptyCreateCwd);
+								}
+							}}
+							onAddProject={() => setIsProjectDialogOpen(true)}
 						/>
 					</div>
-				</section>
-
-				<div className="footer">
-					{isPinned ? null : (
-						<button
-							type="button"
-							className="to-bottom"
-							aria-label="回到底部"
-							onClick={() => scrollToBottom("smooth")}
-						>
-							<ArrowDownIcon size={16} />
-						</button>
-					)}
-					<div className="footer-column">
-						<Composer
-							value={draft}
-							onChange={setDraft}
-							onSend={send}
-							onStop={() => client.cancel()}
-							isRunning={chat?.isRunning === true}
-							model={session?.model}
-							thinkingLevel={session?.thinkingLevel}
-						/>
-
-						{chat && chat.notices.length > 0 ? (
-							<div className="notices">
-								{chat.notices.map((notice) => (
-									<span key={`${notice.level}:${notice.message}`} className="chip">
-										{notice.message}
-									</span>
-								))}
+				) : (
+					<>
+						<section className="scroll" ref={scrollRef}>
+							<div className="column">
+								<ChatTranscript
+									items={transcript}
+									canFork={canFork}
+									onFork={forkTurn}
+									canRevert={canFork}
+									onRevert={revertTo}
+									retry={retryOf(session.state.maintenance)}
+									onRetryTurn={retryTurn}
+									onOpenSettings={() => {
+										setSettingsSection("providers");
+										setView("settings");
+									}}
+									onCopyDetails={(text) => {
+										void navigator.clipboard.writeText(text).catch(() => undefined);
+									}}
+									renames={chat?.renames}
+									emptyHint="还没有消息,输入内容开始"
+								/>
 							</div>
-						) : null}
-					</div>
-				</div>
+						</section>
+
+						<div className="footer">
+							{isPinned ? null : (
+								<button
+									type="button"
+									className="to-bottom"
+									aria-label="回到底部"
+									onClick={() => scrollToBottom("smooth")}
+								>
+									<ArrowDownIcon size={16} />
+								</button>
+							)}
+							<div className="footer-column">
+								{errorBar}
+								<QueueStrip queued={queued} onClear={takeBackQueue} />
+								<Composer
+									value={draft}
+									onChange={updateDraft}
+									onSend={send}
+									onStop={() => client.cancel()}
+									activity={activity}
+									model={session.state.model}
+									thinkingLevel={session.state.thinkingLevel}
+									thinkingLevels={session.state.availableThinkingLevels}
+									models={visibleModels}
+									providerAuth={providerAuth}
+									onModelChange={(next) => client.setModel({ provider: next.provider, id: next.id })}
+									onThinkingLevelChange={(level) => client.setThinkingLevel(level)}
+									onSetDefaultModel={(next) =>
+										void client
+											.saveSettings({
+												...settings,
+												defaultModel: { provider: next.provider, id: next.id },
+											})
+											.then(setSettings)
+											.catch(() => undefined)
+									}
+									onSetDefaultThinkingLevel={(level) =>
+										void client
+											.saveSettings({ ...settings, defaultThinkingLevel: level })
+											.then(setSettings)
+											.catch(() => undefined)
+									}
+									shiftEnterToSend={settings.input.sendKey === "shiftEnter"}
+									blockedReason={blockedReason}
+								/>
+
+								{chat && chat.notices.length > 0 ? (
+									<div className="notices">
+										{chat.notices.map((notice) => (
+											<span
+												key={`${notice.level}:${notice.message}`}
+												className={notice.level === "error" ? "chip is-error" : "chip"}
+											>
+												{notice.message}
+											</span>
+										))}
+									</div>
+								) : null}
+							</div>
+						</div>
+					</>
+				)}
 			</main>
 
 			<CreateProjectDialog
@@ -291,6 +909,14 @@ export function App() {
 				onCreate={createProject}
 				onClose={() => setIsProjectDialogOpen(false)}
 			/>
+
+			{trustPrompt ? (
+				<TrustDialog
+					cwd={trustPrompt.cwd}
+					onDecide={decideTrust}
+					onCancel={() => setTrustPrompt(undefined)}
+				/>
+			) : null}
 		</div>
 	);
 }

@@ -99,32 +99,14 @@ describe("reduceChat", () => {
 		expect(view.toolCalls.c1).toMatchObject({ isRunning: false, durationMs: 12, isError: false });
 	});
 
-	it("终局信号清掉运行与重试状态", () => {
-		let view = reduceChat(chat(), { type: "chat/turnStarted", text: "hi" });
-		view = reduceChat(view, {
-			type: "chat/retryStarted",
-			attempt: 1,
-			maxAttempts: 3,
-			delayMs: 500,
-			error: "限流",
-		});
-		view = reduceChat(view, { type: "chat/turnCompleted", willRetry: true });
-		expect(view).toMatchObject({ isRunning: false, willRetry: true });
-		view = reduceChat(view, { type: "chat/settled", aborted: false });
-		expect(view).toMatchObject({ isRunning: false, willRetry: false, retry: undefined });
-	});
-
-	it("排队变化两边都记录", () => {
-		let view = reduceChat(chat(), { type: "chat/queueChanged", steering: ["a"], followUp: ["b"] });
-		view = reduceChat(view, { type: "chat/pendingMessageSet", kind: "queued", text: "c" });
-		expect(view.queue).toEqual({ steering: ["a"], followUp: ["b", "c"] });
-		view = reduceChat(view, { type: "chat/queueCleared" });
-		expect(view.queue).toEqual({ steering: [], followUp: [] });
+	it("回合终局不改变对话内容", () => {
+		const base = chat();
+		expect(reduceChat(base, { type: "chat/settled", aborted: true })).toBe(base);
 	});
 
 	it("会话动作对对话视图无影响", () => {
 		const base = chat();
-		expect(reduceChat(base, { type: "session/status", status: "running" })).toBe(base);
+		expect(reduceChat(base, { type: "session/phase", phase: "running", maintenance: undefined })).toBe(base);
 	});
 
 	it("归约不改动入参", () => {
@@ -140,31 +122,38 @@ describe("reduceChat", () => {
 });
 
 describe("reduceSession", () => {
-	it("状态、模型与思考档位分别更新", () => {
-		let view = reduceSession(session(), { type: "session/status", status: "running" });
+	it("阶段、模型与思考档位分别更新", () => {
+		let view = reduceSession(session(), { type: "session/phase", phase: "running", maintenance: undefined });
 		view = reduceSession(view, { type: "session/thinkingLevelChanged", level: "high" });
-		expect(view.status).toBe("running");
-		expect(view.thinkingLevel).toBe("high");
+		expect(view.state.phase).toBe("running");
+		expect(view.state.thinkingLevel).toBe("high");
 	});
 
-	it("压缩开始与结束", () => {
-		let view = reduceSession(session(), { type: "session/compactionStarted", reason: "threshold" });
-		expect(view.compaction).toMatchObject({ isRunning: true, reason: "threshold" });
-		view = reduceSession(view, {
-			type: "session/compactionCompleted",
+	it("维护动作独立于阶段", () => {
+		let view = reduceSession(session(), {
+			type: "session/phase",
+			phase: "idle",
+			maintenance: { kind: "compaction", reason: "threshold", tokensBefore: 100, estimatedTokensAfter: 20 },
+		});
+		expect(view.state.phase).toBe("idle");
+		expect(view.state.maintenance).toEqual({
+			kind: "compaction",
 			reason: "threshold",
 			tokensBefore: 100,
 			estimatedTokensAfter: 20,
-			aborted: false,
-			willRetry: false,
-			error: undefined,
 		});
-		expect(view.compaction).toMatchObject({ isRunning: false, tokensBefore: 100, estimatedTokensAfter: 20 });
+		view = reduceSession(view, { type: "session/phase", phase: "running", maintenance: undefined });
+		expect(view.state.maintenance).toBeUndefined();
+	});
+
+	it("排队内容记在会话视图上", () => {
+		const view = reduceSession(session(), { type: "session/queueChanged", steering: ["a"], followUp: ["b"] });
+		expect(view.state.queued).toEqual({ steering: ["a"], followUp: ["b"] });
 	});
 
 	it("改名立即生效", () => {
 		const view = reduceSession(session(), { type: "session/titleChanged", title: "新名字" });
-		expect(view.title).toBe("新名字");
+		expect(view.state.title).toBe("新名字");
 	});
 
 	it("对话动作对会话视图无影响", () => {
@@ -183,5 +172,28 @@ describe("动作帧与视图的配合", () => {
 			action: { type: "chat/notice", level: "info", message: "已连接" },
 		};
 		expect(reduceChat(chat(), frame.action).notices).toEqual([{ level: "info", message: "已连接" }]);
+	});
+});
+
+describe("会话模型变化", () => {
+	it("换模型时同时更新可选档位", () => {
+		const view = reduceSession(session(), {
+			type: "session/modelChanged",
+			model: undefined,
+			availableThinkingLevels: ["off", "medium"],
+		});
+		expect(view.state.availableThinkingLevels).toEqual(["off", "medium"]);
+		expect(view.state.model).toBeUndefined();
+	});
+
+	it("换档位不动模型与可选档位", () => {
+		const base = reduceSession(session(), {
+			type: "session/modelChanged",
+			model: undefined,
+			availableThinkingLevels: ["off", "high"],
+		});
+		const view = reduceSession(base, { type: "session/thinkingLevelChanged", level: "high" });
+		expect(view.state.thinkingLevel).toBe("high");
+		expect(view.state.availableThinkingLevels).toEqual(["off", "high"]);
 	});
 });

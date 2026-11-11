@@ -79,8 +79,8 @@ export class SessionClient {
 	private readonly resyncing = { session: false, chat: false };
 	private handshake: DeviceHandshake | undefined;
 	private opened: OpenedSession | undefined;
-	/** 等设备确认的这次发送 */
-	private pendingSend: { clientSeq: number; text: string } | undefined;
+	/** 等待设备确认的输入:turn 等消息入对话,steering 等队列里出现这段文字 */
+	private pendingSend: { clientSeq: number; text: string; kind: "turn" | "steering" } | undefined;
 	private readonly sentListeners = new Set<(text: string) => void>();
 	/** 是否已经挂了缺口监听,避免重复注册 */
 	private isGapWatched = false;
@@ -301,11 +301,32 @@ export class SessionClient {
 			type: "chat/turnStarted",
 			text,
 		});
-		this.pendingSend = { clientSeq, text };
+		this.pendingSend = { clientSeq, text, kind: "turn" };
 		return clientSeq;
 	}
 
-	/** 设备把这条消息放进对话时回调,带上当时的文本。 */
+	/**
+	 * 排队一条消息。
+	 *
+	 * 走 pi 的 steering:这一轮还在跑时插进去,当前助手回合的工具调用执行完后、下一次请求
+	 * 模型之前生效,不用等整轮结束。设备把这条文字记进队列后回 session/queueChanged。
+	 */
+	enqueue(text: string): number {
+		const clientSeq = this.transport.dispatch(this.requireOpened().sessionChannel, {
+			type: "session/pendingMessageSet",
+			kind: "steering",
+			text,
+		});
+		this.pendingSend = { clientSeq, text, kind: "steering" };
+		return clientSeq;
+	}
+
+	/** 清空排队,界面把内容还原到输入框。 */
+	clearQueue(): number {
+		return this.transport.dispatch(this.requireOpened().sessionChannel, { type: "session/queueCleared" });
+	}
+
+	/** 设备确认收到这条消息后回调,带上当时的文本。 */
 	onSent(listener: (text: string) => void): () => void {
 		this.sentListeners.add(listener);
 		return () => {
@@ -313,17 +334,22 @@ export class SessionClient {
 		};
 	}
 
-	/** 设备确认消息已进入对话,通知界面收起草稿。 */
+	/** 设备确认消息已进入对话或已进队列,通知界面收起草稿。 */
 	private confirmSend(frame: ActionFrame): void {
 		const opened = this.opened;
 		const pending = this.pendingSend;
 		if (opened === undefined || pending === undefined) {
 			return;
 		}
-		if (frame.channel !== opened.chatChannel || frame.action.type !== "chat/messageAppended") {
-			return;
-		}
-		if (frame.action.message.role !== "user") {
+		const accepted =
+			pending.kind === "turn"
+				? frame.channel === opened.chatChannel &&
+					frame.action.type === "chat/messageAppended" &&
+					frame.action.message.role === "user"
+				: frame.channel === opened.sessionChannel &&
+					frame.action.type === "session/queueChanged" &&
+					[...frame.action.steering, ...frame.action.followUp].includes(pending.text);
+		if (!accepted) {
 			return;
 		}
 		this.pendingSend = undefined;
@@ -343,7 +369,10 @@ export class SessionClient {
 		if (clientSeq !== undefined && this.pendingSend?.clientSeq === clientSeq) {
 			this.pendingSend = undefined;
 		}
-		const label = frame.action.type === "chat/turnStarted" ? "发送失败" : "操作被拒绝";
+		const label =
+			frame.action.type === "chat/turnStarted" || frame.action.type === "session/pendingMessageSet"
+				? "发送失败"
+				: "操作被拒绝";
 		// 提示统一挂在同一会话的对话通道上,会话通道的动作被拒也在这里显示
 		const parsed = parseChannel(frame.channel);
 		const target = parsed === undefined ? undefined : makeChannel("chat", parsed.id);

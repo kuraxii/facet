@@ -6,6 +6,7 @@ import {
 	ChatTranscript,
 	Composer,
 	CreateProjectDialog,
+	QueueStrip,
 	SessionSidebar,
 	type SidebarHost,
 	samePath,
@@ -140,6 +141,10 @@ export function App() {
 
 	const session = client.sessionView();
 	const chat = client.chatView();
+	// 对话此刻的状态由会话状态得出,界面不自己拼布尔量
+	const activity = chatActivity(session);
+	const queued = session?.state.queued ?? { steering: [], followUp: [] };
+	const canFork = activity === "idle" && session?.state.maintenance === undefined;
 
 	const openSession = useCallback(async (path: string) => {
 		await client.release();
@@ -162,9 +167,30 @@ export function App() {
 		if (text.length === 0) {
 			return;
 		}
-		// 草稿留到设备把这条消息放进对话再收,发送被拒时不用重打
+		// 草稿留到设备确认再收,发送被拒时不用重打
+		if (activity === "running") {
+			client.enqueue(text);
+			return;
+		}
 		client.send(text);
-	}, [draft]);
+	}, [activity, draft]);
+
+	/**
+	 * 收回排队内容:清空设备侧队列,把文字拼回输入框。
+	 *
+	 * 排队条来自 session/queueChanged,清空后设备会再推一次空队列,这里只改草稿。
+	 */
+	const takeBackQueue = useCallback(() => {
+		const entries = [...queued.steering, ...queued.followUp];
+		client.clearQueue();
+		if (entries.length === 0) {
+			return;
+		}
+		setDraft((current) => {
+			const restored = entries.join("\n\n");
+			return current.trim().length === 0 ? restored : `${restored}\n\n${current}`;
+		});
+	}, [queued]);
 
 	useEffect(() => {
 		return client.onSent((text) => {
@@ -246,10 +272,6 @@ export function App() {
 		);
 	}
 
-	// 对话此刻的状态由会话状态与中止请求合并得出,界面不自己拼布尔量
-	const activity = chatActivity(session);
-	const canFork = activity === "idle" && session?.state.maintenance === undefined;
-
 	return (
 		<div className="shell">
 			<SessionSidebar
@@ -298,6 +320,7 @@ export function App() {
 						</button>
 					)}
 					<div className="footer-column">
+						<QueueStrip queued={queued} onClear={takeBackQueue} />
 						<Composer
 							value={draft}
 							onChange={setDraft}

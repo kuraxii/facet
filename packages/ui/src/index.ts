@@ -7,6 +7,8 @@ export type { ComposerProps } from "./chat/Composer.tsx";
 export { Composer } from "./chat/Composer.tsx";
 export type { CreateProjectDialogProps } from "./chat/CreateProjectDialog.tsx";
 export { CreateProjectDialog } from "./chat/CreateProjectDialog.tsx";
+export type { QueueStripProps } from "./chat/QueueStrip.tsx";
+export { QueueStrip } from "./chat/QueueStrip.tsx";
 export type { SessionSidebarProps, ThemeName } from "./chat/SessionSidebar.tsx";
 export { SessionSidebar } from "./chat/SessionSidebar.tsx";
 export type {

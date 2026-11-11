@@ -267,6 +267,54 @@ describe("SessionClient", () => {
 		expect(sent).toEqual([]);
 	});
 
+	it("运行中的输入走排队,队列里出现这段文字才算收到", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		const sent: string[] = [];
+		client.onSent((text) => sent.push(text));
+		client.enqueue("补充一句");
+		expect(transport.dispatched).toEqual([
+			{
+				channel: SESSION,
+				action: { type: "session/pendingMessageSet", kind: "steering", text: "补充一句" },
+			},
+		]);
+		expect(sent).toEqual([]);
+		transport.emit(SESSION, { type: "session/queueChanged", steering: ["别的"], followUp: [] });
+		expect(sent).toEqual([]);
+		transport.emit(SESSION, { type: "session/queueChanged", steering: ["补充一句"], followUp: [] });
+		expect(sent).toEqual(["补充一句"]);
+		expect(client.sessionView()?.state.queued.steering).toEqual(["补充一句"]);
+	});
+
+	it("清空排队走会话通道", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		client.clearQueue();
+		expect(transport.dispatched).toEqual([{ channel: SESSION, action: { type: "session/queueCleared" } }]);
+	});
+
+	it("排队被拒时给出提示且不确认", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		const sent: string[] = [];
+		client.onSent((text) => sent.push(text));
+		const clientSeq = client.enqueue("补充一句");
+		transport.reject(
+			SESSION,
+			clientSeq,
+			{ type: "session/pendingMessageSet", kind: "steering", text: "补充一句" },
+			"Cannot submit a prompt while compaction is in progress",
+		);
+		expect(sent).toEqual([]);
+		expect(client.chatView()?.notices).toEqual([
+			{
+				level: "error",
+				message: "发送失败:Cannot submit a prompt while compaction is in progress",
+			},
+		]);
+	});
+
 	it("会话通道的动作被拒也提示在对话视图上", async () => {
 		const { transport, client } = createClient(2);
 		await client.openSession("/tmp/s1.jsonl");

@@ -46,14 +46,16 @@ export function Composer({
 	thinkingLevel,
 	onCycleModel,
 }: ComposerProps) {
-	const canSend = value.trim().length > 0 && activity === "idle";
+	// 运行中发送走排队,插入当前轮次;压缩与停止中不接受新输入
+	const canSend = value.trim().length > 0 && (activity === "idle" || activity === "running");
+	const isQueuing = activity === "running";
 
 	return (
 		<div className="composer">
 			<textarea
 				rows={2}
 				value={value}
-				placeholder="输入消息,回车发送"
+				placeholder={activity === "running" ? "输入消息,回车插入当前轮次" : "输入消息,回车发送"}
 				onChange={(event) => onChange(event.target.value)}
 				onKeyDown={(event) => {
 					if (event.key === "Enter" && !event.shiftKey) {
@@ -89,7 +91,14 @@ export function Composer({
 							{activity === "stopping" ? "停止中" : "停止"}
 						</button>
 					)}
-					<button type="button" className="send" aria-label="发送" onClick={onSend} disabled={!canSend}>
+					<button
+						type="button"
+						className="send"
+						aria-label={isQueuing ? "排队" : "发送"}
+						title={isQueuing ? "插入当前轮次" : undefined}
+						onClick={onSend}
+						disabled={!canSend}
+					>
 						<SendIcon size={16} />
 					</button>
 				</span>

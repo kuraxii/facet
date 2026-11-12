@@ -7,6 +7,7 @@
  */
 import type { Action, ActionOrigin } from "./action.ts";
 import type { Channel } from "./channel.ts";
+import type { FileContent, FileEntry } from "./file.ts";
 import type { GitDiff, GitStatus } from "./git.ts";
 import type {
 	CustomProviderInfo,
@@ -38,6 +39,18 @@ export type ErrorCode =
 	| "unknown_session"
 	/** 主机侧拒绝执行,例如会话正在运行而动作未指定投递方式 */
 	| "rejected"
+	/** 文件或目录不存在 */
+	| "file_not_found"
+	/** 路径不在项目根内，含符号链接指到根外 */
+	| "outside_project"
+	/** 目标不是文件 */
+	| "not_a_file"
+	/** 目标不是目录 */
+	| "not_a_directory"
+	/** 文件超过读写上限 */
+	| "file_too_large"
+	/** 文件在磁盘上已被改动，与预期版本不一致 */
+	| "file_conflict"
 	/** 主机侧内部错误 */
 	| "internal";
 
@@ -167,6 +180,10 @@ export interface RequestParams {
 	availableModels: Record<string, never>;
 	/** 列出提供方及其凭证状态。 */
 	providers: Record<string, never>;
+	/** 列出项目里的一个目录。path 为空串表示项目根。 */
+	listDirectory: { cwd: string; path: string };
+	/** 读一个文件；文本按 UTF-8 解码，二进制与超大文件只给类型与大小。 */
+	readFile: { cwd: string; path: string };
 	/** 列出项目工作树相对 HEAD 的改动。 */
 	gitStatus: { cwd: string };
 	/** 取单个文件的补丁。untracked 为真时按「从空文件新增」合成补丁。 */
@@ -242,6 +259,8 @@ export interface RequestResults {
 	models: { models: ModelInfo[] };
 	availableModels: { models: ModelInfo[] };
 	providers: { providers: ProviderInfo[] };
+	listDirectory: { entries: FileEntry[] };
+	readFile: FileContent;
 	gitStatus: GitStatus;
 	gitDiff: GitDiff;
 	listProjects: { projects: ProjectInfo[] };

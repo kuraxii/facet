@@ -58,6 +58,8 @@ export type { MarkdownProps } from "./markdown/Markdown.tsx";
 export { Markdown } from "./markdown/Markdown.tsx";
 export type { ChangesPaneProps } from "./panel/changes-pane.tsx";
 export { ChangesPane } from "./panel/changes-pane.tsx";
+export type { FilesPaneProps } from "./panel/files-pane.tsx";
+export { FilesPane } from "./panel/files-pane.tsx";
 export type { PanelStorage, RightPanelState, RightPanelTab } from "./panel/panel-state.ts";
 export {
 	clampPanelWidth,

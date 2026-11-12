@@ -29,6 +29,7 @@ import {
 import { WebSocket, WebSocketServer } from "ws";
 import type { ServerConfig } from "./config.ts";
 import { buildDiagnostics } from "./diagnostics.ts";
+import { FileAccessError, listDirectory, readTextFile } from "./files.ts";
 import { gitDiff, gitStatus } from "./git.ts";
 import type { HostSource } from "./host-identity.ts";
 import { ProjectExistsError, ProjectNotFoundError, type ProjectStore } from "./project-store.ts";
@@ -312,6 +313,16 @@ async function handleRequest(
 			return { models: await context.factory.availableModels() };
 		case "providers":
 			return { providers: context.factory.providers() };
+		case "listDirectory": {
+			const source = asObject(params);
+			const cwd = await resolveProjectDirectory(requiredString(source, "cwd"));
+			return { entries: await asFileError(listDirectory(cwd, optionalString(source, "path") ?? "")) };
+		}
+		case "readFile": {
+			const source = asObject(params);
+			const cwd = await resolveProjectDirectory(requiredString(source, "cwd"));
+			return await asFileError(readTextFile(cwd, requiredString(source, "path")));
+		}
 		case "gitStatus":
 			return await gitStatus(await resolveProjectDirectory(requiredString(asObject(params), "cwd")));
 		case "gitDiff": {
@@ -459,6 +470,18 @@ async function handleRequest(
  *
  * 目录不存在或不是目录时直接拒绝；符号链接与 `..` 一律换成实际路径，同一个目录只认一个标识。
  */
+/** 把文件操作的失败换成端点统一的错误码，界面据此给出不同提示。 */
+async function asFileError<T>(work: Promise<T>): Promise<T> {
+	try {
+		return await work;
+	} catch (error) {
+		if (error instanceof FileAccessError) {
+			throw new RequestError(error.code, error.message);
+		}
+		throw error;
+	}
+}
+
 async function resolveProjectDirectory(cwd: string): Promise<string> {
 	if (!isAbsolute(cwd)) {
 		throw new RequestError("bad_params", `项目目录必须是绝对路径:${cwd}`);

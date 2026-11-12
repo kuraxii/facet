@@ -1,5 +1,5 @@
 import { chatActivity, type HostHandshake, SessionClient, toTranscript } from "@facet/client-core";
-import type { GitFileChange, GitStatus } from "@facet/protocol";
+import type { FileContent, GitFileChange, GitStatus } from "@facet/protocol";
 import {
 	DEFAULT_SETTINGS,
 	type FacetSettings,
@@ -19,6 +19,7 @@ import {
 	CreateProjectDialog,
 	DEFAULT_DARK_THEME,
 	EmptyState,
+	FilesPane,
 	isDarkTheme,
 	QueueStrip,
 	RightPanel,
@@ -37,7 +38,8 @@ import {
 	useStickToBottom,
 	writePanelState,
 } from "@facet/ui";
-import { X } from "lucide-react";
+import { CodeSurface } from "@facet/ui-editor";
+import { ArrowLeft, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { PLACEHOLDER_HOSTS } from "./placeholder-hosts";
 
@@ -203,6 +205,11 @@ export function App() {
 	/** 右栏的状态；展开、分页与宽度都记在本地 */
 	const [panel, setPanel] = useState<RightPanelState>(() => readPanelState(localStorage));
 
+	/** 右栏里打开的文件；为空时显示目录树 */
+	const [openedFile, setOpenedFile] = useState<{ path: string; content: FileContent } | undefined>(undefined);
+	/** 取文件失败的原因 */
+	const [fileError, setFileError] = useState<string | undefined>(undefined);
+
 	/** 变更页的数据：工作树状态、是否在取、失败原因 */
 	const [changes, setChanges] = useState<{ status?: GitStatus; isLoading: boolean; error?: string }>({
 		isLoading: false,
@@ -352,6 +359,30 @@ export function App() {
 	const isChangesVisible = panel.open && panel.tab === "changes";
 	/** 会话所在的目录，git 命令都在它下面跑 */
 	const sessionCwd = session?.state.cwd;
+
+	/** 打开一个文件：取内容失败时把原因留在右栏。 */
+	const openFile = useCallback(
+		async (path: string): Promise<void> => {
+			if (sessionCwd === undefined) {
+				return;
+			}
+			setFileError(undefined);
+			try {
+				const content = await client.readFile(sessionCwd, path);
+				setOpenedFile({ path, content });
+			} catch (error) {
+				setFileError(error instanceof Error ? error.message : String(error));
+			}
+		},
+		[sessionCwd],
+	);
+
+	// 换会话时把打开的文件收起来
+	// biome-ignore lint/correctness/useExhaustiveDependencies: 只在会话变化时清空，状态设置函数不必列入
+	useEffect(() => {
+		setOpenedFile(undefined);
+		setFileError(undefined);
+	}, [activeFile]);
 
 	/** 重新取工作树状态。并发调用只采用最后一次的结果。 */
 	const refreshChanges = useCallback(async (): Promise<void> => {
@@ -1043,8 +1074,48 @@ export function App() {
 										: client.gitDiff(sessionCwd, file.path, file.status === "untracked")
 								}
 							/>
+						) : openedFile === undefined ? (
+							fileError === undefined ? (
+								<FilesPane
+									loadDirectory={(path) =>
+										sessionCwd === undefined
+											? Promise.reject(new Error("还没有打开会话"))
+											: client.listDirectory(sessionCwd, path)
+									}
+									onOpenFile={(path) => void openFile(path)}
+								/>
+							) : (
+								<p className="chg-note is-error">
+									{fileError}
+									<button type="button" className="chg-retry" onClick={() => setFileError(undefined)}>
+										返回目录
+									</button>
+								</p>
+							)
 						) : (
-							<p className="panel-empty">还没有打开文件</p>
+							<>
+								<div className="file-head">
+									<button
+										type="button"
+										className="ib"
+										aria-label="返回目录"
+										title="返回目录"
+										onClick={() => setOpenedFile(undefined)}
+									>
+										<ArrowLeft size={14} strokeWidth={1.5} />
+									</button>
+									<span className="file-path" title={openedFile.path}>
+										{openedFile.path}
+									</span>
+								</div>
+								{openedFile.content.kind === "text" ? (
+									<CodeSurface text={openedFile.content.content} path={openedFile.path} />
+								) : (
+									<p className="chg-note">
+										{openedFile.content.kind === "binary" ? "二进制文件，不预览" : "文件太大，不预览"}
+									</p>
+								)}
+							</>
 						)}
 					</RightPanel>
 				) : null}

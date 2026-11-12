@@ -966,6 +966,92 @@ svg.fl {
 	font-family: var(--font-mono);
 }
 
+/* 文件页：惰性目录树 */
+.tree {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.tree-row {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	width: 100%;
+	height: 24px;
+	padding-right: 6px;
+	border: 0;
+	border-radius: 5px;
+	background: transparent;
+	color: var(--t2);
+	font-size: 12px;
+	text-align: left;
+}
+
+.tree-row:hover {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+.tree-row.is-on {
+	background: var(--surface3);
+	color: var(--t1);
+}
+
+.tree-spacer {
+	flex: none;
+	width: 11px;
+}
+
+.tree-icon {
+	flex: none;
+	color: var(--t3);
+}
+
+.tree-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tree-note {
+	margin-left: auto;
+	color: var(--t3);
+	font-size: 11px;
+}
+
+.tree-note.is-error {
+	color: var(--err);
+}
+
+/* 文件页的查看与编辑 */
+.file-head {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 6px;
+	padding-bottom: 6px;
+	border-bottom: 1px solid var(--line);
+}
+
+.file-path {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	color: var(--t2);
+	font-family: var(--font-mono);
+	font-size: 11px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.code-surface {
+	height: calc(100% - 34px);
+	min-height: 0;
+	overflow: hidden;
+	border-radius: 6px;
+}
+
 /* 右栏里的占位说明：还没有接上内容时用 */
 .panel-empty {
 	margin: 0;

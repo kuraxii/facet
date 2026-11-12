@@ -16,6 +16,8 @@ import type {
 	CustomProviderInput,
 	Entry,
 	FacetSettings,
+	FileContent,
+	FileEntry,
 	GitDiff,
 	GitStatus,
 	ModelInfo,
@@ -241,6 +243,17 @@ export class SessionClient {
 	async listAvailableModels(): Promise<ModelInfo[]> {
 		const result = await this.transport.request("availableModels", {});
 		return result.models;
+	}
+
+	/** 列出项目里的一个目录，path 为空串表示项目根。 */
+	async listDirectory(cwd: string, path = ""): Promise<FileEntry[]> {
+		const result = await this.transport.request("listDirectory", { cwd, path });
+		return result.entries;
+	}
+
+	/** 读一个文件；文本按 UTF-8 解码，二进制与超大文件只给类型与大小。 */
+	async readFile(cwd: string, path: string): Promise<FileContent> {
+		return await this.transport.request("readFile", { cwd, path });
 	}
 
 	/**

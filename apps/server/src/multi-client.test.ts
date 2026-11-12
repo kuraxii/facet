@@ -8,7 +8,13 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Entry, SessionEvent, SessionEventListener, SessionSnapshot } from "@facet/protocol";
+import type {
+	ContextUsage,
+	Entry,
+	SessionEvent,
+	SessionEventListener,
+	SessionSnapshot,
+} from "@facet/protocol";
 import { type Channel, encodeFrame, FrameDecoder, makeChannel } from "@facet/protocol";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ServerConfig } from "./config.ts";
@@ -77,6 +83,17 @@ class FakeAgent implements HubAgent {
 		return undefined;
 	}
 	dispose(): void {}
+
+	/** 手动压缩：用例里只记下调用次数 */
+	compactCalls = 0;
+
+	async compact(): Promise<void> {
+		this.compactCalls += 1;
+	}
+
+	contextUsage(): ContextUsage | undefined {
+		return undefined;
+	}
 
 	snapshot(): SessionSnapshot {
 		return {
@@ -390,6 +407,21 @@ describe("两个端接同一台主机", () => {
 		);
 		expect(rejected).toHaveLength(1);
 		expect(rejected[0]?.rejectionReason).toContain("streamingBehavior");
+	});
+
+	it("手动压缩走会话通道，运行中被拒绝", async () => {
+		const peer = await openClient();
+		await peer.subscribe(SESSION);
+		peer.dispatch(SESSION, { type: "session/compact" });
+		await settle();
+		expect(agent.compactCalls).toBe(1);
+
+		agent.busy = true;
+		peer.dispatch(SESSION, { type: "session/compact" });
+		await settle();
+		expect(agent.compactCalls).toBe(1);
+		const rejected = peer.frames.filter((frame) => frame.rejectionReason !== undefined);
+		expect(rejected.at(-1)?.rejectionReason).toContain("等它停下");
 	});
 
 	it("断线重连按序号补齐中间的动作", async () => {

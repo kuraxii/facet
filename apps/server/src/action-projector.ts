@@ -22,6 +22,11 @@ export class ActionProjector {
 		return this.chatChannel;
 	}
 
+	/** 会话通道名，需要主动往外发动作时用。 */
+	sessionChannelFor(): Channel {
+		return this.sessionChannel;
+	}
+
 	/** 已分配的消息序号 */
 	private messageCounter = 0;
 	/** 正在生成的消息标识,收到 message_end 后清空 */

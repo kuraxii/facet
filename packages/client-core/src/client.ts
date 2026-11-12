@@ -754,6 +754,16 @@ export class SessionClient {
 		return this.transport.dispatch(this.requireOpened().chatChannel, { type: "chat/turnCancelled" });
 	}
 
+	/**
+	 * 手动压缩上下文。
+	 *
+	 * 结果通过会话通道回来的 session/usageChanged 与对话通道的压缩条目反映；这一轮还没结束
+	 * 时主机会拒绝并给出原因。
+	 */
+	compact(): number {
+		return this.transport.dispatch(this.requireOpened().sessionChannel, { type: "session/compact" });
+	}
+
 	/** 切换模型,结果通过 session/modelChanged 回到视图。 */
 	setModel(model: ModelRef, persist = false): number {
 		return this.transport.dispatch(this.requireOpened().sessionChannel, {

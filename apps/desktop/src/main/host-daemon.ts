@@ -35,16 +35,17 @@ export type HostDiscovery = DiscoveryRecord;
 /**
  * 按 XDG 规范取应用数据目录，与主机侧的规则保持一致。
  *
- * 桌面要靠这个目录找 endpoint.json，两边算法不一致就接不上已经跑着的主机。
+ * 桌面要靠这个目录找 endpoint.json，两边算法不一致就接不上已经跑着的主机。开发实例与发布
+ * 实例分开：目录名带 -dev 后缀，两边的项目清单、设置与主机身份互不覆盖。
  */
-export function resolveDataDir(env: Record<string, string | undefined>): string {
+export function resolveDataDir(env: Record<string, string | undefined>, options: { isDev?: boolean } = {}): string {
 	const explicit = env.FACET_DATA_DIR?.trim();
 	if (explicit !== undefined && explicit.length > 0) {
 		return explicit;
 	}
 	const xdg = env.XDG_DATA_HOME?.trim();
 	const base = xdg !== undefined && isAbsolute(xdg) ? xdg : join(homedir(), ".local", "share");
-	return join(base, "facet");
+	return join(base, options.isDev === true ? "facet-dev" : "facet");
 }
 
 /** 解析发现文件的内容，缺字段或读不懂时返回 undefined。 */

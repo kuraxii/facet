@@ -259,6 +259,13 @@ describe("SessionClient", () => {
 		expect(client.current?.sessionId).toBe("s1");
 	});
 
+	it("手动压缩走会话通道", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		client.compact();
+		expect(transport.dispatched).toEqual([{ channel: SESSION, action: { type: "session/compact" } }]);
+	});
+
 	it("中止请求走对话通道,阶段由主机回报", async () => {
 		const { transport, client } = createClient(2);
 		await client.openSession("/tmp/s1.jsonl");

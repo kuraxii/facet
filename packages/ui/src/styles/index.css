@@ -2131,6 +2131,75 @@ svg.fl {
 	margin: 0 auto;
 }
 
+/* 上下文用量：一条细填充条 + 一行数字，接近上限时整行转提醒色 */
+.usage {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 18px;
+	padding: 0 2px;
+	color: var(--t3);
+	font-size: 11.5px;
+}
+
+.usage.is-near {
+	color: var(--warn);
+}
+
+.usage-track {
+	position: relative;
+	flex: none;
+	width: 64px;
+	height: 4px;
+	border-radius: 2px;
+	background: var(--surface3);
+	overflow: hidden;
+}
+
+.usage-fill {
+	position: absolute;
+	inset: 0 auto 0 0;
+	border-radius: 2px;
+	background: var(--acc);
+	transition: width var(--dur-fast) var(--ease);
+}
+
+.usage.is-near .usage-fill {
+	background: var(--warn);
+}
+
+.usage-text {
+	font-variant-numeric: tabular-nums;
+}
+
+.usage-hint {
+	color: var(--warn);
+}
+
+.usage-compact {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	margin-left: auto;
+	padding: 2px 6px;
+	border: 0;
+	border-radius: 5px;
+	background: transparent;
+	color: var(--t2);
+	font-size: 11.5px;
+	cursor: pointer;
+}
+
+.usage-compact:hover {
+	background: var(--card2);
+	color: var(--t1);
+}
+
+.usage-compact:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+
 .composer {
 	padding: 12px 12px 10px 16px;
 	border: 1px solid var(--line2);
@@ -2399,6 +2468,29 @@ svg.fl {
 	border: 1px solid var(--line);
 	border-radius: 10px;
 	background: var(--card);
+}
+
+/* 图表宽度跟着对话列走，宽了在块内横向滚动，不撑破布局 */
+.md .markstream-react .mermaid-block svg {
+	max-width: 100%;
+	height: auto;
+}
+
+/* 渲染失败时块内留一行说明，配着标题栏的「源码」切换看原始定义 */
+.md .markstream-react .mermaid-error {
+	color: var(--err);
+	background: var(--errbg);
+	border-top-color: color-mix(in srgb, var(--err) 30%, transparent);
+}
+
+.md .markstream-react .math-block {
+	overflow-x: auto;
+}
+
+/* 公式跟随正文颜色，长公式在块内滚动 */
+.md .katex {
+	color: var(--t1);
+	font-size: 1.02em;
 }
 
 .md {

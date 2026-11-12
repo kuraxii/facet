@@ -21,6 +21,7 @@ import {
 	ChatTranscript,
 	CodeThemeProvider,
 	Composer,
+	ContextUsageBar,
 	CreateProjectDialog,
 	DEFAULT_DARK_THEME,
 	EmptyState,
@@ -1405,6 +1406,12 @@ export function App() {
 								)}
 								<div className="footer-column">
 									{errorBar}
+									<ContextUsageBar
+										usage={session.state.contextUsage}
+										isCompacting={activity === "compacting"}
+										isRunning={activity === "running" || activity === "stopping"}
+										onCompact={() => client.compact()}
+									/>
 									<QueueStrip queued={queued} onClear={takeBackQueue} />
 									<Composer
 										value={draft}

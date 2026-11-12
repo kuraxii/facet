@@ -68,6 +68,18 @@ FACET_WEB_ROOT=apps/desktop/out/renderer \
 - 桌面与 Web 共用 `apps/desktop/src/renderer` 这一份界面：桌面用 preload 注入的桥，浏览器用 `web-bridge.ts` 补一个同样的桥
 - 窄屏（880px 以下）侧栏收成抽屉，左上角按钮展开、点遮罩或选中会话收起，右侧栏改成覆盖式
 
+## 正文里的图表与公式
+
+代码块、流程图与公式都由 `markstream-react` 渲染，`packages/ui` 装齐了它的可选依赖（`mermaid`、`katex`、`stream-diffs`），装哪个就渲染哪个。
+
+- 流程图跟着界面深浅色：库会在 mermaid 源码前注入 `%%{init: {"theme": "dark"|"default"}}%%`
+- 图表高度封顶 420 像素，宽图在块内滚动，不把整段对话顶走；公式块也能横向滚动
+- 渲染失败时块内留一行说明，标题栏的「源码」切换能看到原始定义；坏的公式或流程图不影响其余正文
+
+## 上下文用量与压缩
+
+输入区上方一行：占用比例、已用量与窗口大小。接近 80% 转提醒色并提示可以压缩；估不出来时写「上下文用量未知」。右侧的「压缩」按钮把较早的历史压成摘要，走会话通道的 `session/compact`，这一轮在跑或正在压缩时不可点。压缩结束后主机重算用量推给所有端（`session/usageChanged`），对话里留一条「上下文已压缩」的分隔行。
+
 ## 终端
 
 终端跑在主机上，桌面与 Web 都只是它的端：界面里敲的字经通道送到主机，主机再把输出按帧推回来。本机与远程走的是同一条路径，桌面自己不起任何 shell。
@@ -168,9 +180,34 @@ scripts/build-fonts.sh <字体目录>
 | `$XDG_DATA_HOME/facet`（缺省 `~/.local/share/facet`） | 主机身份 `host.json`、项目清单 `projects.json`、界面设置 `settings.json`、终端登记 `terminals.json`、审计 `audit.log`；独立启动时还有发现文件 `endpoint.json` | `FACET_DATA_DIR` |
 | `$XDG_CONFIG_HOME/facet`（缺省 `~/.config/facet`） | 桌面本地记录 `desktop.json`：窗口位置与尺寸 | — |
 
+开发实例的两处目录都带 `-dev` 后缀：数据目录是 `~/.local/share/facet-dev`，配置目录是 `~/.config/facet-dev`。`npm run dev`、`dev:split`、`dev:host` 三者都用这份，因此开发时跑的东西与装好的包互不影响，`projects.json` 与主机身份各有一份。
+
 用 `agent-dev` 而不是 `~/.pi/agent`，是为了和 pi 命令行共用凭证与模型配置，同时不把开发期的会话混进真实目录。
 
 主机标识在首次启动时生成并写入 `host.json`：取 `/etc/machine-id` 拼上数据目录做 SHA-256，取前 20 位；读不到 machine-id 时改用时间戳加随机串。同一台机器跑多份（不同数据目录）各有各的标识，删掉 `host.json` 即可换一个。
+
+## 打包
+
+只出 Linux 的两种安装包：
+
+```bash
+npm run dist -w @facet/desktop
+```
+
+产物在 `apps/desktop/dist/`：
+
+| 文件 | 说明 |
+|---|---|
+| `facet-<版本>-x86_64.rpm` | Fedora、RHEL 系 |
+| `facet-<版本>-amd64.deb` | Debian、Ubuntu 系 |
+
+- 安装到 `/opt/Facet`，可执行文件是 `facet`，桌面项 `facet.desktop` 与 `StartupWMClass` 都是 `facet`，图标 512×512
+- 依赖走 electron-builder 的缺省清单（deb：`libgtk-3-0`、`libnss3`、`libxss1`、`libxtst6` 等；rpm：`gtk3`、`nss`、`libXScrnSaver` 等），不手写
+- `node-pty` 的原生模块与 `spawn-helper` 解包在 `resources/app.asar.unpacked`，打包时只留 linux 的构建产物，源码与其它平台的预编译都剔掉
+- 构建 deb/rpm 用的 `fpm` 由 electron-builder 自己下载到 `~/.cache/electron-builder`，不需要系统装 fpm
+- 渲染产物约 45 MB，主要是随包打的字体（Inter、Noto Sans SC、Maple Mono）；Electron 本身约 100 MB
+
+包里的主机与开发时是同一个入口：桌面用 `process.execPath` 加 `ELECTRON_RUN_AS_NODE=1` 拉起 `out/main/host.js`，主机再起同目录的 `pty-host.js`。
 
 ## 环境变量
 

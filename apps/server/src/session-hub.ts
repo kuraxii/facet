@@ -31,6 +31,8 @@ export type HubAgent = Pick<
 	| "entryBefore"
 	| "snapshot"
 	| "setName"
+	| "compact"
+	| "contextUsage"
 	| "revertTo"
 	| "leafEntryId"
 	| "dispose"
@@ -167,6 +169,8 @@ interface SessionState<A extends HubAgent> {
 	opening: Promise<void> | undefined;
 	/** 待关闭的倒计时 */
 	closeTimer: ReturnType<typeof setTimeout> | undefined;
+	/** 上一次事件是不是压缩中，压缩结束的那一下要重算用量 */
+	wasCompacting: boolean;
 	/** 最近一次被用到的时间，按内存水位回收时从最旧的开始 */
 	lastUsedAt: number;
 	readonly channels: Map<Channel, ChannelState>;
@@ -281,6 +285,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 			phase: "opening",
 			opening: undefined,
 			closeTimer: undefined,
+			wasCompacting: false,
 			lastUsedAt: Date.now(),
 			channels: new Map(),
 			projector: new ActionProjector(sessionId),
@@ -377,6 +382,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 			phase: "open",
 			opening: undefined,
 			closeTimer: undefined,
+			wasCompacting: false,
 			lastUsedAt: Date.now(),
 			channels: new Map(),
 			projector: new ActionProjector(sessionId),
@@ -785,7 +791,26 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 				this.noteSessions(row.file, "changed");
 			}
 		}
+		// 一轮结束与压缩结束都会改动上下文占用，重新估算一次推给所有端
+		if (event.type === "settled") {
+			this.publishUsage(row);
+		}
+		if (event.type === "phase") {
+			const wasCompacting = row.wasCompacting;
+			row.wasCompacting = event.maintenance?.kind === "compaction";
+			if (wasCompacting && !row.wasCompacting) {
+				this.publishUsage(row);
+			}
+		}
 		this.settle(row);
+	}
+
+	/** 推一份当前的上下文用量。用量可能为空（刚压缩完要等下一次响应才有），空也照实推。 */
+	private publishUsage(row: SessionState<A>): void {
+		this.publish(row, row.projector.sessionChannelFor(), {
+			type: "session/usageChanged",
+			usage: row.agent?.contextUsage(),
+		});
 	}
 
 	/**

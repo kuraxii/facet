@@ -50,6 +50,8 @@ export function reduceSession(view: SessionView, action: Action): SessionView {
 	switch (action.type) {
 		case "session/phase":
 			return { ...view, state: { ...view.state, phase: action.phase, maintenance: action.maintenance } };
+		case "session/usageChanged":
+			return { ...view, state: { ...view.state, contextUsage: action.usage } };
 		case "session/modelChanged":
 			return {
 				...view,
@@ -74,6 +76,8 @@ export function reduceSession(view: SessionView, action: Action): SessionView {
 				: { ...view, state: { ...view.state, thinkingLevel: action.thinkingLevel } };
 		case "session/pendingMessageSet":
 		case "session/queueCleared":
+		case "session/compact":
+		case "session/usageChanged":
 			return view;
 		case "chat/messageAppended":
 		case "chat/messageUpdated":
@@ -210,6 +214,8 @@ export function reduceChat(view: ChatView, action: Action): ChatView {
 		case "session/configChanged":
 		case "session/pendingMessageSet":
 		case "session/queueCleared":
+		case "session/compact":
+		case "session/usageChanged":
 		case "sessions/changed":
 		case "sessions/removed":
 		case "terminal/data":

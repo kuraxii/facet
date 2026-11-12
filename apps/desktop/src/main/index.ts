@@ -26,6 +26,11 @@ app.setName("facet");
 
 const isDev = !app.isPackaged;
 
+// 开发实例的配置目录跟着数据目录一起带 -dev 后缀，`desktop.json` 与发布实例分开
+if (isDev) {
+	app.setPath("userData", `${app.getPath("userData")}-dev`);
+}
+
 /** 默认打开的项目目录,可用 FACET_PROJECT_DIR 覆盖 */
 const projectDir = process.env.FACET_PROJECT_DIR?.trim() || process.cwd();
 
@@ -45,8 +50,8 @@ const externalEndpoint =
 /** 等待主机就绪的上限，超时照样开窗口，界面会显示连不上并允许重试。 */
 const READY_WAIT_MS = 20_000;
 
-/** 主机数据目录，发现文件与主机日志都在这里 */
-const dataDir = resolveDataDir(process.env);
+/** 主机数据目录，发现文件与主机日志都在这里；开发实例带 -dev 后缀，与发布实例分开 */
+const dataDir = resolveDataDir(process.env, { isDev });
 
 /** 本机当前连着的主机，界面通过主进程的通道访问它 */
 let localHost: HostDiscovery | undefined;

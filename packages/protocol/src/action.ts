@@ -3,7 +3,7 @@ import type { DeltaKind, NoticeLevel } from "./event.ts";
 import type { Message } from "./message.ts";
 import type { ModelInfo, ModelRef, ThinkingLevel } from "./model.ts";
 import type { StreamingBehavior } from "./request.ts";
-import type { Maintenance, SessionSummary, TurnPhase } from "./session.ts";
+import type { ContextUsage, Maintenance, SessionSummary, TurnPhase } from "./session.ts";
 import type { TerminalAction } from "./terminal.ts";
 
 /** 会话清单动作。主机推给所有订阅清单通道的端,多端看到同一份列表。 */
@@ -33,6 +33,10 @@ export type SessionAction =
 	| { type: "session/pendingMessageSet"; kind: "steering" | "queued"; text: string }
 	/** 客户端可派发:清空排队 */
 	| { type: "session/queueCleared" }
+	/** 客户端可派发:手动压缩上下文 */
+	| { type: "session/compact" }
+	/** 主机侧:上下文用量变化，一轮结束或压缩之后重新估算 */
+	| { type: "session/usageChanged"; usage: ContextUsage | undefined }
 	/** 客户端可派发:变更模型、思考档位或激活的工具 */
 	| {
 			type: "session/configChanged";

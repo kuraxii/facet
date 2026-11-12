@@ -8,6 +8,7 @@ export type * from "./action.ts";
 export * from "./channel.ts";
 export type * from "./content.ts";
 export type * from "./event.ts";
+export type * from "./git.ts";
 export type * from "./message.ts";
 export type * from "./model.ts";
 export type * from "./project.ts";

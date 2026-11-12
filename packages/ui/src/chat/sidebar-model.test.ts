@@ -4,7 +4,6 @@ import {
 	baseName,
 	buildSidebar,
 	groupSessions,
-	type SidebarHost,
 	type SidebarSession,
 	samePath,
 	sessionTitle,
@@ -22,16 +21,6 @@ function summary(overrides: Partial<SessionSummary> & Pick<SessionSummary, "id" 
 		modified: NOW - 60_000,
 		messageCount: 3,
 		firstMessage: "",
-		...overrides,
-	};
-}
-
-function host(overrides: Partial<SidebarHost> & Pick<SidebarHost, "id" | "name">): SidebarHost {
-	return {
-		detail: "",
-		state: "connected",
-		isLocal: false,
-		projects: [],
 		...overrides,
 	};
 }
@@ -139,7 +128,7 @@ describe("组装侧栏", () => {
 	};
 
 	it("运行中的会话单独成组并带运行状态点", () => {
-		const data = buildSidebar({ ...base, hosts: [] });
+		const data = buildSidebar(base);
 		expect(data.groups[0]?.sessions.map((item) => item.path)).toEqual(["/s/a.jsonl"]);
 		expect(data.groups[0]?.sessions[0]?.dot).toBe("running");
 		expect(data.groups[0]?.sessions[0]?.isRunning).toBe(true);
@@ -149,7 +138,6 @@ describe("组装侧栏", () => {
 	it("项目选项合并已添加的项目与会话目录，按会话数倒序", () => {
 		const data = buildSidebar({
 			...base,
-			hosts: [],
 			projects: [
 				{ id: "p1", cwd: "/work/facet/", name: "facet 主仓", createdAt: 1 },
 				{ id: "p2", cwd: "/work/docs-site", name: undefined, createdAt: 2 },
@@ -163,7 +151,7 @@ describe("组装侧栏", () => {
 	});
 
 	it("限定项目时只列该目录的会话，项目选项数字按全部会话统计", () => {
-		const data = buildSidebar({ ...base, hosts: [], projectCwd: "/work/facet/" });
+		const data = buildSidebar({ ...base, projectCwd: "/work/facet/" });
 		expect(data.total).toBe(4);
 		expect(data.groups.flatMap((group) => group.sessions).map((item) => item.path)).toEqual([
 			"/s/a.jsonl",
@@ -173,29 +161,8 @@ describe("组装侧栏", () => {
 	});
 
 	it("关键词过滤会话标题", () => {
-		const data = buildSidebar({ ...base, hosts: [], keyword: "重连" });
+		const data = buildSidebar({ ...base, keyword: "重连" });
 		expect(data.groups.flatMap((group) => group.sessions).map((item) => item.path)).toEqual(["/s/b.jsonl"]);
-	});
-
-	it("主机条按全部会话统计，未知数量留空", () => {
-		const data = buildSidebar({
-			...base,
-			hosts: [
-				host({ id: "local", name: "facet", isLocal: true }),
-				host({
-					id: "dev-box",
-					name: "dev-box",
-					projects: [{ cwd: "/srv/gateway", name: "gateway", host: "dev-box", sessionCount: 3 }],
-				}),
-				host({ id: "staging", name: "staging", state: "connecting" }),
-			],
-		});
-		expect(data.hosts.map((host) => [host.id, host.sessionCount])).toEqual([
-			["local", 4],
-			["dev-box", 3],
-			["staging", undefined],
-		]);
-		expect(data.hosts[0]?.isLocal).toBe(true);
 	});
 });
 
@@ -215,7 +182,6 @@ describe("状态点", () => {
 	it("只有当前会话带运行态,其余按空闲", () => {
 		const data = buildSidebar({
 			sessions: [summary("/s1.jsonl"), summary("/s2.jsonl")],
-			hosts: [{ id: "h", name: "本机", detail: "", state: "connected", isLocal: true, projects: [] }],
 			projects: [],
 			runningFile: "/s1.jsonl",
 			runningDot: "compacting",
@@ -230,7 +196,6 @@ describe("状态点", () => {
 	it("没给状态点时按运行中显示", () => {
 		const data = buildSidebar({
 			sessions: [summary("/s1.jsonl")],
-			hosts: [],
 			projects: [],
 			runningFile: "/s1.jsonl",
 		});

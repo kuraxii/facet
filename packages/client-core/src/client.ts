@@ -16,6 +16,11 @@ import type {
 	CustomProviderInput,
 	Entry,
 	FacetSettings,
+	FileContent,
+	FileEntry,
+	FileWriteResult,
+	GitDiff,
+	GitStatus,
 	ModelInfo,
 	ModelRef,
 	ProjectInfo,
@@ -239,6 +244,49 @@ export class SessionClient {
 	async listAvailableModels(): Promise<ModelInfo[]> {
 		const result = await this.transport.request("availableModels", {});
 		return result.models;
+	}
+
+	/** 列出项目里的一个目录，path 为空串表示项目根。 */
+	async listDirectory(cwd: string, path = ""): Promise<FileEntry[]> {
+		const result = await this.transport.request("listDirectory", { cwd, path });
+		return result.entries;
+	}
+
+	/** 读一个文件；文本按 UTF-8 解码，二进制与超大文件只给类型与大小。 */
+	async readFile(cwd: string, path: string): Promise<FileContent> {
+		return await this.transport.request("readFile", { cwd, path });
+	}
+
+	/**
+	 * 写回一个文本文件。
+	 *
+	 * 带上读或上次写拿到的 revision；磁盘上的内容已经变过时主机回 `file_conflict`。
+	 */
+	async writeFile(
+		cwd: string,
+		path: string,
+		content: string,
+		expectedRevision: string,
+	): Promise<FileWriteResult> {
+		return await this.transport.request("writeFile", { cwd, path, content, expectedRevision });
+	}
+
+	/**
+	 * 列出项目工作树相对 HEAD 的改动。
+	 *
+	 * 口径是 git：已暂存与未暂存合在一份，未跟踪文件单独标出来；不是 git 仓库时
+	 * 返回 isRepo 为假。
+	 */
+	async gitStatus(cwd: string): Promise<GitStatus> {
+		return await this.transport.request("gitStatus", { cwd });
+	}
+
+	/** 取单个文件的补丁；未跟踪文件由主机按「从空文件新增」合成。 */
+	async gitDiff(cwd: string, path: string, untracked = false): Promise<GitDiff> {
+		return await this.transport.request(
+			"gitDiff",
+			untracked ? { cwd, path, untracked: true } : { cwd, path },
+		);
 	}
 
 	/** 列出用户自己添加的提供方。 */

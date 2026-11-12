@@ -1,13 +1,10 @@
 /**
  * 侧栏的数据模型。
  *
- * 侧栏由项目过滤器、按时间分组的会话队列、主机状态条组成。过滤器决定队列的范围与新建
- * 会话的目录，队列按「进行中 / 今天 / 昨天 / 更早」分组。这里只做纯函数变换，组件负责渲染。
+ * 侧栏由项目过滤器与按时间分组的会话队列组成。过滤器决定队列的范围与新建会话的目录，
+ * 队列按「进行中 / 今天 / 昨天 / 更早」分组。这里只做纯函数变换，组件负责渲染。
  */
 import type { ProjectInfo, SessionSummary } from "@facet/protocol";
-
-/** 主机的连接状态。 */
-export type HostState = "connected" | "connecting" | "offline";
 
 /**
  * 会话行左侧的状态点。
@@ -69,55 +66,10 @@ export interface SidebarProject {
 	isPlaceholder?: boolean;
 }
 
-/** 主机状态条上的一项。 */
-export interface SidebarHostStatus {
-	/** 主机标识 */
-	id: string;
-	/** 主机名 */
-	name: string;
-	/** 连接地址或上次连接说明 */
-	detail: string;
-	state: HostState;
-	/** 是否为当前主机 */
-	isLocal: boolean;
-	/** 已测得的往返时延，单位毫秒 */
-	latencyMs?: number;
-	/** 断开主机的上次连接时间描述 */
-	lastSeen?: string;
-	/** 该主机上的会话数，未知为空 */
-	sessionCount: number | undefined;
-	/** 占位数据，接入多主机前不可交互 */
-	isPlaceholder?: boolean;
-}
-
-/** 一台主机在侧栏里的展示数据。 */
-export interface SidebarHost {
-	/** 主机标识 */
-	id: string;
-	/** 主机名 */
-	name: string;
-	/** 连接地址 */
-	detail: string;
-	/** 连接状态 */
-	state: HostState;
-	/** 是否为当前主机 */
-	isLocal: boolean;
-	/** 已测得的往返时延，单位毫秒 */
-	latencyMs?: number;
-	/** 断开主机的上次连接时间描述 */
-	lastSeen?: string;
-	/** 该主机上的项目 */
-	projects: readonly SidebarProject[];
-	/** 占位数据，接入多主机前不可交互 */
-	isPlaceholder?: boolean;
-}
-
 /** 组装侧栏所需的输入。 */
 export interface SidebarInput {
 	/** 当前主机的会话列表 */
 	sessions: readonly SessionSummary[];
-	/** 第一项为当前主机，其余为远程主机 */
-	hosts: readonly SidebarHost[];
 	/** 用户添加的项目 */
 	projects: readonly ProjectInfo[];
 	/** 正在运行的会话文件路径 */
@@ -138,8 +90,6 @@ export interface SidebarData {
 	groups: readonly SidebarGroup[];
 	/** 项目下拉的选项，按会话数倒序 */
 	projects: readonly SidebarProject[];
-	/** 主机状态条 */
-	hosts: readonly SidebarHostStatus[];
 	/** 全部会话数，供「全部项目」选项展示 */
 	total: number;
 }
@@ -325,25 +275,6 @@ function listProjects(added: readonly ProjectInfo[], sessions: readonly SessionS
 	});
 }
 
-/** 主机状态条：本机在前，其余按连接状态排列。 */
-function listHosts(hosts: readonly SidebarHost[], sessions: readonly SessionSummary[]): SidebarHostStatus[] {
-	return hosts.map((host) => ({
-		id: host.id,
-		name: host.name,
-		detail: host.detail,
-		state: host.state,
-		isLocal: host.isLocal,
-		latencyMs: host.latencyMs,
-		lastSeen: host.lastSeen,
-		sessionCount: host.isLocal
-			? sessions.length
-			: host.projects.length === 0
-				? undefined
-				: host.projects.reduce((sum, project) => sum + project.sessionCount, 0),
-		isPlaceholder: host.isPlaceholder,
-	}));
-}
-
 /**
  * 组装侧栏数据。
  *
@@ -369,7 +300,6 @@ export function buildSidebar(input: SidebarInput): SidebarData {
 	return {
 		groups: groupSessions(matched, now),
 		projects: listProjects(input.projects, input.sessions),
-		hosts: listHosts(input.hosts, input.sessions),
 		total: all.length,
 	};
 }

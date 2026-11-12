@@ -1,4 +1,5 @@
 import { chatActivity, type HostHandshake, SessionClient, toTranscript } from "@facet/client-core";
+import type { FileContent, GitFileChange, GitStatus } from "@facet/protocol";
 import {
 	DEFAULT_SETTINGS,
 	type FacetSettings,
@@ -10,6 +11,7 @@ import {
 import { WsTransport } from "@facet/transport/ws";
 import {
 	ArrowDownIcon,
+	ChangesPane,
 	ChatOutline,
 	ChatTranscript,
 	CodeThemeProvider,
@@ -17,27 +19,34 @@ import {
 	CreateProjectDialog,
 	DEFAULT_DARK_THEME,
 	EmptyState,
+	endpointLabel,
+	FilesPane,
+	HostSwitcher,
+	hasEndpoint,
 	isDarkTheme,
+	normalizeEndpoint,
 	QueueStrip,
 	RightPanel,
 	type RightPanelState,
+	readHostList,
 	readPanelState,
 	resolveUiTheme,
+	type SavedHost,
 	SessionSidebar,
 	type SettingsDataSource,
 	SettingsPage,
 	type SettingsSection,
-	type SidebarHost,
 	samePath,
 	THEME_MODES,
 	type ThemeName,
 	TrustDialog,
 	useStickToBottom,
+	writeHostList,
 	writePanelState,
 } from "@facet/ui";
+import { FileView } from "@facet/ui-editor";
 import { X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { PLACEHOLDER_HOSTS } from "./placeholder-hosts";
 
 /** 预加载脚本注入的启动参数 */
 interface FacetBridge {
@@ -46,6 +55,8 @@ interface FacetBridge {
 	platform: string;
 	/** 应用版本 */
 	appVersion: string;
+	/** 主机是桌面拉起的（embedded），还是外面给的（external） */
+	hostMode: string;
 	/** 打开系统的目录选择窗口,取消时返回空 */
 	pickDirectory: () => Promise<string | undefined>;
 	/** 用系统的保存窗口写一段文本,取消时返回 false */
@@ -198,8 +209,40 @@ export function App() {
 	const [settings, setSettings] = useState<FacetSettings>(DEFAULT_SETTINGS);
 	/** 主区域显示对话还是设置 */
 	const [view, setView] = useState<"chat" | "settings">("chat");
+	/** 主机清单：本机之外用户添加的远程主机，以及当前连着的端点 */
+	const [hostList, setHostList] = useState(() => {
+		const saved = readHostList(localStorage, bridge.endpoint);
+		// 外部给了 FACET_ENDPOINT 就以它为准：上一次连的远程主机不该盖过这次显式指定的地址
+		return bridge.hostMode === "external" ? { ...saved, activeEndpoint: bridge.endpoint } : saved;
+	});
+
+	/** 改主机清单并写回本地。 */
+	const updateHostList = useCallback((next: typeof hostList) => {
+		setHostList(next);
+		writeHostList(localStorage, next);
+	}, []);
+
+	// 外部指定了端点时，把记着的那台改回来，别让下次启动被旧地址带着走
+	useEffect(() => {
+		if (bridge.hostMode === "external" && localStorage.getItem("facet.hosts.active") !== bridge.endpoint) {
+			writeHostList(localStorage, { ...hostList, activeEndpoint: bridge.endpoint });
+		}
+	}, [hostList]);
+
 	/** 右栏的状态；展开、分页与宽度都记在本地 */
 	const [panel, setPanel] = useState<RightPanelState>(() => readPanelState(localStorage));
+
+	/** 右栏里打开的文件；为空时显示目录树 */
+	const [openedFile, setOpenedFile] = useState<{ path: string; content: FileContent } | undefined>(undefined);
+	/** 取文件失败的原因 */
+	const [fileError, setFileError] = useState<string | undefined>(undefined);
+
+	/** 变更页的数据：工作树状态、是否在取、失败原因 */
+	const [changes, setChanges] = useState<{ status?: GitStatus; isLoading: boolean; error?: string }>({
+		isLoading: false,
+	});
+	/** 变更请求的序号，只采用最后一次的结果 */
+	const changesSeq = useRef(0);
 
 	/** 改右栏状态并写回本地存储。 */
 	const updatePanel = useCallback((patch: Partial<RightPanelState>) => {
@@ -339,9 +382,86 @@ export function App() {
 	void version;
 
 	const session = client.sessionView();
+	/** 变更页是否正在显示：展开右栏并停在变更分页 */
+	const isChangesVisible = panel.open && panel.tab === "changes";
+	/** 会话所在的目录，git 命令都在它下面跑 */
+	const sessionCwd = session?.state.cwd;
+
+	/** 打开一个文件：取内容失败时把原因留在右栏。 */
+	const openFile = useCallback(
+		async (path: string): Promise<void> => {
+			if (sessionCwd === undefined) {
+				return;
+			}
+			setFileError(undefined);
+			try {
+				const content = await client.readFile(sessionCwd, path);
+				setOpenedFile({ path, content });
+			} catch (error) {
+				setFileError(error instanceof Error ? error.message : String(error));
+			}
+		},
+		[sessionCwd],
+	);
+
+	// 换会话时把打开的文件收起来
+	// biome-ignore lint/correctness/useExhaustiveDependencies: 只在会话变化时清空，状态设置函数不必列入
+	useEffect(() => {
+		setOpenedFile(undefined);
+		setFileError(undefined);
+	}, [activeFile]);
+
+	/** 重新取工作树状态。并发调用只采用最后一次的结果。 */
+	const refreshChanges = useCallback(async (): Promise<void> => {
+		if (sessionCwd === undefined) {
+			return;
+		}
+		changesSeq.current += 1;
+		const seq = changesSeq.current;
+		setChanges((current) => ({ ...current, isLoading: true, error: undefined }));
+		try {
+			const status = await client.gitStatus(sessionCwd);
+			if (seq === changesSeq.current) {
+				setChanges({ status, isLoading: false });
+			}
+		} catch (error) {
+			if (seq === changesSeq.current) {
+				setChanges({
+					isLoading: false,
+					error: error instanceof Error ? error.message : String(error),
+				});
+			}
+		}
+	}, [sessionCwd]);
+
+	// 展开变更页、切换会话、窗口重新获得焦点时各取一次（会话目录变化已含在 refreshChanges 里）
+	useEffect(() => {
+		if (isChangesVisible) {
+			void refreshChanges();
+		}
+	}, [isChangesVisible, refreshChanges]);
+
+	useEffect(() => {
+		if (!isChangesVisible) {
+			return;
+		}
+		const onFocus = (): void => void refreshChanges();
+		window.addEventListener("focus", onFocus);
+		return () => window.removeEventListener("focus", onFocus);
+	}, [isChangesVisible, refreshChanges]);
+
 	const chat = client.chatView();
 	// 对话此刻的状态由会话状态得出,界面不自己拼布尔量
 	const activity = chatActivity(session);
+
+	// 一轮结束之后工作树可能变了，顺手再取一次
+	const lastActivity = useRef(activity);
+	useEffect(() => {
+		if (lastActivity.current !== "idle" && activity === "idle" && isChangesVisible) {
+			void refreshChanges();
+		}
+		lastActivity.current = activity;
+	}, [activity, isChangesVisible, refreshChanges]);
 
 	/** 主机的模型目录与各提供方的凭证状态，供输入区的模型选择使用。 */
 	const [catalog, setCatalog] = useState<{ models: readonly ModelInfo[]; auth: Record<string, boolean> }>({
@@ -363,6 +483,79 @@ export function App() {
 			auth: Object.fromEntries(providers.map((provider) => [provider.id, provider.authenticated])),
 		});
 	}, []);
+
+	/**
+	 * 切到另一台主机。
+	 *
+	 * 先放掉当前会话并清空列表，再换端点重新握手：设置、模型目录、项目与会话都属于主机，
+	 * 换过去之后整份重新取。连不上时交给重连逻辑退避重试，界面显示连不上主机那一屏。
+	 */
+	const switchHost = useCallback(
+		async (nextEndpoint: string): Promise<void> => {
+			if (nextEndpoint === endpoint) {
+				return;
+			}
+			updateHostList({ ...hostList, activeEndpoint: nextEndpoint });
+			setEndpoint(nextEndpoint);
+			transport.setUrl(nextEndpoint);
+			setActiveFile(undefined);
+			setSessions([]);
+			setProjects([]);
+			setOpenedFile(undefined);
+			setChanges({ isLoading: false });
+			await client.release().catch(() => undefined);
+			setPhase("connecting");
+			// 只握一次手：连不上就直接回到「连不上主机」那一屏，重试按钮走退避重连
+			try {
+				const handshake = await transport.connect();
+				client.attach(handshake);
+				setHost(handshake);
+				await client.resume().catch(() => undefined);
+				await refreshSessions();
+				await refreshProjects();
+				setSettings(await client.getSettings().catch(() => DEFAULT_SETTINGS));
+				await refreshCatalog();
+				setPhase("ready");
+			} catch (error) {
+				setFailure(error instanceof Error ? error.message : String(error));
+				setPhase("failed");
+			}
+		},
+		[endpoint, hostList, refreshCatalog, refreshProjects, refreshSessions, updateHostList],
+	);
+
+	/** 添加一台主机：地址收成端点，重复的直接回原因。 */
+	const addHost = useCallback(
+		(name: string, address: string): string | undefined => {
+			const normalized = normalizeEndpoint(address);
+			if (normalized === undefined) {
+				return "地址看不懂，写 host:port 或 ws://host:port/endpoint";
+			}
+			if (hasEndpoint(hostList, normalized, bridge.endpoint)) {
+				return "这台主机已经在清单里";
+			}
+			const host: SavedHost = {
+				id: `${Date.now().toString(36)}-${hostList.hosts.length}`,
+				name,
+				endpoint: normalized,
+			};
+			updateHostList({ ...hostList, hosts: [...hostList.hosts, host] });
+			return undefined;
+		},
+		[hostList, updateHostList],
+	);
+
+	/** 从清单里删掉一台远程主机；删的是当前连接时回到本机。 */
+	const removeHost = useCallback(
+		(id: string): void => {
+			const target = hostList.hosts.find((host) => host.id === id);
+			updateHostList({ ...hostList, hosts: hostList.hosts.filter((host) => host.id !== id) });
+			if (target !== undefined && target.endpoint === endpoint) {
+				void switchHost(bridge.endpoint);
+			}
+		},
+		[endpoint, hostList, switchHost, updateHostList],
+	);
 
 	/** 输入区可选的模型：去掉设置里隐藏的那些。 */
 	const visibleModels = useMemo(
@@ -552,6 +745,12 @@ export function App() {
 		}
 		started.current = true;
 		void (async () => {
+			// 上次连的是远程主机时直接连回去，连不上会落到「连不上主机」那一屏
+			const startEndpoint = hostList.activeEndpoint;
+			if (startEndpoint !== bridge.endpoint) {
+				transport.setUrl(startEndpoint);
+				setEndpoint(startEndpoint);
+			}
 			const handshake = await transport.connect();
 			client.attach(handshake);
 			setHost(handshake);
@@ -570,7 +769,7 @@ export function App() {
 			setFailure(error instanceof Error ? error.message : String(error));
 			setPhase("failed");
 		});
-	}, [openSession, refreshCatalog, refreshProjects, refreshSessions]);
+	}, [hostList.activeEndpoint, openSession, refreshCatalog, refreshProjects, refreshSessions]);
 
 	/** 当前草稿落在哪个键：打开的会话按文件路径分开存，没有会话时存到新会话页面。 */
 	const draftKey = activeFile ?? NEW_DRAFT_KEY;
@@ -777,19 +976,6 @@ export function App() {
 		scrollToBottom,
 	} = useStickToBottom(transcript, activeFile);
 
-	const hosts = useMemo<readonly SidebarHost[]>(() => {
-		const local: SidebarHost = {
-			id: host?.hostId ?? "local",
-			name: host?.hostName ?? "本机",
-			detail: endpoint,
-			state: "connected",
-			isLocal: true,
-			projects: [],
-		};
-		return [local, ...PLACEHOLDER_HOSTS];
-	}, [host, endpoint]);
-
-	// 代码高亮的配色与深浅一起下发，正文里的代码块按它取 shiki 主题
 	const codeThemeValue = useMemo(
 		() => ({
 			theme: settings.appearance.codeTheme,
@@ -804,6 +990,27 @@ export function App() {
 				<h1>连不上主机</h1>
 				<p>{failure}</p>
 				<p>{endpoint}</p>
+				<div className="boot-hosts">
+					<button
+						type="button"
+						className="boot-host"
+						onClick={() => void switchHost(bridge.endpoint)}
+						disabled={endpoint === bridge.endpoint}
+					>
+						本机 · {endpointLabel(bridge.endpoint)}
+					</button>
+					{hostList.hosts.map((host) => (
+						<button
+							key={host.id}
+							type="button"
+							className="boot-host"
+							onClick={() => void switchHost(host.endpoint)}
+							disabled={endpoint === host.endpoint}
+						>
+							{host.name} · {endpointLabel(host.endpoint)}
+						</button>
+					))}
+				</div>
 				<button
 					type="button"
 					className="boot-retry"
@@ -838,7 +1045,6 @@ export function App() {
 			<div className="shell">
 				<SessionSidebar
 					sessions={sessions}
-					hosts={hosts}
 					projects={projects}
 					activeFile={activeFile}
 					runningFile={activity === "idle" ? undefined : activeFile}
@@ -866,6 +1072,19 @@ export function App() {
 					isSettingsOpen={view === "settings"}
 					onTogglePanel={() => updatePanel({ open: !panel.open })}
 					isPanelOpen={panel.open}
+					hostName={host?.hostName}
+					hostSwitcher={
+						<HostSwitcher
+							localEndpoint={bridge.endpoint}
+							localName={host?.hostName ?? "本机"}
+							activeEndpoint={hostList.activeEndpoint}
+							hosts={hostList.hosts}
+							isOnline={isOnline}
+							onConnect={(next) => void switchHost(next)}
+							onAddHost={addHost}
+							onRemoveHost={removeHost}
+						/>
+					}
 				/>
 
 				<main className="main">
@@ -969,9 +1188,56 @@ export function App() {
 						onWidthChange={(width) => updatePanel({ width })}
 						onClose={() => updatePanel({ open: false })}
 					>
-						<p className="panel-empty">
-							{panel.tab === "files" ? "还没有打开文件" : "还没有接上工作树的改动"}
-						</p>
+						{panel.tab === "changes" ? (
+							<ChangesPane
+								status={changes.status}
+								isLoading={changes.isLoading}
+								error={changes.error}
+								onRefresh={() => void refreshChanges()}
+								loadDiff={(file: GitFileChange) =>
+									sessionCwd === undefined
+										? Promise.reject(new Error("还没有打开会话"))
+										: client.gitDiff(sessionCwd, file.path, file.status === "untracked")
+								}
+							/>
+						) : openedFile === undefined ? (
+							fileError === undefined ? (
+								<FilesPane
+									loadDirectory={(path) =>
+										sessionCwd === undefined
+											? Promise.reject(new Error("还没有打开会话"))
+											: client.listDirectory(sessionCwd, path)
+									}
+									onOpenFile={(path) => void openFile(path)}
+								/>
+							) : (
+								<p className="chg-note is-error">
+									{fileError}
+									<button type="button" className="chg-retry" onClick={() => setFileError(undefined)}>
+										返回目录
+									</button>
+								</p>
+							)
+						) : (
+							<FileView
+								path={openedFile.path}
+								content={openedFile.content}
+								onClose={() => setOpenedFile(undefined)}
+								onSave={(text, expectedRevision) =>
+									sessionCwd === undefined
+										? Promise.reject(new Error("还没有打开会话"))
+										: client.writeFile(sessionCwd, openedFile.path, text, expectedRevision)
+								}
+								onReload={async () => {
+									if (sessionCwd === undefined) {
+										throw new Error("还没有打开会话");
+									}
+									const next = await client.readFile(sessionCwd, openedFile.path);
+									setOpenedFile({ path: openedFile.path, content: next });
+									return next;
+								}}
+							/>
+						)}
 					</RightPanel>
 				) : null}
 

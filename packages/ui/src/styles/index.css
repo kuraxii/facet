@@ -741,6 +741,85 @@ svg.fl {
 	min-height: 0;
 }
 
+/* 右栏：文件与变更。左缘一条分隔条，拖动改宽度 */
+.panel {
+	position: relative;
+	display: flex;
+	flex: none;
+	flex-direction: column;
+	min-width: 0;
+	border-left: 1px solid var(--line);
+	background: var(--bg);
+}
+
+.panel-resizer {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: -3px;
+	z-index: 2;
+	width: 6px;
+	cursor: col-resize;
+	background: transparent;
+}
+
+.panel-resizer:hover,
+.panel-resizer:active {
+	background: color-mix(in srgb, var(--acc) 40%, transparent);
+}
+
+.panel-head {
+	display: flex;
+	flex: none;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	height: 38px;
+	padding: 0 8px 0 10px;
+	border-bottom: 1px solid var(--line);
+}
+
+.panel-tabs {
+	display: flex;
+	gap: 2px;
+}
+
+.panel-tab {
+	height: 24px;
+	padding: 0 8px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--t3);
+	font-size: 12px;
+}
+
+.panel-tab:hover {
+	color: var(--t1);
+}
+
+.panel-tab.is-on {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+.panel-body {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	padding: 8px;
+}
+
+/* 右栏里的占位说明：还没有接上内容时用 */
+.panel-empty {
+	margin: 0;
+	padding: 24px 12px;
+	color: var(--t3);
+	font-size: 12px;
+	line-height: 1.6;
+	text-align: center;
+}
+
 /* 对话导航：贴在主区域左缘的一条竖轨，按轮次排列 */
 .outline {
 	position: absolute;

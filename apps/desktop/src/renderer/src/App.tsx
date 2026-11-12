@@ -19,6 +19,9 @@ import {
 	EmptyState,
 	isDarkTheme,
 	QueueStrip,
+	RightPanel,
+	type RightPanelState,
+	readPanelState,
 	resolveUiTheme,
 	SessionSidebar,
 	type SettingsDataSource,
@@ -30,6 +33,7 @@ import {
 	type ThemeName,
 	TrustDialog,
 	useStickToBottom,
+	writePanelState,
 } from "@facet/ui";
 import { X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -194,6 +198,17 @@ export function App() {
 	const [settings, setSettings] = useState<FacetSettings>(DEFAULT_SETTINGS);
 	/** 主区域显示对话还是设置 */
 	const [view, setView] = useState<"chat" | "settings">("chat");
+	/** 右栏的状态；展开、分页与宽度都记在本地 */
+	const [panel, setPanel] = useState<RightPanelState>(() => readPanelState(localStorage));
+
+	/** 改右栏状态并写回本地存储。 */
+	const updatePanel = useCallback((patch: Partial<RightPanelState>) => {
+		setPanel((current) => {
+			const next = { ...current, ...patch };
+			writePanelState(localStorage, next);
+			return next;
+		});
+	}, []);
 	const [settingsSection, setSettingsSection] = useState<SettingsSection>("providers");
 	/** 打开、新建、分叉失败时的提示,带重试入口 */
 	const [sessionError, setSessionError] = useState<{ message: string; retry: () => void } | undefined>(
@@ -849,6 +864,8 @@ export function App() {
 						setView("settings");
 					}}
 					isSettingsOpen={view === "settings"}
+					onTogglePanel={() => updatePanel({ open: !panel.open })}
+					isPanelOpen={panel.open}
 				/>
 
 				<main className="main">
@@ -943,6 +960,20 @@ export function App() {
 						</>
 					)}
 				</main>
+
+				{panel.open ? (
+					<RightPanel
+						tab={panel.tab}
+						onTabChange={(tab) => updatePanel({ tab })}
+						width={panel.width}
+						onWidthChange={(width) => updatePanel({ width })}
+						onClose={() => updatePanel({ open: false })}
+					>
+						<p className="panel-empty">
+							{panel.tab === "files" ? "还没有打开文件" : "还没有接上工作树的改动"}
+						</p>
+					</RightPanel>
+				) : null}
 
 				{view === "settings" ? (
 					<SettingsPage

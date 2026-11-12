@@ -5,7 +5,7 @@
  * 项目过滤器同时决定队列的范围与新建会话的目录，队列按时间分组，分组规则见 sidebar-model。
  */
 import type { ProjectInfo, SessionSummary } from "@facet/protocol";
-import { FolderPlus, Plus, Search, Settings } from "lucide-react";
+import { FolderPlus, PanelRight, Plus, Search, Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronIcon } from "../transcript/chevron.tsx";
 import { FolderIcon, MoonIcon, SunIcon } from "../transcript/icons.tsx";
@@ -71,6 +71,10 @@ export interface SessionSidebarProps {
 	onOpenSettings?: () => void;
 	/** 当前是否停在设置页 */
 	isSettingsOpen?: boolean;
+	/** 切换右侧栏展开与收起 */
+	onTogglePanel?: () => void;
+	/** 右侧栏是否展开 */
+	isPanelOpen?: boolean;
 }
 
 /** 会话行状态点的样式类。运行中与压缩中都走运行色，前者呼吸，后者常亮。 */
@@ -139,6 +143,8 @@ export function SessionSidebar({
 	onToggleTheme,
 	onOpenSettings,
 	isSettingsOpen = false,
+	onTogglePanel,
+	isPanelOpen = false,
 }: SessionSidebarProps) {
 	const [keyword, setKeyword] = useState("");
 	const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -409,6 +415,17 @@ export function SessionSidebar({
 					<button type="button" className="sb-tool" aria-label="添加项目" onClick={onAddProject}>
 						<FolderPlus size={15} strokeWidth={1.5} />
 					</button>
+					{onTogglePanel === undefined ? null : (
+						<button
+							type="button"
+							className="sb-tool"
+							aria-label={isPanelOpen ? "收起右侧栏" : "展开右侧栏"}
+							aria-pressed={isPanelOpen}
+							onClick={onTogglePanel}
+						>
+							<PanelRight size={15} strokeWidth={1.5} />
+						</button>
+					)}
 				</span>
 			</header>
 

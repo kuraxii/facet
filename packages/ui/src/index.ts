@@ -3,6 +3,7 @@
  *
  * 组件只消费数据侧的投影结果，不接触连接与状态归约，Web 端与桌面端共用同一套。
  */
+
 export type { ChatOutlineProps } from "./chat/ChatOutline.tsx";
 export { ChatOutline } from "./chat/ChatOutline.tsx";
 export type { ComposerProps } from "./chat/Composer.tsx";
@@ -55,6 +56,18 @@ export type { CodeThemeValue } from "./markdown/code-theme.tsx";
 export { CodeThemeProvider, useCodeTheme } from "./markdown/code-theme.tsx";
 export type { MarkdownProps } from "./markdown/Markdown.tsx";
 export { Markdown } from "./markdown/Markdown.tsx";
+export type { PanelStorage, RightPanelState, RightPanelTab } from "./panel/panel-state.ts";
+export {
+	clampPanelWidth,
+	DEFAULT_PANEL_STATE,
+	PANEL_DEFAULT_WIDTH,
+	PANEL_MAX_WIDTH,
+	PANEL_MIN_WIDTH,
+	readPanelState,
+	writePanelState,
+} from "./panel/panel-state.ts";
+export type { RightPanelProps } from "./panel/right-panel.tsx";
+export { RightPanel } from "./panel/right-panel.tsx";
 export type { CodeThemeOption, UiThemeOption } from "./theme.ts";
 export {
 	CODE_THEME_OPTIONS,

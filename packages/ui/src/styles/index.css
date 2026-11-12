@@ -1531,10 +1531,6 @@ svg.fl {
 	border-color: var(--err);
 }
 
-.session-error .ib {
-	color: var(--err);
-}
-
 .btn.pri {
 	border-color: transparent;
 	background: var(--t1);
@@ -1611,6 +1607,37 @@ svg.fl {
 	align-items: center;
 	gap: 4px;
 	margin-top: 4px;
+}
+
+/* 输入区左侧的小图标按钮：默认只有图标，悬停时给一层底色并提亮图标 */
+.ib {
+	display: grid;
+	place-items: center;
+	width: 26px;
+	height: 26px;
+	padding: 0;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--t3);
+	transition:
+		background-color var(--dur-fast) var(--ease),
+		color var(--dur-fast) var(--ease);
+}
+
+.ib:hover:not(:disabled),
+.ib[aria-expanded="true"] {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+.ib:disabled {
+	cursor: default;
+}
+
+/* 错误条上的图标按钮用危险色，不管悬停与否 */
+.session-error .ib {
+	color: var(--err);
 }
 
 .composer-row .chip {

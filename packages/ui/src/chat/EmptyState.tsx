@@ -3,7 +3,9 @@
  *
  * 有项目时给新建会话的入口并说明会建在哪个目录；没有项目时先引导添加项目，新建按钮置灰。
  */
-import { FolderPlusIcon, PlusIcon } from "../transcript/icons.tsx";
+
+import { FolderPlus } from "lucide-react";
+import { PlusIcon } from "../transcript/icons.tsx";
 
 /** 引导页参数。 */
 export interface EmptyStateProps {
@@ -35,7 +37,7 @@ export function EmptyState({ cwd, canCreate, onCreate, onAddProject }: EmptyStat
 					新建会话
 				</button>
 				<button type="button" className="empty-secondary" onClick={onAddProject}>
-					<FolderPlusIcon size={14} />
+					<FolderPlus size={14} strokeWidth={1.5} />
 					添加项目
 				</button>
 			</div>

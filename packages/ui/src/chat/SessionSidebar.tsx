@@ -5,9 +5,9 @@
  * 项目过滤器同时决定队列的范围与新建会话的目录，队列按时间分组，分组规则见 sidebar-model。
  */
 import type { ProjectInfo, SessionSummary } from "@facet/protocol";
-import { Settings } from "lucide-react";
+import { FolderPlus, Search, Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FolderIcon, FolderPlusIcon, MoonIcon, PlusIcon, SearchIcon, SunIcon } from "../transcript/icons.tsx";
+import { FolderIcon, MoonIcon, PlusIcon, SunIcon } from "../transcript/icons.tsx";
 import {
 	baseName,
 	buildSidebar,
@@ -403,10 +403,10 @@ export function SessionSidebar({
 							});
 						}}
 					>
-						<SearchIcon size={15} />
+						<Search size={15} strokeWidth={1.5} />
 					</button>
 					<button type="button" className="sb-tool" aria-label="添加项目" onClick={onAddProject}>
-						<FolderPlusIcon size={15} />
+						<FolderPlus size={15} strokeWidth={1.5} />
 					</button>
 				</span>
 			</header>
@@ -446,7 +446,7 @@ export function SessionSidebar({
 						onKeyDown={trapFocus}
 					>
 						<label className="sb-search">
-							<SearchIcon size={13} />
+							<Search size={13} strokeWidth={1.5} />
 							<input
 								ref={projectSearchRef}
 								value={projectKeyword}
@@ -630,7 +630,7 @@ export function SessionSidebar({
 
 			{isSearchOpen ? (
 				<label className="sb-search is-inline">
-					<SearchIcon size={13} />
+					<Search size={13} strokeWidth={1.5} />
 					<input
 						ref={searchRef}
 						value={keyword}

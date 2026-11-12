@@ -348,6 +348,8 @@ async function handleRequest(
 			}
 			return { settings: await context.settingsStore.save(settings as FacetSettings) };
 		}
+		case "busySessions":
+			return { files: context.hub.busyFiles() };
 		case "diagnostics": {
 			const [sessions, settings] = await Promise.all([
 				context.factory.listSessions(),

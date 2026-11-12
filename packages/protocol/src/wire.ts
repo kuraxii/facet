@@ -119,6 +119,8 @@ export interface SubscribeResult {
 export interface RequestParams {
 	/** 列出会话。指定 cwd 时只列该目录。 */
 	listSessions: { cwd?: string };
+	/** 列出正在运行的会话文件。退出前确认有没有任务会被带走。 */
+	busySessions: Record<string, never>;
 	/** 新建会话并返回初始快照。 */
 	createSession: {
 		cwd?: string;
@@ -220,6 +222,7 @@ export interface RequestParams {
 /** 每条请求的应答数据。 */
 export interface RequestResults {
 	listSessions: { sessions: SessionSummary[] };
+	busySessions: { files: string[] };
 	createSession: SessionSnapshot;
 	openSession: SessionSnapshot;
 	forkSession: SessionSnapshot;

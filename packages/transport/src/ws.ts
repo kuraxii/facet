@@ -67,6 +67,21 @@ export class WsTransport implements Transport {
 		return this.currentState;
 	}
 
+	/** 端点地址，下一次 connect 用它。 */
+	get url(): string {
+		return this.options.url;
+	}
+
+	/**
+	 * 换一个端点地址。
+	 *
+	 * 已经建立的连接不受影响，下一次 connect 才连到新地址；嵌入主机被重新拉起后端口会变，
+	 * 调用方据此重新握手。
+	 */
+	setUrl(url: string): void {
+		this.options.url = url;
+	}
+
 	get handshake(): Handshake | undefined {
 		return this.currentHandshake;
 	}

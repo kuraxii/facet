@@ -22,8 +22,18 @@ npm install
 ## 运行
 
 ```bash
-npm run dev            # 桌面应用（Electron + Vite）
-npm run dev -w @facet/web   # Web 壳
+npm run dev            # 桌面应用，主机作为子进程一起起来
+npm run dev:split      # 主机与桌面分开跑，各自热重启
+npm run dev:host       # 只起主机，固定 4319 端口
+npm run dev:client     # 只起桌面，连 FACET_ENDPOINT 指定的主机
+```
+
+`npm run dev` 由桌面主进程拉起主机：主机崩掉会被重启，界面收到新端点后自动重连；关窗口退出时主机一起结束。改主机代码时这条命令会重启整个桌面。
+
+`npm run dev:split` 先起主机（`FACET_PORT`，缺省 4319）再起桌面，改主机代码只重启主机，桌面界面与 Vite 热更新不受影响；两边日志各带 `[host]`、`[desktop]` 前缀。要连别处的主机：
+
+```bash
+FACET_ENDPOINT=ws://192.168.1.20:4319/endpoint npm run dev:client
 ```
 
 首次启动会读取 `~/.pi/agent-dev` 下的凭证与模型配置；没有凭证时先在设置页的提供方里配好密钥，或改用自定义提供方。
@@ -47,7 +57,7 @@ npm run dist -w @facet/desktop # 出安装包
 
 | 路径 | 内容 |
 |---|---|
-| `apps/desktop` | Electron 主进程、预加载与渲染进程 |
+| `apps/desktop` | Electron 主进程（含拉起主机的子进程管理）、预加载与渲染进程 |
 | `apps/server` | 主机侧服务：端点、会话登记、项目与设置存储 |
 | `apps/web` | Web 壳 |
 | `packages/protocol` | 跨边界的类型与常量，零运行时依赖 |
@@ -82,7 +92,8 @@ scripts/build-fonts.sh <字体目录>
 | 路径 | 内容 | 覆盖方式 |
 |---|---|---|
 | `~/.pi/agent-dev` | 凭证 `auth.json`、模型 `models.json`、设置、会话目录 | `FACET_AGENT_DIR` |
-| `$XDG_DATA_HOME/facet`（缺省 `~/.local/share/facet`） | 主机身份 `host.json`、项目清单 `projects.json`、界面设置 `settings.json` | `FACET_DATA_DIR` |
+| `$XDG_DATA_HOME/facet`（缺省 `~/.local/share/facet`） | 主机身份 `host.json`、项目清单 `projects.json`、界面设置 `settings.json`；独立启动时还有发现文件 `endpoint.json` | `FACET_DATA_DIR` |
+| `$XDG_CONFIG_HOME/facet`（缺省 `~/.config/facet`） | 桌面本地记录 `desktop.json`：窗口位置与尺寸 | — |
 
 用 `agent-dev` 而不是 `~/.pi/agent`，是为了和 pi 命令行共用凭证与模型配置，同时不把开发期的会话混进真实目录。
 
@@ -100,6 +111,8 @@ scripts/build-fonts.sh <字体目录>
 | `FACET_REPLAY_LIMIT` | 每个通道保留的动作条数 |
 | `FACET_SESSION_IDLE_MS` | 没人订阅且空闲后多久回收会话 |
 | `FACET_DEBUG` | 打开主机侧调试日志 |
+| `FACET_ENDPOINT` | 桌面连这个主机，不再拉起子进程 |
+| `FACET_PARENT_PID` | 主机被桌面拉起时由桌面设置，父进程消失后主机自行结束 |
 | `FACET_PROJECT_DIR` | 启动时打开的项目目录 |
 | `FACET_SKIP_ELECTRON_DOWNLOAD` | `1` 表示跳过 Electron 二进制检查 |
 

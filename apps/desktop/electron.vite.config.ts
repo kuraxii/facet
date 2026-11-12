@@ -1,22 +1,36 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 
+/** 桌面应用的 package.json，依赖清单从它读 */
+const PACKAGE = JSON.parse(readFileSync(fileURLToPath(new URL("package.json", import.meta.url)), "utf8")) as {
+	dependencies: Record<string, string>;
+};
+
+/** 主进程入口：桌面本体与嵌入主机的独立入口各一个 */
+const MAIN_ENTRIES = {
+	index: fileURLToPath(new URL("src/main/index.ts", import.meta.url)),
+	host: fileURLToPath(new URL("../../apps/server/src/main.ts", import.meta.url)),
+};
+
 /**
- * facet 自己的包只有 TS 源码，必须打进主进程；node_modules 里的实现保持外置。
- * ws 由内嵌的主机用到，因此列进桌面应用的依赖，运行时从 node_modules 解析，
+ * 工作区的包只有 TS 源码，必须打进主进程，否则运行时要现去解析 .ts 文件。
+ * 这里按桌面应用的依赖里 `@facet/` 前缀取出，新增工作区依赖不用再改这份清单。
+ * node_modules 里的实现保持外置：ws 由内嵌的主机用到，运行时从 node_modules 解析，
  * 避免把它自带的可选原生依赖打进包里。
  */
-const WORKSPACE_PACKAGES = [
-	"@facet/agent",
-	"@facet/client-core",
-	"@facet/protocol",
-	"@facet/server",
-	"@facet/services",
-];
+const WORKSPACE_PACKAGES = Object.keys(PACKAGE.dependencies).filter((name) => name.startsWith("@facet/"));
 
 export default defineConfig({
 	main: {
 		plugins: [externalizeDepsPlugin({ exclude: WORKSPACE_PACKAGES })],
+		build: {
+			rollupOptions: {
+				input: MAIN_ENTRIES,
+				output: { entryFileNames: "[name].js" },
+			},
+		},
 	},
 	preload: {
 		plugins: [externalizeDepsPlugin()],

@@ -40,6 +40,8 @@ interface FacetBridge {
 	pickDirectory: () => Promise<string | undefined>;
 	/** 用系统的保存窗口写一段文本,取消时返回 false */
 	saveText: (suggestedName: string, text: string) => Promise<boolean>;
+	/** 订阅主机端点变化,返回取消订阅的函数 */
+	onEndpointChanged: (listener: (endpoint: string) => void) => () => void;
 }
 
 declare global {
@@ -169,6 +171,8 @@ export function App() {
 		() => client.store.getVersion(),
 	);
 	const [phase, setPhase] = useState<Phase>("connecting");
+	/** 当前连的主机端点，嵌入主机被重新拉起后会换 */
+	const [endpoint, setEndpoint] = useState(bridge.endpoint);
 	/** 与主机的连接是否可用，断开时输入区说明原因并禁用发送 */
 	const [isOnline, setIsOnline] = useState(false);
 	const [failure, setFailure] = useState<string | undefined>(undefined);
@@ -314,6 +318,24 @@ export function App() {
 			void reconnect();
 		}
 	}, [isOnline, phase, reconnect]);
+
+	// 嵌入主机被重新拉起后端口会变：换地址再握手，会话由 resume 续订
+	useEffect(
+		() =>
+			bridge.onEndpointChanged((next) => {
+				transport.setUrl(next);
+				setEndpoint(next);
+				setPhase("connecting");
+				void reconnect().then(
+					() => setPhase("ready"),
+					(error: unknown) => {
+						setFailure(error instanceof Error ? error.message : String(error));
+						setPhase("failed");
+					},
+				);
+			}),
+		[reconnect],
+	);
 
 	void version;
 
@@ -709,20 +731,20 @@ export function App() {
 		const local: SidebarHost = {
 			id: host?.hostId ?? "local",
 			name: host?.hostName ?? "本机",
-			detail: bridge.endpoint,
+			detail: endpoint,
 			state: "connected",
 			isLocal: true,
 			projects: [],
 		};
 		return [local, ...PLACEHOLDER_HOSTS];
-	}, [host]);
+	}, [host, endpoint]);
 
 	if (phase === "failed") {
 		return (
 			<main className="boot">
 				<h1>连不上主机</h1>
 				<p>{failure}</p>
-				<p>{bridge.endpoint}</p>
+				<p>{endpoint}</p>
 				<button
 					type="button"
 					className="boot-retry"
@@ -747,7 +769,7 @@ export function App() {
 		return (
 			<main className="boot">
 				<h1>正在连接主机</h1>
-				<p>{bridge.endpoint}</p>
+				<p>{endpoint}</p>
 			</main>
 		);
 	}
@@ -795,7 +817,7 @@ export function App() {
 						about={{
 							appVersion: bridge.appVersion,
 							runtime: `Electron ${bridge.platform}`,
-							endpoint: bridge.endpoint,
+							endpoint,
 						}}
 					/>
 				) : session === undefined ? (

@@ -15,6 +15,18 @@ const api = {
 	platform: readArgument("facet-platform") || process.platform,
 	/** 应用版本，关于页展示用 */
 	appVersion: readArgument("facet-version"),
+	/**
+	 * 订阅主机端点变化。
+	 *
+	 * 嵌入主机被重新拉起后端口会变，界面收到新地址要重新握手。返回值用于取消订阅。
+	 */
+	onEndpointChanged: (listener: (endpoint: string) => void): (() => void) => {
+		const handler = (_event: unknown, next: string): void => listener(next);
+		ipcRenderer.on("facet:endpoint-changed", handler);
+		return () => {
+			ipcRenderer.off("facet:endpoint-changed", handler);
+		};
+	},
 	/** 打开系统的目录选择窗口,取消时返回空 */
 	pickDirectory: (): Promise<string | undefined> => ipcRenderer.invoke("facet:pick-directory"),
 	/** 用系统的保存窗口把一段文本写到文件,取消时返回 false */

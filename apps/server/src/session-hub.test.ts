@@ -542,6 +542,33 @@ describe("空闲回收", () => {
 	});
 });
 
+describe("按数量回收", () => {
+	it("超过上限时从最久没被用过的开始回收", async () => {
+		const first = await hub.openSession("/tmp/s1.jsonl");
+		vi.advanceTimersByTime(5);
+		const second = await hub.openSession("/tmp/s2.jsonl");
+		vi.advanceTimersByTime(5);
+		const third = await hub.openSession("/tmp/s3.jsonl");
+		expect(hub.stats().loaded).toBe(3);
+		const removed = hub.enforceLimits({ maxSessions: 2 });
+		expect(removed).toEqual([first.id]);
+		expect(hub.has(second.id)).toBe(true);
+		expect(hub.has(third.id)).toBe(true);
+	});
+
+	it("有订阅、在跑或者被 keep 的都不回收", async () => {
+		const watched = await hub.openSession("/tmp/s1.jsonl");
+		const running = await hub.openSession("/tmp/s2.jsonl");
+		const kept = await hub.openSession("/tmp/s3.jsonl");
+		hub.agent(running.id).busy = true;
+		await hub.subscribe(makeChannel("session", watched.id), undefined, sink("端一"));
+		const removed = hub.enforceLimits({ maxSessions: 1, keep: [kept.id] });
+		// 三个都在保护里，一个都不回收
+		expect(removed).toEqual([]);
+		expect(hub.stats()).toMatchObject({ loaded: 3, busy: 1 });
+	});
+});
+
 describe("多端", () => {
 	/** 记账用的订阅者：收下的帧按顺序存起来。 */
 	function recorder(id: string) {

@@ -85,6 +85,19 @@ export async function startServer(
 	});
 	const projectStore = await ProjectStore.open({ file: join(config.dataDir, "projects.json") });
 	const settingsStore = await SettingsStore.open({ file: join(config.dataDir, "settings.json") });
+	// 每隔一段时间按数量上限回收闲置会话：长时间开着也不该越攒越多
+	const evictionTimer = setInterval(() => {
+		try {
+			const removed = hub.enforceLimits({ maxSessions: 8 });
+			if (removed.length > 0) {
+				debugLog("server", "回收闲置会话", { removed: removed.length, ...hub.stats() });
+			}
+		} catch (error) {
+			debugLog("server", "回收闲置会话失败", { error: String(error) });
+		}
+	}, 60_000);
+	evictionTimer.unref();
+
 	const endpoint = await startEndpoint({
 		config,
 		factory,
@@ -109,6 +122,7 @@ export async function startServer(
 		settingsStore,
 		sessions,
 		close: async () => {
+			clearInterval(evictionTimer);
 			sessionIndex?.stop();
 			await endpoint.close();
 			hub.dispose();

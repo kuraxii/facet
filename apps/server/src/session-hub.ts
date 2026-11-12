@@ -167,6 +167,8 @@ interface SessionState<A extends HubAgent> {
 	opening: Promise<void> | undefined;
 	/** 待关闭的倒计时 */
 	closeTimer: ReturnType<typeof setTimeout> | undefined;
+	/** 最近一次被用到的时间，按内存水位回收时从最旧的开始 */
+	lastUsedAt: number;
 	readonly channels: Map<Channel, ChannelState>;
 	readonly projector: ActionProjector;
 }
@@ -279,6 +281,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 			phase: "opening",
 			opening: undefined,
 			closeTimer: undefined,
+			lastUsedAt: Date.now(),
 			channels: new Map(),
 			projector: new ActionProjector(sessionId),
 		};
@@ -374,6 +377,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 			phase: "open",
 			opening: undefined,
 			closeTimer: undefined,
+			lastUsedAt: Date.now(),
 			channels: new Map(),
 			projector: new ActionProjector(sessionId),
 		};
@@ -492,6 +496,53 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		this.publish(row, row.projector.chatChannelFor(), { type: "chat/branchMoved", leafId });
 	}
 
+	/**
+	 * 按数量上限回收闲置会话。
+	 *
+	 * 只回收没有订阅、没有在途动作、也没在跑的那些，从最久没被用过的开始；keep 里的会话
+	 * 一律不动（界面正开着的那几个）。运行中的会话本身受保护，数量再多也不回收。
+	 */
+	enforceLimits(options: { maxSessions: number; keep?: readonly string[] }): string[] {
+		const rows = [...this.table.values()];
+		if (rows.length <= options.maxSessions) {
+			return [];
+		}
+		const keep = new Set(options.keep ?? []);
+		const idle = rows
+			.filter((row) => {
+				return (
+					!keep.has(row.sessionId) &&
+					row.phase !== "opening" &&
+					row.holders.size === 0 &&
+					row.holds === 0 &&
+					row.agent?.isBusy !== true
+				);
+			})
+			.sort((left, right) => left.lastUsedAt - right.lastUsedAt);
+		const removed: string[] = [];
+		let count = rows.length;
+		for (const row of idle) {
+			if (count <= options.maxSessions) {
+				break;
+			}
+			this.release(row.sessionId);
+			removed.push(row.sessionId);
+			count -= 1;
+		}
+		return removed;
+	}
+
+	/** 已装载的会话数与其中正在跑的数量，诊断与日志用。 */
+	stats(): { loaded: number; busy: number } {
+		let busy = 0;
+		for (const row of this.table.values()) {
+			if (row.agent?.isBusy === true) {
+				busy += 1;
+			}
+		}
+		return { loaded: this.table.size, busy };
+	}
+
 	/** 还在跑的会话文件。退出应用前用来判断会话会不会被连带终止。 */
 	busyFiles(): string[] {
 		const files: string[] = [];
@@ -582,6 +633,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		const { actions, resync } = target.log.replay(since ?? target.log.lastSeq);
 		target.sinks.add(sink);
 		row.holders.add(sink.id);
+		row.lastUsedAt = Date.now();
 		this.settle(row);
 		for (const item of actions) {
 			sink.send(this.toFrame(channel, item.action, item.seq));
@@ -760,6 +812,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 
 	/** 读一次会话内容即续期,避免只翻历史不订阅的端在途中被回收。 */
 	private touch(row: SessionState<A>): void {
+		row.lastUsedAt = Date.now();
 		if (row.phase === "draining") {
 			this.clearCloseTimer(row);
 			this.scheduleClose(row);

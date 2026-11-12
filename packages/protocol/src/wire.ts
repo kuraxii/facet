@@ -162,6 +162,8 @@ export interface RequestParams {
 	unsubscribe: { channel: Channel };
 	/** 列出模型。 */
 	models: { providerId?: string };
+	/** 列出当前可用的模型：只来自已配置凭证的提供方，并按凭证收窄过清单。 */
+	availableModels: Record<string, never>;
 	/** 列出提供方及其凭证状态。 */
 	providers: Record<string, never>;
 	/** 列出用户添加的项目。 */
@@ -233,6 +235,7 @@ export interface RequestResults {
 	subscribe: SubscribeResult;
 	unsubscribe: Record<string, never>;
 	models: { models: ModelInfo[] };
+	availableModels: { models: ModelInfo[] };
 	providers: { providers: ProviderInfo[] };
 	listProjects: { projects: ProjectInfo[] };
 	addProject: ProjectInfo;

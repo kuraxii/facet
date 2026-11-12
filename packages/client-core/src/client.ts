@@ -230,6 +230,17 @@ export class SessionClient {
 		return result.models;
 	}
 
+	/**
+	 * 列出当前可用的模型。
+	 *
+	 * 只包含已配置凭证的提供方，模型清单也按凭证收窄过（例如按密钥可用的子集），
+	 * 模型选择器用它，设置里那份完整清单仍然走 listModels。
+	 */
+	async listAvailableModels(): Promise<ModelInfo[]> {
+		const result = await this.transport.request("availableModels", {});
+		return result.models;
+	}
+
 	/** 列出用户自己添加的提供方。 */
 	async listCustomProviders(): Promise<CustomProviderInfo[]> {
 		const result = await this.transport.request("listCustomProviders", {});

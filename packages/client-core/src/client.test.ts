@@ -112,6 +112,22 @@ class FakeTransport implements SessionTransport {
 					return { ...snapshot(), id: "s2", file: "/tmp/s2.jsonl" };
 				case "snapshot":
 					return snapshot();
+				case "availableModels":
+					return {
+						models: [
+							{
+								provider: "deepseek",
+								id: "deepseek-v4-flash",
+								name: "DeepSeek V4 Flash",
+								reasoning: true,
+								input: ["text"],
+								contextWindow: 1_048_576,
+								maxTokens: 384_000,
+								cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+								thinkingLevels: ["off", "medium"],
+							},
+						],
+					};
 				case "listProjects":
 					return {
 						projects: [{ id: "p1", cwd: "/work/a", name: "A", createdAt: 1 }],
@@ -770,6 +786,13 @@ describe("回退", () => {
 			channel: "chat:/s1",
 			action: { type: "chat/revertTo", entryId: "e3" },
 		});
+	});
+
+	it("列可用模型走 availableModels 请求", async () => {
+		const { transport, client } = createClient(1);
+		const models = await client.listAvailableModels();
+		expect(transport.calls.at(-1)?.method).toBe("availableModels");
+		expect(models.map((model) => `${model.provider}/${model.id}`)).toEqual(["deepseek/deepseek-v4-flash"]);
 	});
 
 	it("收到 branchMoved 后重新装载历史", async () => {

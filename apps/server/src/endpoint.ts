@@ -307,6 +307,8 @@ async function handleRequest(
 			const source = asObject(params ?? {});
 			return { models: context.factory.models(optionalString(source, "providerId")) };
 		}
+		case "availableModels":
+			return { models: await context.factory.availableModels() };
 		case "providers":
 			return { providers: context.factory.providers() };
 		case "listProjects":

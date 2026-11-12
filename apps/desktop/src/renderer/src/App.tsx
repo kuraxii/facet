@@ -214,26 +214,6 @@ export function App() {
 
 	const listSeq = useRef(0);
 
-	/** 设置页的数据来源，接到主机上。 */
-	const settingsData = useMemo<SettingsDataSource>(
-		() => ({
-			loadSettings: () => client.getSettings(),
-			saveSettings: (next) => client.saveSettings(next),
-			loadProviders: () => client.listProviders(),
-			loadModels: () => client.listModels(),
-			saveCredential: (providerId, apiKey) => client.saveCredential(providerId, apiKey),
-			deleteCredential: (providerId) => client.deleteCredential(providerId),
-			setProviderBaseUrl: (providerId, baseUrl) => client.setProviderBaseUrl(providerId, baseUrl),
-			listCustomProviders: () => client.listCustomProviders(),
-			saveCustomProvider: (provider) => client.saveCustomProvider(provider),
-			removeCustomProvider: (providerId) => client.removeCustomProvider(providerId),
-			testModel: (model) => client.testModel(model),
-			diagnostics: () => client.diagnostics(),
-			saveText: (suggestedName, text) => window.facet.saveText(suggestedName, text),
-		}),
-		[],
-	);
-
 	/**
 	 * 切换深浅色。
 	 *
@@ -352,12 +332,65 @@ export function App() {
 		models: [],
 		auth: {},
 	});
+	/**
+	 * 重取模型目录与各提供方的凭证状态。
+	 *
+	 * 设置里加过凭证或改过自定义提供方之后要再取一次，否则选择器还停在旧的可用清单上。
+	 */
+	const refreshCatalog = useCallback(async (): Promise<void> => {
+		const [models, providers] = await Promise.all([
+			client.listAvailableModels().catch(() => []),
+			client.listProviders().catch(() => []),
+		]);
+		setCatalog({
+			models,
+			auth: Object.fromEntries(providers.map((provider) => [provider.id, provider.authenticated])),
+		});
+	}, []);
+
 	/** 输入区可选的模型：去掉设置里隐藏的那些。 */
 	const visibleModels = useMemo(
 		() => catalog.models.filter((model) => !settings.hiddenModels.includes(`${model.provider}/${model.id}`)),
 		[catalog.models, settings.hiddenModels],
 	);
 	const providerAuth = catalog.auth;
+
+	/** 设置页的数据来源，接到主机上。 */
+	const settingsData = useMemo<SettingsDataSource>(
+		() => ({
+			loadSettings: () => client.getSettings(),
+			saveSettings: (next) => client.saveSettings(next),
+			loadProviders: () => client.listProviders(),
+			loadModels: () => client.listModels(),
+			// 凭证与自定义提供方会改变可用模型，改完重取一次目录
+			saveCredential: (providerId, apiKey) =>
+				client.saveCredential(providerId, apiKey).then(async (providers) => {
+					await refreshCatalog();
+					return providers;
+				}),
+			deleteCredential: (providerId) =>
+				client.deleteCredential(providerId).then(async (providers) => {
+					await refreshCatalog();
+					return providers;
+				}),
+			setProviderBaseUrl: (providerId, baseUrl) => client.setProviderBaseUrl(providerId, baseUrl),
+			listCustomProviders: () => client.listCustomProviders(),
+			saveCustomProvider: (provider) =>
+				client.saveCustomProvider(provider).then(async (providers) => {
+					await refreshCatalog();
+					return providers;
+				}),
+			removeCustomProvider: (providerId) =>
+				client.removeCustomProvider(providerId).then(async (providers) => {
+					await refreshCatalog();
+					return providers;
+				}),
+			testModel: (model) => client.testModel(model),
+			diagnostics: () => client.diagnostics(),
+			saveText: (suggestedName, text) => window.facet.saveText(suggestedName, text),
+		}),
+		[refreshCatalog],
+	);
 
 	/**
 	 * 现在不能发送的原因。
@@ -509,15 +542,8 @@ export function App() {
 			await refreshProjects();
 			// 设置读不到时用缺省值，界面照常可用
 			setSettings(await client.getSettings().catch(() => DEFAULT_SETTINGS));
-			// 模型目录与凭证状态供输入区的模型选择使用，取不到时选择器只展示当前模型
-			const [models, providers] = await Promise.all([
-				client.listModels().catch(() => []),
-				client.listProviders().catch(() => []),
-			]);
-			setCatalog({
-				models,
-				auth: Object.fromEntries(providers.map((provider) => [provider.id, provider.authenticated])),
-			});
+			// 模型选择器只列可用的模型（已配置凭证的提供方），凭证状态仍用来标注当前模型
+			await refreshCatalog();
 			const pool = (await refreshSessions()) ?? [];
 			const newest = pickStartupSession(pool, bridge.projectDir);
 			if (newest) {
@@ -528,7 +554,7 @@ export function App() {
 			setFailure(error instanceof Error ? error.message : String(error));
 			setPhase("failed");
 		});
-	}, [openSession, refreshProjects, refreshSessions]);
+	}, [openSession, refreshCatalog, refreshProjects, refreshSessions]);
 
 	/** 当前草稿落在哪个键：打开的会话按文件路径分开存，没有会话时存到新会话页面。 */
 	const draftKey = activeFile ?? NEW_DRAFT_KEY;

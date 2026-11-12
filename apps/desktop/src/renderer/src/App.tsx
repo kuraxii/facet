@@ -10,6 +10,7 @@ import {
 import { WsTransport } from "@facet/transport/ws";
 import {
 	ArrowDownIcon,
+	ChatOutline,
 	ChatTranscript,
 	CloseIcon,
 	CodeThemeProvider,
@@ -754,7 +755,12 @@ export function App() {
 		);
 
 	const transcript = useMemo(() => (chat ? toTranscript(chat) : []), [chat]);
-	const { scrollRef, isPinned, scrollToBottom } = useStickToBottom(transcript, activeFile);
+	const {
+		scrollRef,
+		element: scrollElement,
+		isPinned,
+		scrollToBottom,
+	} = useStickToBottom(transcript, activeFile);
 
 	const hosts = useMemo<readonly SidebarHost[]>(() => {
 		const local: SidebarHost = {
@@ -846,6 +852,7 @@ export function App() {
 				/>
 
 				<main className="main">
+					{session === undefined ? null : <ChatOutline items={transcript} container={scrollElement} />}
 					{session === undefined ? (
 						<div className="empty-wrap">
 							{errorBar}

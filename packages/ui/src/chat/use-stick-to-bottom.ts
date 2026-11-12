@@ -15,6 +15,8 @@ const SMOOTH_MS = 500;
 export interface StickToBottom {
 	/** 挂到滚动容器上 */
 	scrollRef: (node: HTMLDivElement | null) => void;
+	/** 滚动容器本身，正文定位与对话导航要用 */
+	element: HTMLDivElement | null;
 	/** 当前是否贴底 */
 	isPinned: boolean;
 	/** 回到底部并恢复跟随 */
@@ -110,5 +112,5 @@ export function useStickToBottom(contentKey: unknown, resetKey: unknown): StickT
 		};
 	}, [element, applyPinned, jumpToBottom]);
 
-	return { scrollRef, isPinned, scrollToBottom };
+	return { scrollRef, element, isPinned, scrollToBottom };
 }

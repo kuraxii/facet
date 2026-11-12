@@ -733,11 +733,104 @@ svg.fl {
 /* 主区 */
 
 .main {
+	position: relative;
 	display: flex;
 	flex: 1;
 	flex-direction: column;
 	min-width: 0;
 	min-height: 0;
+}
+
+/* 对话导航：贴在主区域左缘的一条竖轨，按轮次排列 */
+.outline {
+	position: absolute;
+	top: 10%;
+	bottom: 10%;
+	left: 0;
+	z-index: 3;
+	display: flex;
+	/* 宽度不超过正文容器的左内边距，短条放大也不会压到字上 */
+	width: 24px;
+	align-items: center;
+}
+
+.outline-rail {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	height: 100%;
+	align-items: center;
+	justify-content: center;
+}
+
+/* 槽位把一个像素都不让出去，条数多到挤在一起时也能落到每一条上 */
+.outline-slot {
+	position: relative;
+	display: flex;
+	flex-basis: 8px;
+	flex-shrink: 1;
+	width: 100%;
+	min-height: 0;
+	align-items: center;
+	justify-content: center;
+}
+
+.outline-tick {
+	display: flex;
+	width: 100%;
+	height: 100%;
+	align-items: center;
+	justify-content: flex-start;
+	padding: 0 0 0 3px;
+	border: 0;
+	border-radius: 4px;
+	background: transparent;
+}
+
+/* 短条共用一条左缘向右长，放大看起来是一团鼓起跟着指针走 */
+.outline-pill {
+	flex: none;
+	border-radius: 9999px;
+	background: var(--line2);
+	transition:
+		width 140ms ease-out,
+		height 140ms ease-out,
+		background-color 140ms ease-out;
+}
+
+.outline-pill.is-active {
+	background: var(--t3);
+}
+
+.outline-pill.is-attention {
+	background: var(--t1);
+}
+
+.outline-preview {
+	position: absolute;
+	top: 50%;
+	left: 26px;
+	display: flex;
+	width: 260px;
+	min-height: 48px;
+	margin-top: -24px;
+	padding: 10px 12px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: var(--surface2);
+	box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+	align-items: center;
+}
+
+.outline-preview-text {
+	margin: 0;
+	color: var(--t1);
+	font-size: 12px;
+	line-height: 1.5;
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	overflow: hidden;
 }
 
 .scroll {
@@ -1766,6 +1859,11 @@ svg.fl {
 :root[data-motion="reduced"] .pulse,
 :root[data-motion="reduced"] .caret {
 	animation: none;
+}
+
+/* 减少动效时竖轨的短条直接跳到目标尺寸，不做过渡 */
+:root[data-motion="reduced"] .outline-pill {
+	transition: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

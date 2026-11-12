@@ -3,10 +3,14 @@
  *
  * 组件只消费数据侧的投影结果，不接触连接与状态归约，Web 端与桌面端共用同一套。
  */
+export type { ChatOutlineProps } from "./chat/ChatOutline.tsx";
+export { ChatOutline } from "./chat/ChatOutline.tsx";
 export type { ComposerProps } from "./chat/Composer.tsx";
 export { Composer } from "./chat/Composer.tsx";
 export type { CreateProjectDialogProps } from "./chat/CreateProjectDialog.tsx";
 export { CreateProjectDialog } from "./chat/CreateProjectDialog.tsx";
+export type { OutlinePrompt } from "./chat/chat-outline.ts";
+export { outlinePrompts } from "./chat/chat-outline.ts";
 export type { EmptyStateProps } from "./chat/EmptyState.tsx";
 export { EmptyState } from "./chat/EmptyState.tsx";
 export type { ProviderFormProps } from "./chat/ProviderForm.tsx";

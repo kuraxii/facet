@@ -4,9 +4,9 @@
  * 居中的对话框：填写名称，用系统文件管理器选目录，提交后由宿主写入项目清单。
  */
 
-import { FolderPlus } from "lucide-react";
+import { FolderPlus, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CloseIcon, FolderIcon } from "../transcript/icons.tsx";
+import { FolderIcon } from "../transcript/icons.tsx";
 import { RequestEpoch } from "./request-epoch.ts";
 
 /** 对话框参数。 */
@@ -142,7 +142,7 @@ export function CreateProjectDialog({ isOpen, onPickFolder, onCreate, onClose }:
 				<div className="dialog-head">
 					<h2 className="dialog-title">创建项目</h2>
 					<button type="button" className="dialog-close" aria-label="关闭" onClick={close}>
-						<CloseIcon size={18} />
+						<X size={18} strokeWidth={1.5} />
 					</button>
 				</div>
 

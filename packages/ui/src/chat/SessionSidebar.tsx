@@ -5,9 +5,9 @@
  * 项目过滤器同时决定队列的范围与新建会话的目录，队列按时间分组，分组规则见 sidebar-model。
  */
 import type { ProjectInfo, SessionSummary } from "@facet/protocol";
-import { FolderPlus, Search, Settings } from "lucide-react";
+import { FolderPlus, Plus, Search, Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FolderIcon, MoonIcon, PlusIcon, SunIcon } from "../transcript/icons.tsx";
+import { FolderIcon, MoonIcon, SunIcon } from "../transcript/icons.tsx";
 import {
 	baseName,
 	buildSidebar,
@@ -418,7 +418,7 @@ export function SessionSidebar({
 				disabled={!canCreate || newSessionCwd.length === 0}
 				title={newSessionCwd.length === 0 ? "先添加项目" : `在 ${newSessionCwd} 新建`}
 			>
-				<PlusIcon size={14} />
+				<Plus size={14} strokeWidth={1.5} />
 				新建会话
 			</button>
 
@@ -621,7 +621,7 @@ export function SessionSidebar({
 								onAddProject();
 							}}
 						>
-							<PlusIcon size={13} />
+							<Plus size={13} strokeWidth={1.5} />
 							<span className="sb-opt-name">添加项目</span>
 						</button>
 					</div>

@@ -7,8 +7,9 @@
  */
 import type { ChatActivity } from "@facet/client-core";
 import type { ModelInfo, ThinkingLevel } from "@facet/protocol";
+import { Paperclip } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ClipIcon, SendIcon, StopIcon } from "../transcript/icons.tsx";
+import { SendIcon, StopIcon } from "../transcript/icons.tsx";
 
 /** 输入区参数。 */
 export interface ComposerProps {
@@ -160,7 +161,7 @@ export function Composer({
 			/>
 			<div className="composer-row">
 				<button type="button" className="ib" aria-label="添加附件" disabled title="尚未实现">
-					<ClipIcon size={16} />
+					<Paperclip size={16} strokeWidth={1.5} />
 				</button>
 				<button type="button" className="ib" aria-label="引用文件" disabled title="尚未实现">
 					@

@@ -5,9 +5,9 @@
  * 保存失败时保留用户正在编辑的输入，可以直接重试。
  */
 import type { FacetSettings, ModelInfo, ModelRef, ProviderInfo } from "@facet/protocol";
+import { X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CODE_THEME_OPTIONS, UI_THEME_OPTIONS } from "../theme.ts";
-import { CloseIcon } from "../transcript/icons.tsx";
 import { ProvidersSection } from "./ProvidersSection.tsx";
 import type { SettingsDataSource } from "./settings-data-source.ts";
 
@@ -197,7 +197,7 @@ export function SettingsPage({
 				<header className="set-head">
 					<h1 className="set-title">设置</h1>
 					<button type="button" className="set-close" aria-label="关闭设置" onClick={onClose}>
-						<CloseIcon size={16} />
+						<X size={16} strokeWidth={1.5} />
 					</button>
 				</header>
 

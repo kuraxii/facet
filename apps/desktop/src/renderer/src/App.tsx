@@ -12,7 +12,6 @@ import {
 	ArrowDownIcon,
 	ChatOutline,
 	ChatTranscript,
-	CloseIcon,
 	CodeThemeProvider,
 	Composer,
 	CreateProjectDialog,
@@ -32,6 +31,7 @@ import {
 	TrustDialog,
 	useStickToBottom,
 } from "@facet/ui";
+import { X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { PLACEHOLDER_HOSTS } from "./placeholder-hosts";
 
@@ -749,7 +749,7 @@ export function App() {
 					重试
 				</button>
 				<button type="button" className="ib" aria-label="关闭提示" onClick={() => setSessionError(undefined)}>
-					<CloseIcon size={12} />
+					<X size={12} strokeWidth={1.5} />
 				</button>
 			</div>
 		);

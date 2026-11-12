@@ -5,10 +5,10 @@
  * 默认只有过程行与文件改动行收起,其余行展开。
  */
 import type { Part, ToolCallPart, TranscriptItem } from "@facet/client-core";
+import { Split, Undo2 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { Markdown } from "../markdown/Markdown.tsx";
 import { type DiffChunk, type DisplayRow, groupRows, metaSummary } from "./group.ts";
-import { ForkIcon, RevertIcon } from "./icons.tsx";
 import { foldOutput, toolStatusText, toolTarget } from "./tool-text.ts";
 
 /** 面板参数。 */
@@ -424,7 +424,7 @@ export function ChatTranscript({
 								disabled={fork.needsSettle && !canFork}
 								onClick={() => onFork(fork.beforeEntryId)}
 							>
-								<ForkIcon size={14} />
+								<Split size={14} strokeWidth={1.5} />
 							</button>
 						</Shell>
 					);
@@ -510,7 +510,7 @@ export function ChatTranscript({
 										title="回退到这条消息之前"
 										onClick={() => onRevert(entryId, text)}
 									>
-										<RevertIcon size={12} />
+										<Undo2 size={12} strokeWidth={1.5} />
 										回退
 									</button>
 								</div>

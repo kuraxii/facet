@@ -29,6 +29,7 @@ import {
 import { WebSocket, WebSocketServer } from "ws";
 import type { ServerConfig } from "./config.ts";
 import { buildDiagnostics } from "./diagnostics.ts";
+import type { HostSource } from "./host-identity.ts";
 import { ProjectExistsError, ProjectNotFoundError, type ProjectStore } from "./project-store.ts";
 import { RevealFailedError, revealInFileManager } from "./reveal.ts";
 import {
@@ -74,6 +75,8 @@ interface EndpointContext {
 	readonly projectStore: ProjectStore;
 	readonly settingsStore: SettingsStore;
 	readonly hostId: string;
+	/** 主机标识的派生来源，诊断里说明这台机器有没有 machine-id */
+	readonly hostSource: HostSource;
 	readonly connections: Set<Connection>;
 }
 
@@ -354,6 +357,7 @@ async function handleRequest(
 				text: await buildDiagnostics({
 					protocolVersion: PROTOCOL_VERSION,
 					hostId: context.hostId,
+					hostSource: context.hostSource,
 					hostName: context.config.hostName,
 					agentDir: context.factory.agentDir,
 					dataDir: context.config.dataDir,
@@ -564,6 +568,8 @@ export async function startEndpoint(options: {
 	projectStore: ProjectStore;
 	settingsStore: SettingsStore;
 	hostId: string;
+	/** 主机标识的派生来源，缺省当作由 machine-id 派生 */
+	hostSource?: HostSource;
 }): Promise<EndpointHandle> {
 	const context: EndpointContext = {
 		config: options.config,
@@ -572,6 +578,7 @@ export async function startEndpoint(options: {
 		projectStore: options.projectStore,
 		settingsStore: options.settingsStore,
 		hostId: options.hostId,
+		hostSource: options.hostSource ?? "machine-id",
 		connections: new Set(),
 	};
 

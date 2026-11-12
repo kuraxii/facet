@@ -82,9 +82,11 @@ scripts/build-fonts.sh <字体目录>
 | 路径 | 内容 | 覆盖方式 |
 |---|---|---|
 | `~/.pi/agent-dev` | 凭证 `auth.json`、模型 `models.json`、设置、会话目录 | `FACET_AGENT_DIR` |
-| `$XDG_DATA_HOME/facet`（缺省 `~/.local/share/facet`） | 项目清单 `projects.json`、界面设置 `settings.json` | `FACET_DATA_DIR` |
+| `$XDG_DATA_HOME/facet`（缺省 `~/.local/share/facet`） | 主机身份 `host.json`、项目清单 `projects.json`、界面设置 `settings.json` | `FACET_DATA_DIR` |
 
 用 `agent-dev` 而不是 `~/.pi/agent`，是为了和 pi 命令行共用凭证与模型配置，同时不把开发期的会话混进真实目录。
+
+主机标识在首次启动时生成并写入 `host.json`：取 `/etc/machine-id` 拼上数据目录做 SHA-256，取前 20 位；读不到 machine-id 时改用时间戳加随机串。同一台机器跑多份（不同数据目录）各有各的标识，删掉 `host.json` 即可换一个。
 
 ## 环境变量
 

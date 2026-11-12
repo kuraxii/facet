@@ -3,11 +3,11 @@
  *
  * 装配共享的运行时、会话登记与端点监听，供嵌入方（桌面主进程）与独立进程共用。
  */
-import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { PiAgentFactory } from "@facet/agent";
 import { loadServerConfig, type ServerConfig } from "./config.ts";
 import { type EndpointHandle, startEndpoint } from "./endpoint.ts";
+import { type HostIdentity, loadOrCreateHostId } from "./host-identity.ts";
 import { debugLog, setDebugLog } from "./log.ts";
 import { ProjectCatalog } from "./project-catalog.ts";
 import { ProjectStore } from "./project-store.ts";
@@ -17,6 +17,8 @@ import { SettingsStore } from "./settings-store.ts";
 /** 主机启动后的句柄。port 为实际监听端口，hostId 是本进程的主机标识。 */
 export interface ServerHandle extends EndpointHandle {
 	readonly hostId: string;
+	/** 主机身份，含标识、来源与首次生成时间 */
+	readonly hostIdentity: HostIdentity;
 	/** 实际生效的数据目录 */
 	readonly agentDir: string;
 	/** 会话登记，嵌入方可直接使用 */
@@ -55,13 +57,23 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 	});
 	const projectStore = await ProjectStore.open({ file: join(config.dataDir, "projects.json") });
 	const settingsStore = await SettingsStore.open({ file: join(config.dataDir, "settings.json") });
-	const hostId = randomUUID();
-	const endpoint = await startEndpoint({ config, factory, hub, projectStore, settingsStore, hostId });
+	const hostIdentity = await loadOrCreateHostId({ dataDir: config.dataDir });
+	const hostId = hostIdentity.id;
+	const endpoint = await startEndpoint({
+		config,
+		factory,
+		hub,
+		projectStore,
+		settingsStore,
+		hostId,
+		hostSource: hostIdentity.source,
+	});
 	debugLog("server", "主机端点就绪", { endpoint: `ws://${endpoint.host}:${endpoint.port}/endpoint`, hostId });
 
 	return {
 		...endpoint,
 		hostId,
+		hostIdentity,
 		agentDir: factory.agentDir,
 		hub,
 		projects,
@@ -81,6 +93,8 @@ export type { ServerConfig } from "./config.ts";
 export { loadServerConfig } from "./config.ts";
 export type { EndpointHandle } from "./endpoint.ts";
 export { EventLog } from "./event-log.ts";
+export type { HostIdentity, HostSource } from "./host-identity.ts";
+export { loadOrCreateHostId } from "./host-identity.ts";
 export { debugLog, isDebugLogEnabled, setDebugLog } from "./log.ts";
 export type { ProjectSource } from "./project-catalog.ts";
 export { ProjectCatalog } from "./project-catalog.ts";

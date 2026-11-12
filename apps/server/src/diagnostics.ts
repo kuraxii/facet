@@ -15,6 +15,8 @@ export interface DiagnosticsInput {
 	protocolVersion: number;
 	/** 主机标识与展示名 */
 	hostId: string;
+	/** 主机标识的派生来源 */
+	hostSource: string;
 	hostName: string;
 	/** 实际生效的数据目录 */
 	agentDir: string;
@@ -55,6 +57,7 @@ export async function buildDiagnostics(input: DiagnosticsInput): Promise<string>
 		},
 		host: {
 			hostId: input.hostId,
+			hostIdSource: input.hostSource,
 			hostName: input.hostName,
 			agentDir: input.agentDir,
 			dataDir: input.dataDir,

@@ -84,7 +84,7 @@ describe("theme.css", () => {
 	});
 
 	it("各套配色声明的变量完全一致", () => {
-		const reference = variablesIn(':root,\n:root[data-theme="paseo"]');
+		const reference = variablesIn(':root,\n:root[data-theme="zinc"]');
 		expect(reference.length).toBeGreaterThan(20);
 		for (const theme of UI_THEMES) {
 			expect(variablesIn(`:root[data-theme="${theme}"]`), theme).toEqual(reference);

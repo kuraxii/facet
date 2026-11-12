@@ -1,8 +1,8 @@
 /**
  * 配色方案的选择与解析。
  *
- * 配色取自 paseo：一套浅色加六套深色。这里给出每套的显示名与色板，并负责把设置里的取值
- * 解析成实际生效的那套（system 按系统的深浅取向挑一边）。
+ * 配色是同一套语义色板的六种取值：一套浅色加五套深色。这里给出每套的显示名与色板，
+ * 并负责把设置里的取值解析成实际生效的那套（system 按系统的深浅取向挑一边）。
  */
 import { type CodeTheme, type ThemeMode, UI_THEMES, type UiTheme } from "@facet/protocol";
 
@@ -21,7 +21,6 @@ export interface UiThemeOption {
 /** 设置页上的配色清单，浅色在前，其余按深浅排列。 */
 export const UI_THEME_OPTIONS: readonly UiThemeOption[] = [
 	{ id: "light", label: "浅色", swatch: "#ffffff", dark: false },
-	{ id: "paseo", label: "Paseo", swatch: "#2d8b62", dark: true },
 	{ id: "zinc", label: "Zinc", swatch: "#808080", dark: true },
 	{ id: "midnight", label: "Midnight", swatch: "#4a6ba8", dark: true },
 	{ id: "claude", label: "Claude", swatch: "#d97757", dark: true },
@@ -33,7 +32,7 @@ export const UI_THEME_OPTIONS: readonly UiThemeOption[] = [
 export const THEME_MODES: readonly ThemeMode[] = [...UI_THEMES, "system"];
 
 /** 缺省的深色配色，切到浅色再切回来时用它。 */
-export const DEFAULT_DARK_THEME: UiTheme = "paseo";
+export const DEFAULT_DARK_THEME: UiTheme = "zinc";
 
 /** 这套配色是不是深色。 */
 export function isDarkTheme(theme: UiTheme): boolean {

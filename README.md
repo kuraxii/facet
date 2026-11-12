@@ -91,7 +91,7 @@ scripts/build-fonts.sh <字体目录>
 
 设置页的外观分类可以把这两项改成别的字体，留空即回到上面两个默认值。
 
-配色取自 paseo：一套浅色加六套深色（`paseo` 为缺省），代码高亮另有八套可选，浅深跟随界面主题。全部取值在 `packages/ui/src/styles/theme.css`。
+配色是一套浅色加五套深色（`zinc` 为缺省），代码高亮另有八套可选，浅深跟随界面主题。全部取值在 `packages/ui/src/styles/theme.css`。
 
 ## 数据放在哪
 

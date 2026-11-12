@@ -2133,6 +2133,26 @@ svg.fl {
 	box-shadow: 0 12px 32px rgb(0 0 0 / 35%);
 }
 
+/* 添加菜单只有两项，收窄一点，左图标右文字 */
+.chip-pop.is-attach {
+	min-width: 168px;
+}
+
+.chip-pop-item.is-row {
+	justify-content: flex-start;
+	gap: 8px;
+}
+
+.chip-pop-item:disabled {
+	color: var(--t3);
+	cursor: default;
+}
+
+.chip-pop-item:disabled:hover {
+	background: transparent;
+	color: var(--t3);
+}
+
 .chip-pop-group {
 	display: flex;
 	flex-direction: column;

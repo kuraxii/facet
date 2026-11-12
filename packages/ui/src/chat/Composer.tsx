@@ -7,7 +7,7 @@
  */
 import type { ChatActivity } from "@facet/client-core";
 import type { ModelInfo, ThinkingLevel } from "@facet/protocol";
-import { Paperclip } from "lucide-react";
+import { FileUp, ImagePlus, Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SendIcon, StopIcon } from "../transcript/icons.tsx";
 
@@ -104,8 +104,9 @@ export function Composer({
 	const canSend =
 		blockedReason === undefined && value.trim().length > 0 && (activity === "idle" || activity === "running");
 	const isQueuing = activity === "running";
-	const [openMenu, setOpenMenu] = useState<"model" | "level" | undefined>(undefined);
+	const [openMenu, setOpenMenu] = useState<"model" | "level" | "attach" | undefined>(undefined);
 	const modelRef = useDismiss(openMenu === "model", () => setOpenMenu(undefined));
+	const attachRef = useDismiss(openMenu === "attach", () => setOpenMenu(undefined));
 	const levelRef = useDismiss(openMenu === "level", () => setOpenMenu(undefined));
 
 	// 没有给出可选模型时退化成只展示的芯片
@@ -160,12 +161,42 @@ export function Composer({
 				}}
 			/>
 			<div className="composer-row">
-				<button type="button" className="ib" aria-label="添加附件" disabled title="尚未实现">
-					<Paperclip size={16} strokeWidth={1.5} />
-				</button>
-				<button type="button" className="ib" aria-label="引用文件" disabled title="尚未实现">
-					@
-				</button>
+				<div className="chip-wrap" ref={attachRef}>
+					<button
+						type="button"
+						className="ib"
+						aria-label="添加"
+						title="添加图片或文件"
+						aria-expanded={openMenu === "attach"}
+						onClick={() => setOpenMenu(openMenu === "attach" ? undefined : "attach")}
+					>
+						<Plus size={16} strokeWidth={1.5} />
+					</button>
+					{openMenu === "attach" ? (
+						<div className="chip-pop is-attach" role="menu" aria-label="添加内容">
+							<button
+								type="button"
+								className="chip-pop-item is-row"
+								role="menuitem"
+								disabled
+								title="尚未接入"
+							>
+								<ImagePlus size={14} strokeWidth={1.5} />
+								<span className="ell">添加图片</span>
+							</button>
+							<button
+								type="button"
+								className="chip-pop-item is-row"
+								role="menuitem"
+								disabled
+								title="尚未接入"
+							>
+								<FileUp size={14} strokeWidth={1.5} />
+								<span className="ell">上传文件</span>
+							</button>
+						</div>
+					) : null}
+				</div>
 
 				<div className="chip-wrap" ref={modelRef}>
 					<button

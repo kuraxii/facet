@@ -8,7 +8,7 @@ function readArgument(name: string): string {
 }
 
 const api = {
-	/** 设备端点地址 */
+	/** 主机端点地址 */
 	endpoint: readArgument("facet-endpoint"),
 	/** 默认打开的项目目录 */
 	projectDir: readArgument("facet-project"),

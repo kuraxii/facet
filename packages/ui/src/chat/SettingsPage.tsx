@@ -22,7 +22,7 @@ const SECTIONS: ReadonlyArray<{ key: SettingsSection; label: string }> = [
 	{ key: "about", label: "关于" },
 ];
 
-/** 设置的读取与保存入口，由宿主接到设备上。 */
+/** 设置的读取与保存入口，由宿主接到主机上。 */
 export type { SettingsDataSource } from "./settings-data-source.ts";
 
 /** 设置页参数。 */
@@ -333,7 +333,7 @@ function ModelsSection({
 					}}
 					aria-label="默认模型"
 				>
-					<option value="">由设备决定</option>
+					<option value="">由主机决定</option>
 					{models.map((model) => (
 						<option key={modelKey(model)} value={modelKey(model)}>
 							{model.provider} / {model.name}
@@ -584,7 +584,7 @@ const SHORTCUTS: ReadonlyArray<{ keys: string; action: string }> = [
 /**
  * 关于与诊断。
  *
- * 诊断文本由设备生成，凭证与令牌不在其中；导出走宿主的保存对话框，用户自己挑位置。
+ * 诊断文本由主机生成，凭证与令牌不在其中；导出走宿主的保存对话框，用户自己挑位置。
  */
 function AboutSection({ about, data }: { about: SettingsPageProps["about"]; data: SettingsDataSource }) {
 	const [isExporting, setIsExporting] = useState(false);
@@ -620,7 +620,7 @@ function AboutSection({ about, data }: { about: SettingsPageProps["about"]; data
 					<span className="set-row-meta mono">{about.runtime}</span>
 				</li>
 				<li className="set-row">
-					<span className="set-row-name">设备端点</span>
+					<span className="set-row-name">主机端点</span>
 					<span className="set-row-meta mono">{about.endpoint}</span>
 				</li>
 			</ul>

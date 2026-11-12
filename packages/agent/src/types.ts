@@ -2,7 +2,7 @@
  * agent 包自身的类型。
  *
  * 跨边界的结构由 @facet/protocol 定义，这里只保留 PiAgent 的选项与依赖 AbortSignal 的
- * 回调，避免把设备侧的实现细节带进协议层。
+ * 回调，避免把主机侧的实现细节带进协议层。
  */
 import type { ImageBlock, StreamingBehavior } from "@facet/protocol";
 
@@ -16,6 +16,6 @@ export interface PromptOptions {
 
 /** 模型与思考档位变更时的可选参数。 */
 export interface ModelMutationOptions {
-	/** 是否同时写入设备的全局默认值，缺省只影响当前会话 */
+	/** 是否同时写入主机的全局默认值，缺省只影响当前会话 */
 	persist?: boolean;
 }

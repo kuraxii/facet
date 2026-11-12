@@ -3,7 +3,7 @@
  *
  * 进程内只建一份 ModelRuntime，凭证、模型目录与可用性检查由所有会话共用；
  * 每个会话自己的资源加载器按工作目录单独构造。这里不登记建好的会话，
- * 谁活着、何时回收由设备侧决定。
+ * 谁活着、何时回收由主机侧决定。
  */
 import { open } from "node:fs/promises";
 import { join } from "node:path";

@@ -1,7 +1,7 @@
 /**
  * 在系统文件管理器里打开目录。
  *
- * 设备侧执行，所以远端设备在文件管理器里打开的是它自己的目录。管理器按平台选择：
+ * 主机侧执行，所以远端主机在文件管理器里打开的是它自己的目录。管理器按平台选择：
  * Linux 用 xdg-open，macOS 用 open，Windows 用 explorer。进程不等待，管理器自己退出。
  */
 import { type ChildProcess, spawn } from "node:child_process";
@@ -38,7 +38,7 @@ export function openerFor(platform: NodeJS.Platform): string {
 /**
  * 在文件管理器里打开目录。
  *
- * 命令启动失败时抛错；启动成功即返回，管理器后面怎么退出与设备无关。
+ * 命令启动失败时抛错；启动成功即返回，管理器后面怎么退出与主机无关。
  */
 export async function revealInFileManager(
 	path: string,

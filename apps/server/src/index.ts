@@ -1,5 +1,5 @@
 /**
- * 设备侧入口。
+ * 主机侧入口。
  *
  * 装配共享的运行时、会话登记与端点监听，供嵌入方（桌面主进程）与独立进程共用。
  */
@@ -14,7 +14,7 @@ import { ProjectStore } from "./project-store.ts";
 import { SessionHub } from "./session-hub.ts";
 import { SettingsStore } from "./settings-store.ts";
 
-/** 设备启动后的句柄。port 为实际监听端口，hostId 是本进程的设备标识。 */
+/** 主机启动后的句柄。port 为实际监听端口，hostId 是本进程的主机标识。 */
 export interface ServerHandle extends EndpointHandle {
 	readonly hostId: string;
 	/** 实际生效的数据目录 */
@@ -32,7 +32,7 @@ export interface ServerHandle extends EndpointHandle {
 }
 
 /**
- * 启动设备侧服务。
+ * 启动主机侧服务。
  *
  * 缺省只监听回环地址、由系统分配端口，因此适合嵌入到桌面主进程；独立运行时通过
  * FACET_PORT 指定固定端口。
@@ -57,7 +57,7 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 	const settingsStore = await SettingsStore.open({ file: join(config.dataDir, "settings.json") });
 	const hostId = randomUUID();
 	const endpoint = await startEndpoint({ config, factory, hub, projectStore, settingsStore, hostId });
-	debugLog("server", "设备端点就绪", { endpoint: `ws://${endpoint.host}:${endpoint.port}/endpoint`, hostId });
+	debugLog("server", "主机端点就绪", { endpoint: `ws://${endpoint.host}:${endpoint.port}/endpoint`, hostId });
 
 	return {
 		...endpoint,

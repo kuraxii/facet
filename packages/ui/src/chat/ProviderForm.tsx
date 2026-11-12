@@ -2,7 +2,7 @@
  * 自定义提供方表单。
  *
  * 一个提供方由标识、名称、接口地址、协议与模型清单组成；标识与名称必填，接口地址只接受
- * http 与 https，模型清单至少一行且标识不能为空。保存与删除都交给设备校验，失败原因原样
+ * http 与 https，模型清单至少一行且标识不能为空。保存与删除都交给主机校验，失败原因原样
  * 显示在表单里。
  */
 import type { CustomModelInfo, CustomProviderInfo } from "@facet/protocol";
@@ -72,7 +72,7 @@ export function ProviderForm({ initial, onSave, onCancel }: ProviderFormProps) {
 		}));
 	};
 
-	/** 提交前的本地校验，只说最明显的几条；设备侧还会再校验一次。 */
+	/** 提交前的本地校验，只说最明显的几条；主机侧还会再校验一次。 */
 	const validate = (): string | undefined => {
 		if (!/^[a-z0-9][a-z0-9._-]*$/.test(draft.id.trim())) {
 			return "标识只能用小写字母、数字、点、下划线与连字符，且以字母或数字开头";

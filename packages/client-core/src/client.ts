@@ -2,7 +2,7 @@
  * 会话客户端。
  *
  * 把传输、订阅与状态拼成界面能直接用的一个对象:打开会话时取快照、订阅两条通道、
- * 装载最近若干页历史;之后设备推来的动作直接进 store。翻页与重新同步的游标都在这里,
+ * 装载最近若干页历史;之后主机推来的动作直接进 store。翻页与重新同步的游标都在这里,
  * 界面不必知道协议细节。
  *
  * 传输按结构约定,不引入 transport 包,两者处于同一层。
@@ -34,7 +34,7 @@ import type { ChannelGap } from "./store.ts";
 import { SessionStore } from "./store.ts";
 
 /** 握手结果,与 hello 帧去掉判别字段后的形状一致。 */
-export interface DeviceHandshake {
+export interface HostHandshake {
 	readonly protocolVersion: number;
 	readonly hostId: string;
 	readonly hostName: string;
@@ -72,9 +72,9 @@ export interface OpenedSession {
 const DEFAULT_PAGE_SIZE = 50;
 
 /**
- * 设备是不是不认识这个会话。
+ * 主机是不是不认识这个会话。
  *
- * 传输层把设备的错误码带在 error.code 上;这里按码判断,不依赖具体传输实现。
+ * 传输层把主机的错误码带在 error.code 上;这里按码判断,不依赖具体传输实现。
  */
 function isUnknownSession(error: unknown): boolean {
 	return (
@@ -94,16 +94,16 @@ export class SessionClient {
 	private stopState: (() => void) | undefined;
 	/** 缺口补齐进行中的通道,避免叠加请求 */
 	private readonly resyncing = { session: false, chat: false };
-	private handshake: DeviceHandshake | undefined;
+	private handshake: HostHandshake | undefined;
 	private opened: OpenedSession | undefined;
-	/** 等待设备确认的输入:turn 等消息入对话,steering 等队列里出现这段文字 */
+	/** 等待主机确认的输入:turn 等消息入对话,steering 等队列里出现这段文字 */
 	private pendingSend: { clientSeq: number; text: string; kind: "turn" | "steering" } | undefined;
 	private readonly sentListeners = new Set<(text: string) => void>();
 	/** 是否已经挂了缺口监听,避免重复注册 */
 	private isGapWatched = false;
 	/** 下一页更早历史的游标,为空表示已经到最早 */
 	private olderCursor: string | undefined;
-	/** 已提交到视图的末条目 id,提升实时消息时作为边界传给设备 */
+	/** 已提交到视图的末条目 id,提升实时消息时作为边界传给主机 */
 	private lastEntryId: string | undefined;
 	/** 串行执行提升,避免连续 settled 时请求交错 */
 	private commitChain: Promise<void> = Promise.resolve();
@@ -126,7 +126,7 @@ export class SessionClient {
 		return this.opened;
 	}
 
-	get device(): DeviceHandshake | undefined {
+	get host(): HostHandshake | undefined {
 		return this.handshake;
 	}
 
@@ -147,7 +147,7 @@ export class SessionClient {
 	 * 记录握手结果并开始接收动作。重连之后再次调用即可换到新连接:
 	 * 上一条动作订阅会被替换,断线重连时自动续订并重新对齐。
 	 */
-	attach(handshake: DeviceHandshake): void {
+	attach(handshake: HostHandshake): void {
 		this.handshake = handshake;
 		this.stopActions?.();
 		this.stopActions = this.transport.onAction((frame) => {
@@ -169,7 +169,7 @@ export class SessionClient {
 		});
 	}
 
-	/** 列出会话。指定 cwd 时只列该目录,设备上的全部会话用空参数。 */
+	/** 列出会话。指定 cwd 时只列该目录,主机上的全部会话用空参数。 */
 	async listSessions(cwd?: string): Promise<SessionSummary[]> {
 		const result = await this.transport.request("listSessions", cwd === undefined ? {} : { cwd });
 		return result.sessions;
@@ -181,7 +181,7 @@ export class SessionClient {
 		return result.projects;
 	}
 
-	/** 添加项目，目录重复时设备侧拒绝。 */
+	/** 添加项目，目录重复时主机侧拒绝。 */
 	async addProject(input: { cwd: string; name?: string }): Promise<ProjectInfo> {
 		return await this.transport.request("addProject", input);
 	}
@@ -265,19 +265,19 @@ export class SessionClient {
 		return result.text;
 	}
 
-	/** 读设备上保存的界面偏好设置。 */
+	/** 读主机上保存的界面偏好设置。 */
 	async getSettings(): Promise<FacetSettings> {
 		const result = await this.transport.request("getSettings", {});
 		return result.settings;
 	}
 
-	/** 整份保存界面偏好设置，返回设备实际存下的那份。 */
+	/** 整份保存界面偏好设置，返回主机实际存下的那份。 */
 	async saveSettings(settings: FacetSettings): Promise<FacetSettings> {
 		const result = await this.transport.request("updateSettings", { settings });
 		return result.settings;
 	}
 
-	/** 在设备的文件管理器里打开项目目录。 */
+	/** 在主机的文件管理器里打开项目目录。 */
 	async revealProject(id: string): Promise<void> {
 		await this.transport.request("revealProject", { id });
 	}
@@ -285,7 +285,7 @@ export class SessionClient {
 	/**
 	 * 会话改名。
 	 *
-	 * 排在会话级队列里执行，改名与切换不会互相插队；已打开的会话由设备改运行态，没打开的
+	 * 排在会话级队列里执行，改名与切换不会互相插队；已打开的会话由主机改运行态，没打开的
 	 * 会话离线追加一条会话信息条目。
 	 */
 	async renameSession(sessionFile: string, name: string | undefined): Promise<void> {
@@ -349,7 +349,7 @@ export class SessionClient {
 	 * 打开已有会话。
 	 *
 	 * 先订阅再取历史:订阅返回的序号作为基线,此后的动作按序应用,历史只补进视图。
-	 * 设备报告缓冲缺口时,快照与最近一页历史会重新装载。
+	 * 主机报告缓冲缺口时,快照与最近一页历史会重新装载。
 	 */
 	async openSession(sessionFile: string): Promise<OpenedSession> {
 		return await this.exclusive(() => this.openUnlocked(sessionFile));
@@ -358,7 +358,7 @@ export class SessionClient {
 	/**
 	 * 新建会话并进入。
 	 *
-	 * 参数缺省时由设备取默认工作目录与模型;返回与打开会话相同的句柄。
+	 * 参数缺省时由主机取默认工作目录与模型;返回与打开会话相同的句柄。
 	 */
 	async createSession(params: RequestParams["createSession"] = {}): Promise<OpenedSession> {
 		return await this.exclusive(async () => {
@@ -401,7 +401,7 @@ export class SessionClient {
 			try {
 				await this.transport.request("unsubscribe", { channel });
 			} catch {
-				// 退订失败不阻塞清理:连接已经断了,设备侧会按无订阅者回收
+				// 退订失败不阻塞清理:连接已经断了,主机侧会按无订阅者回收
 			}
 		}
 		this.state.drop(channels.session);
@@ -479,7 +479,7 @@ export class SessionClient {
 	/**
 	 * 断线重连之后续订。
 	 *
-	 * 新连接是新的一端,设备那边没有任何订阅记录。按已收到的最后序号续订,
+	 * 新连接是新的一端,主机那边没有任何订阅记录。按已收到的最后序号续订,
 	 * 缓冲能补齐就只补发,补不上就整体重新对齐。
 	 */
 	async resume(): Promise<void> {
@@ -490,7 +490,7 @@ export class SessionClient {
 		try {
 			await this.resumeChannels(opened);
 		} catch (error) {
-			// 设备重启过时它已经不记得这个会话,按文件重新打开一次即可接着用
+			// 主机重启过时它已经不记得这个会话,按文件重新打开一次即可接着用
 			if (opened.file !== undefined && isUnknownSession(error)) {
 				await this.switchSession(opened.file);
 				return;
@@ -523,7 +523,7 @@ export class SessionClient {
 	/**
 	 * 发一条消息。
 	 *
-	 * 界面在设备把这条用户消息放进对话之后才算发出:那之前草稿留在输入框,被拒时用户可以
+	 * 界面在主机把这条用户消息放进对话之后才算发出:那之前草稿留在输入框,被拒时用户可以
 	 * 直接改或重发。
 	 */
 	send(text: string): number {
@@ -539,7 +539,7 @@ export class SessionClient {
 	 * 排队一条消息。
 	 *
 	 * 走 pi 的 steering:这一轮还在跑时插进去,当前助手回合的工具调用执行完后、下一次请求
-	 * 模型之前生效,不用等整轮结束。设备把这条文字记进队列后回 session/queueChanged。
+	 * 模型之前生效,不用等整轮结束。主机把这条文字记进队列后回 session/queueChanged。
 	 */
 	enqueue(text: string): number {
 		const clientSeq = this.transport.dispatch(this.requireOpened().sessionChannel, {
@@ -556,7 +556,7 @@ export class SessionClient {
 		return this.transport.dispatch(this.requireOpened().sessionChannel, { type: "session/queueCleared" });
 	}
 
-	/** 设备确认收到这条消息后回调,带上当时的文本。 */
+	/** 主机确认收到这条消息后回调,带上当时的文本。 */
 	onSent(listener: (text: string) => void): () => void {
 		this.sentListeners.add(listener);
 		return () => {
@@ -564,7 +564,7 @@ export class SessionClient {
 		};
 	}
 
-	/** 设备确认消息已进入对话或已进队列,通知界面收起草稿。 */
+	/** 主机确认消息已进入对话或已进队列,通知界面收起草稿。 */
 	private confirmSend(frame: ActionFrame): void {
 		const opened = this.opened;
 		const pending = this.pendingSend;
@@ -589,7 +589,7 @@ export class SessionClient {
 	}
 
 	/**
-	 * 处理设备拒绝的动作。
+	 * 处理主机拒绝的动作。
 	 *
 	 * 拒绝帧不进序号流,也不参与归约:这里把原因转成对话视图上的一条错误提示,并让对应的
 	 * 发送不再等确认,草稿留在输入框。
@@ -616,10 +616,10 @@ export class SessionClient {
 	 *
 	 * beforeEntryId 是下一轮开始处的条目:分叉点取它之前的那一条,这样这一轮结束后追加的
 	 * usage、session_info、compaction 也一并带到新会话。缺省表示复制整条活动分支。
-	 * 分叉会在设备侧建出一个新会话文件,原会话保持不动；新会话紧接着被打开订阅,否则它会
+	 * 分叉会在主机侧建出一个新会话文件,原会话保持不动；新会话紧接着被打开订阅,否则它会
 	 * 因为没有持有者而在空闲回收的宽限期后关闭。
 	 *
-	 * 会话正在运行时设备会拒绝分叉:这一轮还没写盘,分叉点对不上。
+	 * 会话正在运行时主机会拒绝分叉:这一轮还没写盘,分叉点对不上。
 	 */
 	async fork(beforeEntryId?: string): Promise<OpenedSession> {
 		const opened = this.requireOpened();
@@ -639,7 +639,7 @@ export class SessionClient {
 	/**
 	 * 中止当前运行。
 	 *
-	 * 设备受理后把阶段置为 stopping 并广播 session/phase,界面据此显示停止中。
+	 * 主机受理后把阶段置为 stopping 并广播 session/phase,界面据此显示停止中。
 	 */
 	cancel(): number {
 		return this.transport.dispatch(this.requireOpened().chatChannel, { type: "chat/turnCancelled" });
@@ -666,7 +666,7 @@ export class SessionClient {
 	/**
 	 * 回退到某条用户消息之前。
 	 *
-	 * 设备只挪分支指针,会话文件不动;历史在收到 chat/branchMoved 之后重新装载,调用方不必
+	 * 主机只挪分支指针,会话文件不动;历史在收到 chat/branchMoved 之后重新装载,调用方不必
 	 * 处理返回值。
 	 */
 	revert(entryId: string): number {
@@ -785,7 +785,7 @@ export class SessionClient {
 	/**
 	 * 观察已应用的动作。
 	 *
-	 * 本轮 settle 之后向设备要一次「边界之后的条目」，把实时消息提升为历史消息：
+	 * 本轮 settle 之后向主机要一次「边界之后的条目」，把实时消息提升为历史消息：
 	 * 之后界面上的消息都带条目 id，分叉、定位这类操作不再区分历史与实时。
 	 */
 	private observe(frame: ActionFrame): void {
@@ -816,8 +816,8 @@ export class SessionClient {
 	/**
 	 * 拉取边界之后的条目并提升视图。
 	 *
-	 * 边界是上一次提交到的末条目；设备从叶子沿 parentId 回溯到它为止。条目数量与实时
-	 * 消息对不上（漏了事件）或设备拒绝时，整体重新装载历史。
+	 * 边界是上一次提交到的末条目；主机从叶子沿 parentId 回溯到它为止。条目数量与实时
+	 * 消息对不上（漏了事件）或主机拒绝时，整体重新装载历史。
 	 */
 	private async runCommit(): Promise<void> {
 		const opened = this.opened;

@@ -127,11 +127,11 @@ describe("发送受阻", () => {
 				activity: "idle",
 				model: undefined,
 				thinkingLevel: undefined,
-				blockedReason: "与设备的连接已断开",
+				blockedReason: "与主机的连接已断开",
 			}),
 		);
 		expect(html).toContain("composer-blocked");
-		expect(html).toContain("与设备的连接已断开");
+		expect(html).toContain("与主机的连接已断开");
 		expect(html).toMatch(/class="send"[^>]*disabled/);
 	});
 });

@@ -708,7 +708,7 @@ svg.fl {
 	font-size: 12.5px;
 }
 
-.sb-devices {
+.sb-hosts {
 	display: flex;
 	flex: none;
 	align-items: center;
@@ -721,11 +721,11 @@ svg.fl {
 	scrollbar-width: none;
 }
 
-.sb-devices::-webkit-scrollbar {
+.sb-hosts::-webkit-scrollbar {
 	display: none;
 }
 
-.sb-device {
+.sb-host {
 	display: inline-flex;
 	flex: none;
 	align-items: center;
@@ -739,12 +739,12 @@ svg.fl {
 	font-size: 11.5px;
 }
 
-.sb-device.is-local {
+.sb-host.is-local {
 	border-color: var(--line2);
 	color: var(--t2);
 }
 
-.sb-device-count {
+.sb-host-count {
 	color: var(--t3);
 	font-size: 10.5px;
 	font-variant-numeric: tabular-nums;

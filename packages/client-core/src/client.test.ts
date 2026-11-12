@@ -10,7 +10,7 @@ import type {
 	SessionSnapshot,
 } from "@facet/protocol";
 import { describe, expect, it, vi } from "vitest";
-import { type DeviceHandshake, SessionClient, type SessionTransport } from "./client.ts";
+import { type HostHandshake, SessionClient, type SessionTransport } from "./client.ts";
 
 const CHAT = "chat:/s1" as const;
 const SESSION = "session:/s1" as const;
@@ -82,7 +82,7 @@ class FakeTransport implements SessionTransport {
 	failNext: RequestMethod | undefined;
 	/** 这些通道的订阅直接失败,用例按需设置 */
 	readonly failSubscribe = new Set<Channel>();
-	/** 为真时订阅按设备不认识这个会话报错,模拟设备重启过 */
+	/** 为真时订阅按主机不认识这个会话报错,模拟主机重启过 */
 	unknownSession = false;
 
 	constructor(entryCount: number) {
@@ -132,7 +132,7 @@ class FakeTransport implements SessionTransport {
 						throw new Error("subscribe 失败");
 					}
 					if (this.unknownSession) {
-						// 设备刚重启时不认识旧会话,重新打开之后就记得了
+						// 主机刚重启时不认识旧会话,重新打开之后就记得了
 						this.unknownSession = false;
 						throw Object.assign(new Error("会话不存在:s1"), { code: "unknown_session" });
 					}
@@ -186,7 +186,7 @@ class FakeTransport implements SessionTransport {
 		};
 	}
 
-	/** 推一条带拒绝原因的动作帧,序号取通道当前值,与设备侧一致。 */
+	/** 推一条带拒绝原因的动作帧,序号取通道当前值,与主机侧一致。 */
 	reject(channel: Channel, clientSeq: number, action: Action, reason: string): void {
 		this.listener?.({
 			type: "action",
@@ -208,10 +208,10 @@ class FakeTransport implements SessionTransport {
 	}
 }
 
-const handshake: DeviceHandshake = {
+const handshake: HostHandshake = {
 	protocolVersion: 1,
 	hostId: "h",
-	hostName: "设备",
+	hostName: "主机",
 	clientId: "c",
 	capabilities: ["dispatch"],
 };
@@ -235,7 +235,7 @@ describe("SessionClient", () => {
 		expect(client.current?.sessionId).toBe("s1");
 	});
 
-	it("中止请求走对话通道,阶段由设备回报", async () => {
+	it("中止请求走对话通道,阶段由主机回报", async () => {
 		const { transport, client } = createClient(2);
 		await client.openSession("/tmp/s1.jsonl");
 		client.cancel();
@@ -252,7 +252,7 @@ describe("SessionClient", () => {
 		const sent: string[] = [];
 		client.onSent((text) => sent.push(text));
 		client.send("你好");
-		// 设备先回别的动作,不算确认
+		// 主机先回别的动作,不算确认
 		transport.emit(CHAT, { type: "chat/notice", level: "info", message: "开始" });
 		expect(sent).toEqual([]);
 		transport.emit(CHAT, { type: "chat/messageAppended", messageId: "m1", message: assistant("答复") });
@@ -741,7 +741,7 @@ describe("SessionClient", () => {
 });
 
 describe("重连", () => {
-	it("设备重启过时按文件重新打开会话", async () => {
+	it("主机重启过时按文件重新打开会话", async () => {
 		const { client, transport } = createClient(5);
 		const opened = await client.openSession("/tmp/s1.jsonl");
 		expect(client.sessionView()?.state.file).toBe("/tmp/s1.jsonl");

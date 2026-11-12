@@ -25,7 +25,7 @@ async function startHarness(): Promise<Harness> {
 				type: "hello",
 				protocolVersion: 1,
 				hostId: "host-1",
-				hostName: "测试设备",
+				hostName: "测试主机",
 				clientId: "client-1",
 				capabilities: ["dispatch", "approval"],
 			}),
@@ -94,7 +94,7 @@ function open(): WsTransport {
 }
 
 describe("WsTransport", () => {
-	it("握手后进入就绪状态并带回设备信息", async () => {
+	it("握手后进入就绪状态并带回主机信息", async () => {
 		const connection = open();
 		const states: string[] = [];
 		connection.onStateChange((state) => states.push(state));
@@ -102,7 +102,7 @@ describe("WsTransport", () => {
 		expect(handshake).toEqual({
 			protocolVersion: 1,
 			hostId: "host-1",
-			hostName: "测试设备",
+			hostName: "测试主机",
 			clientId: "client-1",
 			capabilities: ["dispatch", "approval"],
 		});

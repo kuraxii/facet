@@ -1,4 +1,4 @@
-import { chatActivity, type DeviceHandshake, SessionClient, toTranscript } from "@facet/client-core";
+import { chatActivity, type HostHandshake, SessionClient, toTranscript } from "@facet/client-core";
 import {
 	DEFAULT_SETTINGS,
 	type FacetSettings,
@@ -55,7 +55,7 @@ const client = new SessionClient({ transport, pageSize: 200 });
 
 type Phase = "connecting" | "ready" | "failed";
 
-/** 主题在本地保存键，设备上的设置读不到时先用它，避免启动时闪一下 */
+/** 主题在本地保存键，主机上的设置读不到时先用它，避免启动时闪一下 */
 const THEME_KEY = "facet.theme";
 
 /** 等重试期间给对话面板的提示,其余维护动作不显示。 */
@@ -169,12 +169,12 @@ export function App() {
 		() => client.store.getVersion(),
 	);
 	const [phase, setPhase] = useState<Phase>("connecting");
-	/** 与设备的连接是否可用，断开时输入区说明原因并禁用发送 */
+	/** 与主机的连接是否可用，断开时输入区说明原因并禁用发送 */
 	const [isOnline, setIsOnline] = useState(false);
 	const [failure, setFailure] = useState<string | undefined>(undefined);
 	const [sessions, setSessions] = useState<readonly SessionSummary[]>([]);
 	const [activeFile, setActiveFile] = useState<string | undefined>(undefined);
-	const [device, setDevice] = useState<DeviceHandshake | undefined>(undefined);
+	const [host, setHost] = useState<HostHandshake | undefined>(undefined);
 	const [projects, setProjects] = useState<readonly ProjectInfo[]>([]);
 	/** 项目列表上一次拉取失败，侧栏据此给出刷新入口 */
 	const [isProjectsStale, setIsProjectsStale] = useState(false);
@@ -183,7 +183,7 @@ export function App() {
 	/** 各会话的草稿，键为会话文件路径，新会话页面用 NEW_DRAFT_KEY */
 	const [drafts, setDrafts] = useState<Record<string, string>>(readDrafts);
 	const [theme, setTheme] = useState<ThemeName>(readTheme);
-	/** 设备上的偏好设置；没读到之前先用缺省值 */
+	/** 主机上的偏好设置；没读到之前先用缺省值 */
 	const [settings, setSettings] = useState<FacetSettings>(DEFAULT_SETTINGS);
 	/** 主区域显示对话还是设置 */
 	const [view, setView] = useState<"chat" | "settings">("chat");
@@ -208,7 +208,7 @@ export function App() {
 
 	const listSeq = useRef(0);
 
-	/** 设置页的数据来源，接到设备上。 */
+	/** 设置页的数据来源，接到主机上。 */
 	const settingsData = useMemo<SettingsDataSource>(
 		() => ({
 			loadSettings: () => client.getSettings(),
@@ -272,7 +272,7 @@ export function App() {
 	}, []);
 
 	/**
-	 * 重连设备。
+	 * 重连主机。
 	 *
 	 * 断线之后按退避间隔一直试，连上就续订已打开的会话、重取会话状态与会话列表；同一个
 	 * 时刻只跑一次，手动重试与自动重连共用这条路。
@@ -284,7 +284,7 @@ export function App() {
 				try {
 					const handshake = await transport.connect();
 					client.attach(handshake);
-					setDevice(handshake);
+					setHost(handshake);
 					// 会话回不来(例如它的文件已经不在了)时退回没有会话的状态,连接本身照常可用
 					const resumed = await client.resume().then(
 						() => true,
@@ -322,7 +322,7 @@ export function App() {
 	// 对话此刻的状态由会话状态得出,界面不自己拼布尔量
 	const activity = chatActivity(session);
 
-	/** 设备的模型目录与各提供方的凭证状态，供输入区的模型选择使用。 */
+	/** 主机的模型目录与各提供方的凭证状态，供输入区的模型选择使用。 */
 	const [catalog, setCatalog] = useState<{ models: readonly ModelInfo[]; auth: Record<string, boolean> }>({
 		models: [],
 		auth: {},
@@ -342,7 +342,7 @@ export function App() {
 	 */
 	let blockedReason: string | undefined;
 	if (!isOnline) {
-		blockedReason = "与设备的连接已断开,恢复之后可以继续发送";
+		blockedReason = "与主机的连接已断开,恢复之后可以继续发送";
 	} else if (activity === "compacting") {
 		blockedReason = "正在压缩上下文,完成之后再发送";
 	} else if (activity === "stopping") {
@@ -408,7 +408,7 @@ export function App() {
 					return;
 				}
 			} catch {
-				// 查不到就不拦,交给设备按未信任处理
+				// 查不到就不拦,交给主机按未信任处理
 			}
 			run();
 		})();
@@ -447,7 +447,7 @@ export function App() {
 		[runSessionAction, sessions, withTrust],
 	);
 
-	/** 新建会话，采用设置里的默认模型与思考档位；没有设置时交给设备决定。 */
+	/** 新建会话，采用设置里的默认模型与思考档位；没有设置时交给主机决定。 */
 	const createSession = useCallback(
 		(cwd: string) => {
 			const model = settings.defaultModel;
@@ -480,7 +480,7 @@ export function App() {
 		void (async () => {
 			const handshake = await transport.connect();
 			client.attach(handshake);
-			setDevice(handshake);
+			setHost(handshake);
 			await refreshProjects();
 			// 设置读不到时用缺省值，界面照常可用
 			setSettings(await client.getSettings().catch(() => DEFAULT_SETTINGS));
@@ -536,7 +536,7 @@ export function App() {
 		if (text.length === 0) {
 			return;
 		}
-		// 草稿留到设备确认再收,发送被拒时不用重打
+		// 草稿留到主机确认再收,发送被拒时不用重打
 		if (activity === "running") {
 			client.enqueue(text);
 			return;
@@ -545,9 +545,9 @@ export function App() {
 	}, [activity, draft]);
 
 	/**
-	 * 收回排队内容:清空设备侧队列,把文字拼回输入框。
+	 * 收回排队内容:清空主机侧队列,把文字拼回输入框。
 	 *
-	 * 排队条来自 session/queueChanged,清空后设备会再推一次空队列,这里只改草稿。
+	 * 排队条来自 session/queueChanged,清空后主机会再推一次空队列,这里只改草稿。
 	 */
 	const takeBackQueue = useCallback(() => {
 		const entries = [...queued.steering, ...queued.followUp];
@@ -575,7 +575,7 @@ export function App() {
 	 */
 	const revertTo = useCallback(
 		(entryId: string, text: string) => {
-			// 回退在同一个会话里改分支指针，不新建会话；文本先放回输入框，历史由设备推的
+			// 回退在同一个会话里改分支指针，不新建会话；文本先放回输入框，历史由主机推的
 			// chat/branchMoved 触发重装
 			client.revert(entryId);
 			updateDraft(() => text);
@@ -707,20 +707,20 @@ export function App() {
 
 	const hosts = useMemo<readonly SidebarHost[]>(() => {
 		const local: SidebarHost = {
-			id: device?.hostId ?? "local",
-			name: device?.hostName ?? "本机",
+			id: host?.hostId ?? "local",
+			name: host?.hostName ?? "本机",
 			detail: bridge.endpoint,
 			state: "connected",
 			isLocal: true,
 			projects: [],
 		};
 		return [local, ...PLACEHOLDER_HOSTS];
-	}, [device]);
+	}, [host]);
 
 	if (phase === "failed") {
 		return (
 			<main className="boot">
-				<h1>连不上设备</h1>
+				<h1>连不上主机</h1>
 				<p>{failure}</p>
 				<p>{bridge.endpoint}</p>
 				<button
@@ -746,7 +746,7 @@ export function App() {
 	if (phase === "connecting") {
 		return (
 			<main className="boot">
-				<h1>正在连接设备</h1>
+				<h1>正在连接主机</h1>
 				<p>{bridge.endpoint}</p>
 			</main>
 		);

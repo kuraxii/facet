@@ -294,7 +294,7 @@ describe("工作时长", () => {
 		expect(metaSummary(meta, 4_500)).toBe("工作 3.5 秒");
 	});
 
-	it("结束后用设备记录的起止时间,不再随时间走", () => {
+	it("结束后用主机记录的起止时间,不再随时间走", () => {
 		const rows = groupRows([
 			item({ id: "m1", role: "user", parts: [text("text:0", "问")], startedAt: 1_000, endedAt: 1_000 }),
 			item({ id: "m2", role: "assistant", parts: [tool("tool:c1", "c1")], startedAt: 1_000, endedAt: 3_000 }),

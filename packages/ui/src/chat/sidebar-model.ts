@@ -1,7 +1,7 @@
 /**
  * 侧栏的数据模型。
  *
- * 侧栏由项目过滤器、按时间分组的会话队列、设备状态条组成。过滤器决定队列的范围与新建
+ * 侧栏由项目过滤器、按时间分组的会话队列、主机状态条组成。过滤器决定队列的范围与新建
  * 会话的目录，队列按「进行中 / 今天 / 昨天 / 更早」分组。这里只做纯函数变换，组件负责渲染。
  */
 import type { ProjectInfo, SessionSummary } from "@facet/protocol";
@@ -12,7 +12,7 @@ export type HostState = "connected" | "connecting" | "offline";
 /**
  * 会话行左侧的状态点。
  *
- * 设计稿上的完成与未读两态需要设备侧的未读标记与待应答信息，当前有运行、压缩与空闲三态，
+ * 设计稿上的完成与未读两态需要主机侧的未读标记与待应答信息，当前有运行、压缩与空闲三态，
  * 取值确定后才加入新值。
  */
 export type SessionDot = "running" | "compacting" | "idle";
@@ -61,7 +61,7 @@ export interface SidebarProject {
 	cwd: string;
 	/** 项目名，用户设置过时用设置值，否则取目录末段 */
 	name: string;
-	/** 所属设备名，本机为空 */
+	/** 所属主机名，本机为空 */
 	host: string | undefined;
 	/** 该项目下的会话数 */
 	sessionCount: number;
@@ -69,24 +69,24 @@ export interface SidebarProject {
 	isPlaceholder?: boolean;
 }
 
-/** 设备状态条上的一项。 */
-export interface SidebarDevice {
-	/** 设备标识 */
+/** 主机状态条上的一项。 */
+export interface SidebarHostStatus {
+	/** 主机标识 */
 	id: string;
-	/** 设备名 */
+	/** 主机名 */
 	name: string;
 	/** 连接地址或上次连接说明 */
 	detail: string;
 	state: HostState;
-	/** 是否为当前设备 */
+	/** 是否为当前主机 */
 	isLocal: boolean;
 	/** 已测得的往返时延，单位毫秒 */
 	latencyMs?: number;
-	/** 断开设备的上次连接时间描述 */
+	/** 断开主机的上次连接时间描述 */
 	lastSeen?: string;
-	/** 该设备上的会话数，未知为空 */
+	/** 该主机上的会话数，未知为空 */
 	sessionCount: number | undefined;
-	/** 占位数据，接入多设备前不可交互 */
+	/** 占位数据，接入多主机前不可交互 */
 	isPlaceholder?: boolean;
 }
 
@@ -100,7 +100,7 @@ export interface SidebarHost {
 	detail: string;
 	/** 连接状态 */
 	state: HostState;
-	/** 是否为当前设备 */
+	/** 是否为当前主机 */
 	isLocal: boolean;
 	/** 已测得的往返时延，单位毫秒 */
 	latencyMs?: number;
@@ -114,9 +114,9 @@ export interface SidebarHost {
 
 /** 组装侧栏所需的输入。 */
 export interface SidebarInput {
-	/** 当前设备的会话列表 */
+	/** 当前主机的会话列表 */
 	sessions: readonly SessionSummary[];
-	/** 第一项为当前设备，其余为远程设备 */
+	/** 第一项为当前主机，其余为远程主机 */
 	hosts: readonly SidebarHost[];
 	/** 用户添加的项目 */
 	projects: readonly ProjectInfo[];
@@ -138,8 +138,8 @@ export interface SidebarData {
 	groups: readonly SidebarGroup[];
 	/** 项目下拉的选项，按会话数倒序 */
 	projects: readonly SidebarProject[];
-	/** 设备状态条 */
-	devices: readonly SidebarDevice[];
+	/** 主机状态条 */
+	hosts: readonly SidebarHostStatus[];
 	/** 全部会话数，供「全部项目」选项展示 */
 	total: number;
 }
@@ -221,7 +221,7 @@ function shiftDay(dayStart: number, days: number): number {
 /**
  * 一条会话的展示数据。
  *
- * 只有当前打开的会话才有运行态:设备上的会话只有被打开时才可能跑一轮,其余都按空闲显示。
+ * 只有当前打开的会话才有运行态:主机上的会话只有被打开时才可能跑一轮,其余都按空闲显示。
  */
 function toSession(
 	summary: SessionSummary,
@@ -325,8 +325,8 @@ function listProjects(added: readonly ProjectInfo[], sessions: readonly SessionS
 	});
 }
 
-/** 设备状态条：本机在前，其余按连接状态排列。 */
-function listDevices(hosts: readonly SidebarHost[], sessions: readonly SessionSummary[]): SidebarDevice[] {
+/** 主机状态条：本机在前，其余按连接状态排列。 */
+function listHosts(hosts: readonly SidebarHost[], sessions: readonly SessionSummary[]): SidebarHostStatus[] {
 	return hosts.map((host) => ({
 		id: host.id,
 		name: host.name,
@@ -347,7 +347,7 @@ function listDevices(hosts: readonly SidebarHost[], sessions: readonly SessionSu
 /**
  * 组装侧栏数据。
  *
- * 先按项目范围与关键词筛出一份会话，再分组；项目选项与设备条始终按全部会话统计，
+ * 先按项目范围与关键词筛出一份会话，再分组；项目选项与主机条始终按全部会话统计，
  * 切换范围时下拉里的数字不会跟着变小。
  */
 export function buildSidebar(input: SidebarInput): SidebarData {
@@ -369,7 +369,7 @@ export function buildSidebar(input: SidebarInput): SidebarData {
 	return {
 		groups: groupSessions(matched, now),
 		projects: listProjects(input.projects, input.sessions),
-		devices: listDevices(input.hosts, input.sessions),
+		hosts: listHosts(input.hosts, input.sessions),
 		total: all.length,
 	};
 }

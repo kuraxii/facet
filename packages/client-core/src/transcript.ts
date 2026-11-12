@@ -168,10 +168,10 @@ function assistantParts(entryView: EntryView, calls: Readonly<Record<string, Too
 			if (call) {
 				parts.push(toolPart(call));
 			} else if (message.stopReason === "aborted") {
-				// 这一轮被中止:内容里的调用一条都没执行过,设备不会为它们发事件
+				// 这一轮被中止:内容里的调用一条都没执行过,主机不会为它们发事件
 				parts.push(bareToolPart(block, "skipped"));
 			} else {
-				// 设备还没发工具事件时的过渡状态,按已完成呈现
+				// 主机还没发工具事件时的过渡状态,按已完成呈现
 				parts.push(bareToolPart(block, "done"));
 			}
 			continue;

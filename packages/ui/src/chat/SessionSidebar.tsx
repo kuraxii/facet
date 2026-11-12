@@ -1,7 +1,7 @@
 /**
  * 会话侧栏。
  *
- * 自上而下四块：标题与全局操作、新建会话、项目过滤器、会话队列；底部是设备状态条与页脚。
+ * 自上而下四块：标题与全局操作、新建会话、项目过滤器、会话队列；底部是主机状态条与页脚。
  * 项目过滤器同时决定队列的范围与新建会话的目录，队列按时间分组，分组规则见 sidebar-model。
  */
 import type { ProjectInfo, SessionSummary } from "@facet/protocol";
@@ -12,8 +12,8 @@ import {
 	buildSidebar,
 	type HostState,
 	type SessionDot,
-	type SidebarDevice,
 	type SidebarHost,
+	type SidebarHostStatus,
 	type SidebarProject,
 	type SidebarSession,
 	samePath,
@@ -25,9 +25,9 @@ export type ThemeName = "dark" | "light";
 
 /** 侧栏参数。 */
 export interface SessionSidebarProps {
-	/** 当前设备的会话列表，已按时间倒序 */
+	/** 当前主机的会话列表，已按时间倒序 */
 	sessions: readonly SessionSummary[];
-	/** 设备清单，第一项为当前设备 */
+	/** 主机清单，第一项为当前主机 */
 	hosts: readonly SidebarHost[];
 	/** 用户添加的项目 */
 	projects: readonly ProjectInfo[];
@@ -57,7 +57,7 @@ export interface SessionSidebarProps {
 	onRenameProject?: (id: string, name: string | undefined) => Promise<void>;
 	/** 移除项目，失败时抛错 */
 	onRemoveProject?: (id: string) => Promise<void>;
-	/** 在设备的文件管理器里打开项目目录，失败时抛错 */
+	/** 在主机的文件管理器里打开项目目录，失败时抛错 */
 	onRevealProject?: (id: string) => Promise<void>;
 	/** 会话改名，失败时抛错 */
 	onRenameSession?: (path: string, name: string | undefined) => Promise<void>;
@@ -79,21 +79,21 @@ function dotClass(dot: SessionDot): string {
 	return dot === "compacting" ? "dot is-acc" : "dot is-off";
 }
 
-/** 设备状态点的样式类。 */
-function deviceDotClass(state: HostState): string {
+/** 主机状态点的样式类。 */
+function hostDotClass(state: HostState): string {
 	if (state === "connected") {
 		return "dot";
 	}
 	return state === "connecting" ? "dot is-warn pulse" : "dot is-off";
 }
 
-/** 设备的连接说明，用作悬浮提示。 */
-function deviceHint(device: SidebarDevice): string {
-	if (device.state === "connected") {
-		return device.detail.length > 0 ? device.detail : device.name;
+/** 主机的连接说明，用作悬浮提示。 */
+function hostHint(host: SidebarHostStatus): string {
+	if (host.state === "connected") {
+		return host.detail.length > 0 ? host.detail : host.name;
 	}
-	const reason = device.state === "connecting" ? "连接中" : "离线";
-	return `${reason} · ${device.lastSeen ?? device.detail}`;
+	const reason = host.state === "connecting" ? "连接中" : "离线";
+	return `${reason} · ${host.lastSeen ?? host.detail}`;
 }
 
 /** 点击组件外部时关闭浮层，点击触发器本身不算外部。 */
@@ -783,17 +783,13 @@ export function SessionSidebar({
 				))}
 			</div>
 
-			<ul className="sb-devices" aria-label="设备">
-				{data.devices.map((device) => (
-					<li
-						key={device.id}
-						className={device.isLocal ? "sb-device is-local" : "sb-device"}
-						title={deviceHint(device)}
-					>
-						<i className={deviceDotClass(device.state)} />
-						<span className="ell">{device.name}</span>
-						{device.sessionCount === undefined ? null : (
-							<span className="sb-device-count mono">{device.sessionCount}</span>
+			<ul className="sb-hosts" aria-label="主机">
+				{data.hosts.map((host) => (
+					<li key={host.id} className={host.isLocal ? "sb-host is-local" : "sb-host"} title={hostHint(host)}>
+						<i className={hostDotClass(host.state)} />
+						<span className="ell">{host.name}</span>
+						{host.sessionCount === undefined ? null : (
+							<span className="sb-host-count mono">{host.sessionCount}</span>
 						)}
 					</li>
 				))}

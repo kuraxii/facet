@@ -160,7 +160,7 @@ ipcMain.handle("facet:save-text", async (event, suggestedName: string, text: str
 app.whenReady().then(async () => {
 	server = await startServer({ port: 0, host: "127.0.0.1", debug: isDevServer });
 	const endpoint = `ws://${server.host}:${server.port}/endpoint`;
-	console.log(`设备 ${server.hostId} 监听 ${endpoint}`);
+	console.log(`主机 ${server.hostId} 监听 ${endpoint}`);
 	console.log(`数据目录 ${server.agentDir}`);
 	console.log(`项目目录 ${projectDir}`);
 

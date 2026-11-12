@@ -8,7 +8,7 @@ import type { Action, Message } from "@facet/protocol";
 import type { ChatView, EntryView, SessionView } from "./state.ts";
 import { appendNotice } from "./state.ts";
 
-/** 消息是否还在流式写入。设备只在 message_end 时发 messageUpdated,中途的增量走 chat/delta。 */
+/** 消息是否还在流式写入。主机只在 message_end 时发 messageUpdated,中途的增量走 chat/delta。 */
 function isStreamingMessage(message: Message): boolean {
 	return message.role === "assistant" && message.stopReason === "pending";
 }
@@ -85,7 +85,7 @@ export function reduceSession(view: SessionView, action: Action): SessionView {
 		case "chat/notice":
 		case "chat/turnStarted":
 		case "chat/turnCancelled":
-		// 回退由设备改分支指针，历史在收到 chat/branchMoved 后重新装载
+		// 回退由主机改分支指针，历史在收到 chat/branchMoved 后重新装载
 		case "chat/revertTo":
 		case "chat/branchMoved":
 			return view;
@@ -191,7 +191,7 @@ export function reduceChat(view: ChatView, action: Action): ChatView {
 		case "chat/revertTo":
 		case "chat/branchMoved":
 			return view;
-		// 发出消息与中止请求都由设备回过来,这里不需要改视图
+		// 发出消息与中止请求都由主机回过来,这里不需要改视图
 		case "chat/turnStarted":
 		case "chat/turnCancelled":
 			return view;

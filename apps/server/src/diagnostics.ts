@@ -13,7 +13,7 @@ import type { FacetSettings } from "@facet/protocol";
 export interface DiagnosticsInput {
 	/** 协议版本 */
 	protocolVersion: number;
-	/** 设备标识与展示名 */
+	/** 主机标识与展示名 */
 	hostId: string;
 	hostName: string;
 	/** 实际生效的数据目录 */
@@ -53,7 +53,7 @@ export async function buildDiagnostics(input: DiagnosticsInput): Promise<string>
 			platform: `${platform()} ${release()}`,
 			arch: arch(),
 		},
-		device: {
+		host: {
 			hostId: input.hostId,
 			hostName: input.hostName,
 			agentDir: input.agentDir,

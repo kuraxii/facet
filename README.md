@@ -1,6 +1,6 @@
 # facet
 
-在桌面应用里用 pi 的 agent 干活：会话、工具调用、模型切换都在图形界面里完成，设备侧是一个独立的服务进程，界面通过 WebSocket 连它。
+在桌面应用里用 pi 的 agent 干活：会话、工具调用、模型切换都在图形界面里完成，主机侧是一个独立的服务进程，界面通过 WebSocket 连它。
 
 ## 环境要求
 
@@ -48,7 +48,7 @@ npm run dist -w @facet/desktop # 出安装包
 | 路径 | 内容 |
 |---|---|
 | `apps/desktop` | Electron 主进程、预加载与渲染进程 |
-| `apps/server` | 设备侧服务：端点、会话登记、项目与设置存储 |
+| `apps/server` | 主机侧服务：端点、会话登记、项目与设置存储 |
 | `apps/web` | Web 壳 |
 | `packages/protocol` | 跨边界的类型与常量，零运行时依赖 |
 | `packages/agent` | 包住 pi SDK：会话、模型、凭证、配置 |
@@ -90,14 +90,14 @@ scripts/build-fonts.sh <字体目录>
 
 | 变量 | 含义 |
 |---|---|
-| `FACET_HOST`、`FACET_PORT` | 设备端点监听地址与端口，缺省 `127.0.0.1`、系统分配 |
-| `FACET_HOST_NAME` | 设备展示名 |
+| `FACET_HOST`、`FACET_PORT` | 主机端点监听地址与端口，缺省 `127.0.0.1`、系统分配 |
+| `FACET_HOST_NAME` | 主机展示名 |
 | `FACET_AGENT_DIR` | pi 数据目录 |
 | `FACET_SESSION_DIR` | 会话文件目录，缺省按工作目录分组 |
 | `FACET_DATA_DIR` | 应用数据目录 |
 | `FACET_REPLAY_LIMIT` | 每个通道保留的动作条数 |
 | `FACET_SESSION_IDLE_MS` | 没人订阅且空闲后多久回收会话 |
-| `FACET_DEBUG` | 打开设备侧调试日志 |
+| `FACET_DEBUG` | 打开主机侧调试日志 |
 | `FACET_PROJECT_DIR` | 启动时打开的项目目录 |
 | `FACET_SKIP_ELECTRON_DOWNLOAD` | `1` 表示跳过 Electron 二进制检查 |
 

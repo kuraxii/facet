@@ -26,9 +26,9 @@ export type {
 	HostState,
 	SessionDot,
 	SidebarData,
-	SidebarDevice,
 	SidebarGroup,
 	SidebarHost,
+	SidebarHostStatus,
 	SidebarProject,
 	SidebarSession,
 } from "./chat/sidebar-model.ts";

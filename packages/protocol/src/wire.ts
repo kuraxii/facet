@@ -1,7 +1,7 @@
 /**
  * 线格式。
  *
- * 连接建立后设备先发 hello(带本次连接分配的端标识与协议版本),之后端点发请求、设备回响应。
+ * 连接建立后主机先发 hello(带本次连接分配的端标识与协议版本),之后端点发请求、主机回响应。
  * 状态变更一律走 action 帧,按通道定序并可回放;请求只用于查询与生命周期,写操作没有响应,
  * 被拒时以带 rejectionReason 的 action 帧回给发起方。
  */
@@ -22,7 +22,7 @@ import type { FacetSettings } from "./settings.ts";
 /** 线格式版本。不兼容的改动递增此值,端点据此拒绝握手。 */
 export const PROTOCOL_VERSION = 1;
 
-/** 设备上报的能力标记,端点据此隐藏不可用的入口。 */
+/** 主机上报的能力标记,端点据此隐藏不可用的入口。 */
 export type Capability = "dispatch" | "tools" | "compaction" | "export";
 
 /** 请求失败的分类。端点按 code 决定提示方式,message 仅用于展示与日志。 */
@@ -35,9 +35,9 @@ export type ErrorCode =
 	| "unknown_channel"
 	/** 会话不存在或已被释放 */
 	| "unknown_session"
-	/** 设备侧拒绝执行,例如会话正在运行而动作未指定投递方式 */
+	/** 主机侧拒绝执行,例如会话正在运行而动作未指定投递方式 */
 	| "rejected"
-	/** 设备侧内部错误 */
+	/** 主机侧内部错误 */
 	| "internal";
 
 /** 失败详情。 */
@@ -46,15 +46,15 @@ export interface ProtocolError {
 	message: string;
 }
 
-/** 连接建立后设备立即发出的首帧。 */
+/** 连接建立后主机立即发出的首帧。 */
 export interface HelloFrame {
 	type: "hello";
 	protocolVersion: number;
-	/** 设备标识,同一次进程运行内保持不变 */
+	/** 主机标识,同一次进程运行内保持不变 */
 	hostId: string;
-	/** 设备展示名 */
+	/** 主机展示名 */
 	hostName: string;
-	/** 本次连接分配的端标识,派发动作时设备把它回填到 origin */
+	/** 本次连接分配的端标识,派发动作时主机把它回填到 origin */
 	clientId: string;
 	capabilities: Capability[];
 }
@@ -68,7 +68,7 @@ export interface RequestFrame {
 	params?: unknown;
 }
 
-/** 设备对请求的应答。ok 为 false 时带错误详情。 */
+/** 主机对请求的应答。ok 为 false 时带错误详情。 */
 export type ResponseFrame =
 	| { type: "response"; id: string; ok: true; data: unknown }
 	| { type: "response"; id: string; ok: false; error: ProtocolError };
@@ -76,7 +76,7 @@ export type ResponseFrame =
 /**
  * 端点派发的动作。
  *
- * clientSeq 由端点自己递增,设备把它连同 clientId 写进回放的 origin,
+ * clientSeq 由端点自己递增,主机把它连同 clientId 写进回放的 origin,
  * 端点重连后据此对账,避免同一条动作生效两次。
  */
 export interface DispatchFrame {
@@ -86,23 +86,23 @@ export interface DispatchFrame {
 	action: Action;
 }
 
-/** 设备推送的动作帧。 */
+/** 主机推送的动作帧。 */
 export interface ActionFrame {
 	type: "action";
 	channel: Channel;
 	action: Action;
 	/** 通道内的递增序号,从 1 开始 */
 	serverSeq: number;
-	/** 动作来源,缺省表示设备侧产生 */
+	/** 动作来源,缺省表示主机侧产生 */
 	origin: ActionOrigin | undefined;
-	/** 设备拒绝该动作时的说明;出现即表示该动作未被应用 */
+	/** 主机拒绝该动作时的说明;出现即表示该动作未被应用 */
 	rejectionReason?: string;
 }
 
-/** 设备发往端点的帧。 */
+/** 主机发往端点的帧。 */
 export type ServerFrame = HelloFrame | ResponseFrame | ActionFrame;
 
-/** 端点发往设备的帧。 */
+/** 端点发往主机的帧。 */
 export type ClientFrame = RequestFrame | DispatchFrame;
 
 /** 订阅结果。 */
@@ -142,16 +142,16 @@ export interface RequestParams {
 	/**
 	 * 分页读取历史,从 cursor 指向的条目往更早取 limit 条。
 	 *
-	 * 点对点请求,不广播:一个端点拉历史不影响到其他端点,设备侧也不必为此增长状态。
-	 * nextCursor 缺省表示已经到最早。limit 缺省由设备决定。
+	 * 点对点请求,不广播:一个端点拉历史不影响到其他端点,主机侧也不必为此增长状态。
+	 * nextCursor 缺省表示已经到最早。limit 缺省由主机决定。
 	 */
 	entries: { sessionId: string; cursor?: string; limit?: number };
 	/**
 	 * 取 afterEntryId 之后到叶子的条目,按从早到晚排列。
 	 *
-	 * 端点在本轮 settled 之后用它把实时消息提升为历史消息:设备从叶子沿 parentId 往回
+	 * 端点在本轮 settled 之后用它把实时消息提升为历史消息:主机从叶子沿 parentId 往回
 	 * 走到 afterEntryId,再把这一段反转返回。afterEntryId 缺省表示整条分支。
-	 * afterEntryId 不在活动分支上时设备侧拒绝,端点据此重新装载历史。
+	 * afterEntryId 不在活动分支上时主机侧拒绝,端点据此重新装载历史。
 	 */
 	entriesAfter: { sessionId: string; afterEntryId?: string };
 	/** 订阅通道。since 为该通道上一条已收到的序号。 */
@@ -164,7 +164,7 @@ export interface RequestParams {
 	providers: Record<string, never>;
 	/** 列出用户添加的项目。 */
 	listProjects: Record<string, never>;
-	/** 添加项目，目录重复时设备侧拒绝。 */
+	/** 添加项目，目录重复时主机侧拒绝。 */
 	addProject: { cwd: string; name?: string };
 	/** 重命名项目，名称为空时恢复目录名。 */
 	renameProject: { id: string; name?: string };
@@ -179,7 +179,7 @@ export interface RequestParams {
 	projectTrust: { cwd: string };
 	/** 记下某个目录的信任决定。 */
 	setProjectTrust: { cwd: string; trusted: boolean };
-	/** 在设备的文件管理器里打开某个已添加项目的目录。 */
+	/** 在主机的文件管理器里打开某个已添加项目的目录。 */
 	revealProject: { id: string };
 	/**
 	 * 会话改名。
@@ -192,7 +192,7 @@ export interface RequestParams {
 	deleteSession: { sessionFile: string };
 	/** 读一整份界面偏好设置。 */
 	getSettings: Record<string, never>;
-	/** 整份替换界面偏好设置，返回设备实际存下的那份。 */
+	/** 整份替换界面偏好设置，返回主机实际存下的那份。 */
 	updateSettings: { settings: FacetSettings };
 	/**
 	 * 保存提供方凭证。

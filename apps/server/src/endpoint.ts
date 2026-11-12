@@ -38,6 +38,7 @@ import { FileAccessError, listDirectory, readTextFile, writeTextFile } from "./f
 import { gitDiff, gitStatus } from "./git.ts";
 import type { HostSource } from "./host-identity.ts";
 import { ProjectExistsError, ProjectNotFoundError, type ProjectStore } from "./project-store.ts";
+import { DisabledPtyBackend } from "./pty-host.ts";
 import { RevealFailedError, revealInFileManager } from "./reveal.ts";
 import {
 	type ActionSink,
@@ -51,6 +52,7 @@ import {
 } from "./session-hub.ts";
 import type { SessionsChannel } from "./sessions-channel.ts";
 import type { SettingsStore } from "./settings-store.ts";
+import { TerminalService } from "./terminals.ts";
 import { serveWebRequest } from "./web.ts";
 
 /** Web 接入的 WebSocket 路径，与字节流那条共用同一套帧。 */
@@ -86,10 +88,26 @@ const WRITE_REQUESTS = new Set<string>([
 	"renameSession",
 	"deleteSession",
 	"writeFile",
+	"createTerminal",
+	"writeTerminal",
+	"resizeTerminal",
+	"killTerminal",
 ]);
 
 /** 当前主机已实现的能力。未列入的入口由端点隐藏。 */
-const CAPABILITIES: Capability[] = ["dispatch", "tools", "compaction"];
+const BASE_CAPABILITIES: Capability[] = ["dispatch", "tools", "compaction"];
+
+/**
+ * 本次连接能用的能力。
+ *
+ * 终端依赖 pty 子进程里的原生模块，加载不起来（运行时版本不匹配、缺编译产物）时如实报缺，
+ * 界面据此隐藏终端入口并显示原因，而不是让它连上再报错。
+ */
+function capabilitiesFor(context: EndpointContext): Capability[] {
+	return context.terminals.unavailable === undefined
+		? [...BASE_CAPABILITIES, "terminal"]
+		: [...BASE_CAPABILITIES];
+}
 
 /** 请求被拒绝时带出的错误。未捕获的其他错误统一归类为内部错误。 */
 class RequestError extends Error {
@@ -137,6 +155,8 @@ interface EndpointContext {
 	readonly requestShutdown: () => void;
 	/** 会话清单通道，所有端订阅同一条 */
 	readonly sessions: SessionsChannel;
+	/** 终端登记与终端通道 */
+	readonly terminals: TerminalService;
 	/** 远程操作审计 */
 	readonly audit: AuditLog;
 }
@@ -169,10 +189,18 @@ function asObject(value: unknown): Record<string, unknown> {
 	return value as Record<string, unknown>;
 }
 
-function requiredString(source: Record<string, unknown>, key: string): string {
+function requiredString(source: Record<string, unknown>, key: string, allowEmpty = false): string {
 	const value = source[key];
-	if (typeof value !== "string" || value.length === 0) {
+	if (typeof value !== "string" || (!allowEmpty && value.length === 0)) {
 		throw new RequestError("bad_params", `missing string param: ${key}`);
+	}
+	return value;
+}
+
+function requiredNumber(source: Record<string, unknown>, key: string): number {
+	const value = source[key];
+	if (typeof value !== "number" || !Number.isFinite(value)) {
+		throw new RequestError("bad_params", `missing number param: ${key}`);
 	}
 	return value;
 }
@@ -222,7 +250,8 @@ function requiredChannel(source: Record<string, unknown>, key: string): Channel 
 /** 订阅与退订接受会话清单通道，写操作只针对会话与对话通道。 */
 function subscribableChannel(source: Record<string, unknown>, key: string): Channel {
 	const raw = requiredString(source, key);
-	if (parseChannel(raw)?.kind === "sessions") {
+	const kind = parseChannel(raw)?.kind;
+	if (kind === "sessions" || kind === "terminal") {
 		return raw as Channel;
 	}
 	return requiredChannel(source, key);
@@ -230,8 +259,13 @@ function subscribableChannel(source: Record<string, unknown>, key: string): Chan
 
 /** 退掉一个通道的订阅，会话、对话与清单通道各走各的表。 */
 function unsubscribeChannel(context: EndpointContext, channel: Channel, sink: ActionSink): void {
-	if (parseChannel(channel)?.kind === "sessions") {
+	const kind = parseChannel(channel)?.kind;
+	if (kind === "sessions") {
 		context.sessions.unsubscribe(sink);
+		return;
+	}
+	if (kind === "terminal") {
+		context.terminals.unsubscribe(channel, sink);
 		return;
 	}
 	context.hub.unsubscribe(channel, sink);
@@ -239,6 +273,26 @@ function unsubscribeChannel(context: EndpointContext, channel: Channel, sink: Ac
 
 function toSink(connection: Connection): ActionSink {
 	return { id: connection.clientId, send: (frame) => connection.send(frame) };
+}
+
+/**
+ * 终端启动目录。
+ *
+ * 必须是真实存在的目录：终端以主机用户身份跑 shell，界面上给的路径先在这里核对一遍，
+ * 软链接也按实际指向判断。
+ */
+async function resolveTerminalCwd(cwd: string): Promise<string> {
+	let real: string;
+	try {
+		real = await realpath(cwd);
+	} catch {
+		throw new RequestError("file_not_found", `启动目录不存在: ${cwd}`);
+	}
+	const info = await stat(real).catch(() => undefined);
+	if (info === undefined || !info.isDirectory()) {
+		throw new RequestError("bad_params", `启动目录不是目录: ${cwd}`);
+	}
+	return real;
 }
 
 /** 建立会话并把审批应答接到该会话的中转上。 */
@@ -417,12 +471,20 @@ async function handleRequest(
 			}
 			const sink = toSink(connection);
 			connection.subscriptions.set(channel, sink);
-			if (parseChannel(channel)?.kind === "sessions") {
+			const parsed = parseChannel(channel);
+			if (parsed?.kind === "sessions") {
 				// 清单通道只有一条，标识对不上的按未知通道拒绝
-				if (parseChannel(channel)?.id !== context.hostId) {
+				if (parsed.id !== context.hostId) {
 					throw new RequestError("unknown_channel", `unsupported channel: ${channel}`);
 				}
 				return context.sessions.subscribe(channel, optionalNumber(source, "since"), sink);
+			}
+			if (parsed?.kind === "terminal") {
+				// 终端通道按标识对号，登记里没有的按未知通道拒绝
+				if (context.terminals.get(parsed.id) === undefined) {
+					throw new RequestError("unknown_channel", `unsupported channel: ${channel}`);
+				}
+				return context.terminals.subscribe(channel, optionalNumber(source, "since"), sink);
 			}
 			return await context.hub.subscribe(channel, optionalNumber(source, "since"), sink);
 		}
@@ -558,6 +620,48 @@ async function handleRequest(
 				models: Array.isArray(provider.models) ? (provider.models as CustomProviderInfo["models"]) : [],
 			});
 			return { providers: await context.factory.customProviders() };
+		}
+		case "listTerminals": {
+			return { terminals: context.terminals.list() };
+		}
+		case "createTerminal": {
+			const source = asObject(params);
+			const cwd = await resolveTerminalCwd(requiredString(source, "cwd"));
+			const terminal = await context.terminals.create({
+				cwd,
+				cols: requiredNumber(source, "cols"),
+				rows: requiredNumber(source, "rows"),
+				shell: optionalString(source, "shell"),
+			});
+			return { terminal };
+		}
+		case "writeTerminal": {
+			const source = asObject(params);
+			context.terminals.write(requiredString(source, "id"), requiredString(source, "data", true));
+			return {};
+		}
+		case "resizeTerminal": {
+			const source = asObject(params);
+			context.terminals.resize(
+				requiredString(source, "id"),
+				requiredNumber(source, "cols"),
+				requiredNumber(source, "rows"),
+			);
+			return {};
+		}
+		case "killTerminal": {
+			const source = asObject(params);
+			context.terminals.kill(requiredString(source, "id"));
+			return {};
+		}
+		case "ackTerminal": {
+			const source = asObject(params);
+			context.terminals.ack(requiredString(source, "id"), requiredNumber(source, "seq"));
+			return {};
+		}
+		case "serializeTerminal": {
+			const source = asObject(params);
+			return context.terminals.serialize(requiredString(source, "id"));
 		}
 		case "removeCustomProvider": {
 			const source = asObject(params);
@@ -784,7 +888,7 @@ async function handleFrame(context: EndpointContext, connection: Connection, tex
 			hostName: context.config.hostName,
 			clientId: connection.clientId,
 			role: connection.role,
-			capabilities: CAPABILITIES,
+			capabilities: capabilitiesFor(context),
 		} satisfies HelloFrame);
 		return;
 	}
@@ -830,6 +934,8 @@ export async function startEndpoint(options: {
 	requestShutdown?: () => void;
 	/** 会话清单通道 */
 	sessions: SessionsChannel;
+	/** 终端登记与终端通道 */
+	terminals?: TerminalService;
 	/** 远程操作审计，缺省写到数据目录的 audit.log */
 	audit?: AuditLog;
 }): Promise<EndpointHandle> {
@@ -844,6 +950,8 @@ export async function startEndpoint(options: {
 		connections: new Set(),
 		requestShutdown: options.requestShutdown ?? (() => {}),
 		sessions: options.sessions,
+		terminals:
+			options.terminals ?? new TerminalService({ backend: new DisabledPtyBackend("这台主机没有装配终端") }),
 		audit: options.audit ?? new AuditLog(join(options.config.dataDir, "audit.log")),
 	};
 

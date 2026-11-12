@@ -20,12 +20,13 @@ import type {
 import type { ProjectInfo } from "./project.ts";
 import type { Entry, SessionSnapshot, SessionSummary } from "./session.ts";
 import type { FacetSettings } from "./settings.ts";
+import type { TerminalInfo } from "./terminal.ts";
 
 /** 线格式版本。不兼容的改动递增此值,端点据此拒绝握手。 */
 export const PROTOCOL_VERSION = 1;
 
 /** 主机上报的能力标记,端点据此隐藏不可用的入口。 */
-export type Capability = "dispatch" | "tools" | "compaction";
+export type Capability = "dispatch" | "tools" | "compaction" | "terminal";
 
 /**
  * 这条连接的权限档。
@@ -280,6 +281,32 @@ export interface RequestParams {
 	saveCustomProvider: { provider: CustomProviderInput };
 	/** 删除一个自定义提供方，连同它的凭证，返回更新后的清单。 */
 	removeCustomProvider: { providerId: string };
+	/** 列出主机上的终端，含已结束的与主机重启前留下的。 */
+	listTerminals: Record<string, never>;
+	/**
+	 * 开一个终端。
+	 *
+	 * cwd 必须落在项目根内；cols 与 rows 由界面的 xterm 实例给出。
+	 */
+	createTerminal: { cwd: string; cols: number; rows: number; shell?: string };
+	/** 往终端里写入按键。多个端同时写时按到达顺序执行。 */
+	writeTerminal: { id: string; data: string };
+	/** 改终端尺寸。 */
+	resizeTerminal: { id: string; cols: number; rows: number };
+	/** 关掉终端，进程收到挂断。 */
+	killTerminal: { id: string };
+	/**
+	 * 确认已收到的输出。
+	 *
+	 * seq 是端已处理到的通道序号，主机据此扣减未确认字符数，水位降下来再恢复 pty。
+	 */
+	ackTerminal: { id: string; seq: number };
+	/**
+	 * 取回滚内容与当前序号。
+	 *
+	 * 端挂载或断线重连时先取一次，再按 since 订阅增量。
+	 */
+	serializeTerminal: { id: string };
 }
 
 /** 每条请求的应答数据。 */
@@ -323,6 +350,14 @@ export interface RequestResults {
 	listCustomProviders: { providers: CustomProviderInfo[] };
 	saveCustomProvider: { providers: CustomProviderInfo[] };
 	removeCustomProvider: { providers: CustomProviderInfo[] };
+	listTerminals: { terminals: TerminalInfo[] };
+	createTerminal: { terminal: TerminalInfo };
+	writeTerminal: Record<string, never>;
+	resizeTerminal: Record<string, never>;
+	killTerminal: Record<string, never>;
+	ackTerminal: Record<string, never>;
+	/** text 是回滚缓冲里的可见文本，seq 是当前通道序号，端从 seq 之后接着收增量 */
+	serializeTerminal: { text: string; seq: number; cols: number; rows: number };
 }
 
 /** 请求方法名。 */

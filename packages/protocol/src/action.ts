@@ -4,6 +4,7 @@ import type { Message } from "./message.ts";
 import type { ModelInfo, ModelRef, ThinkingLevel } from "./model.ts";
 import type { StreamingBehavior } from "./request.ts";
 import type { Maintenance, SessionSummary, TurnPhase } from "./session.ts";
+import type { TerminalAction } from "./terminal.ts";
 
 /** 会话清单动作。主机推给所有订阅清单通道的端,多端看到同一份列表。 */
 export type SessionsAction =
@@ -81,7 +82,7 @@ export type ChatAction =
 	| { type: "chat/branchMoved"; leafId: string | null };
 
 /** 动作联合。按 `type` 前缀决定归属通道。 */
-export type Action = SessionAction | ChatAction | SessionsAction;
+export type Action = SessionAction | ChatAction | SessionsAction | TerminalAction;
 
 /** 动作来源。缺省表示主机侧产生。 */
 export interface ActionOrigin {
@@ -91,7 +92,13 @@ export interface ActionOrigin {
 	clientSeq: number;
 }
 
-/** 通道种类与动作前缀的对应关系。 */
-export function channelKindForAction(action: Action): "session" | "chat" {
+/** 通道种类与动作前缀的对应关系。终端与清单动作只由主机产生，不参与端的派发。 */
+export function channelKindForAction(action: Action): "session" | "chat" | "terminal" | "sessions" {
+	if (action.type.startsWith("terminal/")) {
+		return "terminal";
+	}
+	if (action.type.startsWith("sessions/")) {
+		return "sessions";
+	}
 	return action.type.startsWith("session/") ? "session" : "chat";
 }

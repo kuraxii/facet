@@ -78,9 +78,9 @@ class Peer {
 		return { ok: frame.ok, ...(frame.error === undefined ? {} : { message: frame.error.message }) };
 	}
 
-	/** 拿握手结果里的权限档。 */
-	async hello(): Promise<{ role: string }> {
-		return await this.waitFor<{ role: string }>((item) => item.type === "hello");
+	/** 拿握手结果里的权限档与能力。 */
+	async hello(): Promise<{ role: string; capabilities: string[] }> {
+		return await this.waitFor<{ role: string; capabilities: string[] }>((item) => item.type === "hello");
 	}
 
 	/** 派发一条动作，返回拒绝原因（被接受时为空）。 */
@@ -209,6 +209,38 @@ describe("权限档", () => {
 		expect((await remote.hello()).role).toBe("operator");
 		expect((await remote.request("shutdownHost")).message).toBe("这个操作只允许在本机进行");
 		expect((await remote.request("diagnostics")).ok).toBe(false);
+	});
+});
+
+describe("终端的权限", () => {
+	it("只读档能列终端，开终端与打字都拒绝", async () => {
+		await start({ socketPath: join(dir, "local.sock") });
+		const remote = await Peer.connect(join(dir, "local.sock"), "令牌", "viewer");
+		peerList.push(remote);
+		expect((await remote.hello()).role).toBe("viewer");
+		expect((await remote.request("listTerminals")).ok).toBe(true);
+		expect((await remote.request("createTerminal", { cwd: dir, cols: 80, rows: 24 })).message).toBe(
+			"这条连接是只读的",
+		);
+		expect((await remote.request("writeTerminal", { id: "x", data: "ls\r" })).message).toBe(
+			"这条连接是只读的",
+		);
+		expect((await remote.request("resizeTerminal", { id: "x", cols: 100, rows: 30 })).message).toBe(
+			"这条连接是只读的",
+		);
+		expect((await remote.request("killTerminal", { id: "x" })).ok).toBe(false);
+	});
+
+	it("没有 pty 后端的主机在握手里不报终端能力，开终端时说明原因", async () => {
+		await start({ socketPath: join(dir, "local.sock") });
+		const local = await Peer.connect(join(dir, "local.sock"), "令牌");
+		peerList.push(local);
+		const hello = await local.hello();
+		expect(hello.capabilities).toContain("dispatch");
+		expect(hello.capabilities).not.toContain("terminal");
+		const result = await local.request("createTerminal", { cwd: dir, cols: 80, rows: 24 });
+		expect(result.ok).toBe(false);
+		expect(result.message).toBe("这台主机没有装配终端");
 	});
 });
 

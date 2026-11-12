@@ -9,6 +9,7 @@
 - 跨模块改动只允许依赖声明、导入路径、类型定义、构建与配置文件这类使改动生效所必需的部分，且 MUST 在提交说明正文点名涉及的其他模块。
 - 依赖方向单向，禁止反向引用：`protocol ← services / agent / client-core / transport ← ui ← apps`。
 - `protocol` MUST 保持零运行时依赖。`client-core` 与 `ui` MUST NOT 引入 `electron`、`node:*`。`services` MUST NOT 引入 `electron` 与 React。
+- `apps/server` MUST NOT 依赖 `electron`：主机与它起的子进程一律按 Node 运行，桌面只负责用 `process.execPath` 加 `ELECTRON_RUN_AS_NODE=1` 把它拉起来，并把环境原样传给它的子进程。
 - 提交说明用中文，格式 `<type>(<scope>): <结果>`，`type` 取 `feat` / `fix` / `docs` / `chore` / `refactor` / `perf` / `test`，`scope` 为包名或应用名。
 - 提交说明只描述改动完成后的状态与原因，不记录被放弃的做法。
 - 不提交 `node_modules/`、`out/`、`dist/`、编辑器临时文件与本地数据目录。

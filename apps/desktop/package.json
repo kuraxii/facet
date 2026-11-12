@@ -25,6 +25,7 @@
 		"@facet/ui-editor": "*",
 		"@facet/ui-terminal": "*",
 		"lucide-react": "^1.72.0",
+		"node-pty": "^1.1.0",
 		"ssh2": "^1.17.0",
 		"ws": "^8.18.0"
 	},

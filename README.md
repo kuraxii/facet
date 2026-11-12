@@ -68,6 +68,18 @@ FACET_WEB_ROOT=apps/desktop/out/renderer \
 - 桌面与 Web 共用 `apps/desktop/src/renderer` 这一份界面：桌面用 preload 注入的桥，浏览器用 `web-bridge.ts` 补一个同样的桥
 - 窄屏（880px 以下）侧栏收成抽屉，左上角按钮展开、点遮罩或选中会话收起，右侧栏改成覆盖式
 
+## 终端
+
+终端跑在主机上，桌面与 Web 都只是它的端：界面里敲的字经通道送到主机，主机再把输出按帧推回来。本机与远程走的是同一条路径，桌面自己不起任何 shell。
+
+- **pty 子进程**：`node-pty` 在主机再往下起的 `pty-host` 子进程里加载，崩溃与突发输出都关在这个进程里，会话与推理轮次不受影响
+- **通道**：每个终端一条 `terminal:/<id>`，输出带通道序号，多个端同时看同一个 shell
+- **流控**：未确认字符数超过 100_000 让 pty 暂停读，端确认回来降到 5_000 以下再恢复；单帧上限 64KB 字符
+- **回滚**：每个终端保留最近 200_000 字符，端挂载或断线重连时先取这份再收增量
+- **登记**：`$FACET_DATA_DIR/terminals.json` 记下开过的终端，主机重启后把它们列成已结束，进程已经不在
+- **运行时**：`node-pty` 是 N-API 模块，一份构建在 Node 与 Electron 自带的 Node 里都能用，不需要 `electron-rebuild`；打包时把 `pty-host.js` 作为独立入口产物，`.node` 文件放在 asar 外
+- **不可用时**：原生模块加载不起来（版本不匹配、缺编译产物）主机在握手里不报 `terminal` 能力，界面隐藏终端入口
+
 ## 主机与桌面分开运行
 
 主机是独立的进程，桌面只是它的一个端：
@@ -146,7 +158,7 @@ scripts/build-fonts.sh <字体目录>
 | 路径 | 内容 | 覆盖方式 |
 |---|---|---|
 | `~/.pi/agent-dev` | 凭证 `auth.json`、模型 `models.json`、设置、会话目录 | `FACET_AGENT_DIR` |
-| `$XDG_DATA_HOME/facet`（缺省 `~/.local/share/facet`） | 主机身份 `host.json`、项目清单 `projects.json`、界面设置 `settings.json`；独立启动时还有发现文件 `endpoint.json` | `FACET_DATA_DIR` |
+| `$XDG_DATA_HOME/facet`（缺省 `~/.local/share/facet`） | 主机身份 `host.json`、项目清单 `projects.json`、界面设置 `settings.json`、终端登记 `terminals.json`、审计 `audit.log`；独立启动时还有发现文件 `endpoint.json` | `FACET_DATA_DIR` |
 | `$XDG_CONFIG_HOME/facet`（缺省 `~/.config/facet`） | 桌面本地记录 `desktop.json`：窗口位置与尺寸 | — |
 
 用 `agent-dev` 而不是 `~/.pi/agent`，是为了和 pi 命令行共用凭证与模型配置，同时不把开发期的会话混进真实目录。
@@ -169,6 +181,7 @@ scripts/build-fonts.sh <字体目录>
 | `FACET_SOCKET` | 主机监听的 unix socket 路径或命名管道名，给出后不再监听 TCP |
 | `FACET_REMOTE_PERMISSION` | 远程连接申请档位的上限：`view`（只读，缺省）或 `operate`（可申请操作档） |
 | `FACET_WEB_PORT` | Web 端接入端口，缺省关闭；同一个端口发页面也接 WebSocket |
+| `FACET_PTY_HOST` | pty 子进程入口，缺省与主机入口同目录（`pty-host.js` 或 `pty-host-child.ts`） |
 | `FACET_WEB_ROOT` | Web 页面的构建产物目录，缺省不提供页面 |
 | `FACET_TOKEN` | 连接令牌，缺省随机生成并写进发现文件 |
 | `FACET_NO_TOKEN` | 设为 `1` 时不校验令牌，只用于本机调试 |

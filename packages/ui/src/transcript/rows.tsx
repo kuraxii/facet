@@ -511,7 +511,6 @@ export function ChatTranscript({
 										onClick={() => onRevert(entryId, text)}
 									>
 										<Undo2 size={12} strokeWidth={1.5} />
-										回退
 									</button>
 								</div>
 							) : null}

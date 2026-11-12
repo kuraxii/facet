@@ -1,4 +1,4 @@
-import { chatActivity, type DeviceHandshake, SessionClient, toTranscript } from "@facet/client-core";
+import { chatActivity, type HostHandshake, SessionClient, toTranscript } from "@facet/client-core";
 import {
 	DEFAULT_SETTINGS,
 	type FacetSettings,
@@ -10,18 +10,24 @@ import {
 import { WsTransport } from "@facet/transport/ws";
 import {
 	ArrowDownIcon,
+	ChatOutline,
 	ChatTranscript,
 	CloseIcon,
+	CodeThemeProvider,
 	Composer,
 	CreateProjectDialog,
+	DEFAULT_DARK_THEME,
 	EmptyState,
+	isDarkTheme,
 	QueueStrip,
+	resolveUiTheme,
 	SessionSidebar,
 	type SettingsDataSource,
 	SettingsPage,
 	type SettingsSection,
 	type SidebarHost,
 	samePath,
+	THEME_MODES,
 	type ThemeName,
 	TrustDialog,
 	useStickToBottom,
@@ -40,6 +46,8 @@ interface FacetBridge {
 	pickDirectory: () => Promise<string | undefined>;
 	/** 用系统的保存窗口写一段文本,取消时返回 false */
 	saveText: (suggestedName: string, text: string) => Promise<boolean>;
+	/** 订阅主机端点变化,返回取消订阅的函数 */
+	onEndpointChanged: (listener: (endpoint: string) => void) => () => void;
 }
 
 declare global {
@@ -55,7 +63,7 @@ const client = new SessionClient({ transport, pageSize: 200 });
 
 type Phase = "connecting" | "ready" | "failed";
 
-/** 主题在本地保存键，设备上的设置读不到时先用它，避免启动时闪一下 */
+/** 主题在本地保存键，主机上的设置读不到时先用它，避免启动时闪一下 */
 const THEME_KEY = "facet.theme";
 
 /** 等重试期间给对话面板的提示,其余维护动作不显示。 */
@@ -87,16 +95,16 @@ function readDrafts(): Record<string, string> {
 	}
 }
 
-/** 读取上次选择的主题，缺省深色 */
+/** 系统是否偏浅色。 */
+function prefersLight(): boolean {
+	return window.matchMedia("(prefers-color-scheme: light)").matches;
+}
+
+/** 读取上次的主题，只用来在设置读到之前避免闪一下，缺省深色 */
 function readTheme(): ThemeName {
 	const stored = localStorage.getItem(THEME_KEY);
-	if (stored === "light") {
-		return "light";
-	}
-	if (stored === "system") {
-		return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
-	}
-	return "dark";
+	const mode = THEME_MODES.find((candidate) => candidate === stored) ?? DEFAULT_DARK_THEME;
+	return isDarkTheme(resolveUiTheme(mode, prefersLight())) ? "dark" : "light";
 }
 
 /**
@@ -107,7 +115,7 @@ function readTheme(): ThemeName {
  */
 function applyAppearance(appearance: FacetSettings["appearance"]): void {
 	const root = document.documentElement;
-	root.dataset.theme = appearance.theme === "light" ? "light" : "dark";
+	root.dataset.theme = resolveUiTheme(appearance.theme, prefersLight());
 	root.dataset.motion = appearance.reducedMotion ? "reduced" : "full";
 	if (appearance.bodyFont.trim().length > 0) {
 		root.style.setProperty("--font-sans", appearance.bodyFont.trim());
@@ -123,12 +131,9 @@ function applyAppearance(appearance: FacetSettings["appearance"]): void {
 	localStorage.setItem(THEME_KEY, appearance.theme);
 }
 
-/** 把设置里的主题换成实际生效的深浅色。 */
+/** 把设置里的主题换成实际生效的深浅色，侧栏的切换按钮按它决定图标与文案。 */
 function resolveTheme(mode: FacetSettings["appearance"]["theme"]): ThemeName {
-	if (mode === "system") {
-		return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
-	}
-	return mode;
+	return isDarkTheme(resolveUiTheme(mode, prefersLight())) ? "dark" : "light";
 }
 
 /** 把一条项目并进列表：同一个标识就替换，没有就追加，保持原有顺序。 */
@@ -169,12 +174,14 @@ export function App() {
 		() => client.store.getVersion(),
 	);
 	const [phase, setPhase] = useState<Phase>("connecting");
-	/** 与设备的连接是否可用，断开时输入区说明原因并禁用发送 */
+	/** 当前连的主机端点，嵌入主机被重新拉起后会换 */
+	const [endpoint, setEndpoint] = useState(bridge.endpoint);
+	/** 与主机的连接是否可用，断开时输入区说明原因并禁用发送 */
 	const [isOnline, setIsOnline] = useState(false);
 	const [failure, setFailure] = useState<string | undefined>(undefined);
 	const [sessions, setSessions] = useState<readonly SessionSummary[]>([]);
 	const [activeFile, setActiveFile] = useState<string | undefined>(undefined);
-	const [device, setDevice] = useState<DeviceHandshake | undefined>(undefined);
+	const [host, setHost] = useState<HostHandshake | undefined>(undefined);
 	const [projects, setProjects] = useState<readonly ProjectInfo[]>([]);
 	/** 项目列表上一次拉取失败，侧栏据此给出刷新入口 */
 	const [isProjectsStale, setIsProjectsStale] = useState(false);
@@ -183,7 +190,7 @@ export function App() {
 	/** 各会话的草稿，键为会话文件路径，新会话页面用 NEW_DRAFT_KEY */
 	const [drafts, setDrafts] = useState<Record<string, string>>(readDrafts);
 	const [theme, setTheme] = useState<ThemeName>(readTheme);
-	/** 设备上的偏好设置；没读到之前先用缺省值 */
+	/** 主机上的偏好设置；没读到之前先用缺省值 */
 	const [settings, setSettings] = useState<FacetSettings>(DEFAULT_SETTINGS);
 	/** 主区域显示对话还是设置 */
 	const [view, setView] = useState<"chat" | "settings">("chat");
@@ -208,34 +215,15 @@ export function App() {
 
 	const listSeq = useRef(0);
 
-	/** 设置页的数据来源，接到设备上。 */
-	const settingsData = useMemo<SettingsDataSource>(
-		() => ({
-			loadSettings: () => client.getSettings(),
-			saveSettings: (next) => client.saveSettings(next),
-			loadProviders: () => client.listProviders(),
-			loadModels: () => client.listModels(),
-			saveCredential: (providerId, apiKey) => client.saveCredential(providerId, apiKey),
-			deleteCredential: (providerId) => client.deleteCredential(providerId),
-			setProviderBaseUrl: (providerId, baseUrl) => client.setProviderBaseUrl(providerId, baseUrl),
-			listCustomProviders: () => client.listCustomProviders(),
-			saveCustomProvider: (provider) => client.saveCustomProvider(provider),
-			removeCustomProvider: (providerId) => client.removeCustomProvider(providerId),
-			testModel: (model) => client.testModel(model),
-			diagnostics: () => client.diagnostics(),
-			saveText: (suggestedName, text) => window.facet.saveText(suggestedName, text),
-		}),
-		[],
-	);
-
 	/**
 	 * 切换深浅色。
 	 *
 	 * 外观立刻生效，同时写回设置；写不进去时界面按新主题显示，下次启动回到原来的值。
 	 */
+	// 侧栏的快捷切换只在浅色与缺省深色之间来回，其余配色在设置页里选
 	const toggleTheme = useCallback(() => {
-		const next = theme === "dark" ? "light" : "dark";
-		setTheme(next);
+		const next = theme === "dark" ? "light" : DEFAULT_DARK_THEME;
+		setTheme(next === "light" ? "light" : "dark");
 		const changed: FacetSettings = {
 			...settings,
 			appearance: { ...settings.appearance, theme: next },
@@ -272,7 +260,7 @@ export function App() {
 	}, []);
 
 	/**
-	 * 重连设备。
+	 * 重连主机。
 	 *
 	 * 断线之后按退避间隔一直试，连上就续订已打开的会话、重取会话状态与会话列表；同一个
 	 * 时刻只跑一次，手动重试与自动重连共用这条路。
@@ -284,7 +272,7 @@ export function App() {
 				try {
 					const handshake = await transport.connect();
 					client.attach(handshake);
-					setDevice(handshake);
+					setHost(handshake);
 					// 会话回不来(例如它的文件已经不在了)时退回没有会话的状态,连接本身照常可用
 					const resumed = await client.resume().then(
 						() => true,
@@ -315,6 +303,24 @@ export function App() {
 		}
 	}, [isOnline, phase, reconnect]);
 
+	// 嵌入主机被重新拉起后端口会变：换地址再握手，会话由 resume 续订
+	useEffect(
+		() =>
+			bridge.onEndpointChanged((next) => {
+				transport.setUrl(next);
+				setEndpoint(next);
+				setPhase("connecting");
+				void reconnect().then(
+					() => setPhase("ready"),
+					(error: unknown) => {
+						setFailure(error instanceof Error ? error.message : String(error));
+						setPhase("failed");
+					},
+				);
+			}),
+		[reconnect],
+	);
+
 	void version;
 
 	const session = client.sessionView();
@@ -322,17 +328,70 @@ export function App() {
 	// 对话此刻的状态由会话状态得出,界面不自己拼布尔量
 	const activity = chatActivity(session);
 
-	/** 设备的模型目录与各提供方的凭证状态，供输入区的模型选择使用。 */
+	/** 主机的模型目录与各提供方的凭证状态，供输入区的模型选择使用。 */
 	const [catalog, setCatalog] = useState<{ models: readonly ModelInfo[]; auth: Record<string, boolean> }>({
 		models: [],
 		auth: {},
 	});
+	/**
+	 * 重取模型目录与各提供方的凭证状态。
+	 *
+	 * 设置里加过凭证或改过自定义提供方之后要再取一次，否则选择器还停在旧的可用清单上。
+	 */
+	const refreshCatalog = useCallback(async (): Promise<void> => {
+		const [models, providers] = await Promise.all([
+			client.listAvailableModels().catch(() => []),
+			client.listProviders().catch(() => []),
+		]);
+		setCatalog({
+			models,
+			auth: Object.fromEntries(providers.map((provider) => [provider.id, provider.authenticated])),
+		});
+	}, []);
+
 	/** 输入区可选的模型：去掉设置里隐藏的那些。 */
 	const visibleModels = useMemo(
 		() => catalog.models.filter((model) => !settings.hiddenModels.includes(`${model.provider}/${model.id}`)),
 		[catalog.models, settings.hiddenModels],
 	);
 	const providerAuth = catalog.auth;
+
+	/** 设置页的数据来源，接到主机上。 */
+	const settingsData = useMemo<SettingsDataSource>(
+		() => ({
+			loadSettings: () => client.getSettings(),
+			saveSettings: (next) => client.saveSettings(next),
+			loadProviders: () => client.listProviders(),
+			loadModels: () => client.listModels(),
+			// 凭证与自定义提供方会改变可用模型，改完重取一次目录
+			saveCredential: (providerId, apiKey) =>
+				client.saveCredential(providerId, apiKey).then(async (providers) => {
+					await refreshCatalog();
+					return providers;
+				}),
+			deleteCredential: (providerId) =>
+				client.deleteCredential(providerId).then(async (providers) => {
+					await refreshCatalog();
+					return providers;
+				}),
+			setProviderBaseUrl: (providerId, baseUrl) => client.setProviderBaseUrl(providerId, baseUrl),
+			listCustomProviders: () => client.listCustomProviders(),
+			saveCustomProvider: (provider) =>
+				client.saveCustomProvider(provider).then(async (providers) => {
+					await refreshCatalog();
+					return providers;
+				}),
+			removeCustomProvider: (providerId) =>
+				client.removeCustomProvider(providerId).then(async (providers) => {
+					await refreshCatalog();
+					return providers;
+				}),
+			testModel: (model) => client.testModel(model),
+			diagnostics: () => client.diagnostics(),
+			saveText: (suggestedName, text) => window.facet.saveText(suggestedName, text),
+		}),
+		[refreshCatalog],
+	);
 
 	/**
 	 * 现在不能发送的原因。
@@ -342,7 +401,7 @@ export function App() {
 	 */
 	let blockedReason: string | undefined;
 	if (!isOnline) {
-		blockedReason = "与设备的连接已断开,恢复之后可以继续发送";
+		blockedReason = "与主机的连接已断开,恢复之后可以继续发送";
 	} else if (activity === "compacting") {
 		blockedReason = "正在压缩上下文,完成之后再发送";
 	} else if (activity === "stopping") {
@@ -408,7 +467,7 @@ export function App() {
 					return;
 				}
 			} catch {
-				// 查不到就不拦,交给设备按未信任处理
+				// 查不到就不拦,交给主机按未信任处理
 			}
 			run();
 		})();
@@ -447,7 +506,7 @@ export function App() {
 		[runSessionAction, sessions, withTrust],
 	);
 
-	/** 新建会话，采用设置里的默认模型与思考档位；没有设置时交给设备决定。 */
+	/** 新建会话，采用设置里的默认模型与思考档位；没有设置时交给主机决定。 */
 	const createSession = useCallback(
 		(cwd: string) => {
 			const model = settings.defaultModel;
@@ -480,19 +539,12 @@ export function App() {
 		void (async () => {
 			const handshake = await transport.connect();
 			client.attach(handshake);
-			setDevice(handshake);
+			setHost(handshake);
 			await refreshProjects();
 			// 设置读不到时用缺省值，界面照常可用
 			setSettings(await client.getSettings().catch(() => DEFAULT_SETTINGS));
-			// 模型目录与凭证状态供输入区的模型选择使用，取不到时选择器只展示当前模型
-			const [models, providers] = await Promise.all([
-				client.listModels().catch(() => []),
-				client.listProviders().catch(() => []),
-			]);
-			setCatalog({
-				models,
-				auth: Object.fromEntries(providers.map((provider) => [provider.id, provider.authenticated])),
-			});
+			// 模型选择器只列可用的模型（已配置凭证的提供方），凭证状态仍用来标注当前模型
+			await refreshCatalog();
 			const pool = (await refreshSessions()) ?? [];
 			const newest = pickStartupSession(pool, bridge.projectDir);
 			if (newest) {
@@ -503,7 +555,7 @@ export function App() {
 			setFailure(error instanceof Error ? error.message : String(error));
 			setPhase("failed");
 		});
-	}, [openSession, refreshProjects, refreshSessions]);
+	}, [openSession, refreshCatalog, refreshProjects, refreshSessions]);
 
 	/** 当前草稿落在哪个键：打开的会话按文件路径分开存，没有会话时存到新会话页面。 */
 	const draftKey = activeFile ?? NEW_DRAFT_KEY;
@@ -536,7 +588,7 @@ export function App() {
 		if (text.length === 0) {
 			return;
 		}
-		// 草稿留到设备确认再收,发送被拒时不用重打
+		// 草稿留到主机确认再收,发送被拒时不用重打
 		if (activity === "running") {
 			client.enqueue(text);
 			return;
@@ -545,9 +597,9 @@ export function App() {
 	}, [activity, draft]);
 
 	/**
-	 * 收回排队内容:清空设备侧队列,把文字拼回输入框。
+	 * 收回排队内容:清空主机侧队列,把文字拼回输入框。
 	 *
-	 * 排队条来自 session/queueChanged,清空后设备会再推一次空队列,这里只改草稿。
+	 * 排队条来自 session/queueChanged,清空后主机会再推一次空队列,这里只改草稿。
 	 */
 	const takeBackQueue = useCallback(() => {
 		const entries = [...queued.steering, ...queued.followUp];
@@ -575,7 +627,7 @@ export function App() {
 	 */
 	const revertTo = useCallback(
 		(entryId: string, text: string) => {
-			// 回退在同一个会话里改分支指针，不新建会话；文本先放回输入框，历史由设备推的
+			// 回退在同一个会话里改分支指针，不新建会话；文本先放回输入框，历史由主机推的
 			// chat/branchMoved 触发重装
 			client.revert(entryId);
 			updateDraft(() => text);
@@ -703,26 +755,40 @@ export function App() {
 		);
 
 	const transcript = useMemo(() => (chat ? toTranscript(chat) : []), [chat]);
-	const { scrollRef, isPinned, scrollToBottom } = useStickToBottom(transcript, activeFile);
+	const {
+		scrollRef,
+		element: scrollElement,
+		isPinned,
+		scrollToBottom,
+	} = useStickToBottom(transcript, activeFile);
 
 	const hosts = useMemo<readonly SidebarHost[]>(() => {
 		const local: SidebarHost = {
-			id: device?.hostId ?? "local",
-			name: device?.hostName ?? "本机",
-			detail: bridge.endpoint,
+			id: host?.hostId ?? "local",
+			name: host?.hostName ?? "本机",
+			detail: endpoint,
 			state: "connected",
 			isLocal: true,
 			projects: [],
 		};
 		return [local, ...PLACEHOLDER_HOSTS];
-	}, [device]);
+	}, [host, endpoint]);
+
+	// 代码高亮的配色与深浅一起下发，正文里的代码块按它取 shiki 主题
+	const codeThemeValue = useMemo(
+		() => ({
+			theme: settings.appearance.codeTheme,
+			isDark: resolveTheme(settings.appearance.theme) === "dark",
+		}),
+		[settings.appearance.codeTheme, settings.appearance.theme],
+	);
 
 	if (phase === "failed") {
 		return (
 			<main className="boot">
-				<h1>连不上设备</h1>
+				<h1>连不上主机</h1>
 				<p>{failure}</p>
-				<p>{bridge.endpoint}</p>
+				<p>{endpoint}</p>
 				<button
 					type="button"
 					className="boot-retry"
@@ -746,175 +812,174 @@ export function App() {
 	if (phase === "connecting") {
 		return (
 			<main className="boot">
-				<h1>正在连接设备</h1>
-				<p>{bridge.endpoint}</p>
+				<h1>正在连接主机</h1>
+				<p>{endpoint}</p>
 			</main>
 		);
 	}
 
 	return (
-		<div className="shell">
-			<SessionSidebar
-				sessions={sessions}
-				hosts={hosts}
-				projects={projects}
-				activeFile={activeFile}
-				runningFile={activity === "idle" ? undefined : activeFile}
-				runningDot={activity === "compacting" ? "compacting" : "running"}
-				createCwd={createCwd}
-				theme={theme}
-				onSelect={(path) => void openSession(path)}
-				onCreate={(cwd) => {
-					setCreateCwd(cwd);
-					void createSession(cwd);
-				}}
-				canCreate={phase === "ready"}
-				onAddProject={() => setIsProjectDialogOpen(true)}
-				isProjectsStale={isProjectsStale}
-				onRefreshProjects={() => void refreshProjects()}
-				onRenameProject={renameProject}
-				onRemoveProject={removeProject}
-				onRevealProject={revealProject}
-				onRenameSession={renameSession}
-				onDeleteSession={deleteSession}
-				onToggleTheme={toggleTheme}
-				onOpenSettings={() => {
-					setView("settings");
-				}}
-				isSettingsOpen={view === "settings"}
-			/>
+		<CodeThemeProvider value={codeThemeValue}>
+			<div className="shell">
+				<SessionSidebar
+					sessions={sessions}
+					hosts={hosts}
+					projects={projects}
+					activeFile={activeFile}
+					runningFile={activity === "idle" ? undefined : activeFile}
+					runningDot={activity === "compacting" ? "compacting" : "running"}
+					createCwd={createCwd}
+					theme={theme}
+					onSelect={(path) => void openSession(path)}
+					onCreate={(cwd) => {
+						setCreateCwd(cwd);
+						void createSession(cwd);
+					}}
+					canCreate={phase === "ready"}
+					onAddProject={() => setIsProjectDialogOpen(true)}
+					isProjectsStale={isProjectsStale}
+					onRefreshProjects={() => void refreshProjects()}
+					onRenameProject={renameProject}
+					onRemoveProject={removeProject}
+					onRevealProject={revealProject}
+					onRenameSession={renameSession}
+					onDeleteSession={deleteSession}
+					onToggleTheme={toggleTheme}
+					onOpenSettings={() => {
+						setView("settings");
+					}}
+					isSettingsOpen={view === "settings"}
+				/>
 
-			<main className="main">
+				<main className="main">
+					{session === undefined ? null : <ChatOutline items={transcript} container={scrollElement} />}
+					{session === undefined ? (
+						<div className="empty-wrap">
+							{errorBar}
+							<EmptyState
+								cwd={emptyCreateCwd}
+								canCreate={phase === "ready"}
+								onCreate={() => {
+									if (emptyCreateCwd !== undefined) {
+										createSession(emptyCreateCwd);
+									}
+								}}
+								onAddProject={() => setIsProjectDialogOpen(true)}
+							/>
+						</div>
+					) : (
+						<>
+							<section className="scroll" ref={scrollRef}>
+								<div className="column">
+									<ChatTranscript
+										items={transcript}
+										canFork={canFork}
+										onFork={forkTurn}
+										canRevert={canFork}
+										onRevert={revertTo}
+										retry={retryOf(session.state.maintenance)}
+										onRetryTurn={retryTurn}
+										onOpenSettings={() => {
+											setSettingsSection("providers");
+											setView("settings");
+										}}
+										onCopyDetails={(text) => {
+											void navigator.clipboard.writeText(text).catch(() => undefined);
+										}}
+										renames={chat?.renames}
+										emptyHint="还没有消息,输入内容开始"
+									/>
+								</div>
+							</section>
+
+							<div className="footer">
+								{isPinned ? null : (
+									<button
+										type="button"
+										className="to-bottom"
+										aria-label="回到底部"
+										onClick={() => scrollToBottom("smooth")}
+									>
+										<ArrowDownIcon size={16} />
+									</button>
+								)}
+								<div className="footer-column">
+									{errorBar}
+									<QueueStrip queued={queued} onClear={takeBackQueue} />
+									<Composer
+										value={draft}
+										onChange={updateDraft}
+										onSend={send}
+										onStop={() => client.cancel()}
+										activity={activity}
+										model={session.state.model}
+										thinkingLevel={session.state.thinkingLevel}
+										thinkingLevels={session.state.availableThinkingLevels}
+										models={visibleModels}
+										providerAuth={providerAuth}
+										onModelChange={(next) => client.setModel({ provider: next.provider, id: next.id })}
+										onThinkingLevelChange={(level) => client.setThinkingLevel(level)}
+										shiftEnterToSend={settings.input.sendKey === "shiftEnter"}
+										blockedReason={blockedReason}
+									/>
+
+									{chat && chat.notices.length > 0 ? (
+										<div className="notices">
+											{chat.notices.map((notice) => (
+												<span
+													key={`${notice.level}:${notice.message}`}
+													className={notice.level === "error" ? "chip is-error" : "chip"}
+												>
+													{notice.message}
+												</span>
+											))}
+										</div>
+									) : null}
+								</div>
+							</div>
+						</>
+					)}
+				</main>
+
 				{view === "settings" ? (
 					<SettingsPage
 						section={settingsSection}
 						onSectionChange={setSettingsSection}
-						onClose={() => setView("chat")}
+						onClose={() => {
+							// 预览过但没保存的外观回到已保存的那份
+							applyAppearance(settings.appearance);
+							setTheme(resolveTheme(settings.appearance.theme));
+							setView("chat");
+						}}
 						data={settingsData}
 						onSettingsApplied={setSettings}
+						onAppearancePreview={(appearance) => {
+							applyAppearance(appearance);
+							setTheme(resolveTheme(appearance.theme));
+						}}
 						about={{
 							appVersion: bridge.appVersion,
 							runtime: `Electron ${bridge.platform}`,
-							endpoint: bridge.endpoint,
+							endpoint,
 						}}
 					/>
-				) : session === undefined ? (
-					<div className="empty-wrap">
-						{errorBar}
-						<EmptyState
-							cwd={emptyCreateCwd}
-							canCreate={phase === "ready"}
-							onCreate={() => {
-								if (emptyCreateCwd !== undefined) {
-									createSession(emptyCreateCwd);
-								}
-							}}
-							onAddProject={() => setIsProjectDialogOpen(true)}
-						/>
-					</div>
-				) : (
-					<>
-						<section className="scroll" ref={scrollRef}>
-							<div className="column">
-								<ChatTranscript
-									items={transcript}
-									canFork={canFork}
-									onFork={forkTurn}
-									canRevert={canFork}
-									onRevert={revertTo}
-									retry={retryOf(session.state.maintenance)}
-									onRetryTurn={retryTurn}
-									onOpenSettings={() => {
-										setSettingsSection("providers");
-										setView("settings");
-									}}
-									onCopyDetails={(text) => {
-										void navigator.clipboard.writeText(text).catch(() => undefined);
-									}}
-									renames={chat?.renames}
-									emptyHint="还没有消息,输入内容开始"
-								/>
-							</div>
-						</section>
+				) : null}
 
-						<div className="footer">
-							{isPinned ? null : (
-								<button
-									type="button"
-									className="to-bottom"
-									aria-label="回到底部"
-									onClick={() => scrollToBottom("smooth")}
-								>
-									<ArrowDownIcon size={16} />
-								</button>
-							)}
-							<div className="footer-column">
-								{errorBar}
-								<QueueStrip queued={queued} onClear={takeBackQueue} />
-								<Composer
-									value={draft}
-									onChange={updateDraft}
-									onSend={send}
-									onStop={() => client.cancel()}
-									activity={activity}
-									model={session.state.model}
-									thinkingLevel={session.state.thinkingLevel}
-									thinkingLevels={session.state.availableThinkingLevels}
-									models={visibleModels}
-									providerAuth={providerAuth}
-									onModelChange={(next) => client.setModel({ provider: next.provider, id: next.id })}
-									onThinkingLevelChange={(level) => client.setThinkingLevel(level)}
-									onSetDefaultModel={(next) =>
-										void client
-											.saveSettings({
-												...settings,
-												defaultModel: { provider: next.provider, id: next.id },
-											})
-											.then(setSettings)
-											.catch(() => undefined)
-									}
-									onSetDefaultThinkingLevel={(level) =>
-										void client
-											.saveSettings({ ...settings, defaultThinkingLevel: level })
-											.then(setSettings)
-											.catch(() => undefined)
-									}
-									shiftEnterToSend={settings.input.sendKey === "shiftEnter"}
-									blockedReason={blockedReason}
-								/>
-
-								{chat && chat.notices.length > 0 ? (
-									<div className="notices">
-										{chat.notices.map((notice) => (
-											<span
-												key={`${notice.level}:${notice.message}`}
-												className={notice.level === "error" ? "chip is-error" : "chip"}
-											>
-												{notice.message}
-											</span>
-										))}
-									</div>
-								) : null}
-							</div>
-						</div>
-					</>
-				)}
-			</main>
-
-			<CreateProjectDialog
-				isOpen={isProjectDialogOpen}
-				onPickFolder={() => window.facet.pickDirectory()}
-				onCreate={createProject}
-				onClose={() => setIsProjectDialogOpen(false)}
-			/>
-
-			{trustPrompt ? (
-				<TrustDialog
-					cwd={trustPrompt.cwd}
-					onDecide={decideTrust}
-					onCancel={() => setTrustPrompt(undefined)}
+				<CreateProjectDialog
+					isOpen={isProjectDialogOpen}
+					onPickFolder={() => window.facet.pickDirectory()}
+					onCreate={createProject}
+					onClose={() => setIsProjectDialogOpen(false)}
 				/>
-			) : null}
-		</div>
+
+				{trustPrompt ? (
+					<TrustDialog
+						cwd={trustPrompt.cwd}
+						onDecide={decideTrust}
+						onCancel={() => setTrustPrompt(undefined)}
+					/>
+				) : null}
+			</div>
+		</CodeThemeProvider>
 	);
 }

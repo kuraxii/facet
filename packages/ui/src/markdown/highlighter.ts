@@ -4,13 +4,18 @@
  * 用一个共享的 shiki 实例,按需加载语言,先把常用语言预热,其余第一次出现时再加载。
  * 流式期间同一块代码会被反复要求分词,结果按「语言 + 主题 + 代码」缓存,避免每帧重算。
  */
-import { createHighlighter, type Highlighter } from "shiki";
+import type { CodeTheme } from "@facet/protocol";
+import { type BundledTheme, createHighlighter, type Highlighter } from "shiki";
+import { codeThemeName } from "../theme.ts";
 
-/** 深色主题名。 */
-export const CODE_DARK_THEME = "vitesse-dark";
+/** shiki 自带主题名的类型，用于把运行时算出的名字交给 loadTheme。 */
+type KnownThemeName = BundledTheme;
 
-/** 浅色主题名。 */
-export const CODE_LIGHT_THEME = "vitesse-light";
+/** 缺省的深色主题名，高亮器初始化时先加载它。 */
+export const CODE_DARK_THEME = codeThemeName("github", true);
+
+/** 缺省的浅色主题名。 */
+export const CODE_LIGHT_THEME = codeThemeName("github", false);
 
 /** 预热语言。表外的语言第一次用到时再加载,加载期间按纯文本显示。 */
 const PRELOAD_LANGS = [
@@ -56,6 +61,21 @@ export function getHighlighter(): Promise<Highlighter> {
 		langs: PRELOAD_LANGS,
 	});
 	return highlighter;
+}
+
+/**
+ * 取指定配色下的高亮器。
+ *
+ * 缺省的两套在初始化时就加载好了,其余配色第一次用到时再加载;加载期间调用方退回纯文本。
+ */
+export async function getHighlighterFor(theme: CodeTheme, isDark: boolean): Promise<Highlighter> {
+	const instance = await getHighlighter();
+	const name = codeThemeName(theme, isDark);
+	if (!instance.getLoadedThemes().includes(name)) {
+		// 主题名是运行时算出来的，打包版的类型只认字面量联合，这里按名传参
+		await instance.loadTheme(name as KnownThemeName);
+	}
+	return instance;
 }
 
 /**

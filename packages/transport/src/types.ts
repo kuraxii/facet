@@ -17,17 +17,17 @@ import type {
 /** 连接状态。ready 表示握手完成,可以发请求与动作。 */
 export type ConnectionState = "connecting" | "ready" | "closed";
 
-/** 握手结果,来自设备发出的 hello 帧。 */
+/** 握手结果,来自主机发出的 hello 帧。 */
 export interface Handshake {
-	/** 设备实现的协议版本 */
+	/** 主机实现的协议版本 */
 	protocolVersion: number;
-	/** 设备标识,同一台设备重启后可能变化 */
+	/** 主机标识,同一台主机重启后可能变化 */
 	hostId: string;
-	/** 设备展示名 */
+	/** 主机展示名 */
 	hostName: string;
 	/** 本次连接分配的端标识,回放动作的来源用它归因 */
 	clientId: string;
-	/** 设备已实现的能力 */
+	/** 主机已实现的能力 */
 	capabilities: readonly Capability[];
 }
 
@@ -46,7 +46,7 @@ export interface SocketLike {
 /** 创建底层 socket。缺省用运行时自带的 WebSocket。 */
 export type SocketFactory = (url: string) => SocketLike;
 
-/** 设备端点的客户端。 */
+/** 主机端点的客户端。 */
 export interface Transport {
 	readonly state: ConnectionState;
 	/** 握手结果,连接就绪前为空 */
@@ -61,7 +61,7 @@ export interface Transport {
 	request<M extends RequestMethod>(method: M, params?: RequestParams[M]): Promise<RequestResults[M]>;
 	/** 派发一条动作。受理即返回,不等待执行结果;返回本次使用的端内序号。 */
 	dispatch(channel: Channel, action: Action): number;
-	/** 订阅设备推送的动作帧。 */
+	/** 订阅主机推送的动作帧。 */
 	onAction(listener: (frame: ActionFrame) => void): () => void;
 	/** 订阅连接状态变化。 */
 	onStateChange(listener: (state: ConnectionState) => void): () => void;
@@ -69,7 +69,7 @@ export interface Transport {
 	close(): void;
 }
 
-/** 传输层错误。code 取自设备的错误分类,本地错误没有 code。 */
+/** 传输层错误。code 取自主机的错误分类,本地错误没有 code。 */
 export class TransportError extends Error {
 	readonly code: string | undefined;
 

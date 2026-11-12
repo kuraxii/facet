@@ -230,7 +230,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 	/**
 	 * 按会话文件取会话,已登记时复用。
 	 *
-	 * 一个会话文件在设备上只能有一份运行态:两份会写同一个文件、各自维护条目树,
+	 * 一个会话文件在主机上只能有一份运行态:两份会写同一个文件、各自维护条目树,
 	 * 而登记表按会话 id 索引,后来者会覆盖先到的订阅者。并发打开同一文件共用一次建立。
 	 */
 	async openSession(file: string, cwd?: string): Promise<SessionSnapshot> {
@@ -311,7 +311,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 	/**
 	 * 分叉点：给出 beforeEntryId 时取它在活动分支上的前一条，缺省留空由工厂取叶子。
 	 *
-	 * beforeEntryId 需要会话已在设备上打开才能定位；没打开或不在分支上时报错。
+	 * beforeEntryId 需要会话已在主机上打开才能定位；没打开或不在分支上时报错。
 	 */
 	private forkPoint(
 		source: SessionState<A> | undefined,
@@ -490,7 +490,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 	/**
 	 * 分页读取历史,从 cursor 指向的条目往更早取。
 	 *
-	 * 点对点返回,不广播,也不改变设备侧保留的状态。读的时候顺带续期:只翻历史不订阅的端
+	 * 点对点返回,不广播,也不改变主机侧保留的状态。读的时候顺带续期:只翻历史不订阅的端
 	 * 不该在翻页途中被回收。
 	 */
 	async entries(

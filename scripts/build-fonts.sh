@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # 从本机的 Maple Mono 生成界面用的 woff2。
 #
-# 代码字体只需要等宽部分与非 CJK 的符号：中文由界面字体兜底，CJK 字形放在代码字体里会让
-# 每个字重多出五兆左右。字体来自 Maple Mono NL NF CN v7.9，OFL-1.1，许可文本随字体一起放在
+# 这里只切 Latin、符号与制表符：汉字与中文标点由 @automann/maple-mono-cn 的 400 分片提供
+# （见 packages/ui/src/styles/fonts.css）。CJK 字形放进每个 woff2 会让一个字重多出五兆左右。
+# 字体来自 Maple Mono NL NF CN v7.9，OFL-1.1，许可文本随字体一起放在
 # packages/ui/src/assets/fonts/LICENSE.txt。
 #
 # 用法：scripts/build-fonts.sh [字体目录]，缺省读 ~/.fonts。

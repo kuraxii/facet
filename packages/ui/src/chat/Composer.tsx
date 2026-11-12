@@ -36,10 +36,6 @@ export interface ComposerProps {
 	onModelChange?: (model: ModelInfo) => void;
 	/** 切换当前会话的思考档位 */
 	onThinkingLevelChange?: (level: ThinkingLevel) => void;
-	/** 把当前模型存为新建会话的默认值 */
-	onSetDefaultModel?: (model: ModelInfo) => void;
-	/** 把当前档位存为新建会话的默认值 */
-	onSetDefaultThinkingLevel?: (level: ThinkingLevel) => void;
 	/** 发送键位：true 表示 Shift+回车发送 */
 	shiftEnterToSend?: boolean;
 	/** 现在不能发送的原因，给出时输入区上方显示说明并禁用发送 */
@@ -100,8 +96,6 @@ export function Composer({
 	providerAuth,
 	onModelChange,
 	onThinkingLevelChange,
-	onSetDefaultModel,
-	onSetDefaultThinkingLevel,
 	shiftEnterToSend = false,
 	blockedReason,
 }: ComposerProps) {
@@ -218,18 +212,6 @@ export function Composer({
 								</div>
 							))}
 							{(models ?? []).length === 0 ? <p className="chip-pop-empty">没有可选的模型</p> : null}
-							{model !== undefined && onSetDefaultModel !== undefined ? (
-								<button
-									type="button"
-									className="chip-pop-action"
-									onClick={() => {
-										onSetDefaultModel(model);
-										setOpenMenu(undefined);
-									}}
-								>
-									设为新建会话的默认模型
-								</button>
-							) : null}
 						</div>
 					) : null}
 				</div>
@@ -262,18 +244,6 @@ export function Composer({
 									<span className="chip-pop-meta mono">{level}</span>
 								</button>
 							))}
-							{thinkingLevel !== undefined && onSetDefaultThinkingLevel !== undefined ? (
-								<button
-									type="button"
-									className="chip-pop-action"
-									onClick={() => {
-										onSetDefaultThinkingLevel(thinkingLevel);
-										setOpenMenu(undefined);
-									}}
-								>
-									设为新建会话的默认档位
-								</button>
-							) : null}
 						</div>
 					) : null}
 				</div>

@@ -6,7 +6,15 @@
  */
 import { readFile, rename } from "node:fs/promises";
 import { writeFileAtomic } from "@facet/agent";
-import { DEFAULT_SETTINGS, type FacetSettings, type SendKey, type ThemeMode } from "@facet/protocol";
+import {
+	CODE_THEMES,
+	type CodeTheme,
+	DEFAULT_SETTINGS,
+	type FacetSettings,
+	type SendKey,
+	type ThemeMode,
+	UI_THEMES,
+} from "@facet/protocol";
 
 /** 文件格式版本，读取时按它判断能否兼容。 */
 const FILE_VERSION = 1;
@@ -55,22 +63,6 @@ function readModelRef(value: unknown): FacetSettings["defaultModel"] {
 	return { provider: value.provider, id: value.id };
 }
 
-/** 读出窗口尺寸，缺省或不合法的字段单独回落到默认。 */
-function readWindow(value: unknown): FacetSettings["window"] {
-	if (!isRecord(value)) {
-		return undefined;
-	}
-	const width = readNumber(value.width, 1100, 640, 8000);
-	const height = readNumber(value.height, 760, 480, 8000);
-	return {
-		width,
-		height,
-		...(typeof value.x === "number" && Number.isFinite(value.x) ? { x: Math.round(value.x) } : {}),
-		...(typeof value.y === "number" && Number.isFinite(value.y) ? { y: Math.round(value.y) } : {}),
-		maximized: typeof value.maximized === "boolean" ? value.maximized : false,
-	};
-}
-
 /** 思考档位。 */
 const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 
@@ -101,8 +93,13 @@ export function parseSettings(value: unknown): FacetSettings {
 		appearance: {
 			theme: readChoice<ThemeMode>(
 				appearance.theme,
-				["dark", "light", "system"],
+				[...UI_THEMES, "system"],
 				DEFAULT_SETTINGS.appearance.theme,
+			),
+			codeTheme: readChoice<CodeTheme>(
+				appearance.codeTheme,
+				CODE_THEMES,
+				DEFAULT_SETTINGS.appearance.codeTheme,
 			),
 			bodyFont: readString(appearance.bodyFont, DEFAULT_SETTINGS.appearance.bodyFont),
 			codeFont: readString(appearance.codeFont, DEFAULT_SETTINGS.appearance.codeFont),
@@ -120,7 +117,6 @@ export function parseSettings(value: unknown): FacetSettings {
 		input: {
 			sendKey: readChoice<SendKey>(input.sendKey, ["enter", "shiftEnter"], DEFAULT_SETTINGS.input.sendKey),
 		},
-		...(readWindow(value.window) === undefined ? {} : { window: readWindow(value.window) }),
 		layout: {
 			sidebarWidth: readNumber(
 				layout.sidebarWidth,

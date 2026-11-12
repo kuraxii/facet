@@ -115,7 +115,7 @@ export interface BranchSummaryMessage {
 	timestamp: number;
 }
 
-/** 扩展或设备侧注入的自定义消息。 */
+/** 扩展或主机侧注入的自定义消息。 */
 export interface CustomMessage {
 	role: "custom";
 	/** 自定义类型标记，由写入方决定 */

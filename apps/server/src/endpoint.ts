@@ -1,9 +1,9 @@
 /**
  * 端点接入。
  *
- * 一条 WebSocket 连接对应一个端。连接建立后设备先发 hello(带本次连接的端标识),
- * 之后端点发请求、设备回响应;状态变更走 action 帧,按通道定序推给订阅者。
- * 断线时该端的订阅全部解除,会话本身继续在设备上运行。
+ * 一条 WebSocket 连接对应一个端。连接建立后主机先发 hello(带本次连接的端标识),
+ * 之后端点发请求、主机回响应;状态变更走 action 帧,按通道定序推给订阅者。
+ * 断线时该端的订阅全部解除,会话本身继续在主机上运行。
  */
 import { randomUUID } from "node:crypto";
 import { realpath, stat } from "node:fs/promises";
@@ -29,6 +29,7 @@ import {
 import { WebSocket, WebSocketServer } from "ws";
 import type { ServerConfig } from "./config.ts";
 import { buildDiagnostics } from "./diagnostics.ts";
+import type { HostSource } from "./host-identity.ts";
 import { ProjectExistsError, ProjectNotFoundError, type ProjectStore } from "./project-store.ts";
 import { RevealFailedError, revealInFileManager } from "./reveal.ts";
 import {
@@ -46,7 +47,7 @@ import type { SettingsStore } from "./settings-store.ts";
 const ENDPOINT_PATH = "/endpoint";
 const MAX_FRAME_BYTES = 32 * 1024 * 1024;
 
-/** 当前设备已实现的能力。未列入的入口由端点隐藏。 */
+/** 当前主机已实现的能力。未列入的入口由端点隐藏。 */
 const CAPABILITIES: Capability[] = ["dispatch", "tools", "compaction", "export"];
 
 /** 请求被拒绝时带出的错误。未捕获的其他错误统一归类为内部错误。 */
@@ -74,6 +75,8 @@ interface EndpointContext {
 	readonly projectStore: ProjectStore;
 	readonly settingsStore: SettingsStore;
 	readonly hostId: string;
+	/** 主机标识的派生来源，诊断里说明这台机器有没有 machine-id */
+	readonly hostSource: HostSource;
 	readonly connections: Set<Connection>;
 }
 
@@ -179,7 +182,7 @@ async function openSession(context: EndpointContext, params: unknown): Promise<S
 	return await context.hub.openSession(requiredString(source, "sessionFile"), optionalString(source, "cwd"));
 }
 
-/** 应用一条端点派发的动作。返回即表示已受理,设备产生的动作随后从通道推出。 */
+/** 应用一条端点派发的动作。返回即表示已受理,主机产生的动作随后从通道推出。 */
 async function applyAction(context: EndpointContext, channel: Channel, action: Action): Promise<void> {
 	const parsed = parseChannel(channel);
 	if (!parsed) {
@@ -231,7 +234,7 @@ async function applyAction(context: EndpointContext, channel: Channel, action: A
 				}
 				return;
 			default:
-				throw new RequestError("unknown_method", `action is produced by the device: ${action.type}`);
+				throw new RequestError("unknown_method", `action is produced by the host: ${action.type}`);
 		}
 	});
 }
@@ -304,6 +307,8 @@ async function handleRequest(
 			const source = asObject(params ?? {});
 			return { models: context.factory.models(optionalString(source, "providerId")) };
 		}
+		case "availableModels":
+			return { models: await context.factory.availableModels() };
 		case "providers":
 			return { providers: context.factory.providers() };
 		case "listProjects":
@@ -345,6 +350,8 @@ async function handleRequest(
 			}
 			return { settings: await context.settingsStore.save(settings as FacetSettings) };
 		}
+		case "busySessions":
+			return { files: context.hub.busyFiles() };
 		case "diagnostics": {
 			const [sessions, settings] = await Promise.all([
 				context.factory.listSessions(),
@@ -354,6 +361,7 @@ async function handleRequest(
 				text: await buildDiagnostics({
 					protocolVersion: PROTOCOL_VERSION,
 					hostId: context.hostId,
+					hostSource: context.hostSource,
 					hostName: context.config.hostName,
 					agentDir: context.factory.agentDir,
 					dataDir: context.config.dataDir,
@@ -564,6 +572,8 @@ export async function startEndpoint(options: {
 	projectStore: ProjectStore;
 	settingsStore: SettingsStore;
 	hostId: string;
+	/** 主机标识的派生来源，缺省当作由 machine-id 派生 */
+	hostSource?: HostSource;
 }): Promise<EndpointHandle> {
 	const context: EndpointContext = {
 		config: options.config,
@@ -572,12 +582,13 @@ export async function startEndpoint(options: {
 		projectStore: options.projectStore,
 		settingsStore: options.settingsStore,
 		hostId: options.hostId,
+		hostSource: options.hostSource ?? "machine-id",
 		connections: new Set(),
 	};
 
 	const httpServer = createServer((_request, response) => {
 		response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
-		response.end(`facet device endpoint, use websocket at ${ENDPOINT_PATH}\n`);
+		response.end(`facet host endpoint, use websocket at ${ENDPOINT_PATH}\n`);
 	});
 
 	const wss = new WebSocketServer({ server: httpServer, path: ENDPOINT_PATH, maxPayload: MAX_FRAME_BYTES });
@@ -622,7 +633,7 @@ export async function startEndpoint(options: {
 		host: options.config.host,
 		close: async () => {
 			for (const connection of context.connections) {
-				connection.ws.close(1001, "device shutting down");
+				connection.ws.close(1001, "host shutting down");
 			}
 			context.connections.clear();
 			await new Promise<void>((resolve) => {

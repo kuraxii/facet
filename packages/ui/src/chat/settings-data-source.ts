@@ -1,7 +1,7 @@
 /**
  * 设置页的数据来源。
  *
- * 由宿主接到设备上；界面不关心这些调用背后是本地还是远端。
+ * 由宿主接到主机上；界面不关心这些调用背后是本地还是远端。
  */
 import type { CustomProviderInfo, FacetSettings, ModelInfo, ModelRef, ProviderInfo } from "@facet/protocol";
 

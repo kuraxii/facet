@@ -1,14 +1,39 @@
 /**
  * 界面与新建会话的偏好设置。
  *
- * 这些设置存在设备的应用数据目录里，与 pi 的模型配置、凭证分开：pi 管的是运行时怎么调模型，
+ * 这些设置存在主机的应用数据目录里，与 pi 的模型配置、凭证分开：pi 管的是运行时怎么调模型，
  * 这里管的是界面怎么显示、新建会话用哪个模型。整份设置作为一个对象读写，避免逐字段合并
  * 带来的半新半旧。
  */
 import type { ModelRef, ThinkingLevel } from "./model.ts";
 
-/** 主题。system 表示跟随系统深浅色。 */
-export type ThemeMode = "dark" | "light" | "system";
+/**
+ * 具体的界面配色方案。
+ *
+ * light 为唯一浅色，zinc 为缺省的深色，其余是同一套语义色板的深色变体。
+ */
+export const UI_THEMES = ["light", "zinc", "midnight", "claude", "ghostty", "pureBlack"] as const;
+
+/** 一个配色方案。 */
+export type UiTheme = (typeof UI_THEMES)[number];
+
+/** 主题。system 表示跟随系统深浅色，深色一侧用缺省的 zinc。 */
+export type ThemeMode = UiTheme | "system";
+
+/** 代码高亮配色，浅深两版跟随界面主题的深浅。 */
+export const CODE_THEMES = [
+	"github",
+	"catppuccin",
+	"dracula",
+	"tokyo-night",
+	"one",
+	"nord",
+	"gruvbox",
+	"solarized",
+] as const;
+
+/** 一套代码高亮配色。 */
+export type CodeTheme = (typeof CODE_THEMES)[number];
 
 /** 发送键位。enter 为回车发送，shiftEnter 为回车换行、⌘/Ctrl+回车发送。 */
 export type SendKey = "enter" | "shiftEnter";
@@ -17,6 +42,8 @@ export type SendKey = "enter" | "shiftEnter";
 export interface AppearanceSettings {
 	/** 主题 */
 	theme: ThemeMode;
+	/** 代码块与差异视图的高亮配色 */
+	codeTheme: CodeTheme;
 	/** 正文字体，空串表示用界面默认字体 */
 	bodyFont: string;
 	/** 代码字体，空串表示用界面默认等宽字体 */
@@ -39,20 +66,6 @@ export interface LayoutSettings {
 	sidebarWidth: number;
 }
 
-/** 窗口位置与尺寸。x、y 缺省时由系统决定位置。 */
-export interface WindowBounds {
-	/** 宽度，单位 px */
-	width: number;
-	/** 高度，单位 px */
-	height: number;
-	/** 距屏幕左边距 */
-	x?: number;
-	/** 距屏幕上边距 */
-	y?: number;
-	/** 是否最大化 */
-	maximized: boolean;
-}
-
 /** 一整份设置。 */
 export interface FacetSettings {
 	/** 文件格式版本 */
@@ -69,8 +82,6 @@ export interface FacetSettings {
 	input: InputSettings;
 	/** 界面布局 */
 	layout: LayoutSettings;
-	/** 上次退出时的窗口位置与尺寸，缺省时用应用默认值 */
-	window?: WindowBounds;
 }
 
 /** 缺省设置。 */
@@ -78,7 +89,8 @@ export const DEFAULT_SETTINGS: FacetSettings = {
 	version: 1,
 	hiddenModels: [],
 	appearance: {
-		theme: "dark",
+		theme: "zinc",
+		codeTheme: "github",
 		bodyFont: "",
 		codeFont: "",
 		fontSize: 13,

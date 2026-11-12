@@ -315,8 +315,21 @@ function bodyOf(row: DisplayRow): ReactNode[] {
 }
 
 /** 一行外壳。 */
-function Shell({ className, children }: { className: string; children: ReactNode }) {
-	return <div className={`row ${className}`}>{children}</div>;
+function Shell({
+	className,
+	children,
+	outlineKey,
+}: {
+	className: string;
+	children: ReactNode;
+	/** 对话导航的定位键，只在用户消息行上给 */
+	outlineKey?: string;
+}) {
+	return (
+		<div className={`row ${className}`} data-outline-key={outlineKey}>
+			{children}
+		</div>
+	);
 }
 
 /**
@@ -484,7 +497,7 @@ export function ChatTranscript({
 					// 回退要有落地过的条目:实时消息在提升之前没有条目 id
 					const entryId = row.items[0]?.entryId;
 					return (
-						<Shell key={row.id} className="is-user">
+						<Shell key={row.id} className="is-user" outlineKey={entryId ?? row.id}>
 							<div className="user-line">
 								<div className="bub">{text}</div>
 							</div>

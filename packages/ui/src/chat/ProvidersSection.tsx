@@ -165,7 +165,7 @@ export function ProvidersSection({ providers, error, onReload, data }: Providers
 		<section className="set-section">
 			<h2 className="set-section-title">提供方</h2>
 			<p className="set-hint">
-				凭证保存在设备上，界面不回显密钥内容，也不进入日志。带「自定义」标记的提供方来自模型配置，
+				凭证保存在主机上，界面不回显密钥内容，也不进入日志。带「自定义」标记的提供方来自模型配置，
 				可以编辑地址、协议与模型清单。
 			</p>
 

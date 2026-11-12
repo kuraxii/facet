@@ -5,7 +5,8 @@
  * 保存失败时保留用户正在编辑的输入，可以直接重试。
  */
 import type { FacetSettings, ModelInfo, ModelRef, ProviderInfo } from "@facet/protocol";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { CODE_THEME_OPTIONS, UI_THEME_OPTIONS } from "../theme.ts";
 import { CloseIcon } from "../transcript/icons.tsx";
 import { ProvidersSection } from "./ProvidersSection.tsx";
 import type { SettingsDataSource } from "./settings-data-source.ts";
@@ -22,7 +23,7 @@ const SECTIONS: ReadonlyArray<{ key: SettingsSection; label: string }> = [
 	{ key: "about", label: "关于" },
 ];
 
-/** 设置的读取与保存入口，由宿主接到设备上。 */
+/** 设置的读取与保存入口，由宿主接到主机上。 */
 export type { SettingsDataSource } from "./settings-data-source.ts";
 
 /** 设置页参数。 */
@@ -35,8 +36,10 @@ export interface SettingsPageProps {
 	onClose: () => void;
 	/** 数据来源 */
 	data: SettingsDataSource;
-	/** 设置变化后通知宿主应用，例如外观立刻生效 */
+	/** 设置保存成功后通知宿主应用 */
 	onSettingsApplied?: (settings: FacetSettings) => void;
+	/** 外观改动时先带给宿主预览，保存之前不落盘 */
+	onAppearancePreview?: (appearance: FacetSettings["appearance"]) => void;
 	/** 应用版本等只读信息 */
 	about: { appVersion: string; runtime: string; endpoint: string };
 }
@@ -67,6 +70,7 @@ export function SettingsPage({
 	onClose,
 	data,
 	onSettingsApplied,
+	onAppearancePreview,
 	about,
 }: SettingsPageProps) {
 	/** 已加载的设置；为空表示还没读到 */
@@ -79,6 +83,41 @@ export function SettingsPage({
 	const [saveError, setSaveError] = useState<string | undefined>(undefined);
 	const [providers, setProviders] = useState<readonly ProviderInfo[] | undefined>(undefined);
 	const [providersError, setProvidersError] = useState<string | undefined>(undefined);
+
+	/** 关闭回调每次渲染都是新的，事件监听只挂一次，用 ref 转一手 */
+	const onCloseRef = useRef(onClose);
+	onCloseRef.current = onClose;
+
+	/** 设置窗口本身，打开时把焦点交给它 */
+	const windowRef = useRef<HTMLDivElement>(null);
+
+	useEffect(() => {
+		const previous = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
+		windowRef.current?.focus();
+		const onKeyDown = (event: KeyboardEvent): void => {
+			if (event.key === "Escape") {
+				onCloseRef.current();
+			}
+		};
+		document.addEventListener("keydown", onKeyDown);
+		return () => {
+			document.removeEventListener("keydown", onKeyDown);
+			// 关闭后焦点回到打开设置的那个按钮。放到下一轮事件循环里给：这一轮里窗口还在
+			// 移除中，而且点遮罩的 click 随后还会把焦点带回 body
+			if (previous !== undefined) {
+				setTimeout(() => previous.focus(), 0);
+			}
+		};
+	}, []);
+
+	/** 点窗口外面关闭。 */
+	const handleBackdropPointerDown = (event: React.PointerEvent<HTMLDivElement>): void => {
+		const window = windowRef.current;
+		if (window !== null && event.target instanceof Node && window.contains(event.target)) {
+			return;
+		}
+		onClose();
+	};
 
 	const loadSettings = useCallback(async () => {
 		setIsLoading(true);
@@ -146,78 +185,89 @@ export function SettingsPage({
 		settings !== undefined && draft !== undefined && JSON.stringify(settings) !== JSON.stringify(draft);
 
 	return (
-		<div className="set-page">
-			<header className="set-head">
-				<h1 className="set-title">设置</h1>
-				<button type="button" className="set-close" aria-label="关闭设置" onClick={onClose}>
-					<CloseIcon size={16} />
-				</button>
-			</header>
+		<div className="dialog-backdrop" role="presentation" onPointerDown={handleBackdropPointerDown}>
+			<div
+				ref={windowRef}
+				className="set-page"
+				role="dialog"
+				aria-modal="true"
+				aria-label="设置"
+				tabIndex={-1}
+			>
+				<header className="set-head">
+					<h1 className="set-title">设置</h1>
+					<button type="button" className="set-close" aria-label="关闭设置" onClick={onClose}>
+						<CloseIcon size={16} />
+					</button>
+				</header>
 
-			<div className="set-body">
-				<nav className="set-nav" aria-label="设置分类">
-					{SECTIONS.map((item) => (
-						<button
-							type="button"
-							key={item.key}
-							className={item.key === section ? "set-nav-item is-on" : "set-nav-item"}
-							aria-current={item.key === section}
-							onClick={() => onSectionChange(item.key)}
-						>
-							{item.label}
-						</button>
-					))}
-				</nav>
+				<div className="set-body">
+					<nav className="set-nav" aria-label="设置分类">
+						{SECTIONS.map((item) => (
+							<button
+								type="button"
+								key={item.key}
+								className={item.key === section ? "set-nav-item is-on" : "set-nav-item"}
+								aria-current={item.key === section}
+								onClick={() => onSectionChange(item.key)}
+							>
+								{item.label}
+							</button>
+						))}
+					</nav>
 
-				<div className="set-content">
-					{section === "providers" ? (
-						<ProvidersSection
-							providers={providers}
-							error={providersError}
-							onReload={() => void loadProviders()}
-							data={data}
-						/>
-					) : null}
+					<div className="set-content">
+						{section === "providers" ? (
+							<ProvidersSection
+								providers={providers}
+								error={providersError}
+								onReload={() => void loadProviders()}
+								data={data}
+							/>
+						) : null}
 
-					{section === "about" ? <AboutSection about={about} data={data} /> : null}
+						{section === "about" ? <AboutSection about={about} data={data} /> : null}
 
-					{section === "models" || section === "appearance" || section === "input" ? (
-						<section className="set-section">
-							{loadError === undefined ? null : (
-								<StatusNote message={`读取设置失败:${loadError}`} onRetry={loadSettings} tone="error" />
-							)}
-							{isLoading ? <p className="set-hint">正在读取设置…</p> : null}
-							{draft === undefined ? null : (
-								<>
-									{section === "models" ? <ModelsSection draft={draft} patch={patch} data={data} /> : null}
-									{section === "appearance" ? <AppearanceSection draft={draft} patch={patch} /> : null}
-									{section === "input" ? <InputSection draft={draft} patch={patch} /> : null}
-									{saveError === undefined ? null : (
-										<StatusNote
-											message={`保存失败:${saveError}`}
-											onRetry={() => void save(draft)}
-											tone="error"
-										/>
-									)}
-									<div className="set-actions">
-										<button
-											type="button"
-											className="set-save"
-											disabled={!isDirty || isSaving}
-											onClick={() => void save(draft)}
-										>
-											{isSaving ? "保存中…" : "保存"}
-										</button>
-										{isDirty ? (
-											<button type="button" className="set-reset" onClick={() => setDraft(settings)}>
-												放弃改动
-											</button>
+						{section === "models" || section === "appearance" || section === "input" ? (
+							<section className="set-section">
+								{loadError === undefined ? null : (
+									<StatusNote message={`读取设置失败:${loadError}`} onRetry={loadSettings} tone="error" />
+								)}
+								{isLoading ? <p className="set-hint">正在读取设置…</p> : null}
+								{draft === undefined ? null : (
+									<>
+										{section === "models" ? <ModelsSection draft={draft} patch={patch} data={data} /> : null}
+										{section === "appearance" ? (
+											<AppearanceSection draft={draft} patch={patch} onPreview={onAppearancePreview} />
 										) : null}
-									</div>
-								</>
-							)}
-						</section>
-					) : null}
+										{section === "input" ? <InputSection draft={draft} patch={patch} /> : null}
+										{saveError === undefined ? null : (
+											<StatusNote
+												message={`保存失败:${saveError}`}
+												onRetry={() => void save(draft)}
+												tone="error"
+											/>
+										)}
+										<div className="set-actions">
+											<button
+												type="button"
+												className="set-save"
+												disabled={!isDirty || isSaving}
+												onClick={() => void save(draft)}
+											>
+												{isSaving ? "保存中…" : "保存"}
+											</button>
+											{isDirty ? (
+												<button type="button" className="set-reset" onClick={() => setDraft(settings)}>
+													放弃改动
+												</button>
+											) : null}
+										</div>
+									</>
+								)}
+							</section>
+						) : null}
+					</div>
 				</div>
 			</div>
 		</div>
@@ -333,7 +383,7 @@ function ModelsSection({
 					}}
 					aria-label="默认模型"
 				>
-					<option value="">由设备决定</option>
+					<option value="">由主机决定</option>
 					{models.map((model) => (
 						<option key={modelKey(model)} value={modelKey(model)}>
 							{model.provider} / {model.name}
@@ -429,33 +479,69 @@ type ThinkingLevelValue = (typeof THINKING_LEVEL_OPTIONS)[number];
 function AppearanceSection({
 	draft,
 	patch,
+	onPreview,
 }: {
 	draft: FacetSettings;
 	patch: (change: (current: FacetSettings) => FacetSettings) => void;
+	onPreview: ((appearance: FacetSettings["appearance"]) => void) | undefined;
 }) {
 	const appearance = draft.appearance;
+	// 外观改动立刻作用到界面上，关掉设置页而不保存时由宿主恢复
+	const patchAppearance = (next: FacetSettings["appearance"]): void => {
+		patch((current) => ({ ...current, appearance: next }));
+		onPreview?.(next);
+	};
 	return (
 		<>
 			<h2 className="set-section-title">外观</h2>
+			<fieldset className="set-field">
+				<legend className="set-label">主题</legend>
+				<div className="set-swatches">
+					{UI_THEME_OPTIONS.map((option) => (
+						<button
+							key={option.id}
+							type="button"
+							className={appearance.theme === option.id ? "set-swatch is-active" : "set-swatch"}
+							title={option.label}
+							aria-label={option.label}
+							aria-pressed={appearance.theme === option.id}
+							onClick={() => patchAppearance({ ...appearance, theme: option.id })}
+						>
+							<i className="set-swatch-chip" style={{ background: option.swatch }} />
+							<span className="set-swatch-name">{option.label}</span>
+						</button>
+					))}
+					<button
+						type="button"
+						className={appearance.theme === "system" ? "set-swatch is-active" : "set-swatch"}
+						title="跟随系统"
+						aria-label="跟随系统"
+						aria-pressed={appearance.theme === "system"}
+						onClick={() => patchAppearance({ ...appearance, theme: "system" })}
+					>
+						<i className="set-swatch-chip is-system" />
+						<span className="set-swatch-name">跟随系统</span>
+					</button>
+				</div>
+			</fieldset>
 			<label className="set-field">
-				<span className="set-label">主题</span>
+				<span className="set-label">代码配色</span>
 				<select
 					className="set-input"
-					value={appearance.theme}
+					value={appearance.codeTheme}
 					onChange={(event) =>
-						patch((current) => ({
-							...current,
-							appearance: {
-								...current.appearance,
-								theme: event.target.value as FacetSettings["appearance"]["theme"],
-							},
-						}))
+						patchAppearance({
+							...appearance,
+							codeTheme: event.target.value as FacetSettings["appearance"]["codeTheme"],
+						})
 					}
-					aria-label="主题"
+					aria-label="代码配色"
 				>
-					<option value="dark">深色</option>
-					<option value="light">浅色</option>
-					<option value="system">跟随系统</option>
+					{CODE_THEME_OPTIONS.map((option) => (
+						<option key={option.id} value={option.id}>
+							{option.label}
+						</option>
+					))}
 				</select>
 			</label>
 			<label className="set-field">
@@ -463,12 +549,7 @@ function AppearanceSection({
 				<input
 					className="set-input"
 					value={appearance.bodyFont}
-					onChange={(event) =>
-						patch((current) => ({
-							...current,
-							appearance: { ...current.appearance, bodyFont: event.target.value },
-						}))
-					}
+					onChange={(event) => patchAppearance({ ...appearance, bodyFont: event.target.value })}
 					placeholder="留空使用 Inter"
 					aria-label="正文字体"
 				/>
@@ -478,12 +559,7 @@ function AppearanceSection({
 				<input
 					className="set-input"
 					value={appearance.codeFont}
-					onChange={(event) =>
-						patch((current) => ({
-							...current,
-							appearance: { ...current.appearance, codeFont: event.target.value },
-						}))
-					}
+					onChange={(event) => patchAppearance({ ...appearance, codeFont: event.target.value })}
 					placeholder="留空使用 Maple Mono"
 					aria-label="代码字体"
 				/>
@@ -498,13 +574,10 @@ function AppearanceSection({
 					value={appearance.fontSize}
 					onChange={(event) => {
 						const value = Number(event.target.value);
-						patch((current) => ({
-							...current,
-							appearance: {
-								...current.appearance,
-								fontSize: Number.isFinite(value) ? value : current.appearance.fontSize,
-							},
-						}));
+						patchAppearance({
+							...appearance,
+							fontSize: Number.isFinite(value) ? value : appearance.fontSize,
+						});
 					}}
 					aria-label="正文字号"
 				/>
@@ -513,12 +586,7 @@ function AppearanceSection({
 				<input
 					type="checkbox"
 					checked={appearance.reducedMotion}
-					onChange={(event) =>
-						patch((current) => ({
-							...current,
-							appearance: { ...current.appearance, reducedMotion: event.target.checked },
-						}))
-					}
+					onChange={(event) => patchAppearance({ ...appearance, reducedMotion: event.target.checked })}
 				/>
 				<span>减少动效</span>
 			</label>
@@ -584,7 +652,7 @@ const SHORTCUTS: ReadonlyArray<{ keys: string; action: string }> = [
 /**
  * 关于与诊断。
  *
- * 诊断文本由设备生成，凭证与令牌不在其中；导出走宿主的保存对话框，用户自己挑位置。
+ * 诊断文本由主机生成，凭证与令牌不在其中；导出走宿主的保存对话框，用户自己挑位置。
  */
 function AboutSection({ about, data }: { about: SettingsPageProps["about"]; data: SettingsDataSource }) {
 	const [isExporting, setIsExporting] = useState(false);
@@ -620,7 +688,7 @@ function AboutSection({ about, data }: { about: SettingsPageProps["about"]; data
 					<span className="set-row-meta mono">{about.runtime}</span>
 				</li>
 				<li className="set-row">
-					<span className="set-row-name">设备端点</span>
+					<span className="set-row-name">主机端点</span>
 					<span className="set-row-meta mono">{about.endpoint}</span>
 				</li>
 			</ul>

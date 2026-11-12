@@ -66,6 +66,25 @@ describe("设置读取", () => {
 		expect(settings.appearance.reducedMotion).toBe(true);
 		expect(settings.input.sendKey).toBe(DEFAULT_SETTINGS.input.sendKey);
 		expect(settings.layout.sidebarWidth).toBe(200);
+		expect(settings.appearance.codeTheme).toBe(DEFAULT_SETTINGS.appearance.codeTheme);
+	});
+
+	it("清单外的主题取值回落到缺省配色", async () => {
+		await writeFile(file, JSON.stringify({ version: 1, appearance: { theme: "dark" } }), "utf8");
+		expect((await SettingsStore.open({ file })).get().appearance.theme).toBe(
+			DEFAULT_SETTINGS.appearance.theme,
+		);
+	});
+
+	it("主题与代码配色都只接受清单里的取值", async () => {
+		await writeFile(
+			file,
+			JSON.stringify({ version: 1, appearance: { theme: "midnight", codeTheme: "nord" } }),
+			"utf8",
+		);
+		const settings = (await SettingsStore.open({ file })).get();
+		expect(settings.appearance.theme).toBe("midnight");
+		expect(settings.appearance.codeTheme).toBe("nord");
 	});
 
 	it("版本不认识时回到缺省值", () => {
@@ -99,34 +118,5 @@ describe("设置读取", () => {
 		};
 		expect(written.version).toBe(1);
 		expect(written.hiddenModels).toEqual(["a/b"]);
-	});
-});
-
-describe("窗口尺寸", () => {
-	it("保存后重新打开读得到,越界的尺寸收回范围", async () => {
-		const store = await SettingsStore.open({ file });
-		await store.save({
-			...store.get(),
-			window: { width: 1300, height: 900, x: 40, y: 20, maximized: true },
-		});
-		const reopened = await SettingsStore.open({ file });
-		expect(reopened.get().window).toEqual({ width: 1300, height: 900, x: 40, y: 20, maximized: true });
-
-		await writeFile(
-			file,
-			JSON.stringify({ version: 1, window: { width: 100, height: 9000, maximized: "yes" } }),
-			"utf8",
-		);
-		expect((await SettingsStore.open({ file })).get().window).toEqual({
-			width: 640,
-			height: 8000,
-			maximized: false,
-		});
-	});
-
-	it("没有窗口记录时该字段为空", async () => {
-		const store = await SettingsStore.open({ file });
-		await store.save({ ...store.get(), hiddenModels: [] });
-		expect((await SettingsStore.open({ file })).get().window).toBeUndefined();
 	});
 });

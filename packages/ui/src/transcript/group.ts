@@ -377,7 +377,7 @@ export function groupRows(items: readonly TranscriptItem[]): DisplayRow[] {
  * 过程行的摘要。
  *
  * 只说这一轮工作了多久,不再列思考段数与工具次数——那些细节展开就能看到。
- * 回合结束后用设备记录的起止时间;还在跑的时候由界面自己计时,调用方每秒传一次当前时间。
+ * 回合结束后用主机记录的起止时间;还在跑的时候由界面自己计时,调用方每秒传一次当前时间。
  */
 export function metaSummary(row: DisplayRow, now?: number): string {
 	if (row.isStreaming && row.startedAt !== undefined) {

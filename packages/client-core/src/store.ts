@@ -2,7 +2,7 @@
  * 通道状态的持有者。
  *
  * 只做三件事:按通道保存视图、按序号去重与察觉缺口、在视图变化后通知订阅者。
- * 序号缺口意味着设备侧的缓冲已经丢掉更早的动作,调用方需要重新拉取快照与历史。
+ * 序号缺口意味着主机侧的缓冲已经丢掉更早的动作,调用方需要重新拉取快照与历史。
  */
 import type { ActionFrame, Channel, Entry, Message, SessionSnapshot } from "@facet/protocol";
 import { makeChannel, parseChannel } from "@facet/protocol";
@@ -149,7 +149,7 @@ export class SessionStore {
 	 * 用历史条目替换对话内容。
 	 *
 	 * 条目按时间升序传入，全部类型都进视图；目前只有带 message 的条目参与渲染，其余留给
-	 * 以后的事件展示。历史条目的标识用条目 id 加前缀，与设备实时分配的标识不相撞。
+	 * 以后的事件展示。历史条目的标识用条目 id 加前缀，与主机实时分配的标识不相撞。
 	 */
 	replaceChat(channel: Channel, entries: readonly Entry[]): ChatView {
 		const slot = this.chats.get(channel) ?? this.createChatSlot(channel);
@@ -162,7 +162,7 @@ export class SessionStore {
 	/**
 	 * 往对话视图追加一条提示。
 	 *
-	 * 设备拒绝一条动作时回的是带原因的动作帧,它不占通道序号,不能进归约,由调用方转成提示。
+	 * 主机拒绝一条动作时回的是带原因的动作帧,它不占通道序号,不能进归约,由调用方转成提示。
 	 */
 	addNotice(channel: Channel, notice: NoticeView): void {
 		const slot = this.chats.get(channel);
@@ -196,7 +196,7 @@ export class SessionStore {
 	/**
 	 * 把实时消息提升为历史消息。
 	 *
-	 * entries 是设备返回的、本轮新写入的条目，按从早到晚排列。实时消息都是带 message 的
+	 * entries 是主机返回的、本轮新写入的条目，按从早到晚排列。实时消息都是带 message 的
 	 * 条目，与其中的消息条目一一对应、顺序相同，因此按位置配对；非消息条目没有实时对应物，
 	 * 只留在视图里供以后扩展展示。整段实时视图换成这一段条目，消息内容用写盘后的版本。
 	 * 消息条目数与实时消息数对不上说明漏了事件，返回 false，调用方重新装载历史。

@@ -1,5 +1,5 @@
 /**
- * 端点发往设备的请求负载。
+ * 端点发往主机的请求负载。
  *
  * 这里只定义负载本身，封装与传输由端点层决定。
  */
@@ -16,7 +16,7 @@ export interface PromptRequest {
 	text: string;
 	/** 随消息发送的图片附件 */
 	images?: ImageBlock[];
-	/** 会话正在运行时必须指定投递方式，缺省时设备侧拒绝 */
+	/** 会话正在运行时必须指定投递方式，缺省时主机侧拒绝 */
 	streamingBehavior?: StreamingBehavior;
 }
 
@@ -28,7 +28,7 @@ export interface QueuePromptRequest {
 
 /** 变更模型或思考档位。 */
 export interface ModelMutationRequest {
-	/** 是否同时写入设备的全局默认值，缺省只影响当前会话 */
+	/** 是否同时写入主机的全局默认值，缺省只影响当前会话 */
 	persist?: boolean;
 }
 

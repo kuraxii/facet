@@ -1,5 +1,5 @@
 /**
- * 设备侧配置。
+ * 主机侧配置。
  *
  * 全部来自环境变量，缺省值面向本机嵌入运行：只监听回环地址，端口由系统分配，
  * 数据写在 facet 自己的目录，与命令行工具的数据目录分开。
@@ -8,7 +8,7 @@ import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { DEFAULT_AGENT_DIR } from "@facet/agent";
 
-/** 设备的运行配置。 */
+/** 主机的运行配置。 */
 export interface ServerConfig {
 	/** 监听地址，缺省 127.0.0.1；远程接入需要显式改动并配合 SSH 通道 */
 	host: string;
@@ -24,7 +24,7 @@ export interface ServerConfig {
 	replayLimit: number;
 	/** 没人订阅且不在运行后，等多久回收会话，毫秒 */
 	sessionIdleMs: number;
-	/** 设备展示名 */
+	/** 主机展示名 */
 	hostName: string;
 	/** 是否输出开发期日志，由嵌入方在开发启动时打开 */
 	debug: boolean;

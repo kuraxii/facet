@@ -5,22 +5,17 @@
  * 表格、链接在流式期间不会闪成空白。代码块走本项目的悬浮卡,公式与流程图是可选的。
  */
 import MarkdownRender, { type SmoothMarkdownStreamOptions } from "markstream-react";
-import { useRef } from "react";
+import { useMemo, useRef } from "react";
 import "markstream-react/index.css";
 import "katex/dist/katex.min.css";
+import { codeThemeName } from "../theme.ts";
+import { useCodeTheme } from "./code-theme.tsx";
 import { MARKDOWN_SCOPE } from "./registry.ts";
 
 /** 平滑输出的基速,其余节奏用库默认值。 */
 const SMOOTH_OPTIONS: SmoothMarkdownStreamOptions = {
 	minCharsPerSecond: 80,
 };
-
-/** 代码块主题。顺序是深色在前,这个是库的类型约定。 */
-const CODE_DARK_THEME = "vitesse-dark";
-const CODE_LIGHT_THEME = "vitesse-light";
-
-/** 主题列表在模块级固定引用:库按身份比较,每次新建数组会让整棵子树重渲。 */
-const CODE_BLOCK_THEMES: readonly [string, string] = [CODE_DARK_THEME, CODE_LIGHT_THEME];
 
 /** 只留标题栏与复制按钮,其余按钮全部关掉。布尔项必须给显式值,传 undefined 会覆盖库的默认 true。 */
 const CODE_BLOCK_PROPS = {
@@ -60,13 +55,18 @@ export interface MarkdownProps {
 	isStreaming: boolean;
 	/** 一段正文在列表里的序号,用于让代码块的 DOM id 保持唯一 */
 	indexKey?: number | string;
-	/** 是否深色,缺省为深色 */
-	isDark?: boolean;
 }
 
-export function Markdown({ text, isStreaming, indexKey, isDark = true }: MarkdownProps) {
+export function Markdown({ text, isStreaming, indexKey }: MarkdownProps) {
 	// 平滑只看挂载时的状态:历史消息挂载时不是流式,就不该重播一遍打字机
 	const smoothRef = useRef(isStreaming && !prefersReducedMotion());
+	const codeTheme = useCodeTheme();
+	const isDark = codeTheme.isDark;
+	// 主题名变化时才换数组引用:库按身份比较,每次渲染新建数组会让整棵子树重渲
+	const blockThemes = useMemo<readonly [string, string]>(
+		() => [codeThemeName(codeTheme.theme, true), codeThemeName(codeTheme.theme, false)],
+		[codeTheme.theme],
+	);
 
 	return (
 		<div className="md">
@@ -78,9 +78,9 @@ export function Markdown({ text, isStreaming, indexKey, isDark = true }: Markdow
 				smoothStreaming={smoothRef.current}
 				smoothStreamingOptions={SMOOTH_OPTIONS}
 				isDark={isDark}
-				codeBlockDarkTheme={CODE_DARK_THEME}
-				codeBlockLightTheme={CODE_LIGHT_THEME}
-				themes={CODE_BLOCK_THEMES}
+				codeBlockDarkTheme={blockThemes[0]}
+				codeBlockLightTheme={blockThemes[1]}
+				themes={blockThemes}
 				codeBlockProps={CODE_BLOCK_PROPS}
 				codeBlockOptions={CODE_BLOCK_OPTIONS}
 				showTooltips={false}

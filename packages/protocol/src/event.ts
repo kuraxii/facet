@@ -1,7 +1,7 @@
 /**
  * 会话事件流。
  *
- * 事件都是可序列化的纯数据，设备侧产生、端点原样转发、界面按 type 分派。
+ * 事件都是可序列化的纯数据，主机侧产生、端点原样转发、界面按 type 分派。
  * run_end 之后仍可能有重试与排队工作，需要等待 settled 才能判定会话不再自动继续。
  */
 import type { ToolOutput } from "./content.ts";
@@ -9,7 +9,7 @@ import type { Message } from "./message.ts";
 import type { ModelInfo, ThinkingLevel } from "./model.ts";
 import type { EntryKind, Maintenance, TurnPhase } from "./session.ts";
 
-/** 提示级别，用于扩展或设备侧发出的通知。 */
+/** 提示级别，用于扩展或主机侧发出的通知。 */
 export type NoticeLevel = "info" | "warning" | "error";
 
 /** 流式增量的种类，与消息内容块一一对应。 */
@@ -62,7 +62,7 @@ export type SessionEvent =
 	| { type: "thinking_level"; level: ThinkingLevel }
 	/** 直接执行的命令的流式输出 */
 	| { type: "bash_output"; id: string | undefined; delta: string }
-	/** 扩展或设备侧发出的通知 */
+	/** 扩展或主机侧发出的通知 */
 	| { type: "notice"; level: NoticeLevel; message: string };
 
 /** 事件监听器。抛出的错误由分发方隔离，不影响其他监听器。 */

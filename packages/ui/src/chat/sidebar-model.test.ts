@@ -177,7 +177,7 @@ describe("组装侧栏", () => {
 		expect(data.groups.flatMap((group) => group.sessions).map((item) => item.path)).toEqual(["/s/b.jsonl"]);
 	});
 
-	it("设备条按全部会话统计，未知数量留空", () => {
+	it("主机条按全部会话统计，未知数量留空", () => {
 		const data = buildSidebar({
 			...base,
 			hosts: [
@@ -190,12 +190,12 @@ describe("组装侧栏", () => {
 				host({ id: "staging", name: "staging", state: "connecting" }),
 			],
 		});
-		expect(data.devices.map((device) => [device.id, device.sessionCount])).toEqual([
+		expect(data.hosts.map((host) => [host.id, host.sessionCount])).toEqual([
 			["local", 4],
 			["dev-box", 3],
 			["staging", undefined],
 		]);
-		expect(data.devices[0]?.isLocal).toBe(true);
+		expect(data.hosts[0]?.isLocal).toBe(true);
 	});
 });
 

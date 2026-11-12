@@ -55,9 +55,9 @@ export interface StreamedPart {
  * 供以后扩展事件展示。实时消息在提升为历史消息之前没有 entry，只有 message。
  */
 export interface EntryView {
-	/** 视图标识;历史与提升后的消息用条目 id 加前缀,实时消息用设备分配的标识 */
+	/** 视图标识;历史与提升后的消息用条目 id 加前缀,实时消息用主机分配的标识 */
 	id: string;
-	/** 会话条目;实时消息在本轮 settled 之后由设备补上 */
+	/** 会话条目;实时消息在本轮 settled 之后由主机补上 */
 	entry: Entry | undefined;
 	/** 消息内容;usage、session_info 这类条目没有 */
 	message: Message | undefined;
@@ -76,7 +76,7 @@ export interface NoticeView {
 /**
  * 会话状态。
  *
- * 订阅时由设备快照建立,之后由会话通道的动作就地更新;同一个字段只有这一个来源。
+ * 订阅时由主机快照建立,之后由会话通道的动作就地更新;同一个字段只有这一个来源。
  */
 export interface SessionState {
 	/** 会话文件路径,内存会话为空 */

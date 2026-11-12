@@ -21,20 +21,22 @@ npm install
 
 ## 运行
 
+开发时主机固定跑在 `ws://127.0.0.1:4319/endpoint`，桌面缺省连这个地址：
+
 ```bash
-npm run dev            # 桌面应用，主机作为子进程一起起来
-npm run dev:split      # 主机与桌面分开跑，各自热重启
-npm run dev:host       # 只起主机，固定 4319 端口
-npm run dev:client     # 只起桌面，连 FACET_ENDPOINT 指定的主机
+npm run dev:host       # 只起主机，固定 4319 端口（FACET_PORT 可换）
+npm run dev            # 只起桌面，连 4319
+npm run dev:client     # 同上，给需要并排调试时用
+npm run dev:split      # 主机与桌面一起起，各自热重启
 ```
 
-`npm run dev` 由桌面主进程拉起主机：主机崩掉会被重启，界面收到新端点后自动重连；关窗口退出时主机一起结束。改主机代码时这条命令会重启整个桌面。
-
-`npm run dev:split` 先起主机（`FACET_PORT`，缺省 4319）再起桌面，改主机代码只重启主机，桌面界面与 Vite 热更新不受影响；两边日志各带 `[host]`、`[desktop]` 前缀。要连别处的主机：
+主机端口由 `FACET_PORT` 决定，缺省 4319；桌面端点由 `FACET_ENDPOINT` 决定，开发时缺省是 `ws://127.0.0.1:4319/endpoint`。要连别处的主机：
 
 ```bash
 FACET_ENDPOINT=ws://192.168.1.20:4319/endpoint npm run dev:client
 ```
+
+开发时想跑打包那样的嵌入模式（桌面自己拉起主机）用 `FACET_EMBEDDED=1 npm run dev`；打包运行不带 `FACET_ENDPOINT` 时本来就是嵌入模式。
 
 首次启动会读取 `~/.pi/agent-dev` 下的凭证与模型配置；没有凭证时先在设置页的提供方里配好密钥，或改用自定义提供方。
 

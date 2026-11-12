@@ -20,12 +20,18 @@ const isDev = !app.isPackaged;
 /** 默认打开的项目目录,可用 FACET_PROJECT_DIR 覆盖 */
 const projectDir = process.env.FACET_PROJECT_DIR?.trim() || process.cwd();
 
+/** 开发时主机的固定端口，与 `npm run dev:host`、`dev:split` 用的是同一个。 */
+const DEV_HOST_PORT = process.env.FACET_PORT?.trim() || "4319";
+
 /**
  * 外部主机端点。
  *
- * 给出时桌面只当客户端连过去（开发时把主机单独跑起来调试）；不给时由主进程拉起嵌入主机。
+ * 开发时缺省连到本机固定的那个端口，主机用 `npm run dev:host` 单独起；给出 FACET_ENDPOINT
+ * 时连它；打包运行不给时由主进程拉起嵌入主机。开发时想跑嵌入模式用 FACET_EMBEDDED=1。
  */
-const externalEndpoint = process.env.FACET_ENDPOINT?.trim();
+const externalEndpoint =
+	process.env.FACET_ENDPOINT?.trim() ||
+	(isDev && process.env.FACET_EMBEDDED !== "1" ? `ws://127.0.0.1:${DEV_HOST_PORT}/endpoint` : undefined);
 
 /** 嵌入模式下等待主机就绪的上限，超时照样开窗口，界面会显示连不上并允许重试。 */
 const READY_WAIT_MS = 20_000;

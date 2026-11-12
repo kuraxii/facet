@@ -12,6 +12,7 @@ import type {
 	ActionFrame,
 	Capability,
 	Channel,
+	ClientRole,
 	CustomProviderInfo,
 	CustomProviderInput,
 	Entry,
@@ -44,6 +45,8 @@ export interface HostHandshake {
 	readonly hostId: string;
 	readonly hostName: string;
 	readonly clientId: string;
+	/** 这条连接能做什么：本机管理档、远程操作档或远程只读档 */
+	readonly role: ClientRole;
 	readonly capabilities: readonly Capability[];
 }
 

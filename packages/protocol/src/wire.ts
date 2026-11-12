@@ -27,6 +27,14 @@ export const PROTOCOL_VERSION = 1;
 /** 主机上报的能力标记,端点据此隐藏不可用的入口。 */
 export type Capability = "dispatch" | "tools" | "compaction" | "export";
 
+/**
+ * 这条连接的权限档。
+ *
+ * admin 是本机连接，能改设置与凭证、增删项目、结束主机；operator 是允许操作项目的远程
+ * 连接，能发消息、停止与应答交互；viewer 是只读的远程连接，只能看。
+ */
+export type ClientRole = "admin" | "operator" | "viewer";
+
 /** 请求失败的分类。端点按 code 决定提示方式,message 仅用于展示与日志。 */
 export type ErrorCode =
 	/** 方法名未知或该版本不支持 */
@@ -70,6 +78,8 @@ export interface HelloFrame {
 	hostName: string;
 	/** 本次连接分配的端标识,派发动作时主机把它回填到 origin */
 	clientId: string;
+	/** 这条连接能做什么 */
+	role: ClientRole;
 	capabilities: Capability[];
 }
 

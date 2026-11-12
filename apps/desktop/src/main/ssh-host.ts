@@ -356,17 +356,19 @@ export class SshHosts {
 			if (discovery === undefined) {
 				throw new SshHostError("no_discovery", `${sshTargetLabel(target)} 上没有运行中的 facet 主机`);
 			}
+			// 远程端只能连主机为远程开的那条监听，连本机那条等于自封管理档
+			const remote = discovery.remote;
+			if (remote === undefined) {
+				throw new SshHostError("no_discovery", `${sshTargetLabel(target)} 没有开启远程接入`);
+			}
 			const stream =
-				discovery.endpoint.transport === "unix"
-					? await client.openStreamLocal(discovery.endpoint.path)
-					: await client.openTcp(
-							new URL(discovery.endpoint.url).hostname,
-							Number(new URL(discovery.endpoint.url).port),
-						);
+				remote.transport === "unix"
+					? await client.openStreamLocal(remote.path)
+					: await client.openTcp("127.0.0.1", remote.port);
 			return {
 				stream,
 				token: discovery.token,
-				address: discovery.endpoint.transport === "unix" ? discovery.endpoint.path : discovery.endpoint.url,
+				address: remote.transport === "unix" ? remote.path : `127.0.0.1:${remote.port}`,
 			};
 		} catch (error) {
 			client.close();

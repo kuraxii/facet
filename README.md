@@ -44,6 +44,8 @@ FACET_ENDPOINT=ws://192.168.1.20:4319/endpoint npm run dev:client
 
 - **本机**：缺省监听 TCP 回环地址；用 `FACET_SOCKET=/run/user/1000/facet.sock` 之类给出路径时改成监听 unix socket（Windows 上是命名管道），不再开 TCP 端口。
 - **远程**：主机清单里填 `user@host`（或 `ssh://user@host:端口`），桌面用进程内的 SSH 库连过去，读远端的发现文件拿到 socket 路径与令牌，再在远端 socket 上开一条通道；远端不开端口、本地也不开端口，协议层一行不用改。认证复用 `~/.ssh/config`、ssh-agent 与私钥；主机密钥按 `known_hosts` 校验（支持哈希条目），未知或变更的密钥直接拒绝。Windows 远端只监听命名管道时无法用 SSH 通道，退回走远端的 TCP 回环地址。
+- **远程接入**：缺省关闭。开启后主机额外监听一条给远程端用的地址，写进发现文件的 `remote` 字段；本机那条只服务本机。远程端通过 SSH 连的是这一条，连本机那条会被拒之门外。
+- **权限档**：本机连接是管理档；远程连接按 `FACET_REMOTE_PERMISSION` 给操作档或只读档。设置与凭证、提供方、项目增删与信任、诊断、结束主机只允许本机；只读档连会话与文件都不能改，输入区写明原因。远程的写操作记进 `$FACET_DATA_DIR/audit.log`（时间、连接标识、权限档、操作与结果，不含参数与内容）。
 - **令牌**：主机会生成一个随机令牌写进发现文件（`FACET_TOKEN` 可指定，`FACET_NO_TOKEN=1` 关闭校验）。连接的第一帧是 `{type:"auth",token}`，不匹配直接断开，拿不到 hello。发现文件权限 `0600`、所在目录 `0700`，socket 本身也是 `0600`。
 - **桌面不直连主机**：渲染进程在沙箱里，连接由主进程按目标建通道（本机按发现文件，远程按 `host:port`），界面只搬运帧。
 
@@ -146,6 +148,8 @@ scripts/build-fonts.sh <字体目录>
 | `FACET_DEBUG` | 打开主机侧调试日志 |
 | `FACET_ENDPOINT` | 桌面连这个主机（`host:port`），不再拉起本机主机 |
 | `FACET_SOCKET` | 主机监听的 unix socket 路径或命名管道名，给出后不再监听 TCP |
+| `FACET_REMOTE_SOCKET`、`FACET_REMOTE_PORT` | 额外开一条给远程端用的监听，缺省关闭；远程端必须连这一条 |
+| `FACET_REMOTE_PERMISSION` | 远程连接的权限档：`view`（只读，缺省）或 `operate`（可操作项目） |
 | `FACET_TOKEN` | 连接令牌，缺省随机生成并写进发现文件 |
 | `FACET_NO_TOKEN` | 设为 `1` 时不校验令牌，只用于本机调试 |
 | `FACET_EMBEDDED` | 开发时设为 `1`，桌面像打包那样自己拉起本机主机 |

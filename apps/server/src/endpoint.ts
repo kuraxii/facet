@@ -8,13 +8,14 @@
 import { randomUUID } from "node:crypto";
 import { chmod, mkdir, realpath, rm, stat } from "node:fs/promises";
 import { createServer as createSocketServer, type Socket } from "node:net";
-import { dirname, isAbsolute } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { InvalidProviderError, type PiAgentFactory } from "@facet/agent";
 import {
 	type Action,
 	type ActionFrame,
 	type Capability,
 	type Channel,
+	type ClientRole,
 	type CustomProviderInfo,
 	type ErrorCode,
 	encodeFrame,
@@ -28,6 +29,7 @@ import {
 	type ServerFrame,
 	type SessionSnapshot,
 } from "@facet/protocol";
+import { AuditLog } from "./audit.ts";
 import type { ServerConfig } from "./config.ts";
 import { buildDiagnostics } from "./diagnostics.ts";
 import { FileAccessError, listDirectory, readTextFile, writeTextFile } from "./files.ts";
@@ -47,6 +49,38 @@ import {
 } from "./session-hub.ts";
 import type { SessionsChannel } from "./sessions-channel.ts";
 import type { SettingsStore } from "./settings-store.ts";
+
+/**
+ * 只允许本机连接的请求。
+ *
+ * 凭证、设置、提供方、项目增删与信任、诊断与结束主机都属于主机管理，远程连接即使是
+ * 操作档也不放行。
+ */
+const ADMIN_ONLY_REQUESTS = new Set<string>([
+	"saveCredential",
+	"deleteCredential",
+	"updateSettings",
+	"saveCustomProvider",
+	"removeCustomProvider",
+	"setProviderBaseUrl",
+	"testModel",
+	"addProject",
+	"removeProject",
+	"renameProject",
+	"setProjectTrust",
+	"revealProject",
+	"diagnostics",
+	"shutdownHost",
+]);
+
+/** 只读连接不能做的请求：会改会话或文件。 */
+const WRITE_REQUESTS = new Set<string>([
+	"createSession",
+	"forkSession",
+	"renameSession",
+	"deleteSession",
+	"writeFile",
+]);
 
 /** 当前主机已实现的能力。未列入的入口由端点隐藏。 */
 const CAPABILITIES: Capability[] = ["dispatch", "tools", "compaction", "export"];
@@ -75,6 +109,8 @@ interface Connection {
 	readonly subscriptions: Map<Channel, ActionSink>;
 	/** 令牌是否已校验通过，通过之后才发 hello 并接受请求 */
 	authenticated: boolean;
+	/** 这条连接能做什么，由监听来源决定 */
+	readonly role: ClientRole;
 	/** 发一帧给对端 */
 	send(frame: ServerFrame): void;
 	/** 关掉连接，参数是给对端看的说明 */
@@ -95,6 +131,8 @@ interface EndpointContext {
 	readonly requestShutdown: () => void;
 	/** 会话清单通道，所有端订阅同一条 */
 	readonly sessions: SessionsChannel;
+	/** 远程操作审计 */
+	readonly audit: AuditLog;
 }
 
 /** 这个对端地址是否是回环地址。IPv4、IPv6 与 IPv4 映射地址都算。 */
@@ -112,6 +150,10 @@ export interface EndpointHandle {
 	readonly host: string;
 	/** unix socket 路径，TCP 模式下没有 */
 	readonly socketPath?: string;
+	/** 远程接入的 socket 路径，未开启时没有 */
+	readonly remoteSocketPath?: string;
+	/** 远程接入的端口，未开启时没有 */
+	readonly remotePort?: number;
 	/** 关闭监听并断开所有连接。会话由调用方负责释放。 */
 	close(): Promise<void>;
 }
@@ -278,12 +320,53 @@ async function applyAction(context: EndpointContext, channel: Channel, action: A
 	});
 }
 
+/**
+ * 按连接的权限档判定能不能做这个请求。
+ *
+ * 本机连接放行；远程的操作档不能碰主机管理；远程的只读档连会话与文件都改不了。
+ */
+function assertRequestAllowed(connection: Connection, method: string): void {
+	if (connection.role === "admin") {
+		return;
+	}
+	if (ADMIN_ONLY_REQUESTS.has(method)) {
+		throw new RequestError("rejected", "这个操作只允许在本机进行");
+	}
+	if (connection.role === "viewer" && WRITE_REQUESTS.has(method)) {
+		throw new RequestError("rejected", "这条连接是只读的");
+	}
+}
+
+/** 远程连接的写操作记一笔，本机连接不记。 */
+function auditRemote(context: EndpointContext, connection: Connection, name: string, failure?: string): void {
+	if (connection.role === "admin") {
+		return;
+	}
+	context.audit.record({
+		at: Date.now(),
+		clientId: connection.clientId,
+		role: connection.role,
+		name,
+		ok: failure === undefined,
+		...(failure === undefined ? {} : { reason: failure }),
+	});
+}
+
 async function handleRequest(
 	context: EndpointContext,
 	connection: Connection,
 	method: string,
 	params: unknown,
 ): Promise<unknown> {
+	try {
+		assertRequestAllowed(connection, method);
+	} catch (error) {
+		auditRemote(context, connection, method, toProtocolError(error).message);
+		throw error;
+	}
+	if (connection.role !== "admin" && WRITE_REQUESTS.has(method)) {
+		auditRemote(context, connection, method);
+	}
 	switch (method) {
 		case "listSessions": {
 			const source = asObject(params ?? {});
@@ -428,8 +511,8 @@ async function handleRequest(
 		case "busySessions":
 			return { files: context.hub.busyFiles() };
 		case "shutdownHost": {
-			// 结束主机等于把主机上正在跑的任务一起停掉，只允许本机操作
-			if (!isLoopbackAddress(connection.remoteAddress)) {
+			// 结束主机等于把主机上正在跑的任务一起停掉，只允许本机连接
+			if (connection.role !== "admin") {
 				throw new RequestError("rejected", "只有本机连接可以结束主机");
 			}
 			// 先给出应答再退，否则发出请求的端只会看到连接断开
@@ -601,6 +684,21 @@ async function handleDispatch(context: EndpointContext, connection: Connection, 
 	const channel = requiredChannel(source, "channel");
 	const action = source.action as Action;
 	const clientSeq = optionalNumber(source, "clientSeq") ?? 0;
+	if (connection.role === "viewer") {
+		// 只读连接派发动作直接拒绝：回一条带原因的帧，不写任何东西
+		const reason = "这条连接是只读的";
+		auditRemote(context, connection, action.type, reason);
+		connection.send({
+			type: "action",
+			channel,
+			action,
+			serverSeq: context.hub.lastSeq(channel),
+			origin: { clientId: connection.clientId, clientSeq },
+			rejectionReason: reason,
+		} satisfies ActionFrame);
+		return;
+	}
+	auditRemote(context, connection, action.type);
 	if (typeof action !== "object" || action === null || typeof action.type !== "string") {
 		throw new RequestError("bad_params", "action must carry a type");
 	}
@@ -664,6 +762,7 @@ async function handleFrame(context: EndpointContext, connection: Connection, tex
 			hostId: context.hostId,
 			hostName: context.config.hostName,
 			clientId: connection.clientId,
+			role: connection.role,
 			capabilities: CAPABILITIES,
 		} satisfies HelloFrame);
 		return;
@@ -710,6 +809,8 @@ export async function startEndpoint(options: {
 	requestShutdown?: () => void;
 	/** 会话清单通道 */
 	sessions: SessionsChannel;
+	/** 远程操作审计，缺省写到数据目录的 audit.log */
+	audit?: AuditLog;
 }): Promise<EndpointHandle> {
 	const context: EndpointContext = {
 		config: options.config,
@@ -722,6 +823,7 @@ export async function startEndpoint(options: {
 		connections: new Set(),
 		requestShutdown: options.requestShutdown ?? (() => {}),
 		sessions: options.sessions,
+		audit: options.audit ?? new AuditLog(join(options.config.dataDir, "audit.log")),
 	};
 
 	/** 连接关闭时的清理：退掉订阅、从表里摘掉。 */
@@ -736,12 +838,13 @@ export async function startEndpoint(options: {
 	};
 
 	/** 一条新连接：按行切帧，首帧认令牌，通过后发 hello。 */
-	const accept = (socket: Socket): void => {
+	const accept = (socket: Socket, role: ClientRole): void => {
 		const connection: Connection = {
 			clientId: randomUUID(),
 			remoteAddress: socket.remoteAddress,
 			subscriptions: new Map(),
 			authenticated: false,
+			role,
 			send: (frame) => {
 				if (!socket.destroyed) {
 					socket.write(encodeFrame(frame));
@@ -774,7 +877,7 @@ export async function startEndpoint(options: {
 	};
 
 	const useUnixSocket = options.config.socketPath !== undefined && options.config.socketPath.length > 0;
-	const socketServer = createSocketServer((socket) => accept(socket));
+	const socketServer = createSocketServer((socket) => accept(socket, "admin"));
 
 	if (useUnixSocket) {
 		const path = options.config.socketPath as string;
@@ -800,6 +903,36 @@ export async function startEndpoint(options: {
 		});
 	}
 
+	/**
+	 * 远程接入的监听。
+	 *
+	 * 与本机那条分开：关掉它即关闭远程接入，本机连接不受影响。远程连接的权限档来自
+	 * 配置，缺省只读。
+	 */
+	const remoteRole: ClientRole = options.config.remotePermission === "operate" ? "operator" : "viewer";
+	let remoteServer: ReturnType<typeof createSocketServer> | undefined;
+	if (options.config.remoteSocketPath !== undefined || options.config.remotePort !== undefined) {
+		remoteServer = createSocketServer((socket) => accept(socket, remoteRole));
+		const remotePath = options.config.remoteSocketPath;
+		if (remotePath !== undefined) {
+			await rm(remotePath, { force: true }).catch(() => undefined);
+			await mkdir(dirname(remotePath), { recursive: true, mode: 0o700 }).catch(() => undefined);
+		}
+		const remote = remoteServer;
+		await new Promise<void>((resolve, reject) => {
+			remote.once("error", reject);
+			const done = (): void => {
+				remote.off("error", reject);
+				resolve();
+			};
+			if (remotePath === undefined) {
+				remote.listen(options.config.remotePort, options.config.host, done);
+				return;
+			}
+			remote.listen(remotePath, done);
+		});
+	}
+
 	const address = socketServer.address();
 	const port = typeof address === "object" && address !== null ? address.port : 0;
 
@@ -807,6 +940,10 @@ export async function startEndpoint(options: {
 		port,
 		host: options.config.host,
 		...(useUnixSocket ? { socketPath: options.config.socketPath as string } : {}),
+		...(options.config.remoteSocketPath === undefined
+			? {}
+			: { remoteSocketPath: options.config.remoteSocketPath }),
+		...(options.config.remotePort === undefined ? {} : { remotePort: options.config.remotePort }),
 		close: async () => {
 			for (const connection of [...context.connections]) {
 				connection.close(1001, "host shutting down");
@@ -816,6 +953,11 @@ export async function startEndpoint(options: {
 			await new Promise<void>((resolve) => {
 				socketServer.close(() => resolve());
 			});
+			if (remoteServer !== undefined) {
+				await new Promise<void>((resolve) => {
+					remoteServer?.close(() => resolve());
+				});
+			}
 		},
 	};
 }

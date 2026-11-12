@@ -9,6 +9,7 @@ import type {
 	ActionFrame,
 	Capability,
 	Channel,
+	ClientRole,
 	RequestMethod,
 	RequestParams,
 	RequestResults,
@@ -27,6 +28,8 @@ export interface Handshake {
 	hostName: string;
 	/** 本次连接分配的端标识,回放动作的来源用它归因 */
 	clientId: string;
+	/** 这条连接能做什么 */
+	role: ClientRole;
 	/** 主机已实现的能力 */
 	capabilities: readonly Capability[];
 }

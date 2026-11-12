@@ -5,7 +5,7 @@
  * 每行显示状态点、名字与地址，当前连着的那台高亮。清单底部是「添加主机」，展开一个填名字与
  * 地址的小表单；再往下是本机主机的两个开关：关掉窗口后是否继续运行、结束主机。
  */
-import { Plus, Server, Settings2 } from "lucide-react";
+import { Check, Pencil, Plus, Server, Settings2, X } from "lucide-react";
 import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { endpointLabel, type SavedHost } from "./host-list.ts";
 
@@ -46,6 +46,8 @@ export interface HostSwitcherProps {
 	onAddHost: (name: string, endpoint: string) => string | undefined;
 	/** 删除一台远程主机 */
 	onRemoveHost: (id: string) => void;
+	/** 改一台远程主机的名字 */
+	onRenameHost: (id: string, name: string) => void;
 	/** 关掉窗口后本机主机是否继续运行 */
 	keepOnClose: boolean;
 	/** 改「关掉窗口后继续运行」 */
@@ -63,6 +65,7 @@ export function HostSwitcher({
 	onConnect,
 	onAddHost,
 	onRemoveHost,
+	onRenameHost,
 	keepOnClose,
 	onToggleKeepOnClose,
 	onShutdownHost,
@@ -73,6 +76,16 @@ export function HostSwitcher({
 	const [isConfirming, setIsConfirming] = useState(false);
 	/** 结束主机失败的原因 */
 	const [shutdownError, setShutdownError] = useState<string | undefined>(undefined);
+	/** 正在改名的主机与草稿 */
+	const [renaming, setRenaming] = useState<{ id: string; draft: string } | undefined>(undefined);
+	/** 改名输入框，展开时把焦点送过去 */
+	const renameRef = useRef<HTMLInputElement>(null);
+	useEffect(() => {
+		if (renaming !== undefined) {
+			renameRef.current?.focus();
+			renameRef.current?.select();
+		}
+	}, [renaming]);
 	const [name, setName] = useState("");
 	const [address, setAddress] = useState("");
 	const [error, setError] = useState<string | undefined>(undefined);
@@ -134,24 +147,77 @@ export function HostSwitcher({
 								<span className="host-addr mono">{endpointLabel(localEndpoint)}</span>
 							</button>
 						</li>
-						{hosts.map((host) => (
-							<li key={host.id} className={activeEndpoint === host.endpoint ? "host-row is-on" : "host-row"}>
-								<button type="button" className="host-main" onClick={() => onConnect(host.endpoint)}>
-									<i className={activeEndpoint === host.endpoint && isOnline ? "dot" : "dot is-off"} />
-									<span className="host-name">{host.name}</span>
-									<span className="host-addr mono">{endpointLabel(host.endpoint)}</span>
-								</button>
-								<button
-									type="button"
-									className="host-remove"
-									aria-label={`删除主机 ${host.name}`}
-									title="从清单里删除"
-									onClick={() => onRemoveHost(host.id)}
+						{hosts.map((host) =>
+							renaming?.id === host.id ? (
+								<li key={host.id} className="host-row is-editing">
+									<input
+										className="set-input host-rename"
+										aria-label="新的主机名字"
+										value={renaming.draft}
+										ref={renameRef}
+										onChange={(event) => setRenaming({ id: host.id, draft: event.target.value })}
+										onKeyDown={(event) => {
+											if (event.key === "Enter") {
+												onRenameHost(host.id, renaming.draft);
+												setRenaming(undefined);
+											} else if (event.key === "Escape") {
+												setRenaming(undefined);
+											}
+										}}
+									/>
+									<button
+										type="button"
+										className="host-remove"
+										aria-label="保存名字"
+										title="保存"
+										onClick={() => {
+											onRenameHost(host.id, renaming.draft);
+											setRenaming(undefined);
+										}}
+									>
+										<Check size={12} strokeWidth={1.5} />
+									</button>
+									<button
+										type="button"
+										className="host-remove"
+										aria-label="取消改名"
+										title="取消"
+										onClick={() => setRenaming(undefined)}
+									>
+										<X size={12} strokeWidth={1.5} />
+									</button>
+								</li>
+							) : (
+								<li
+									key={host.id}
+									className={activeEndpoint === host.endpoint ? "host-row is-on" : "host-row"}
 								>
-									<Settings2 size={12} strokeWidth={1.5} />
-								</button>
-							</li>
-						))}
+									<button type="button" className="host-main" onClick={() => onConnect(host.endpoint)}>
+										<i className={activeEndpoint === host.endpoint && isOnline ? "dot" : "dot is-off"} />
+										<span className="host-name">{host.name}</span>
+										<span className="host-addr mono">{endpointLabel(host.endpoint)}</span>
+									</button>
+									<button
+										type="button"
+										className="host-remove"
+										aria-label={`给主机 ${host.name} 改名`}
+										title="改名"
+										onClick={() => setRenaming({ id: host.id, draft: host.name })}
+									>
+										<Pencil size={12} strokeWidth={1.5} />
+									</button>
+									<button
+										type="button"
+										className="host-remove"
+										aria-label={`删除主机 ${host.name}`}
+										title="从清单里删除"
+										onClick={() => onRemoveHost(host.id)}
+									>
+										<Settings2 size={12} strokeWidth={1.5} />
+									</button>
+								</li>
+							),
+						)}
 					</ul>
 					{isAdding ? (
 						<form className="host-form" onSubmit={submit}>

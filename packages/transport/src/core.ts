@@ -159,6 +159,7 @@ export class TransportCore {
 			hostId: frame.hostId,
 			hostName: frame.hostName,
 			clientId: frame.clientId,
+			role: frame.role,
 			capabilities: frame.capabilities,
 		};
 	}

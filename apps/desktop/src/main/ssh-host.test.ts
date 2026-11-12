@@ -138,6 +138,7 @@ describe("SshHosts", () => {
 				JSON.stringify({
 					schemaVersion: 2,
 					endpoint: { transport: "unix", path: "/home/u/.local/share/facet/host.sock" },
+					remote: { transport: "unix", path: "/home/u/.local/share/facet/remote.sock" },
 					token: "远端令牌",
 					pid: 1,
 				}),
@@ -145,9 +146,10 @@ describe("SshHosts", () => {
 			),
 		});
 		const result = await hosts.open("ssh://dev@laptop");
-		expect(opened.path).toBe("/home/u/.local/share/facet/host.sock");
+		// 远程端连的是远程监听，不是本机那条
+		expect(opened.path).toBe("/home/u/.local/share/facet/remote.sock");
 		expect(result.token).toBe("远端令牌");
-		expect(result.address).toBe("/home/u/.local/share/facet/host.sock");
+		expect(result.address).toBe("/home/u/.local/share/facet/remote.sock");
 	});
 
 	it("远端只监听 TCP 时退回 direct-tcpip", async () => {
@@ -160,6 +162,7 @@ describe("SshHosts", () => {
 				JSON.stringify({
 					schemaVersion: 2,
 					endpoint: { transport: "tcp", url: "ws://127.0.0.1:4319/endpoint" },
+					remote: { transport: "tcp", port: 4319 },
 					token: "t",
 					pid: 1,
 				}),
@@ -168,6 +171,24 @@ describe("SshHosts", () => {
 		});
 		await hosts.open("ssh://dev@laptop");
 		expect(opened.tcp).toBe("127.0.0.1:4319");
+	});
+
+	it("主机没开远程接入时说明原因", async () => {
+		const hosts = new SshHosts({
+			home: "/home/u",
+			env: { SSH_AUTH_SOCK: "/tmp/agent.sock" },
+			readLocalFile: read,
+			connect: fakeClient(
+				JSON.stringify({
+					schemaVersion: 2,
+					endpoint: { transport: "unix", path: "/home/u/.local/share/facet/host.sock" },
+					token: "t",
+					pid: 1,
+				}),
+				{},
+			),
+		});
+		await expect(hosts.open("ssh://dev@laptop")).rejects.toMatchObject({ code: "no_discovery" });
 	});
 
 	it("远端没有发现文件时报没有主机", async () => {

@@ -578,6 +578,21 @@ export function App() {
 		[hostList, updateHostList],
 	);
 
+	/** 改一台远程主机的名字，名字从清单里读，不改连接。 */
+	const renameHost = useCallback(
+		(id: string, name: string): void => {
+			const trimmed = name.trim();
+			if (trimmed.length === 0) {
+				return;
+			}
+			updateHostList({
+				...hostList,
+				hosts: hostList.hosts.map((host) => (host.id === id ? { ...host, name: trimmed } : host)),
+			});
+		},
+		[hostList, updateHostList],
+	);
+
 	/** 从清单里删掉一台远程主机；删的是当前连接时回到本机。 */
 	const removeHost = useCallback(
 		(id: string): void => {
@@ -673,6 +688,8 @@ export function App() {
 	let blockedReason: string | undefined;
 	if (!isOnline) {
 		blockedReason = "与主机的连接已断开,恢复之后可以继续发送";
+	} else if (host?.role === "viewer") {
+		blockedReason = "这条连接是只读的,不能发送消息";
 	} else if (activity === "compacting") {
 		blockedReason = "正在压缩上下文,完成之后再发送";
 	} else if (activity === "stopping") {
@@ -1135,7 +1152,7 @@ export function App() {
 					isSettingsOpen={view === "settings"}
 					onTogglePanel={() => updatePanel({ open: !panel.open })}
 					isPanelOpen={panel.open}
-					hostName={host?.hostName}
+					hostName={host?.role === "viewer" ? `${host.hostName} · 只读` : host?.hostName}
 					hostSwitcher={
 						<HostSwitcher
 							localEndpoint={LOCAL_TARGET}
@@ -1146,6 +1163,7 @@ export function App() {
 							onConnect={(next) => void switchHost(next)}
 							onAddHost={addHost}
 							onRemoveHost={removeHost}
+							onRenameHost={renameHost}
 							keepOnClose={keepOnClose}
 							onToggleKeepOnClose={toggleKeepOnClose}
 							onShutdownHost={shutdownHost}

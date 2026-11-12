@@ -1181,6 +1181,13 @@ svg.fl {
 	color: var(--t1);
 }
 
+.host-rename {
+	flex: 1;
+	min-width: 0;
+	height: 24px;
+	font-size: 11.5px;
+}
+
 .host-foot {
 	display: flex;
 	flex-direction: column;

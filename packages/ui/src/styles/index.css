@@ -810,6 +810,162 @@ svg.fl {
 	padding: 8px;
 }
 
+/* 增删行数的颜色，对话里的文件改动与变更页共用 */
+.add {
+	color: var(--add);
+}
+
+.del {
+	color: var(--del);
+}
+
+/* 变更页：分支头、文件行与就地展开的补丁 */
+.chg-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	margin-bottom: 6px;
+	padding: 0 2px 6px;
+	border-bottom: 1px solid var(--line);
+}
+
+.chg-branch {
+	min-width: 0;
+	overflow: hidden;
+	color: var(--t2);
+	font-size: 12px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.chg-upstream {
+	margin-left: 6px;
+	color: var(--t3);
+	font-size: 11px;
+}
+
+.chg-list {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.chg-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	padding: 4px 6px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--t2);
+	font-size: 12px;
+	text-align: left;
+}
+
+.chg-row:hover {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+/* 状态字母：增删改各一色，未跟踪与冲突用弱色与危险色 */
+.chg-status {
+	flex: none;
+	width: 14px;
+	color: var(--t3);
+	font-family: var(--font-mono);
+	font-size: 11px;
+	text-align: center;
+}
+
+.chg-status.is-added,
+.chg-status.is-untracked {
+	color: var(--ok);
+}
+
+.chg-status.is-deleted,
+.chg-status.is-conflicted {
+	color: var(--err);
+}
+
+.chg-status.is-renamed {
+	color: var(--warn);
+}
+
+.chg-name {
+	flex: none;
+	max-width: 55%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.chg-dir {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	color: var(--t3);
+	font-size: 11px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.chg-counts {
+	display: flex;
+	flex: none;
+	gap: 4px;
+	margin-left: auto;
+	font-family: var(--font-mono);
+	font-size: 11px;
+}
+
+.chg-binary {
+	color: var(--t3);
+	font-size: 10.5px;
+}
+
+.chg-diff {
+	margin: 2px 0 8px 20px;
+}
+
+.chg-note {
+	margin: 6px 2px;
+	color: var(--t3);
+	font-size: 12px;
+	line-height: 1.6;
+}
+
+.chg-note.is-error {
+	color: var(--err);
+}
+
+.chg-retry {
+	margin-left: 6px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--acc);
+	font-size: 12px;
+}
+
+.chg-total {
+	margin: 8px 2px 0;
+	color: var(--t3);
+	font-size: 11px;
+	text-align: right;
+}
+
+/* 颜色沿用全局的 .add / .del，这里只统一数字的字体 */
+.chg-total .add,
+.chg-total .del {
+	font-family: var(--font-mono);
+}
+
 /* 右栏里的占位说明：还没有接上内容时用 */
 .panel-empty {
 	margin: 0;
@@ -1435,14 +1591,6 @@ svg.fl {
 	white-space: nowrap;
 }
 
-.add {
-	color: var(--add);
-}
-
-.del {
-	color: var(--del);
-}
-
 .files-meta {
 	margin-left: auto;
 	color: var(--t3);
@@ -1489,6 +1637,17 @@ svg.fl {
 
 .diff-line.is-meta {
 	color: var(--t3);
+}
+
+/* 窄栏里补丁不折行，横向滚动看长行 */
+.chg-diff .diff-body {
+	overflow-x: auto;
+	white-space: pre;
+}
+
+.chg-diff .diff-line {
+	width: max-content;
+	min-width: 100%;
 }
 
 /* 错误与提示 */

@@ -56,6 +56,8 @@ export type { CodeThemeValue } from "./markdown/code-theme.tsx";
 export { CodeThemeProvider, useCodeTheme } from "./markdown/code-theme.tsx";
 export type { MarkdownProps } from "./markdown/Markdown.tsx";
 export { Markdown } from "./markdown/Markdown.tsx";
+export type { ChangesPaneProps } from "./panel/changes-pane.tsx";
+export { ChangesPane } from "./panel/changes-pane.tsx";
 export type { PanelStorage, RightPanelState, RightPanelTab } from "./panel/panel-state.ts";
 export {
 	clampPanelWidth,

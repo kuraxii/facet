@@ -33,7 +33,7 @@ export function RightPanel({ tab, onTabChange, width, onWidthChange, onClose, ch
 
 	/** 按住分隔条开始拖：记住起点，指针捕获到分隔条上，拖出栏外也不会断。 */
 	const handlePointerDown = useCallback(
-		(event: ReactPointerEvent<HTMLDivElement>) => {
+		(event: ReactPointerEvent<HTMLHRElement>) => {
 			event.preventDefault();
 			dragging.current = { startX: event.clientX, startWidth: width };
 			event.currentTarget.setPointerCapture(event.pointerId);
@@ -43,7 +43,7 @@ export function RightPanel({ tab, onTabChange, width, onWidthChange, onClose, ch
 
 	/** 往左拖变宽，往右拖变窄，宽度收在上下限之间。 */
 	const handlePointerMove = useCallback(
-		(event: ReactPointerEvent<HTMLDivElement>) => {
+		(event: ReactPointerEvent<HTMLHRElement>) => {
 			const start = dragging.current;
 			if (start === undefined) {
 				return;
@@ -53,16 +53,15 @@ export function RightPanel({ tab, onTabChange, width, onWidthChange, onClose, ch
 		[onWidthChange],
 	);
 
-	const handlePointerUp = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+	const handlePointerUp = useCallback((event: ReactPointerEvent<HTMLHRElement>) => {
 		dragging.current = undefined;
 		event.currentTarget.releasePointerCapture(event.pointerId);
 	}, []);
 
 	return (
 		<aside className="panel" style={{ width }}>
-			<div
+			<hr
 				className="panel-resizer"
-				role="separator"
 				aria-orientation="vertical"
 				aria-label="调整右侧栏宽度"
 				aria-valuenow={width}

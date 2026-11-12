@@ -9,6 +9,7 @@ import { Check, Copy, Split, Undo2 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { Markdown } from "../markdown/Markdown.tsx";
 import { ChevronIcon } from "./chevron.tsx";
+import { lineClass, patchLines } from "./diff-lines.ts";
 import { type DiffChunk, type DisplayRow, groupRows, metaSummary } from "./group.ts";
 import { foldOutput, toolStatusText, toolTarget } from "./tool-text.ts";
 
@@ -136,51 +137,6 @@ function activeTool(row: DisplayRow): string {
 function shortPath(path: string): string {
 	const parts = path.split("/").filter((segment) => segment.length > 0);
 	return parts.length <= 2 ? parts.join("/") : parts.slice(-2).join("/");
-}
-
-function lineClass(line: string): string {
-	if (line.startsWith("@@") || line.startsWith("+++ ") || line.startsWith("--- ")) {
-		return "is-meta";
-	}
-	if (line.startsWith("+")) {
-		return "is-add";
-	}
-	if (line.startsWith("-")) {
-		return "is-del";
-	}
-	return "";
-}
-
-/** 补丁按行拆开并带上行号,键用累计偏移,刷新时不会错位。 */
-function patchLines(patch: string): readonly { key: string; line: string; number: string }[] {
-	const lines: { key: string; line: string; number: string }[] = [];
-	let offset = 0;
-	let oldLine = 0;
-	let newLine = 0;
-	for (const line of patch.split("\n")) {
-		const header = /^@@ -(\d+)(?:,\d+)? \+(\d+)/.exec(line);
-		if (header) {
-			oldLine = Number(header[1]);
-			newLine = Number(header[2]);
-		}
-		let number = "";
-		if (!header && !line.startsWith("+++ ") && !line.startsWith("--- ") && !line.startsWith("diff ")) {
-			if (line.startsWith("-")) {
-				number = String(oldLine);
-				oldLine += 1;
-			} else if (line.startsWith("+")) {
-				number = String(newLine);
-				newLine += 1;
-			} else {
-				number = String(newLine);
-				oldLine += 1;
-				newLine += 1;
-			}
-		}
-		lines.push({ key: `at-${offset}`, line, number });
-		offset += line.length + 1;
-	}
-	return lines;
 }
 
 /** 一次工具调用卡。 */

@@ -16,6 +16,8 @@ import type {
 	CustomProviderInput,
 	Entry,
 	FacetSettings,
+	GitDiff,
+	GitStatus,
 	ModelInfo,
 	ModelRef,
 	ProjectInfo,
@@ -239,6 +241,24 @@ export class SessionClient {
 	async listAvailableModels(): Promise<ModelInfo[]> {
 		const result = await this.transport.request("availableModels", {});
 		return result.models;
+	}
+
+	/**
+	 * 列出项目工作树相对 HEAD 的改动。
+	 *
+	 * 口径是 git：已暂存与未暂存合在一份，未跟踪文件单独标出来；不是 git 仓库时
+	 * 返回 isRepo 为假。
+	 */
+	async gitStatus(cwd: string): Promise<GitStatus> {
+		return await this.transport.request("gitStatus", { cwd });
+	}
+
+	/** 取单个文件的补丁；未跟踪文件由主机按「从空文件新增」合成。 */
+	async gitDiff(cwd: string, path: string, untracked = false): Promise<GitDiff> {
+		return await this.transport.request(
+			"gitDiff",
+			untracked ? { cwd, path, untracked: true } : { cwd, path },
+		);
 	}
 
 	/** 列出用户自己添加的提供方。 */

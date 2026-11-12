@@ -1,4 +1,5 @@
 import { chatActivity, type HostHandshake, SessionClient, toTranscript } from "@facet/client-core";
+import type { GitFileChange, GitStatus } from "@facet/protocol";
 import {
 	DEFAULT_SETTINGS,
 	type FacetSettings,
@@ -10,6 +11,7 @@ import {
 import { WsTransport } from "@facet/transport/ws";
 import {
 	ArrowDownIcon,
+	ChangesPane,
 	ChatOutline,
 	ChatTranscript,
 	CodeThemeProvider,
@@ -201,6 +203,13 @@ export function App() {
 	/** 右栏的状态；展开、分页与宽度都记在本地 */
 	const [panel, setPanel] = useState<RightPanelState>(() => readPanelState(localStorage));
 
+	/** 变更页的数据：工作树状态、是否在取、失败原因 */
+	const [changes, setChanges] = useState<{ status?: GitStatus; isLoading: boolean; error?: string }>({
+		isLoading: false,
+	});
+	/** 变更请求的序号，只采用最后一次的结果 */
+	const changesSeq = useRef(0);
+
 	/** 改右栏状态并写回本地存储。 */
 	const updatePanel = useCallback((patch: Partial<RightPanelState>) => {
 		setPanel((current) => {
@@ -339,9 +348,62 @@ export function App() {
 	void version;
 
 	const session = client.sessionView();
+	/** 变更页是否正在显示：展开右栏并停在变更分页 */
+	const isChangesVisible = panel.open && panel.tab === "changes";
+	/** 会话所在的目录，git 命令都在它下面跑 */
+	const sessionCwd = session?.state.cwd;
+
+	/** 重新取工作树状态。并发调用只采用最后一次的结果。 */
+	const refreshChanges = useCallback(async (): Promise<void> => {
+		if (sessionCwd === undefined) {
+			return;
+		}
+		changesSeq.current += 1;
+		const seq = changesSeq.current;
+		setChanges((current) => ({ ...current, isLoading: true, error: undefined }));
+		try {
+			const status = await client.gitStatus(sessionCwd);
+			if (seq === changesSeq.current) {
+				setChanges({ status, isLoading: false });
+			}
+		} catch (error) {
+			if (seq === changesSeq.current) {
+				setChanges({
+					isLoading: false,
+					error: error instanceof Error ? error.message : String(error),
+				});
+			}
+		}
+	}, [sessionCwd]);
+
+	// 展开变更页、切换会话、窗口重新获得焦点时各取一次（会话目录变化已含在 refreshChanges 里）
+	useEffect(() => {
+		if (isChangesVisible) {
+			void refreshChanges();
+		}
+	}, [isChangesVisible, refreshChanges]);
+
+	useEffect(() => {
+		if (!isChangesVisible) {
+			return;
+		}
+		const onFocus = (): void => void refreshChanges();
+		window.addEventListener("focus", onFocus);
+		return () => window.removeEventListener("focus", onFocus);
+	}, [isChangesVisible, refreshChanges]);
+
 	const chat = client.chatView();
 	// 对话此刻的状态由会话状态得出,界面不自己拼布尔量
 	const activity = chatActivity(session);
+
+	// 一轮结束之后工作树可能变了，顺手再取一次
+	const lastActivity = useRef(activity);
+	useEffect(() => {
+		if (lastActivity.current !== "idle" && activity === "idle" && isChangesVisible) {
+			void refreshChanges();
+		}
+		lastActivity.current = activity;
+	}, [activity, isChangesVisible, refreshChanges]);
 
 	/** 主机的模型目录与各提供方的凭证状态，供输入区的模型选择使用。 */
 	const [catalog, setCatalog] = useState<{ models: readonly ModelInfo[]; auth: Record<string, boolean> }>({
@@ -969,9 +1031,21 @@ export function App() {
 						onWidthChange={(width) => updatePanel({ width })}
 						onClose={() => updatePanel({ open: false })}
 					>
-						<p className="panel-empty">
-							{panel.tab === "files" ? "还没有打开文件" : "还没有接上工作树的改动"}
-						</p>
+						{panel.tab === "changes" ? (
+							<ChangesPane
+								status={changes.status}
+								isLoading={changes.isLoading}
+								error={changes.error}
+								onRefresh={() => void refreshChanges()}
+								loadDiff={(file: GitFileChange) =>
+									sessionCwd === undefined
+										? Promise.reject(new Error("还没有打开会话"))
+										: client.gitDiff(sessionCwd, file.path, file.status === "untracked")
+								}
+							/>
+						) : (
+							<p className="panel-empty">还没有打开文件</p>
+						)}
 					</RightPanel>
 				) : null}
 

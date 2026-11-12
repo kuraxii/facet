@@ -25,7 +25,7 @@ import type { FacetSettings } from "./settings.ts";
 export const PROTOCOL_VERSION = 1;
 
 /** 主机上报的能力标记,端点据此隐藏不可用的入口。 */
-export type Capability = "dispatch" | "tools" | "compaction" | "export";
+export type Capability = "dispatch" | "tools" | "compaction";
 
 /**
  * 这条连接的权限档。

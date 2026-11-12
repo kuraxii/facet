@@ -89,7 +89,7 @@ const WRITE_REQUESTS = new Set<string>([
 ]);
 
 /** 当前主机已实现的能力。未列入的入口由端点隐藏。 */
-const CAPABILITIES: Capability[] = ["dispatch", "tools", "compaction", "export"];
+const CAPABILITIES: Capability[] = ["dispatch", "tools", "compaction"];
 
 /** 请求被拒绝时带出的错误。未捕获的其他错误统一归类为内部错误。 */
 class RequestError extends Error {

@@ -73,12 +73,15 @@ npm run dist -w @facet/desktop # 出安装包
 
 界面字体与代码字体都打进构建产物，不依赖系统装没装：
 
-| 用途 | 字体 | 来源 |
-|---|---|---|
-| 界面 | Inter（400 / 500 / 600） | `@fontsource/inter`，随构建打包 |
-| 代码 | Maple Mono（400 / 500 / 600） | `packages/ui/src/assets/fonts/` 下的 woff2，OFL-1.1，许可文本同目录 |
+| 用途 | 字体 | 字重 | 来源 |
+|---|---|---|---|
+| 界面 | Inter | 400 / 500 / 600 | `@fontsource/inter` |
+| 代码的中文之外部分 | Maple Mono | 400 / 500 / 600 | `packages/ui/src/assets/fonts/` 下的 woff2，OFL-1.1，许可文本同目录 |
+| 代码里的汉字与中文标点 | Maple Mono CN | 400 | `@automann/maple-mono-cn`，按 unicode-range 分片，OFL-1.1 |
 
-Maple Mono 取自本机的 Maple Mono NL NF CN v7.9，只保留等宽部分与非 CJK 符号，中文由界面字体兜底。要重新生成：
+汉字那一段由 `packages/ui/src/styles/fonts.css` 顶部的 `@import "@automann/maple-mono-cn/400.css";` 引入，覆盖整个 CJK 基本区（U+4E00–U+9FA5），13px 字号下每个汉字占两格宽。分片只在渲染到对应字符时才加载，代码块里没有中文就不下载任何一片。这个包只发布 400 一个字重：代码正文用的就是 400，600 只出现在 `.tool-name` 的英文工具名上，汉字遇到粗体由浏览器合成。
+
+Latin、符号与制表符那三个 woff2 取自本机的 Maple Mono NL NF CN v7.9，要重新生成：
 
 ```bash
 scripts/build-fonts.sh            # 缺省读 ~/.fonts

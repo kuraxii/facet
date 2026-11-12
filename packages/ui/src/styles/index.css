@@ -36,7 +36,7 @@
 	--user: #1b1c24;
 	/* 界面字体与代码字体，两者都随构建产物一起打进应用 */
 	--font-sans: Inter, "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
-	--font-mono: "Maple Mono", ui-monospace, SFMono-Regular, Menlo, "Noto Sans SC", monospace;
+	--font-mono: "Maple Mono", "Maple Mono CN", ui-monospace, SFMono-Regular, Menlo, monospace;
 	/* 正文字号，由设置里的字号写入 */
 	--text-size: 13px;
 	/* 交互动效：极快反馈 120ms，展开折叠 180ms */

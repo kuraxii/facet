@@ -36,7 +36,16 @@ npm run dev:split      # 主机与桌面一起起，各自热重启
 FACET_ENDPOINT=ws://192.168.1.20:4319/endpoint npm run dev:client
 ```
 
-开发时想跑打包那样的嵌入模式（桌面自己拉起主机）用 `FACET_EMBEDDED=1 npm run dev`；打包运行不带 `FACET_ENDPOINT` 时本来就是嵌入模式。
+开发时想跑打包那样的本机模式（桌面自己拉起主机）用 `FACET_EMBEDDED=1 npm run dev`；打包运行不带 `FACET_ENDPOINT` 时本来就是本机模式。
+
+## 主机与桌面分开运行
+
+主机是独立的进程，桌面只是它的一个端：
+
+- 主机就绪后把端点写进 `$FACET_DATA_DIR/endpoint.json`（Linux 缺省 `~/.local/share/facet`），日志写进同目录的 `host.log`。
+- 桌面拉起主机时让它自成一组，应用退出后主机留在后台；下次启动读到发现文件并与主机握上手，就直接接上，会话与运行中的任务都还在。
+- 关掉窗口后是否继续在主机清单里切换：「关掉窗口后继续运行」勾上时应用退出不动主机，取消勾选则应用退出会连主机一起结束。
+- 主机清单里的「结束主机」需要再点一次确认，结束后停在「连不上主机」，可以直接重启应用或用 `npm run dev:host` 再起一台。
 
 首次启动会读取 `~/.pi/agent-dev` 下的凭证与模型配置；没有凭证时先在设置页的提供方里配好密钥，或改用自定义提供方。
 
@@ -126,8 +135,9 @@ scripts/build-fonts.sh <字体目录>
 | `FACET_REPLAY_LIMIT` | 每个通道保留的动作条数 |
 | `FACET_SESSION_IDLE_MS` | 没人订阅且空闲后多久回收会话 |
 | `FACET_DEBUG` | 打开主机侧调试日志 |
-| `FACET_ENDPOINT` | 桌面连这个主机，不再拉起子进程 |
-| `FACET_PARENT_PID` | 主机被桌面拉起时由桌面设置，父进程消失后主机自行结束 |
+| `FACET_ENDPOINT` | 桌面连这个主机，不再拉起本机主机 |
+| `FACET_EMBEDDED` | 开发时设为 `1`，桌面像打包那样自己拉起本机主机 |
+| `FACET_PARENT_PID` | 让主机盯着一个进程，那个进程消失后主机自行结束；不再由桌面设置，调试残留进程时用得上 |
 | `FACET_PROJECT_DIR` | 启动时打开的项目目录 |
 | `FACET_SKIP_ELECTRON_DOWNLOAD` | `1` 表示跳过 Electron 二进制检查 |
 

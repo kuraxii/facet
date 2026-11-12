@@ -8,7 +8,7 @@
 import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { loadServerConfig } from "./config.ts";
-import { startServer } from "./index.ts";
+import { type ServerHandle, startServer } from "./index.ts";
 
 /** 就绪行的标记，父进程按它从日志里挑出结构化信息。 */
 export const READY_MARKER = "facet-host-ready";
@@ -26,32 +26,38 @@ export interface HostReadyPayload {
 }
 
 const config = loadServerConfig();
-const server = await startServer(config);
+const discoveryFile = join(config.dataDir, "endpoint.json");
+
+let server: ServerHandle | undefined;
+let closing = false;
+
+/** 收尾：删掉发现文件再关端点，最后退出。重复调用只生效一次。 */
+const shutdown = (): void => {
+	if (closing || server === undefined) {
+		return;
+	}
+	closing = true;
+	const handle = server;
+	void (async () => {
+		// 发现文件先删：外部工具看到它就说明主机还在，留着会连到已经关闭的端口
+		await rm(discoveryFile, { force: true }).catch(() => undefined);
+		// 收尾给一点时间，端点关不干净也要退出，端会按断线自己重连
+		await Promise.race([handle.close(), new Promise((resolve) => setTimeout(resolve, 1500))]);
+		process.exit(0);
+	})();
+};
+
+server = await startServer(config, { requestShutdown: shutdown });
 const payload: HostReadyPayload = {
 	endpoint: `ws://${server.host}:${server.port}/endpoint`,
 	hostId: server.hostId,
 	agentDir: server.agentDir,
 	pid: process.pid,
 };
-const discoveryFile = join(config.dataDir, "endpoint.json");
 await writeFile(discoveryFile, `${JSON.stringify({ ...payload, startedAt: Date.now() }, null, 2)}\n`, "utf8");
 console.log(`${READY_MARKER} ${JSON.stringify(payload)}`);
 console.log(`数据目录 ${config.dataDir}`);
 console.log("按 Ctrl+C 结束");
-
-let closing = false;
-const shutdown = () => {
-	if (closing) {
-		return;
-	}
-	closing = true;
-	void (async () => {
-		// 发现文件随进程一起走，留下的旧文件会让外部工具连到已经关闭的端口
-		await rm(discoveryFile, { force: true }).catch(() => undefined);
-		await server.close();
-		process.exit(0);
-	})();
-};
 
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);

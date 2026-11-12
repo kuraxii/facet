@@ -7,7 +7,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { realpath, stat } from "node:fs/promises";
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage } from "node:http";
 import { isAbsolute } from "node:path";
 import { InvalidProviderError, type PiAgentFactory } from "@facet/agent";
 import {
@@ -66,6 +66,8 @@ interface Connection {
 	readonly ws: WebSocket;
 	/** 本次连接的端标识,写进回放动作的 origin */
 	readonly clientId: string;
+	/** 对端地址，只有回环地址能结束主机 */
+	readonly remoteAddress: string | undefined;
 	/** 已订阅的通道与其转发函数,用于取消订阅与断线清理 */
 	readonly subscriptions: Map<Channel, ActionSink>;
 }
@@ -80,6 +82,17 @@ interface EndpointContext {
 	/** 主机标识的派生来源，诊断里说明这台机器有没有 machine-id */
 	readonly hostSource: HostSource;
 	readonly connections: Set<Connection>;
+	/** 收到结束主机的请求后调用，由进程入口决定怎么收尾 */
+	readonly requestShutdown: () => void;
+}
+
+/** 这个对端地址是否是回环地址。IPv4、IPv6 与 IPv4 映射地址都算。 */
+export function isLoopbackAddress(address: string | undefined): boolean {
+	if (address === undefined) {
+		return false;
+	}
+	const normalized = address.startsWith("::ffff:") ? address.slice("::ffff:".length) : address;
+	return normalized === "::1" || normalized === "localhost" || normalized.startsWith("127.");
 }
 
 export interface EndpointHandle {
@@ -383,6 +396,15 @@ async function handleRequest(
 		}
 		case "busySessions":
 			return { files: context.hub.busyFiles() };
+		case "shutdownHost": {
+			// 结束主机等于把主机上正在跑的任务一起停掉，只允许本机操作
+			if (!isLoopbackAddress(connection.remoteAddress)) {
+				throw new RequestError("rejected", "只有本机连接可以结束主机");
+			}
+			// 先给出应答再退，否则发出请求的端只会看到连接断开
+			setTimeout(() => context.requestShutdown(), 50).unref();
+			return {};
+		}
 		case "diagnostics": {
 			const [sessions, settings] = await Promise.all([
 				context.factory.listSessions(),
@@ -617,6 +639,8 @@ export async function startEndpoint(options: {
 	hostId: string;
 	/** 主机标识的派生来源，缺省当作由 machine-id 派生 */
 	hostSource?: HostSource;
+	/** 收到 shutdownHost 请求后调用 */
+	requestShutdown?: () => void;
 }): Promise<EndpointHandle> {
 	const context: EndpointContext = {
 		config: options.config,
@@ -627,6 +651,7 @@ export async function startEndpoint(options: {
 		hostId: options.hostId,
 		hostSource: options.hostSource ?? "machine-id",
 		connections: new Set(),
+		requestShutdown: options.requestShutdown ?? (() => {}),
 	};
 
 	const httpServer = createServer((_request, response) => {
@@ -636,8 +661,13 @@ export async function startEndpoint(options: {
 
 	const wss = new WebSocketServer({ server: httpServer, path: ENDPOINT_PATH, maxPayload: MAX_FRAME_BYTES });
 
-	wss.on("connection", (ws: WebSocket) => {
-		const connection: Connection = { ws, clientId: randomUUID(), subscriptions: new Map() };
+	wss.on("connection", (ws: WebSocket, request: IncomingMessage) => {
+		const connection: Connection = {
+			ws,
+			clientId: randomUUID(),
+			remoteAddress: request.socket.remoteAddress,
+			subscriptions: new Map(),
+		};
 		context.connections.add(connection);
 		const hello: HelloFrame = {
 			type: "hello",
@@ -679,6 +709,11 @@ export async function startEndpoint(options: {
 				connection.ws.close(1001, "host shutting down");
 			}
 			context.connections.clear();
+			// 端会立刻重连，光发关闭帧会让 wss 一直等下去，这里直接断开所有套接字
+			for (const client of wss.clients) {
+				client.terminate();
+			}
+			httpServer.closeAllConnections?.();
 			await new Promise<void>((resolve) => {
 				wss.close(() => resolve());
 			});

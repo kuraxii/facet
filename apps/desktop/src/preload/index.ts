@@ -10,8 +10,17 @@ function readArgument(name: string): string {
 const api = {
 	/** 主机端点地址 */
 	endpoint: readArgument("facet-endpoint"),
-	/** 主机是这个进程拉起来的（embedded），还是外面跑着、这里只当客户端（external） */
-	hostMode: readArgument("facet-host-mode") || "embedded",
+	/** 主机是本机管的（local），还是外面跑着、这里只当客户端（external） */
+	hostMode: readArgument("facet-host-mode") || "local",
+	/** 关掉窗口后本机主机是否继续运行，来自桌面本地设置 */
+	keepHostOnClose: readArgument("facet-keep-host") !== "0",
+	/** 读本机主机的开关 */
+	getHostPrefs: (): Promise<{ keepOnClose: boolean }> => ipcRenderer.invoke("facet:host-prefs"),
+	/** 结束本机主机，之后不再自动重启 */
+	stopHost: (): Promise<void> => ipcRenderer.invoke("facet:stop-host"),
+	/** 改本机主机的开关，返回保存后的值 */
+	setHostPrefs: (prefs: { keepOnClose: boolean }): Promise<{ keepOnClose: boolean }> =>
+		ipcRenderer.invoke("facet:set-host-prefs", prefs),
 	/** 默认打开的项目目录 */
 	projectDir: readArgument("facet-project"),
 	platform: readArgument("facet-platform") || process.platform,

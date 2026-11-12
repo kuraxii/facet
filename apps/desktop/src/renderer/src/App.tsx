@@ -1,5 +1,11 @@
-import { chatActivity, type HostHandshake, SessionClient, toTranscript } from "@facet/client-core";
-import type { FileContent, GitFileChange, GitStatus } from "@facet/protocol";
+import {
+	chatActivity,
+	type HostHandshake,
+	SessionClient,
+	TerminalClient,
+	toTranscript,
+} from "@facet/client-core";
+import type { FileContent, GitFileChange, GitStatus, TerminalInfo } from "@facet/protocol";
 import {
 	DEFAULT_SETTINGS,
 	type FacetSettings,
@@ -44,6 +50,14 @@ import {
 	writePanelState,
 } from "@facet/ui";
 import { FileView } from "@facet/ui-editor";
+import {
+	clampDockHeight,
+	readDockState,
+	type TerminalAppearance,
+	TerminalDock,
+	type TerminalDockState,
+	writeDockState,
+} from "@facet/ui-terminal";
 import { PanelLeft, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { type HostChannelBridge, LOCAL_TARGET, makeTransport } from "./host-connection.ts";
@@ -88,6 +102,7 @@ let hostTarget = LOCAL_TARGET;
 
 const transport = makeTransport(bridge, () => hostTarget);
 const client = new SessionClient({ transport, pageSize: 200 });
+const terminalClient = new TerminalClient({ transport });
 
 type Phase = "connecting" | "ready" | "failed";
 
@@ -264,6 +279,44 @@ export function App() {
 	/** 变更请求的序号，只采用最后一次的结果 */
 	const changesSeq = useRef(0);
 
+	/** 终端面板的状态：是否展开、高度、当前标签 */
+	const [dock, setDock] = useState<TerminalDockState>(() => readDockState(localStorage));
+	/** 主机上的终端清单，含已结束的 */
+	const [terminals, setTerminals] = useState<TerminalInfo[]>([]);
+	/** 开终端失败的原因 */
+	const [terminalError, setTerminalError] = useState<string | undefined>(undefined);
+
+	/** 改终端面板状态并写回本地存储。 */
+	const updateDock = useCallback((patch: Partial<TerminalDockState>) => {
+		setDock((current) => {
+			const next = { ...current, ...patch };
+			writeDockState(localStorage, next);
+			return next;
+		});
+	}, []);
+
+	/** 重新取终端清单。连不上或主机没有终端能力时按空处理。 */
+	const refreshTerminals = useCallback(async (): Promise<TerminalInfo[]> => {
+		try {
+			const list = await terminalClient.list();
+			setTerminals(list);
+			return list;
+		} catch {
+			setTerminals([]);
+			return [];
+		}
+	}, []);
+
+	/** 连上主机之后：会话与终端都从这里开始收动作。 */
+	const attachHost = useCallback(
+		(handshake: HostHandshake) => {
+			client.attach(handshake);
+			terminalClient.start();
+			void refreshTerminals();
+		},
+		[refreshTerminals],
+	);
+
 	/** 改右栏状态并写回本地存储。 */
 	const updatePanel = useCallback((patch: Partial<RightPanelState>) => {
 		setPanel((current) => {
@@ -367,7 +420,7 @@ export function App() {
 			for (;;) {
 				try {
 					const handshake = await transport.connect();
-					client.attach(handshake);
+					attachHost(handshake);
 					setHost(handshake);
 					// 会话回不来(例如它的文件已经不在了)时退回没有会话的状态,连接本身照常可用
 					const resumed = await client.resume().then(
@@ -395,7 +448,7 @@ export function App() {
 				setIsReconnecting(false);
 			});
 		await reconnecting.current;
-	}, [refreshProjects, refreshSessions]);
+	}, [refreshProjects, refreshSessions, attachHost]);
 
 	// 断线之后自动重连，期间输入区提示连接已断开
 	useEffect(() => {
@@ -430,6 +483,97 @@ export function App() {
 	const isChangesVisible = panel.open && panel.tab === "changes";
 	/** 会话所在的目录，git 命令都在它下面跑 */
 	const sessionCwd = session?.state.cwd;
+
+	/** 终端能力：主机没装 pty 后端时不给入口 */
+	const canUseTerminal = host?.capabilities.includes("terminal") ?? false;
+	/** 新建终端的启动目录：跟着当前会话，没有会话时用第一个项目 */
+	const terminalCwd = sessionCwd ?? projects[0]?.cwd;
+	/** 终端面板不能用的原因，能用时为空 */
+	const terminalDisabledReason = canUseTerminal ? undefined : "这台主机的终端不可用";
+
+	/** 终端外观：跟着界面配色与等宽字体走，主题一换就重算 */
+	const terminalAppearance = useMemo<TerminalAppearance>(() => {
+		const styles = getComputedStyle(document.documentElement);
+		const read = (name: string, fallback: string): string => styles.getPropertyValue(name).trim() || fallback;
+		return {
+			fontFamily: read("--font-mono", "ui-monospace, monospace"),
+			fontSize: 12.5,
+			lineHeight: 1.35,
+			cursorBlink: true,
+			scrollback: 5000,
+			background: read("--bg", "#ffffff"),
+			foreground: read("--t1", "#1a1a1e"),
+			cursor: read("--acc", "#239956"),
+			selection: read("--surface3", "#e4e4e7"),
+		};
+	}, []);
+
+	/** 在当前目录开一个终端，并把它设成当前标签。 */
+	const openTerminal = useCallback(async (): Promise<void> => {
+		setTerminalError(undefined);
+		try {
+			// 尺寸先给一个常用值，视图挂上之后 fit 出来的真实尺寸会再报一次
+			const info = await terminalClient.create(terminalCwd, 100, 24);
+			await refreshTerminals();
+			updateDock({ open: true, activeId: info.id });
+		} catch (error) {
+			setTerminalError(error instanceof Error ? error.message : String(error));
+			updateDock({ open: true });
+		}
+	}, [refreshTerminals, terminalCwd, updateDock]);
+
+	/** 关掉一个终端，清单跟着刷新。 */
+	const killTerminal = useCallback(
+		async (id: string): Promise<void> => {
+			try {
+				await terminalClient.kill(id);
+			} catch {
+				// 已经结束的终端再关一次没有影响
+			}
+			const list = await refreshTerminals();
+			const next = list.find((terminal) => !terminal.restored && terminal.exit === null);
+			updateDock({ activeId: next?.id });
+		},
+		[refreshTerminals, updateDock],
+	);
+
+	/** 展开或收起终端面板。 */
+	const toggleTerminal = useCallback(() => {
+		setDock((current) => {
+			const next = { ...current, open: !current.open };
+			writeDockState(localStorage, next);
+			return next;
+		});
+	}, []);
+
+	// 快捷键 Ctrl + ` 开关终端面板
+	useEffect(() => {
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key !== "`" || !(event.ctrlKey || event.metaKey)) {
+				return;
+			}
+			event.preventDefault();
+			toggleTerminal();
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [toggleTerminal]);
+
+	// 窗口变矮时把面板高度收回来，避免把对话挤没
+	useEffect(() => {
+		const onResize = () => {
+			setDock((current) => {
+				const next = clampDockHeight(current.height, window.innerHeight);
+				if (next === current.height) {
+					return current;
+				}
+				writeDockState(localStorage, { ...current, height: next });
+				return { ...current, height: next };
+			});
+		};
+		window.addEventListener("resize", onResize);
+		return () => window.removeEventListener("resize", onResize);
+	}, []);
 
 	/** 打开一个文件：取内容失败时把原因留在右栏。 */
 	const openFile = useCallback(
@@ -552,7 +696,7 @@ export function App() {
 			// 只握一次手：连不上就直接回到「连不上主机」那一屏，重试按钮走退避重连
 			try {
 				const handshake = await transport.connect();
-				client.attach(handshake);
+				attachHost(handshake);
 				setHost(handshake);
 				await client.resume().catch(() => undefined);
 				await refreshSessions();
@@ -565,7 +709,7 @@ export function App() {
 				setPhase("failed");
 			}
 		},
-		[endpoint, hostList, refreshCatalog, refreshProjects, refreshSessions, updateHostList],
+		[endpoint, hostList, refreshCatalog, refreshProjects, refreshSessions, updateHostList, attachHost],
 	);
 
 	/** 添加一台主机：地址收成端点，重复的直接回原因。 */
@@ -843,7 +987,7 @@ export function App() {
 				setEndpoint(startEndpoint);
 			}
 			const handshake = await transport.connect();
-			client.attach(handshake);
+			attachHost(handshake);
 			setHost(handshake);
 			await refreshProjects();
 			// 设置读不到时用缺省值，界面照常可用
@@ -860,7 +1004,7 @@ export function App() {
 			setFailure(error instanceof Error ? error.message : String(error));
 			setPhase("failed");
 		});
-	}, [hostList.activeEndpoint, openSession, refreshCatalog, refreshProjects, refreshSessions]);
+	}, [hostList.activeEndpoint, openSession, refreshCatalog, refreshProjects, refreshSessions, attachHost]);
 
 	/** 当前草稿落在哪个键：打开的会话按文件路径分开存，没有会话时存到新会话页面。 */
 	const draftKey = activeFile ?? NEW_DRAFT_KEY;
@@ -1171,6 +1315,8 @@ export function App() {
 					isSettingsOpen={view === "settings"}
 					onTogglePanel={() => updatePanel({ open: !panel.open })}
 					isPanelOpen={panel.open}
+					onToggleTerminal={toggleTerminal}
+					isTerminalOpen={dock.open}
 					hostName={host?.hostName}
 					hostStatus={isReconnecting ? "重连中" : host?.role === "viewer" ? "只读" : undefined}
 					isOpen={isSidebarOpen}
@@ -1293,6 +1439,37 @@ export function App() {
 							</div>
 						</>
 					)}
+
+					{terminalError === undefined ? null : (
+						<p className="term-dock-error">
+							{terminalError}
+							<button
+								type="button"
+								className="chg-retry"
+								onClick={() => {
+									setTerminalError(undefined);
+									void openTerminal();
+								}}
+							>
+								重试
+							</button>
+						</p>
+					)}
+					<TerminalDock
+						isOpen={dock.open}
+						height={dock.height}
+						terminals={terminals}
+						activeId={dock.activeId}
+						cwd={terminalCwd}
+						client={terminalClient}
+						appearance={terminalAppearance}
+						disabledReason={terminalDisabledReason}
+						onHeightChange={(height) => updateDock({ height })}
+						onSelect={(id) => updateDock({ activeId: id })}
+						onCreate={() => void openTerminal()}
+						onKill={(id) => void killTerminal(id)}
+						onClose={toggleTerminal}
+					/>
 				</main>
 
 				{panel.open ? (

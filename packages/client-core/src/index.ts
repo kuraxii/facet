@@ -21,6 +21,8 @@ export type {
 export { appendNotice, chatActivity, createChatView, createSessionView } from "./state.ts";
 export type { ChannelGap, SessionListEntry } from "./store.ts";
 export { messageDisplayText, messageText, SessionStore } from "./store.ts";
+export type { AttachedTerminal, TerminalListener } from "./terminal-client.ts";
+export { TerminalClient } from "./terminal-client.ts";
 export type {
 	Part,
 	TextPart,

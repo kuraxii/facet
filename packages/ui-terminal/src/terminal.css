@@ -1,0 +1,198 @@
+/* 底部终端面板。上缘一条分隔条拖动改高度，头一行标签与操作，下面是 xterm。 */
+
+.term-dock {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	flex: none;
+	min-height: 0;
+	border-top: 1px solid var(--line);
+	background: var(--card);
+}
+
+/* 上缘的分隔条：贴在边上，命中区比视觉上的线宽一些 */
+.term-dock-grip {
+	position: absolute;
+	top: -3px;
+	left: 0;
+	right: 0;
+	height: 6px;
+	cursor: row-resize;
+	z-index: 2;
+}
+
+.term-dock-grip:hover {
+	background: color-mix(in oklab, var(--acc) 24%, transparent);
+}
+
+.term-dock-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex: none;
+	height: 34px;
+	padding: 0 8px 0 10px;
+	border-bottom: 1px solid var(--line2);
+}
+
+.term-dock-tabs {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	min-width: 0;
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+
+.term-dock-tabs::-webkit-scrollbar {
+	display: none;
+}
+
+.term-tab {
+	display: inline-flex;
+	align-items: center;
+	flex: none;
+	max-width: 200px;
+	height: 24px;
+	padding: 0 2px 0 2px;
+	border-radius: 6px;
+	color: var(--t2);
+	font-size: 12px;
+}
+
+.term-tab:hover {
+	background: var(--card2);
+	color: var(--t1);
+}
+
+.term-tab.is-active {
+	background: var(--surface3);
+	color: var(--t1);
+}
+
+.term-tab-main {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	height: 100%;
+	padding: 0 2px 0 8px;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	font-size: inherit;
+	cursor: pointer;
+}
+
+.term-tab-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.term-tab-exit {
+	flex: none;
+	color: var(--t3);
+	font-variant-numeric: tabular-nums;
+	font-size: 11px;
+}
+
+.term-tab-close {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: none;
+	width: 16px;
+	height: 16px;
+	margin-right: 3px;
+	border: 0;
+	border-radius: 4px;
+	background: transparent;
+	color: var(--t3);
+	cursor: pointer;
+}
+
+.term-tab-close:hover {
+	background: var(--surface4);
+	color: var(--t1);
+}
+
+.term-dock-actions {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	flex: none;
+	margin-left: auto;
+}
+
+.term-tool {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--t2);
+	cursor: pointer;
+}
+
+.term-tool:hover {
+	background: var(--card2);
+	color: var(--t1);
+}
+
+.term-tool:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+
+.term-dock-body {
+	display: flex;
+	flex: 1;
+	min-height: 0;
+	padding: 6px 0 6px 8px;
+}
+
+/* xterm 自己撑满容器，容器留一点内边距让文字不贴边 */
+.term-surface {
+	flex: 1;
+	min-width: 0;
+	min-height: 0;
+}
+
+.term-surface .xterm {
+	height: 100%;
+}
+
+/* 开终端失败时贴在面板上方的提示 */
+.term-dock-error {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex: none;
+	margin: 0;
+	padding: 6px 12px;
+	border-top: 1px solid var(--line2);
+	background: var(--errbg);
+	color: var(--err);
+	font-size: 12px;
+}
+
+.term-empty {
+	margin: 0;
+	padding: 12px 4px;
+	color: var(--t3);
+	font-size: 12px;
+}
+
+@media (max-width: 880px) {
+	.term-dock-head {
+		padding: 0 6px;
+	}
+
+	.term-dock-body {
+		padding: 4px 0 4px 4px;
+	}
+}

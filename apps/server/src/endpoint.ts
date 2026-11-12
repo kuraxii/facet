@@ -9,6 +9,7 @@ import { randomUUID } from "node:crypto";
 import { chmod, mkdir, realpath, rm, stat } from "node:fs/promises";
 import { createServer as createHttpServer } from "node:http";
 import { createServer as createSocketServer, type Socket } from "node:net";
+import { homedir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import { InvalidProviderError, type PiAgentFactory } from "@facet/agent";
 import {
@@ -626,7 +627,9 @@ async function handleRequest(
 		}
 		case "createTerminal": {
 			const source = asObject(params);
-			const cwd = await resolveTerminalCwd(requiredString(source, "cwd"));
+			// cwd 为空时落在主机用户的 home：界面还没有打开会话或项目时也能开终端
+			const requested = optionalString(source, "cwd")?.trim() ?? "";
+			const cwd = await resolveTerminalCwd(requested.length > 0 ? requested : homedir());
 			const terminal = await context.terminals.create({
 				cwd,
 				cols: requiredNumber(source, "cols"),

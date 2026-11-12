@@ -286,7 +286,8 @@ export interface RequestParams {
 	/**
 	 * 开一个终端。
 	 *
-	 * cwd 必须落在项目根内；cols 与 rows 由界面的 xterm 实例给出。
+	 * cwd 为空串时用主机用户的 home，界面还没打开会话或项目时也能开；cols 与 rows 由界面的
+	 * xterm 实例给出，挂载之后会按 fit 出来的真实尺寸再报一次。
 	 */
 	createTerminal: { cwd: string; cols: number; rows: number; shell?: string };
 	/** 往终端里写入按键。多个端同时写时按到达顺序执行。 */

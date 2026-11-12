@@ -204,6 +204,8 @@ function config(dataDir: string, overrides: Partial<ServerConfig> = {}): ServerC
 		socketPath: undefined,
 		token: undefined,
 		remotePermission: "view",
+		webPort: undefined,
+		webRoot: undefined,
 		agentDir: dataDir,
 		sessionDir: undefined,
 		dataDir,

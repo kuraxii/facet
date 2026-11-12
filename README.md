@@ -49,6 +49,24 @@ FACET_ENDPOINT=ws://192.168.1.20:4319/endpoint npm run dev:client
 - **令牌**：主机会生成一个随机令牌写进发现文件（`FACET_TOKEN` 可指定，`FACET_NO_TOKEN=1` 关闭校验）。连接的第一帧是 `{type:"auth",token}`，不匹配直接断开，拿不到 hello。发现文件权限 `0600`、所在目录 `0700`，socket 本身也是 `0600`。
 - **桌面不直连主机**：渲染进程在沙箱里，连接由主进程按目标建通道（本机按发现文件，远程按 `host:port`），界面只搬运帧。
 
+## Web 端
+
+同一份界面也能在浏览器里跑：
+
+```bash
+FACET_TOKEN=<令牌> \
+FACET_WEB_PORT=7801 \
+FACET_WEB_ROOT=apps/desktop/out/renderer \
+  npm start -w @facet/server
+```
+
+浏览器打开 `http://<主机>:7801/?tkn=<令牌>`。页面与连接同源同端口：静态产物由主机直接发，连接走同一个端口的 WebSocket，帧格式与 unix socket 那条完全一样。
+
+- **接入开关就是这个端口**：不给 `FACET_WEB_PORT` 就没有 Web 入口
+- **令牌**：地址栏给的会记进 localStorage，之后的连接直接用它
+- **权限档**：Web 是远程入口，缺省只读（认证帧可以申请操作档，主机按 `FACET_REMOTE_PERMISSION` 收窄）
+- 桌面与 Web 共用 `apps/desktop/src/renderer` 这一份界面：桌面用 preload 注入的桥，浏览器用 `web-bridge.ts` 补一个同样的桥
+
 ## 主机与桌面分开运行
 
 主机是独立的进程，桌面只是它的一个端：
@@ -149,6 +167,8 @@ scripts/build-fonts.sh <字体目录>
 | `FACET_ENDPOINT` | 桌面连这个主机（`host:port`），不再拉起本机主机 |
 | `FACET_SOCKET` | 主机监听的 unix socket 路径或命名管道名，给出后不再监听 TCP |
 | `FACET_REMOTE_PERMISSION` | 远程连接申请档位的上限：`view`（只读，缺省）或 `operate`（可申请操作档） |
+| `FACET_WEB_PORT` | Web 端接入端口，缺省关闭；同一个端口发页面也接 WebSocket |
+| `FACET_WEB_ROOT` | Web 页面的构建产物目录，缺省不提供页面 |
 | `FACET_TOKEN` | 连接令牌，缺省随机生成并写进发现文件 |
 | `FACET_NO_TOKEN` | 设为 `1` 时不校验令牌，只用于本机调试 |
 | `FACET_EMBEDDED` | 开发时设为 `1`，桌面像打包那样自己拉起本机主机 |

@@ -111,6 +111,8 @@ function config(dataDir: string, overrides: Partial<ServerConfig> = {}): ServerC
 		sessionDir: undefined,
 		dataDir,
 		remotePermission: "view",
+		webPort: undefined,
+		webRoot: undefined,
 		replayLimit: 32,
 		sessionIdleMs: 60_000,
 		hostName: "主机",

@@ -7,6 +7,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { chmod, mkdir, realpath, rm, stat } from "node:fs/promises";
+import { createServer as createHttpServer } from "node:http";
 import { createServer as createSocketServer, type Socket } from "node:net";
 import { dirname, isAbsolute, join } from "node:path";
 import { InvalidProviderError, type PiAgentFactory } from "@facet/agent";
@@ -29,6 +30,7 @@ import {
 	type ServerFrame,
 	type SessionSnapshot,
 } from "@facet/protocol";
+import { WebSocket, WebSocketServer } from "ws";
 import { AuditLog } from "./audit.ts";
 import type { ServerConfig } from "./config.ts";
 import { buildDiagnostics } from "./diagnostics.ts";
@@ -49,6 +51,10 @@ import {
 } from "./session-hub.ts";
 import type { SessionsChannel } from "./sessions-channel.ts";
 import type { SettingsStore } from "./settings-store.ts";
+import { serveWebRequest } from "./web.ts";
+
+/** Web 接入的 WebSocket 路径，与字节流那条共用同一套帧。 */
+const ENDPOINT_PATH = "/endpoint";
 
 /**
  * 只允许本机连接的请求。
@@ -150,6 +156,8 @@ export interface EndpointHandle {
 	readonly host: string;
 	/** unix socket 路径，TCP 模式下没有 */
 	readonly socketPath?: string;
+	/** Web 接入的端口，未开启时没有 */
+	readonly webPort?: number;
 	/** 关闭监听并断开所有连接。会话由调用方负责释放。 */
 	close(): Promise<void>;
 }
@@ -718,9 +726,9 @@ async function handleDispatch(context: EndpointContext, connection: Connection, 
  *
  * 不声明就是管理档（本机连接）；声明操作档时按主机配置收窄，配置为只读时一律给只读。
  */
-function grantedRole(context: EndpointContext, requested: unknown): ClientRole {
+function grantedRole(context: EndpointContext, requested: unknown, fallback: ClientRole): ClientRole {
 	if (requested === undefined) {
-		return "admin";
+		return fallback;
 	}
 	if (requested === "operator") {
 		return context.config.remotePermission === "operate" ? "operator" : "viewer";
@@ -768,7 +776,7 @@ async function handleFrame(context: EndpointContext, connection: Connection, tex
 			return;
 		}
 		connection.authenticated = true;
-		connection.role = grantedRole(context, frame.role);
+		connection.role = grantedRole(context, frame.role, connection.role);
 		connection.send({
 			type: "hello",
 			protocolVersion: PROTOCOL_VERSION,
@@ -851,27 +859,44 @@ export async function startEndpoint(options: {
 	};
 
 	/** 一条新连接：按行切帧，首帧认令牌，通过后发 hello。 */
-	const accept = (socket: Socket): void => {
+	/** 建一条连接：收发交给具体承载，其余逻辑各条连接一致。 */
+	const makeConnection = (
+		remoteAddress: string | undefined,
+		send: (frame: ServerFrame) => void,
+		close: (code: number, reason: string) => void,
+		/** 认证帧没声明档位时用的档位：Web 连接缺省只读 */
+		defaultRole: ClientRole = "admin",
+	): Connection => {
 		const connection: Connection = {
 			clientId: randomUUID(),
-			remoteAddress: socket.remoteAddress,
+			remoteAddress,
 			subscriptions: new Map(),
 			authenticated: false,
-			// 认证帧里声明档位之后才确定，缺省按管理档
-			role: "admin",
-			send: (frame) => {
+			// 认证帧里声明档位之后才确定
+			role: defaultRole,
+			send,
+			close: (code, reason) => {
+				close(code, reason);
+				cleanup(connection);
+			},
+		};
+		context.connections.add(connection);
+		return connection;
+	};
+
+	const accept = (socket: Socket): void => {
+		const connection = makeConnection(
+			socket.remoteAddress,
+			(frame) => {
 				if (!socket.destroyed) {
 					socket.write(encodeFrame(frame));
 				}
 			},
-			close: (_code, reason) => {
+			() => {
 				socket.end();
 				socket.destroy();
-				cleanup(connection);
-				void reason;
 			},
-		};
-		context.connections.add(connection);
+		);
 		const decoder = new FrameDecoder();
 		socket.setEncoding("utf8");
 		socket.on("data", (chunk: string) => {
@@ -917,14 +942,69 @@ export async function startEndpoint(options: {
 		});
 	}
 
+	/**
+	 * Web 接入。
+	 *
+	 * 只有给出 webPort 时才开：同一个端口既发页面也接 WebSocket，页面的连接走 WS 帧、
+	 * 每条消息是一行帧。远程接入的开关与权限档在这里生效，缺省关闭。
+	 */
+	let webServer: ReturnType<typeof createHttpServer> | undefined;
+	let webSockets: WebSocketServer | undefined;
+	if (options.config.webPort !== undefined) {
+		const root = options.config.webRoot;
+		webServer = createHttpServer((request, response) => {
+			void serveWebRequest(root, request, response);
+		});
+		webSockets = new WebSocketServer({ server: webServer, path: ENDPOINT_PATH });
+		webSockets.on("connection", (ws: WebSocket) => {
+			const connection = makeConnection(
+				"web",
+				(frame) => {
+					if (ws.readyState === WebSocket.OPEN) {
+						// 与字节流一样的按行编码：浏览器端用同一个解码器
+						ws.send(encodeFrame(frame));
+					}
+				},
+				() => {
+					ws.terminate();
+				},
+				// Web 端是远程入口，没声明档位时按只读
+				"viewer",
+			);
+			ws.on("message", (raw) => {
+				void handleFrame(context, connection, raw.toString());
+			});
+			ws.on("close", () => cleanup(connection));
+			ws.on("error", () => cleanup(connection));
+		});
+		await new Promise<void>((resolve, reject) => {
+			webServer?.once("error", reject);
+			webServer?.listen(options.config.webPort, options.config.host, () => {
+				webServer?.off("error", reject);
+				resolve();
+			});
+		});
+	}
+
 	const address = socketServer.address();
 	const port = typeof address === "object" && address !== null ? address.port : 0;
+	const webAddress = webServer?.address();
+	const webPort = typeof webAddress === "object" && webAddress !== null ? webAddress.port : undefined;
 
 	return {
 		port,
 		host: options.config.host,
 		...(useUnixSocket ? { socketPath: options.config.socketPath as string } : {}),
+		...(webPort === undefined ? {} : { webPort }),
 		close: async () => {
+			webSockets?.close();
+			await new Promise<void>((resolve) => {
+				if (webServer === undefined) {
+					resolve();
+					return;
+				}
+				webServer.close(() => resolve());
+			});
 			for (const connection of [...context.connections]) {
 				connection.close(1001, "host shutting down");
 			}

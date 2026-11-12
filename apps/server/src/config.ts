@@ -22,6 +22,14 @@ export interface ServerConfig {
 	 */
 	socketPath: string | undefined;
 	/**
+	 * Web 接入的端口，缺省关闭。
+	 *
+	 * 给出时同一个端口发页面也接 WebSocket；这是唯一需要接入开关的入口。
+	 */
+	webPort: number | undefined;
+	/** Web 页面的构建产物目录，缺省不提供页面 */
+	webRoot: string | undefined;
+	/**
 	 * 连接令牌，端点握手的第一帧带它，不匹配直接断开。
 	 *
 	 * 空表示不校验，只用于本机调试；独立运行入口缺省生成一个随机值写进发现文件。
@@ -92,6 +100,8 @@ export function loadServerConfig(env: Record<string, string | undefined> = proce
 		dataDir: env.FACET_DATA_DIR?.trim() || defaultDataDir(env),
 		socketPath: env.FACET_SOCKET?.trim() || undefined,
 		remotePermission: env.FACET_REMOTE_PERMISSION?.trim() === "operate" ? "operate" : "view",
+		webPort: env.FACET_WEB_PORT === undefined ? undefined : readInt(env.FACET_WEB_PORT, 0) || undefined,
+		webRoot: env.FACET_WEB_ROOT?.trim() || undefined,
 		token: env.FACET_NO_TOKEN === "1" ? undefined : env.FACET_TOKEN?.trim() || generateToken(),
 		replayLimit: readInt(env.FACET_REPLAY_LIMIT, DEFAULT_REPLAY_LIMIT) || DEFAULT_REPLAY_LIMIT,
 		sessionIdleMs: readInt(env.FACET_SESSION_IDLE_MS, DEFAULT_SESSION_IDLE_MS),

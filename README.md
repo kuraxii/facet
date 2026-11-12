@@ -36,7 +36,65 @@ npm run dev:split      # 主机与桌面一起起，各自热重启
 FACET_ENDPOINT=ws://192.168.1.20:4319/endpoint npm run dev:client
 ```
 
-开发时想跑打包那样的嵌入模式（桌面自己拉起主机）用 `FACET_EMBEDDED=1 npm run dev`；打包运行不带 `FACET_ENDPOINT` 时本来就是嵌入模式。
+开发时想跑打包那样的本机模式（桌面自己拉起主机）用 `FACET_EMBEDDED=1 npm run dev`；打包运行不带 `FACET_ENDPOINT` 时本来就是本机模式。
+
+## 连接方式与令牌
+
+主机只跑一套按行编码的协议，跑在哪条字节流上都一样：
+
+- **本机**：缺省监听 TCP 回环地址；用 `FACET_SOCKET=/run/user/1000/facet.sock` 之类给出路径时改成监听 unix socket（Windows 上是命名管道），不再开 TCP 端口。
+- **远程**：主机清单里填 `user@host`（或 `ssh://user@host:端口`），桌面用进程内的 SSH 库连过去，读远端的发现文件拿到 socket 路径与令牌，再在远端 socket 上开一条通道；远端不开端口、本地也不开端口，协议层一行不用改。认证复用 `~/.ssh/config`、ssh-agent 与私钥；主机密钥按 `known_hosts` 校验（支持哈希条目），未知或变更的密钥直接拒绝。Windows 远端只监听命名管道时无法用 SSH 通道，退回走远端的 TCP 回环地址。
+- **远程端不需要开关**：SSH 与主机密钥就是信任边界，远程端连的是同一个 socket，认证帧里声明自己要只读还是操作档，主机按 `FACET_REMOTE_PERMISSION` 收窄。只有以后的 Web 端才需要单独的接入开关与端点。
+- **权限档**：本机连接是管理档；远程连接按 `FACET_REMOTE_PERMISSION` 给操作档或只读档。设置与凭证、提供方、项目增删与信任、诊断、结束主机只允许本机；只读档连会话与文件都不能改，输入区写明原因。远程的写操作记进 `$FACET_DATA_DIR/audit.log`（时间、连接标识、权限档、操作与结果，不含参数与内容）。
+- **令牌**：主机会生成一个随机令牌写进发现文件（`FACET_TOKEN` 可指定，`FACET_NO_TOKEN=1` 关闭校验）。连接的第一帧是 `{type:"auth",token}`，不匹配直接断开，拿不到 hello。发现文件权限 `0600`、所在目录 `0700`，socket 本身也是 `0600`。
+- **桌面不直连主机**：渲染进程在沙箱里，连接由主进程按目标建通道（本机按发现文件，远程按 `host:port`），界面只搬运帧。
+
+## Web 端
+
+同一份界面也能在浏览器里跑：
+
+```bash
+FACET_TOKEN=<令牌> \
+FACET_WEB_PORT=7801 \
+FACET_WEB_ROOT=apps/desktop/out/renderer \
+  npm start -w @facet/server
+```
+
+浏览器打开 `http://<主机>:7801/?tkn=<令牌>`。页面与连接同源同端口：静态产物由主机直接发，连接走同一个端口的 WebSocket，帧格式与 unix socket 那条完全一样。
+
+- **接入开关就是这个端口**：不给 `FACET_WEB_PORT` 就没有 Web 入口
+- **令牌**：地址栏给的会记进 localStorage，之后的连接直接用它
+- **权限档**：Web 是远程入口，缺省只读（认证帧可以申请操作档，主机按 `FACET_REMOTE_PERMISSION` 收窄）
+- 桌面与 Web 共用 `apps/desktop/src/renderer` 这一份界面：桌面用 preload 注入的桥，浏览器用 `web-bridge.ts` 补一个同样的桥
+- 窄屏（880px 以下）侧栏收成抽屉，左上角按钮展开、点遮罩或选中会话收起，右侧栏改成覆盖式
+
+## 终端
+
+终端跑在主机上，桌面与 Web 都只是它的端：界面里敲的字经通道送到主机，主机再把输出按帧推回来。本机与远程走的是同一条路径，桌面自己不起任何 shell。
+
+- **pty 子进程**：`node-pty` 在主机再往下起的 `pty-host` 子进程里加载，崩溃与突发输出都关在这个进程里，会话与推理轮次不受影响
+- **通道**：每个终端一条 `terminal:/<id>`，输出带通道序号，多个端同时看同一个 shell
+- **流控**：未确认字符数超过 100_000 让 pty 暂停读，端确认回来降到 5_000 以下再恢复；单帧上限 64KB 字符
+- **回滚**：每个终端保留最近 200_000 字符，端挂载或断线重连时先取这份再收增量
+- **登记**：`$FACET_DATA_DIR/terminals.json` 记下开过的终端，主机重启后把它们列成已结束，进程已经不在
+- **运行时**：`node-pty` 是 N-API 模块，一份构建在 Node 与 Electron 自带的 Node 里都能用，不需要 `electron-rebuild`；打包时把 `pty-host.js` 作为独立入口产物，`.node` 文件放在 asar 外
+- **不可用时**：原生模块加载不起来（版本不匹配、缺编译产物）主机在握手里不报 `terminal` 能力，界面隐藏终端入口
+
+界面这边（`packages/ui-terminal`）：
+
+- 底部停靠面板，上缘拖动改高度，高度与展开状态记在本机；`Ctrl + \`` 开关，也可以点侧栏页脚的终端按钮
+- 每个终端一个标签，标签名取启动目录的最后一段，进程结束后在标签上显示退出码；点标签右边的叉挂断
+- 只挂当前标签的 xterm：切标签时卸载并重新挂载，回滚由主机重新给一份，因此标签多了也不会堆实例
+- 外观跟着界面配色与等宽字体走：主题一换，背景、前景、光标与选区立刻更新
+
+## 主机与桌面分开运行
+
+主机是独立的进程，桌面只是它的一个端：
+
+- 主机就绪后把端点写进 `$FACET_DATA_DIR/endpoint.json`（Linux 缺省 `~/.local/share/facet`），日志写进同目录的 `host.log`。
+- 桌面拉起主机时让它自成一组，应用退出后主机留在后台；下次启动读到发现文件并与主机握上手，就直接接上，会话与运行中的任务都还在。
+- 关掉窗口后是否继续在主机清单里切换：「关掉窗口后继续运行」勾上时应用退出不动主机，取消勾选则应用退出会连主机一起结束。
+- 主机清单里的「结束主机」需要再点一次确认，结束后停在「连不上主机」，可以直接重启应用或用 `npm run dev:host` 再起一台。
 
 首次启动会读取 `~/.pi/agent-dev` 下的凭证与模型配置；没有凭证时先在设置页的提供方里配好密钥，或改用自定义提供方。
 
@@ -107,7 +165,7 @@ scripts/build-fonts.sh <字体目录>
 | 路径 | 内容 | 覆盖方式 |
 |---|---|---|
 | `~/.pi/agent-dev` | 凭证 `auth.json`、模型 `models.json`、设置、会话目录 | `FACET_AGENT_DIR` |
-| `$XDG_DATA_HOME/facet`（缺省 `~/.local/share/facet`） | 主机身份 `host.json`、项目清单 `projects.json`、界面设置 `settings.json`；独立启动时还有发现文件 `endpoint.json` | `FACET_DATA_DIR` |
+| `$XDG_DATA_HOME/facet`（缺省 `~/.local/share/facet`） | 主机身份 `host.json`、项目清单 `projects.json`、界面设置 `settings.json`、终端登记 `terminals.json`、审计 `audit.log`；独立启动时还有发现文件 `endpoint.json` | `FACET_DATA_DIR` |
 | `$XDG_CONFIG_HOME/facet`（缺省 `~/.config/facet`） | 桌面本地记录 `desktop.json`：窗口位置与尺寸 | — |
 
 用 `agent-dev` 而不是 `~/.pi/agent`，是为了和 pi 命令行共用凭证与模型配置，同时不把开发期的会话混进真实目录。
@@ -126,8 +184,16 @@ scripts/build-fonts.sh <字体目录>
 | `FACET_REPLAY_LIMIT` | 每个通道保留的动作条数 |
 | `FACET_SESSION_IDLE_MS` | 没人订阅且空闲后多久回收会话 |
 | `FACET_DEBUG` | 打开主机侧调试日志 |
-| `FACET_ENDPOINT` | 桌面连这个主机，不再拉起子进程 |
-| `FACET_PARENT_PID` | 主机被桌面拉起时由桌面设置，父进程消失后主机自行结束 |
+| `FACET_ENDPOINT` | 桌面连这个主机（`host:port`），不再拉起本机主机 |
+| `FACET_SOCKET` | 主机监听的 unix socket 路径或命名管道名，给出后不再监听 TCP |
+| `FACET_REMOTE_PERMISSION` | 远程连接申请档位的上限：`view`（只读，缺省）或 `operate`（可申请操作档） |
+| `FACET_WEB_PORT` | Web 端接入端口，缺省关闭；同一个端口发页面也接 WebSocket |
+| `FACET_PTY_HOST` | pty 子进程入口，缺省与主机入口同目录（`pty-host.js` 或 `pty-host-child.ts`） |
+| `FACET_WEB_ROOT` | Web 页面的构建产物目录，缺省不提供页面 |
+| `FACET_TOKEN` | 连接令牌，缺省随机生成并写进发现文件 |
+| `FACET_NO_TOKEN` | 设为 `1` 时不校验令牌，只用于本机调试 |
+| `FACET_EMBEDDED` | 开发时设为 `1`，桌面像打包那样自己拉起本机主机 |
+| `FACET_PARENT_PID` | 让主机盯着一个进程，那个进程消失后主机自行结束；不再由桌面设置，调试残留进程时用得上 |
 | `FACET_PROJECT_DIR` | 启动时打开的项目目录 |
 | `FACET_SKIP_ELECTRON_DOWNLOAD` | `1` 表示跳过 Electron 二进制检查 |
 

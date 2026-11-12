@@ -20,12 +20,21 @@ import type {
 import type { ProjectInfo } from "./project.ts";
 import type { Entry, SessionSnapshot, SessionSummary } from "./session.ts";
 import type { FacetSettings } from "./settings.ts";
+import type { TerminalInfo } from "./terminal.ts";
 
 /** 线格式版本。不兼容的改动递增此值,端点据此拒绝握手。 */
 export const PROTOCOL_VERSION = 1;
 
 /** 主机上报的能力标记,端点据此隐藏不可用的入口。 */
-export type Capability = "dispatch" | "tools" | "compaction" | "export";
+export type Capability = "dispatch" | "tools" | "compaction" | "terminal";
+
+/**
+ * 这条连接的权限档。
+ *
+ * admin 是本机连接，能改设置与凭证、增删项目、结束主机；operator 是允许操作项目的远程
+ * 连接，能发消息、停止与应答交互；viewer 是只读的远程连接，只能看。
+ */
+export type ClientRole = "admin" | "operator" | "viewer";
 
 /** 请求失败的分类。端点按 code 决定提示方式,message 仅用于展示与日志。 */
 export type ErrorCode =
@@ -70,7 +79,27 @@ export interface HelloFrame {
 	hostName: string;
 	/** 本次连接分配的端标识,派发动作时主机把它回填到 origin */
 	clientId: string;
+	/** 这条连接能做什么 */
+	role: ClientRole;
 	capabilities: Capability[];
+}
+
+/**
+ * 连接建立后的第一帧。
+ *
+ * 主机校验通过才发 hello；令牌不对直接断开，端点拿不到 hello 也就无法发请求。
+ * 不设令牌的主机用 `withoutToken` 显式声明，用来隔离本地调试环境。
+ */
+export interface AuthFrame {
+	type: "auth";
+	token: string;
+	/**
+	 * 请求的权限档。
+	 *
+	 * 缺省按管理档处理（本机连接）；远程端自己声明要只读还是操作档，主机会按自己的配置
+	 * 收窄。能拿到令牌就等于能用这台主机，所以这里限制的是操作习惯，不是安全边界。
+	 */
+	role?: "operator" | "viewer";
 }
 
 /** 端点发出的请求。id 由端点生成,响应原样带回。 */
@@ -117,7 +146,7 @@ export interface ActionFrame {
 export type ServerFrame = HelloFrame | ResponseFrame | ActionFrame;
 
 /** 端点发往主机的帧。 */
-export type ClientFrame = RequestFrame | DispatchFrame;
+export type ClientFrame = AuthFrame | RequestFrame | DispatchFrame;
 
 /** 订阅结果。 */
 export interface SubscribeResult {
@@ -135,6 +164,8 @@ export interface RequestParams {
 	listSessions: { cwd?: string };
 	/** 列出正在运行的会话文件。退出前确认有没有任务会被带走。 */
 	busySessions: Record<string, never>;
+	/** 结束主机：应答后关闭端点并退出进程。只接受来自回环地址的连接。 */
+	shutdownHost: Record<string, never>;
 	/** 新建会话并返回初始快照。 */
 	createSession: {
 		cwd?: string;
@@ -250,12 +281,40 @@ export interface RequestParams {
 	saveCustomProvider: { provider: CustomProviderInput };
 	/** 删除一个自定义提供方，连同它的凭证，返回更新后的清单。 */
 	removeCustomProvider: { providerId: string };
+	/** 列出主机上的终端，含已结束的与主机重启前留下的。 */
+	listTerminals: Record<string, never>;
+	/**
+	 * 开一个终端。
+	 *
+	 * cwd 为空串时用主机用户的 home，界面还没打开会话或项目时也能开；cols 与 rows 由界面的
+	 * xterm 实例给出，挂载之后会按 fit 出来的真实尺寸再报一次。
+	 */
+	createTerminal: { cwd: string; cols: number; rows: number; shell?: string };
+	/** 往终端里写入按键。多个端同时写时按到达顺序执行。 */
+	writeTerminal: { id: string; data: string };
+	/** 改终端尺寸。 */
+	resizeTerminal: { id: string; cols: number; rows: number };
+	/** 关掉终端，进程收到挂断。 */
+	killTerminal: { id: string };
+	/**
+	 * 确认已收到的输出。
+	 *
+	 * seq 是端已处理到的通道序号，主机据此扣减未确认字符数，水位降下来再恢复 pty。
+	 */
+	ackTerminal: { id: string; seq: number };
+	/**
+	 * 取回滚内容与当前序号。
+	 *
+	 * 端挂载或断线重连时先取一次，再按 since 订阅增量。
+	 */
+	serializeTerminal: { id: string };
 }
 
 /** 每条请求的应答数据。 */
 export interface RequestResults {
 	listSessions: { sessions: SessionSummary[] };
 	busySessions: { files: string[] };
+	shutdownHost: Record<string, never>;
 	createSession: SessionSnapshot;
 	openSession: SessionSnapshot;
 	forkSession: SessionSnapshot;
@@ -292,6 +351,14 @@ export interface RequestResults {
 	listCustomProviders: { providers: CustomProviderInfo[] };
 	saveCustomProvider: { providers: CustomProviderInfo[] };
 	removeCustomProvider: { providers: CustomProviderInfo[] };
+	listTerminals: { terminals: TerminalInfo[] };
+	createTerminal: { terminal: TerminalInfo };
+	writeTerminal: Record<string, never>;
+	resizeTerminal: Record<string, never>;
+	killTerminal: Record<string, never>;
+	ackTerminal: Record<string, never>;
+	/** text 是回滚缓冲里的可见文本，seq 是当前通道序号，端从 seq 之后接着收增量 */
+	serializeTerminal: { text: string; seq: number; cols: number; rows: number };
 }
 
 /** 请求方法名。 */

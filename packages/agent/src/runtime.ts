@@ -442,7 +442,8 @@ export class PiAgentFactory {
 	 * 建立会话要先知道它的 id 才能确定登记键,而 id 在文件头部,这里只读一小段。
 	 * 文件不是会话文件时抛错。
 	 */
-	async peekSessionId(file: string): Promise<string> {
+	/** 读会话文件的头部：会话标识与创建时的工作目录。 */
+	private async readSessionHeader(file: string): Promise<{ id: string; cwd: string }> {
 		let handle: Awaited<ReturnType<typeof open>>;
 		try {
 			handle = await open(file, "r");
@@ -458,19 +459,29 @@ export class PiAgentFactory {
 			const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
 			const text = buffer.subarray(0, bytesRead).toString("utf8");
 			const line = text.slice(0, text.indexOf("\n") < 0 ? text.length : text.indexOf("\n"));
-			let header: { type?: unknown; id?: unknown };
+			let header: { type?: unknown; id?: unknown; cwd?: unknown };
 			try {
-				header = JSON.parse(line) as { type?: unknown; id?: unknown };
+				header = JSON.parse(line) as { type?: unknown; id?: unknown; cwd?: unknown };
 			} catch {
 				throw new Error(`不是会话文件:${file}`);
 			}
-			if (header.type !== "session" || typeof header.id !== "string") {
+			if (header.type !== "session" || typeof header.id !== "string" || typeof header.cwd !== "string") {
 				throw new Error(`不是会话文件:${file}`);
 			}
-			return header.id;
+			return { id: header.id, cwd: header.cwd };
 		} finally {
 			await handle.close();
 		}
+	}
+
+	/** 会话文件里的会话标识。 */
+	async peekSessionId(file: string): Promise<string> {
+		return (await this.readSessionHeader(file)).id;
+	}
+
+	/** 会话文件头部的目录。会话清单推送据此决定读哪个项目的会话，文件不在了时抛出。 */
+	async peekSessionCwd(file: string): Promise<string> {
+		return normalizeProjectPath((await this.readSessionHeader(file)).cwd);
 	}
 
 	/** 打开已有会话。模型回退等提示通过 PiAgent 的 fallbackNotice 取得。 */

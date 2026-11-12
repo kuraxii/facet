@@ -5,7 +5,7 @@
  * 项目过滤器同时决定队列的范围与新建会话的目录，队列按时间分组，分组规则见 sidebar-model。
  */
 import type { ProjectInfo, SessionSummary } from "@facet/protocol";
-import { FolderPlus, PanelRight, Plus, Search, Settings } from "lucide-react";
+import { FolderPlus, PanelRight, Plus, Search, Settings, SquareTerminal } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronIcon } from "../transcript/chevron.tsx";
 import { FolderIcon, MoonIcon, SunIcon } from "../transcript/icons.tsx";
@@ -69,12 +69,22 @@ export interface SessionSidebarProps {
 	isSettingsOpen?: boolean;
 	/** 切换右侧栏展开与收起 */
 	onTogglePanel?: () => void;
+	/** 展开或收起终端面板 */
+	onToggleTerminal?: () => void;
+	/** 终端面板是否展开 */
+	isTerminalOpen?: boolean;
 	/** 右侧栏是否展开 */
 	isPanelOpen?: boolean;
 	/** 页脚的主机切换入口，由宿主给出 */
 	hostSwitcher?: ReactNode;
 	/** 当前主机名，显示在页脚右侧 */
 	hostName?: string;
+	/** 连接状态提示，例如「重连中」或「只读」 */
+	hostStatus?: string;
+	/** 窄屏时侧栏是抽屉，展开状态由这个开关控制 */
+	isOpen?: boolean;
+	/** 窄屏抽屉里选完会话后收起 */
+	onNavigate?: () => void;
 }
 
 /** 会话行状态点的样式类。运行中与压缩中都走运行色，前者呼吸，后者常亮。 */
@@ -126,9 +136,14 @@ export function SessionSidebar({
 	onOpenSettings,
 	isSettingsOpen = false,
 	onTogglePanel,
+	isTerminalOpen = false,
+	onToggleTerminal,
 	isPanelOpen = false,
 	hostSwitcher,
 	hostName,
+	hostStatus,
+	isOpen = true,
+	onNavigate,
 }: SessionSidebarProps) {
 	const [keyword, setKeyword] = useState("");
 	const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -363,6 +378,7 @@ export function SessionSidebar({
 	const openSession = (session: SidebarSession): void => {
 		if (session.isPlaceholder !== true) {
 			onSelect(session.path);
+			onNavigate?.();
 		}
 	};
 
@@ -374,7 +390,7 @@ export function SessionSidebar({
 			: "这个项目还没有会话";
 
 	return (
-		<aside className="sb">
+		<aside className={isOpen ? "sb is-open" : "sb"}>
 			<header className="sb-head">
 				<span className="sb-title">Facet</span>
 				<span className="sb-tools">
@@ -397,6 +413,17 @@ export function SessionSidebar({
 					<button type="button" className="sb-tool" aria-label="添加项目" onClick={onAddProject}>
 						<FolderPlus size={15} strokeWidth={1.5} />
 					</button>
+					{onToggleTerminal === undefined ? null : (
+						<button
+							type="button"
+							className="sb-tool"
+							aria-label={isTerminalOpen ? "收起终端" : "展开终端"}
+							aria-pressed={isTerminalOpen}
+							onClick={onToggleTerminal}
+						>
+							<SquareTerminal size={15} strokeWidth={1.5} />
+						</button>
+					)}
 					{onTogglePanel === undefined ? null : (
 						<button
 							type="button"
@@ -414,7 +441,10 @@ export function SessionSidebar({
 			<button
 				type="button"
 				className="sb-new"
-				onClick={() => onCreate(newSessionCwd)}
+				onClick={() => {
+					onCreate(newSessionCwd);
+					onNavigate?.();
+				}}
 				disabled={!canCreate || newSessionCwd.length === 0}
 				title={newSessionCwd.length === 0 ? "先添加项目" : `在 ${newSessionCwd} 新建`}
 			>
@@ -805,7 +835,10 @@ export function SessionSidebar({
 				>
 					{theme === "dark" ? <SunIcon size={14} /> : <MoonIcon size={14} />}
 				</button>
-				<span className="sb-foot-hint">{hostName ?? "本机"}</span>
+				<span className="sb-foot-hint">
+					{hostName ?? "本机"}
+					{hostStatus === undefined ? null : <span className="sb-foot-status">{hostStatus}</span>}
+				</span>
 			</footer>
 		</aside>
 	);

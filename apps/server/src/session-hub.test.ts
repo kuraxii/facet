@@ -1,7 +1,14 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
-import type { Entry, SessionEvent, SessionEventListener, SessionSnapshot } from "@facet/protocol";
+import type {
+	ActionFrame,
+	Entry,
+	SessionEvent,
+	SessionEventListener,
+	SessionSnapshot,
+} from "@facet/protocol";
+import { makeChannel } from "@facet/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	type ActionSink,
@@ -221,6 +228,54 @@ afterEach(() => {
 });
 
 const sink = (id: string) => ({ id, send: () => {} });
+
+describe("会话清单通知", () => {
+	/** 换一个记下清单变化的 hub，覆盖新建、改名、删除与一轮结束。 */
+	function hubWithNotes(): { hub: SessionHub<FakeAgent>; notes: [string, string][] } {
+		const notes: [string, string][] = [];
+		const noted = new SessionHub<FakeAgent>({
+			factory,
+			replayLimit: 8,
+			idleCloseMs: IDLE_MS,
+			onSessionChanged: (file, change) => notes.push([file, change]),
+		});
+		return { hub: noted, notes };
+	}
+
+	it("新建、打开、改名与删除都会通知", async () => {
+		const { hub: local, notes } = hubWithNotes();
+		await local.createSession({ cwd: "/tmp" });
+		expect(notes).toContainEqual(["/tmp/new-1.jsonl", "changed"]);
+
+		const dir = await mkdtemp(join(tmpdir(), "facet-notes-"));
+		const file = join(dir, "s1.jsonl");
+		await writeFile(
+			file,
+			`${JSON.stringify({ type: "session", id: "s1", cwd: dir })}
+`,
+		);
+		notes.length = 0;
+		await local.openSession(file);
+		expect(notes).toContainEqual([file, "changed"]);
+		notes.length = 0;
+		await local.renameSession(file, "新名字");
+		expect(notes).toContainEqual([file, "changed"]);
+		notes.length = 0;
+		await local.deleteSession(file);
+		expect(notes).toContainEqual([file, "removed"]);
+		await rm(dir, { recursive: true, force: true });
+		local.dispose();
+	});
+
+	it("一轮结束时通知", async () => {
+		const { hub: local, notes } = hubWithNotes();
+		const snapshot = await local.openSession("/tmp/s1.jsonl");
+		notes.length = 0;
+		local.agent(snapshot.id).emit({ type: "settled", aborted: false } as never);
+		expect(notes).toContainEqual(["/tmp/s1.jsonl", "changed"]);
+		local.dispose();
+	});
+});
 
 describe("会话建立与复用", () => {
 	it("打开同一文件复用同一份运行态", async () => {
@@ -484,6 +539,101 @@ describe("空闲回收", () => {
 		await hub.snapshot(snapshot.id);
 		await vi.advanceTimersByTimeAsync(IDLE_MS + 1);
 		expect(hub.has(snapshot.id)).toBe(false);
+	});
+});
+
+describe("按数量回收", () => {
+	it("超过上限时从最久没被用过的开始回收", async () => {
+		const first = await hub.openSession("/tmp/s1.jsonl");
+		vi.advanceTimersByTime(5);
+		const second = await hub.openSession("/tmp/s2.jsonl");
+		vi.advanceTimersByTime(5);
+		const third = await hub.openSession("/tmp/s3.jsonl");
+		expect(hub.stats().loaded).toBe(3);
+		const removed = hub.enforceLimits({ maxSessions: 2 });
+		expect(removed).toEqual([first.id]);
+		expect(hub.has(second.id)).toBe(true);
+		expect(hub.has(third.id)).toBe(true);
+	});
+
+	it("有订阅、在跑或者被 keep 的都不回收", async () => {
+		const watched = await hub.openSession("/tmp/s1.jsonl");
+		const running = await hub.openSession("/tmp/s2.jsonl");
+		const kept = await hub.openSession("/tmp/s3.jsonl");
+		hub.agent(running.id).busy = true;
+		await hub.subscribe(makeChannel("session", watched.id), undefined, sink("端一"));
+		const removed = hub.enforceLimits({ maxSessions: 1, keep: [kept.id] });
+		// 三个都在保护里，一个都不回收
+		expect(removed).toEqual([]);
+		expect(hub.stats()).toMatchObject({ loaded: 3, busy: 1 });
+	});
+});
+
+describe("多端", () => {
+	/** 记账用的订阅者：收下的帧按顺序存起来。 */
+	function recorder(id: string) {
+		const frames: ActionFrame[] = [];
+		return { frames, sink: { id, send: (frame: ActionFrame) => frames.push(frame) } };
+	}
+
+	it("两个端订阅同一会话时收到同一串动作", async () => {
+		const snapshot = await hub.openSession("/tmp/s1.jsonl");
+		const first = recorder("端一");
+		const second = recorder("端二");
+		for (const { sink } of [first, second]) {
+			await hub.subscribe(makeChannel("session", snapshot.id), undefined, sink);
+			await hub.subscribe(makeChannel("chat", snapshot.id), undefined, sink);
+		}
+		const agent = hub.agent(snapshot.id);
+		agent.emit({ type: "queue", steering: ["排队一句"], followUp: [] } as never);
+		agent.emit({ type: "settled", aborted: false } as never);
+		expect(first.frames.length).toBeGreaterThan(0);
+		expect(first.frames).toEqual(second.frames);
+	});
+
+	it("两个端同时写同一会话时按到达顺序执行，后一个看到前一个的结果", async () => {
+		const snapshot = await hub.createSession();
+		const order: string[] = [];
+		let running = 0;
+		await Promise.all([
+			hub.withSession(snapshot.id, async () => {
+				running += 1;
+				order.push(`端一 ${running}`);
+				await Promise.resolve();
+			}),
+			hub.withSession(snapshot.id, async () => {
+				running += 1;
+				order.push(`端二 ${running}`);
+			}),
+		]);
+		// 同一时刻只有一个动作在跑，第二个看到的 running 已经是 2
+		expect(order).toEqual(["端一 1", "端二 2"]);
+	});
+
+	it("排队变化推给所有订阅者", async () => {
+		const snapshot = await hub.openSession("/tmp/s1.jsonl");
+		const first = recorder("端一");
+		const second = recorder("端二");
+		const channel = makeChannel("session", snapshot.id);
+		await hub.subscribe(channel, undefined, first.sink);
+		await hub.subscribe(channel, undefined, second.sink);
+		hub.agent(snapshot.id).emit({ type: "queue", steering: ["补充"], followUp: ["收尾"] } as never);
+		const actions = first.frames.map((frame) => frame.action);
+		expect(actions).toContainEqual({ type: "session/queueChanged", steering: ["补充"], followUp: ["收尾"] });
+		expect(second.frames.map((frame) => frame.action)).toEqual(actions);
+	});
+
+	it("退订之后不再收到，另一个端照常", async () => {
+		const snapshot = await hub.openSession("/tmp/s1.jsonl");
+		const first = recorder("端一");
+		const second = recorder("端二");
+		const channel = makeChannel("session", snapshot.id);
+		await hub.subscribe(channel, undefined, first.sink);
+		await hub.subscribe(channel, undefined, second.sink);
+		hub.unsubscribe(channel, first.sink);
+		hub.agent(snapshot.id).emit({ type: "queue", steering: ["再说一句"], followUp: [] } as never);
+		expect(first.frames).toEqual([]);
+		expect(second.frames).toHaveLength(1);
 	});
 });
 

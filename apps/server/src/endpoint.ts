@@ -6,18 +6,23 @@
  * 断线时该端的订阅全部解除,会话本身继续在主机上运行。
  */
 import { randomUUID } from "node:crypto";
-import { realpath, stat } from "node:fs/promises";
-import { createServer } from "node:http";
-import { isAbsolute } from "node:path";
+import { chmod, mkdir, realpath, rm, stat } from "node:fs/promises";
+import { createServer as createHttpServer } from "node:http";
+import { createServer as createSocketServer, type Socket } from "node:net";
+import { homedir } from "node:os";
+import { dirname, isAbsolute, join } from "node:path";
 import { InvalidProviderError, type PiAgentFactory } from "@facet/agent";
 import {
 	type Action,
 	type ActionFrame,
 	type Capability,
 	type Channel,
+	type ClientRole,
 	type CustomProviderInfo,
 	type ErrorCode,
+	encodeFrame,
 	type FacetSettings,
+	FrameDecoder,
 	type HelloFrame,
 	PROTOCOL_VERSION,
 	parseChannel,
@@ -27,12 +32,14 @@ import {
 	type SessionSnapshot,
 } from "@facet/protocol";
 import { WebSocket, WebSocketServer } from "ws";
+import { AuditLog } from "./audit.ts";
 import type { ServerConfig } from "./config.ts";
 import { buildDiagnostics } from "./diagnostics.ts";
 import { FileAccessError, listDirectory, readTextFile, writeTextFile } from "./files.ts";
 import { gitDiff, gitStatus } from "./git.ts";
 import type { HostSource } from "./host-identity.ts";
 import { ProjectExistsError, ProjectNotFoundError, type ProjectStore } from "./project-store.ts";
+import { DisabledPtyBackend } from "./pty-host.ts";
 import { RevealFailedError, revealInFileManager } from "./reveal.ts";
 import {
 	type ActionSink,
@@ -44,13 +51,64 @@ import {
 	type SessionHub,
 	SessionNotFoundError,
 } from "./session-hub.ts";
+import type { SessionsChannel } from "./sessions-channel.ts";
 import type { SettingsStore } from "./settings-store.ts";
+import { TerminalService } from "./terminals.ts";
+import { serveWebRequest } from "./web.ts";
 
+/** Web 接入的 WebSocket 路径，与字节流那条共用同一套帧。 */
 const ENDPOINT_PATH = "/endpoint";
-const MAX_FRAME_BYTES = 32 * 1024 * 1024;
+
+/**
+ * 只允许本机连接的请求。
+ *
+ * 凭证、设置、提供方、项目增删与信任、诊断与结束主机都属于主机管理，远程连接即使是
+ * 操作档也不放行。
+ */
+const ADMIN_ONLY_REQUESTS = new Set<string>([
+	"saveCredential",
+	"deleteCredential",
+	"updateSettings",
+	"saveCustomProvider",
+	"removeCustomProvider",
+	"setProviderBaseUrl",
+	"testModel",
+	"addProject",
+	"removeProject",
+	"renameProject",
+	"setProjectTrust",
+	"revealProject",
+	"diagnostics",
+	"shutdownHost",
+]);
+
+/** 只读连接不能做的请求：会改会话或文件。 */
+const WRITE_REQUESTS = new Set<string>([
+	"createSession",
+	"forkSession",
+	"renameSession",
+	"deleteSession",
+	"writeFile",
+	"createTerminal",
+	"writeTerminal",
+	"resizeTerminal",
+	"killTerminal",
+]);
 
 /** 当前主机已实现的能力。未列入的入口由端点隐藏。 */
-const CAPABILITIES: Capability[] = ["dispatch", "tools", "compaction", "export"];
+const BASE_CAPABILITIES: Capability[] = ["dispatch", "tools", "compaction"];
+
+/**
+ * 本次连接能用的能力。
+ *
+ * 终端依赖 pty 子进程里的原生模块，加载不起来（运行时版本不匹配、缺编译产物）时如实报缺，
+ * 界面据此隐藏终端入口并显示原因，而不是让它连上再报错。
+ */
+function capabilitiesFor(context: EndpointContext): Capability[] {
+	return context.terminals.unavailable === undefined
+		? [...BASE_CAPABILITIES, "terminal"]
+		: [...BASE_CAPABILITIES];
+}
 
 /** 请求被拒绝时带出的错误。未捕获的其他错误统一归类为内部错误。 */
 class RequestError extends Error {
@@ -62,12 +120,26 @@ class RequestError extends Error {
 	}
 }
 
+/**
+ * 一条连接。
+ *
+ * 承载方式（WebSocket 或字节流）只影响怎么收发字节，连接本身只认「发一帧」与「关掉」。
+ */
 interface Connection {
-	readonly ws: WebSocket;
 	/** 本次连接的端标识,写进回放动作的 origin */
 	readonly clientId: string;
+	/** 对端地址，只有回环地址能结束主机 */
+	readonly remoteAddress: string | undefined;
 	/** 已订阅的通道与其转发函数,用于取消订阅与断线清理 */
 	readonly subscriptions: Map<Channel, ActionSink>;
+	/** 令牌是否已校验通过，通过之后才发 hello 并接受请求 */
+	authenticated: boolean;
+	/** 这条连接能做什么：认证帧里声明的档位，主机会按配置收窄 */
+	role: ClientRole;
+	/** 发一帧给对端 */
+	send(frame: ServerFrame): void;
+	/** 关掉连接，参数是给对端看的说明 */
+	close(code: number, reason: string): void;
 }
 
 interface EndpointContext {
@@ -80,12 +152,33 @@ interface EndpointContext {
 	/** 主机标识的派生来源，诊断里说明这台机器有没有 machine-id */
 	readonly hostSource: HostSource;
 	readonly connections: Set<Connection>;
+	/** 收到结束主机的请求后调用，由进程入口决定怎么收尾 */
+	readonly requestShutdown: () => void;
+	/** 会话清单通道，所有端订阅同一条 */
+	readonly sessions: SessionsChannel;
+	/** 终端登记与终端通道 */
+	readonly terminals: TerminalService;
+	/** 远程操作审计 */
+	readonly audit: AuditLog;
+}
+
+/** 这个对端地址是否是回环地址。IPv4、IPv6 与 IPv4 映射地址都算。 */
+export function isLoopbackAddress(address: string | undefined): boolean {
+	if (address === undefined) {
+		return false;
+	}
+	const normalized = address.startsWith("::ffff:") ? address.slice("::ffff:".length) : address;
+	return normalized === "::1" || normalized === "localhost" || normalized.startsWith("127.");
 }
 
 export interface EndpointHandle {
-	/** 实际监听的端口,配置为 0 时由系统分配 */
+	/** 实际监听的端口,配置为 0 时由系统分配；unix socket 模式下为 0 */
 	readonly port: number;
 	readonly host: string;
+	/** unix socket 路径，TCP 模式下没有 */
+	readonly socketPath?: string;
+	/** Web 接入的端口，未开启时没有 */
+	readonly webPort?: number;
 	/** 关闭监听并断开所有连接。会话由调用方负责释放。 */
 	close(): Promise<void>;
 }
@@ -97,10 +190,18 @@ function asObject(value: unknown): Record<string, unknown> {
 	return value as Record<string, unknown>;
 }
 
-function requiredString(source: Record<string, unknown>, key: string): string {
+function requiredString(source: Record<string, unknown>, key: string, allowEmpty = false): string {
 	const value = source[key];
-	if (typeof value !== "string" || value.length === 0) {
+	if (typeof value !== "string" || (!allowEmpty && value.length === 0)) {
 		throw new RequestError("bad_params", `missing string param: ${key}`);
+	}
+	return value;
+}
+
+function requiredNumber(source: Record<string, unknown>, key: string): number {
+	const value = source[key];
+	if (typeof value !== "number" || !Number.isFinite(value)) {
+		throw new RequestError("bad_params", `missing number param: ${key}`);
 	}
 	return value;
 }
@@ -147,15 +248,52 @@ function requiredChannel(source: Record<string, unknown>, key: string): Channel 
 	return raw as Channel;
 }
 
-function send(ws: WebSocket, frame: ServerFrame): void {
-	if (ws.readyState !== WebSocket.OPEN) {
+/** 订阅与退订接受会话清单通道，写操作只针对会话与对话通道。 */
+function subscribableChannel(source: Record<string, unknown>, key: string): Channel {
+	const raw = requiredString(source, key);
+	const kind = parseChannel(raw)?.kind;
+	if (kind === "sessions" || kind === "terminal") {
+		return raw as Channel;
+	}
+	return requiredChannel(source, key);
+}
+
+/** 退掉一个通道的订阅，会话、对话与清单通道各走各的表。 */
+function unsubscribeChannel(context: EndpointContext, channel: Channel, sink: ActionSink): void {
+	const kind = parseChannel(channel)?.kind;
+	if (kind === "sessions") {
+		context.sessions.unsubscribe(sink);
 		return;
 	}
-	ws.send(JSON.stringify(frame));
+	if (kind === "terminal") {
+		context.terminals.unsubscribe(channel, sink);
+		return;
+	}
+	context.hub.unsubscribe(channel, sink);
 }
 
 function toSink(connection: Connection): ActionSink {
-	return { id: connection.clientId, send: (frame) => send(connection.ws, frame) };
+	return { id: connection.clientId, send: (frame) => connection.send(frame) };
+}
+
+/**
+ * 终端启动目录。
+ *
+ * 必须是真实存在的目录：终端以主机用户身份跑 shell，界面上给的路径先在这里核对一遍，
+ * 软链接也按实际指向判断。
+ */
+async function resolveTerminalCwd(cwd: string): Promise<string> {
+	let real: string;
+	try {
+		real = await realpath(cwd);
+	} catch {
+		throw new RequestError("file_not_found", `启动目录不存在: ${cwd}`);
+	}
+	const info = await stat(real).catch(() => undefined);
+	if (info === undefined || !info.isDirectory()) {
+		throw new RequestError("bad_params", `启动目录不是目录: ${cwd}`);
+	}
+	return real;
 }
 
 /** 建立会话并把审批应答接到该会话的中转上。 */
@@ -241,12 +379,53 @@ async function applyAction(context: EndpointContext, channel: Channel, action: A
 	});
 }
 
+/**
+ * 按连接的权限档判定能不能做这个请求。
+ *
+ * 本机连接放行；远程的操作档不能碰主机管理；远程的只读档连会话与文件都改不了。
+ */
+function assertRequestAllowed(connection: Connection, method: string): void {
+	if (connection.role === "admin") {
+		return;
+	}
+	if (ADMIN_ONLY_REQUESTS.has(method)) {
+		throw new RequestError("rejected", "这个操作只允许在本机进行");
+	}
+	if (connection.role === "viewer" && WRITE_REQUESTS.has(method)) {
+		throw new RequestError("rejected", "这条连接是只读的");
+	}
+}
+
+/** 远程连接的写操作记一笔，本机连接不记。 */
+function auditRemote(context: EndpointContext, connection: Connection, name: string, failure?: string): void {
+	if (connection.role === "admin") {
+		return;
+	}
+	context.audit.record({
+		at: Date.now(),
+		clientId: connection.clientId,
+		role: connection.role,
+		name,
+		ok: failure === undefined,
+		...(failure === undefined ? {} : { reason: failure }),
+	});
+}
+
 async function handleRequest(
 	context: EndpointContext,
 	connection: Connection,
 	method: string,
 	params: unknown,
 ): Promise<unknown> {
+	try {
+		assertRequestAllowed(connection, method);
+	} catch (error) {
+		auditRemote(context, connection, method, toProtocolError(error).message);
+		throw error;
+	}
+	if (connection.role !== "admin" && WRITE_REQUESTS.has(method)) {
+		auditRemote(context, connection, method);
+	}
 	switch (method) {
 		case "listSessions": {
 			const source = asObject(params ?? {});
@@ -286,21 +465,36 @@ async function handleRequest(
 		}
 		case "subscribe": {
 			const source = asObject(params);
-			const channel = requiredChannel(source, "channel");
+			const channel = subscribableChannel(source, "channel");
 			const previous = connection.subscriptions.get(channel);
 			if (previous) {
-				context.hub.unsubscribe(channel, previous);
+				unsubscribeChannel(context, channel, previous);
 			}
 			const sink = toSink(connection);
 			connection.subscriptions.set(channel, sink);
+			const parsed = parseChannel(channel);
+			if (parsed?.kind === "sessions") {
+				// 清单通道只有一条，标识对不上的按未知通道拒绝
+				if (parsed.id !== context.hostId) {
+					throw new RequestError("unknown_channel", `unsupported channel: ${channel}`);
+				}
+				return context.sessions.subscribe(channel, optionalNumber(source, "since"), sink);
+			}
+			if (parsed?.kind === "terminal") {
+				// 终端通道按标识对号，登记里没有的按未知通道拒绝
+				if (context.terminals.get(parsed.id) === undefined) {
+					throw new RequestError("unknown_channel", `unsupported channel: ${channel}`);
+				}
+				return context.terminals.subscribe(channel, optionalNumber(source, "since"), sink);
+			}
 			return await context.hub.subscribe(channel, optionalNumber(source, "since"), sink);
 		}
 		case "unsubscribe": {
 			const source = asObject(params);
-			const channel = requiredChannel(source, "channel");
+			const channel = subscribableChannel(source, "channel");
 			const sink = connection.subscriptions.get(channel);
 			if (sink) {
-				context.hub.unsubscribe(channel, sink);
+				unsubscribeChannel(context, channel, sink);
 				connection.subscriptions.delete(channel);
 			}
 			return {};
@@ -383,6 +577,15 @@ async function handleRequest(
 		}
 		case "busySessions":
 			return { files: context.hub.busyFiles() };
+		case "shutdownHost": {
+			// 结束主机等于把主机上正在跑的任务一起停掉，只允许本机连接
+			if (connection.role !== "admin") {
+				throw new RequestError("rejected", "只有本机连接可以结束主机");
+			}
+			// 先给出应答再退，否则发出请求的端只会看到连接断开
+			setTimeout(() => context.requestShutdown(), 50).unref();
+			return {};
+		}
 		case "diagnostics": {
 			const [sessions, settings] = await Promise.all([
 				context.factory.listSessions(),
@@ -418,6 +621,50 @@ async function handleRequest(
 				models: Array.isArray(provider.models) ? (provider.models as CustomProviderInfo["models"]) : [],
 			});
 			return { providers: await context.factory.customProviders() };
+		}
+		case "listTerminals": {
+			return { terminals: context.terminals.list() };
+		}
+		case "createTerminal": {
+			const source = asObject(params);
+			// cwd 为空时落在主机用户的 home：界面还没有打开会话或项目时也能开终端
+			const requested = optionalString(source, "cwd")?.trim() ?? "";
+			const cwd = await resolveTerminalCwd(requested.length > 0 ? requested : homedir());
+			const terminal = await context.terminals.create({
+				cwd,
+				cols: requiredNumber(source, "cols"),
+				rows: requiredNumber(source, "rows"),
+				shell: optionalString(source, "shell"),
+			});
+			return { terminal };
+		}
+		case "writeTerminal": {
+			const source = asObject(params);
+			context.terminals.write(requiredString(source, "id"), requiredString(source, "data", true));
+			return {};
+		}
+		case "resizeTerminal": {
+			const source = asObject(params);
+			context.terminals.resize(
+				requiredString(source, "id"),
+				requiredNumber(source, "cols"),
+				requiredNumber(source, "rows"),
+			);
+			return {};
+		}
+		case "killTerminal": {
+			const source = asObject(params);
+			context.terminals.kill(requiredString(source, "id"));
+			return {};
+		}
+		case "ackTerminal": {
+			const source = asObject(params);
+			context.terminals.ack(requiredString(source, "id"), requiredNumber(source, "seq"));
+			return {};
+		}
+		case "serializeTerminal": {
+			const source = asObject(params);
+			return context.terminals.serialize(requiredString(source, "id"));
 		}
 		case "removeCustomProvider": {
 			const source = asObject(params);
@@ -548,6 +795,21 @@ async function handleDispatch(context: EndpointContext, connection: Connection, 
 	const channel = requiredChannel(source, "channel");
 	const action = source.action as Action;
 	const clientSeq = optionalNumber(source, "clientSeq") ?? 0;
+	if (connection.role === "viewer") {
+		// 只读连接派发动作直接拒绝：回一条带原因的帧，不写任何东西
+		const reason = "这条连接是只读的";
+		auditRemote(context, connection, action.type, reason);
+		connection.send({
+			type: "action",
+			channel,
+			action,
+			serverSeq: context.hub.lastSeq(channel),
+			origin: { clientId: connection.clientId, clientSeq },
+			rejectionReason: reason,
+		} satisfies ActionFrame);
+		return;
+	}
+	auditRemote(context, connection, action.type);
 	if (typeof action !== "object" || action === null || typeof action.type !== "string") {
 		throw new RequestError("bad_params", "action must carry a type");
 	}
@@ -555,7 +817,7 @@ async function handleDispatch(context: EndpointContext, connection: Connection, 
 	// 不等待执行完成,否则同一端连续发出的动作会被前一条阻塞。
 	void applyAction(context, channel, action).catch((error) => {
 		const failure = toProtocolError(error);
-		send(connection.ws, {
+		connection.send({
 			type: "action",
 			channel,
 			action,
@@ -566,29 +828,83 @@ async function handleDispatch(context: EndpointContext, connection: Connection, 
 	});
 }
 
+/**
+ * 认证帧里声明的档位换算成实际授予的档位。
+ *
+ * 不声明就是管理档（本机连接）；声明操作档时按主机配置收窄，配置为只读时一律给只读。
+ */
+function grantedRole(context: EndpointContext, requested: unknown, fallback: ClientRole): ClientRole {
+	if (requested === undefined) {
+		return fallback;
+	}
+	if (requested === "operator") {
+		return context.config.remotePermission === "operate" ? "operator" : "viewer";
+	}
+	return "viewer";
+}
+
+/** 令牌是否与主机配置一致。主机没设令牌时放行，只用于本机调试环境。 */
+function matchesToken(context: EndpointContext, token: string): boolean {
+	const expected = context.config.token;
+	if (expected === undefined || expected.length === 0) {
+		return true;
+	}
+	return token === expected;
+}
+
 async function handleFrame(context: EndpointContext, connection: Connection, text: string): Promise<void> {
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(text);
 	} catch {
-		connection.ws.close(1003, "invalid json");
+		connection.close(1003, "invalid json");
 		return;
 	}
 	if (typeof parsed !== "object" || parsed === null) {
-		connection.ws.close(1003, "invalid frame");
+		connection.close(1003, "invalid frame");
 		return;
 	}
-	const frame = parsed as { type?: unknown; id?: unknown; method?: unknown; params?: unknown };
+	const frame = parsed as {
+		type?: unknown;
+		id?: unknown;
+		method?: unknown;
+		params?: unknown;
+		token?: unknown;
+		role?: unknown;
+	};
+	if (!connection.authenticated) {
+		// 首帧必须是令牌；校验不过直接断开，之后才发 hello
+		if (frame.type !== "auth" || typeof frame.token !== "string") {
+			connection.close(1008, "需要先认证");
+			return;
+		}
+		if (!matchesToken(context, frame.token)) {
+			connection.close(1008, "令牌不匹配");
+			return;
+		}
+		connection.authenticated = true;
+		connection.role = grantedRole(context, frame.role, connection.role);
+		connection.send({
+			type: "hello",
+			protocolVersion: PROTOCOL_VERSION,
+			hostId: context.hostId,
+			hostName: context.config.hostName,
+			clientId: connection.clientId,
+			role: connection.role,
+			capabilities: capabilitiesFor(context),
+		} satisfies HelloFrame);
+		return;
+	}
 	if (frame.type === "dispatch") {
 		try {
 			await handleDispatch(context, connection, frame);
 		} catch (error) {
-			connection.ws.close(1008, toProtocolError(error).message);
+			connection.close(1008, toProtocolError(error).message);
 		}
 		return;
 	}
 	if (frame.type !== "request" || typeof frame.id !== "string" || typeof frame.method !== "string") {
-		connection.ws.close(1003, "invalid frame");
+		connection.close(1003, "invalid frame");
 		return;
 	}
 	const response: ResponseFrame = await (async () => {
@@ -604,7 +920,7 @@ async function handleFrame(context: EndpointContext, connection: Connection, tex
 			} satisfies ResponseFrame;
 		}
 	})();
-	send(connection.ws, response);
+	connection.send(response);
 }
 
 /** 启动端点监听。返回实际端口,供嵌入方写入自己的握手信息。 */
@@ -617,6 +933,14 @@ export async function startEndpoint(options: {
 	hostId: string;
 	/** 主机标识的派生来源，缺省当作由 machine-id 派生 */
 	hostSource?: HostSource;
+	/** 收到 shutdownHost 请求后调用 */
+	requestShutdown?: () => void;
+	/** 会话清单通道 */
+	sessions: SessionsChannel;
+	/** 终端登记与终端通道 */
+	terminals?: TerminalService;
+	/** 远程操作审计，缺省写到数据目录的 audit.log */
+	audit?: AuditLog;
 }): Promise<EndpointHandle> {
 	const context: EndpointContext = {
 		config: options.config,
@@ -627,63 +951,178 @@ export async function startEndpoint(options: {
 		hostId: options.hostId,
 		hostSource: options.hostSource ?? "machine-id",
 		connections: new Set(),
+		requestShutdown: options.requestShutdown ?? (() => {}),
+		sessions: options.sessions,
+		terminals:
+			options.terminals ?? new TerminalService({ backend: new DisabledPtyBackend("这台主机没有装配终端") }),
+		audit: options.audit ?? new AuditLog(join(options.config.dataDir, "audit.log")),
 	};
 
-	const httpServer = createServer((_request, response) => {
-		response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
-		response.end(`facet host endpoint, use websocket at ${ENDPOINT_PATH}\n`);
-	});
+	/** 连接关闭时的清理：退掉订阅、从表里摘掉。 */
+	const cleanup = (connection: Connection): void => {
+		if (!context.connections.delete(connection)) {
+			return;
+		}
+		for (const [channel, sink] of connection.subscriptions) {
+			unsubscribeChannel(context, channel, sink);
+		}
+		connection.subscriptions.clear();
+	};
 
-	const wss = new WebSocketServer({ server: httpServer, path: ENDPOINT_PATH, maxPayload: MAX_FRAME_BYTES });
-
-	wss.on("connection", (ws: WebSocket) => {
-		const connection: Connection = { ws, clientId: randomUUID(), subscriptions: new Map() };
-		context.connections.add(connection);
-		const hello: HelloFrame = {
-			type: "hello",
-			protocolVersion: PROTOCOL_VERSION,
-			hostId: context.hostId,
-			hostName: context.config.hostName,
-			clientId: connection.clientId,
-			capabilities: CAPABILITIES,
+	/** 一条新连接：按行切帧，首帧认令牌，通过后发 hello。 */
+	/** 建一条连接：收发交给具体承载，其余逻辑各条连接一致。 */
+	const makeConnection = (
+		remoteAddress: string | undefined,
+		send: (frame: ServerFrame) => void,
+		close: (code: number, reason: string) => void,
+		/** 认证帧没声明档位时用的档位：Web 连接缺省只读 */
+		defaultRole: ClientRole = "admin",
+	): Connection => {
+		const connection: Connection = {
+			clientId: randomUUID(),
+			remoteAddress,
+			subscriptions: new Map(),
+			authenticated: false,
+			// 认证帧里声明档位之后才确定
+			role: defaultRole,
+			send,
+			close: (code, reason) => {
+				close(code, reason);
+				cleanup(connection);
+			},
 		};
-		send(ws, hello);
-		ws.on("message", (raw) => {
-			void handleFrame(context, connection, raw.toString());
-		});
-		ws.on("close", () => {
-			for (const [channel, sink] of connection.subscriptions) {
-				context.hub.unsubscribe(channel, sink);
+		context.connections.add(connection);
+		return connection;
+	};
+
+	const accept = (socket: Socket): void => {
+		const connection = makeConnection(
+			socket.remoteAddress,
+			(frame) => {
+				if (!socket.destroyed) {
+					socket.write(encodeFrame(frame));
+				}
+			},
+			() => {
+				socket.end();
+				socket.destroy();
+			},
+		);
+		const decoder = new FrameDecoder();
+		socket.setEncoding("utf8");
+		socket.on("data", (chunk: string) => {
+			let lines: string[];
+			try {
+				lines = decoder.push(chunk);
+			} catch {
+				connection.close(1009, "帧超过上限");
+				return;
 			}
-			connection.subscriptions.clear();
-			context.connections.delete(connection);
+			for (const line of lines) {
+				void handleFrame(context, connection, line);
+			}
 		});
-	});
+		socket.on("close", () => cleanup(connection));
+		socket.on("error", () => cleanup(connection));
+	};
 
-	await new Promise<void>((resolve, reject) => {
-		httpServer.once("error", reject);
-		httpServer.listen(options.config.port, options.config.host, () => {
-			httpServer.off("error", reject);
-			resolve();
+	const useUnixSocket = options.config.socketPath !== undefined && options.config.socketPath.length > 0;
+	const socketServer = createSocketServer((socket) => accept(socket));
+
+	if (useUnixSocket) {
+		const path = options.config.socketPath as string;
+		// 上一次异常退出可能留下同名的 socket 文件，先清掉再监听
+		await rm(path, { force: true }).catch(() => undefined);
+		await mkdir(dirname(path), { recursive: true, mode: 0o700 }).catch(() => undefined);
+		await new Promise<void>((resolve, reject) => {
+			socketServer.once("error", reject);
+			socketServer.listen(path, () => {
+				socketServer.off("error", reject);
+				resolve();
+			});
 		});
-	});
+		// socket 本身也收成仅本人可读写，同机的其他用户连不上
+		await chmod(path, 0o600).catch(() => undefined);
+	} else {
+		await new Promise<void>((resolve, reject) => {
+			socketServer.once("error", reject);
+			socketServer.listen(options.config.port, options.config.host, () => {
+				socketServer.off("error", reject);
+				resolve();
+			});
+		});
+	}
 
-	const address = httpServer.address();
-	const port = typeof address === "object" && address !== null ? address.port : options.config.port;
+	/**
+	 * Web 接入。
+	 *
+	 * 只有给出 webPort 时才开：同一个端口既发页面也接 WebSocket，页面的连接走 WS 帧、
+	 * 每条消息是一行帧。远程接入的开关与权限档在这里生效，缺省关闭。
+	 */
+	let webServer: ReturnType<typeof createHttpServer> | undefined;
+	let webSockets: WebSocketServer | undefined;
+	if (options.config.webPort !== undefined) {
+		const root = options.config.webRoot;
+		webServer = createHttpServer((request, response) => {
+			void serveWebRequest(root, request, response);
+		});
+		webSockets = new WebSocketServer({ server: webServer, path: ENDPOINT_PATH });
+		webSockets.on("connection", (ws: WebSocket) => {
+			const connection = makeConnection(
+				"web",
+				(frame) => {
+					if (ws.readyState === WebSocket.OPEN) {
+						// 与字节流一样的按行编码：浏览器端用同一个解码器
+						ws.send(encodeFrame(frame));
+					}
+				},
+				() => {
+					ws.terminate();
+				},
+				// Web 端是远程入口，没声明档位时按只读
+				"viewer",
+			);
+			ws.on("message", (raw) => {
+				void handleFrame(context, connection, raw.toString());
+			});
+			ws.on("close", () => cleanup(connection));
+			ws.on("error", () => cleanup(connection));
+		});
+		await new Promise<void>((resolve, reject) => {
+			webServer?.once("error", reject);
+			webServer?.listen(options.config.webPort, options.config.host, () => {
+				webServer?.off("error", reject);
+				resolve();
+			});
+		});
+	}
+
+	const address = socketServer.address();
+	const port = typeof address === "object" && address !== null ? address.port : 0;
+	const webAddress = webServer?.address();
+	const webPort = typeof webAddress === "object" && webAddress !== null ? webAddress.port : undefined;
 
 	return {
 		port,
 		host: options.config.host,
+		...(useUnixSocket ? { socketPath: options.config.socketPath as string } : {}),
+		...(webPort === undefined ? {} : { webPort }),
 		close: async () => {
-			for (const connection of context.connections) {
-				connection.ws.close(1001, "host shutting down");
+			webSockets?.close();
+			await new Promise<void>((resolve) => {
+				if (webServer === undefined) {
+					resolve();
+					return;
+				}
+				webServer.close(() => resolve());
+			});
+			for (const connection of [...context.connections]) {
+				connection.close(1001, "host shutting down");
 			}
 			context.connections.clear();
+			context.sessions.clear();
 			await new Promise<void>((resolve) => {
-				wss.close(() => resolve());
-			});
-			await new Promise<void>((resolve) => {
-				httpServer.close(() => resolve());
+				socketServer.close(() => resolve());
 			});
 		},
 	};

@@ -11,6 +11,7 @@ import {
 	DEFAULT_WINDOW_HEIGHT,
 	DEFAULT_WINDOW_WIDTH,
 	parseLocalSettings,
+	readHostPrefs,
 	readLocalSettings,
 	readWindowBounds,
 	writeLocalSettings,
@@ -37,6 +38,32 @@ describe("parseLocalSettings", () => {
 
 	it("没有窗口记录时只有版本", () => {
 		expect(parseLocalSettings(JSON.stringify({ version: 1 }))).toEqual({ version: 1 });
+	});
+});
+
+describe("readHostPrefs", () => {
+	it("没有记录或不是对象时交给调用方的缺省值", () => {
+		expect(readHostPrefs(undefined)).toBeUndefined();
+		expect(readHostPrefs("yes")).toBeUndefined();
+	});
+
+	it("缺字段时按关窗后继续运行", () => {
+		expect(readHostPrefs({})).toEqual({ keepOnClose: true });
+		expect(readHostPrefs({ keepOnClose: true })).toEqual({ keepOnClose: true });
+		expect(readHostPrefs({ keepOnClose: false })).toEqual({ keepOnClose: false });
+	});
+
+	it("和窗口记录一起读写，互不覆盖", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "facet-settings-"));
+		const file = join(dir, "desktop.json");
+		await writeLocalSettings(file, {
+			version: 1,
+			window: { width: 900, height: 700, maximized: false },
+			host: { keepOnClose: false },
+		});
+		const parsed = parseLocalSettings(await readFile(file, "utf8"));
+		expect(parsed.window?.width).toBe(900);
+		expect(parsed.host).toEqual({ keepOnClose: false });
 	});
 });
 

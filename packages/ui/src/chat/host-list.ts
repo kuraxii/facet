@@ -1,8 +1,8 @@
 /**
  * 主机清单。
  *
- * 清单记在这一台机器上：本机由桌面端拉起，地址由主进程给出；远程主机由用户自己添加。每台
- * 主机只存名字与端点，连接凭据不在这里（远程接入走 SSH，见需求 FR-XDEV）。
+ * 清单记在这一台机器上：本机用固定标识本地表示，地址与令牌由主进程按发现文件给出；远程
+ * 主机由用户自己添加，只存 `host:port`。连接凭据不进清单（远程接入走 SSH，见需求 FR-XDEV）。
  */
 
 /** 一台已保存的主机。 */
@@ -11,7 +11,7 @@ export interface SavedHost {
 	id: string;
 	/** 显示名 */
 	name: string;
-	/** WebSocket 端点，形如 ws://host:port/endpoint */
+	/** 主机地址，形如 host:port */
 	endpoint: string;
 }
 
@@ -33,11 +33,15 @@ export interface HostListStorage {
 	setItem: (key: string, value: string) => void;
 }
 
+/** SSH 目标的统一写法，缺省端口 22 省略。 */
+export const SSH_PREFIX = "ssh://";
+
 /**
- * 把用户填的地址收成端点。
+ * 把用户填的地址收成主机地址。
  *
- * 接受 `host:port`、`ws://host:port`、`http://host:port` 与带 `/endpoint` 的完整地址；
- * 没写协议时按 ws 处理，没写路径时补 `/endpoint`。空串与解析不出的返回 undefined。
+ * 两种写法：`ssh://user@host[:port]` 走 SSH（`user@host` 也可以，缺省补上前缀）；其余
+ * 按 `host:port` 走直连。带协议的 `ws://`、`http://` 与它们的 `/endpoint` 路径都化成
+ * `host:port`。含非 ASCII 字符、没写端口的一律按填错处理。
  */
 export function normalizeEndpoint(input: string): string | undefined {
 	const text = input.trim();
@@ -48,40 +52,61 @@ export function normalizeEndpoint(input: string): string | undefined {
 	if (!/^[\x20-\x7e]+$/.test(text)) {
 		return undefined;
 	}
-	const withScheme = /^[a-z]+:\/\//i.test(text) ? text : `ws://${text}`;
+	if (text.includes("@") || text.toLowerCase().startsWith(SSH_PREFIX)) {
+		return normalizeSshTarget(text);
+	}
+	const withScheme = /^[a-z]+:\/\//i.test(text) ? text : `tcp://${text}`;
 	let url: URL;
 	try {
 		url = new URL(withScheme);
 	} catch {
 		return undefined;
 	}
-	if (url.protocol !== "ws:" && url.protocol !== "wss:") {
-		if (url.protocol !== "http:" && url.protocol !== "https:") {
-			return undefined;
-		}
-		url.protocol = url.protocol === "http:" ? "ws:" : "wss:";
-	}
 	if (url.hostname.length === 0) {
 		return undefined;
 	}
-	// 主机端点都是自选端口；没写端口的按填错处理，免得把路径当成主机名
+	// 直连的主机都是自选端口；没写端口的按填错处理，免得把路径当成主机名
 	if (url.port.length === 0) {
 		return undefined;
 	}
-	if (url.pathname === "/" || url.pathname.length === 0) {
-		url.pathname = "/endpoint";
-	}
-	return url.toString();
+	return `${url.hostname}:${url.port}`;
 }
 
-/** 端点里去掉协议与路径，只给人看 host:port。 */
-export function endpointLabel(endpoint: string): string {
-	try {
-		const url = new URL(endpoint);
-		return url.host;
-	} catch {
-		return endpoint;
+/** 收 SSH 目标：校验用户名、主机与端口，端口 22 不写出来。 */
+function normalizeSshTarget(text: string): string | undefined {
+	const body = text.toLowerCase().startsWith(SSH_PREFIX) ? text.slice(SSH_PREFIX.length) : text;
+	const at = body.lastIndexOf("@");
+	const user = at > 0 ? body.slice(0, at) : undefined;
+	const rest = at >= 0 ? body.slice(at + 1) : body;
+	if (user === undefined && at === 0) {
+		return undefined;
 	}
+	// IPv6 带方括号，端口写在方括号之后
+	const matched = /^(?:\[([^\]]+)\]|([^@\s/:[\]]+))(?::(\d+))?$/.exec(rest);
+	if (matched === null) {
+		return undefined;
+	}
+	const host = matched[1] ?? matched[2];
+	if (host === undefined || host.length === 0) {
+		return undefined;
+	}
+	// IPv6 保留方括号，免得主机与端口分不清
+	const shownHost = host.includes(":") ? `[${host}]` : host;
+	const prefix = `${SSH_PREFIX}${user === undefined ? "" : `${user}@`}${shownHost}`;
+	const port = matched[3];
+	if (port === undefined) {
+		return prefix;
+	}
+	const parsed = Number(port);
+	if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 65_535) {
+		return undefined;
+	}
+	return parsed === 22 ? prefix : `${prefix}:${parsed}`;
+}
+
+/** 端点给人看的写法：SSH 目标去掉前缀，直连就是 host:port。 */
+export function endpointLabel(endpoint: string): string {
+	return endpoint.toLowerCase().startsWith(SSH_PREFIX) ? endpoint.slice(SSH_PREFIX.length) : endpoint;
 }
 
 /** 从本地存储读主机清单；读不懂的条目跳过。 */

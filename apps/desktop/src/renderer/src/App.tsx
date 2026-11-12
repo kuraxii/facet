@@ -1,5 +1,11 @@
-import { chatActivity, type HostHandshake, SessionClient, toTranscript } from "@facet/client-core";
-import type { FileContent, GitFileChange, GitStatus } from "@facet/protocol";
+import {
+	chatActivity,
+	type HostHandshake,
+	SessionClient,
+	TerminalClient,
+	toTranscript,
+} from "@facet/client-core";
+import type { FileContent, GitFileChange, GitStatus, TerminalInfo } from "@facet/protocol";
 import {
 	DEFAULT_SETTINGS,
 	type FacetSettings,
@@ -8,7 +14,6 @@ import {
 	type ProjectInfo,
 	type SessionSummary,
 } from "@facet/protocol";
-import { WsTransport } from "@facet/transport/ws";
 import {
 	ArrowDownIcon,
 	ChangesPane,
@@ -45,24 +50,38 @@ import {
 	writePanelState,
 } from "@facet/ui";
 import { FileView } from "@facet/ui-editor";
-import { X } from "lucide-react";
+import {
+	clampDockHeight,
+	readDockState,
+	type TerminalAppearance,
+	TerminalDock,
+	type TerminalDockState,
+	writeDockState,
+} from "@facet/ui-terminal";
+import { PanelLeft, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { type HostChannelBridge, LOCAL_TARGET, makeTransport } from "./host-connection.ts";
 
 /** 预加载脚本注入的启动参数 */
-interface FacetBridge {
-	endpoint: string;
+interface FacetBridge extends HostChannelBridge {
 	projectDir: string;
 	platform: string;
 	/** 应用版本 */
 	appVersion: string;
-	/** 主机是桌面拉起的（embedded），还是外面给的（external） */
+	/** 主机是本机管的（local），还是外面给的（external） */
 	hostMode: string;
 	/** 打开系统的目录选择窗口,取消时返回空 */
 	pickDirectory: () => Promise<string | undefined>;
 	/** 用系统的保存窗口写一段文本,取消时返回 false */
 	saveText: (suggestedName: string, text: string) => Promise<boolean>;
-	/** 订阅主机端点变化,返回取消订阅的函数 */
-	onEndpointChanged: (listener: (endpoint: string) => void) => () => void;
+	/** 关掉窗口后本机主机是否继续运行 */
+	keepHostOnClose: boolean;
+	/** 读本机主机的开关 */
+	getHostPrefs: () => Promise<{ keepOnClose: boolean }>;
+	/** 结束本机主机 */
+	stopHost: () => Promise<void>;
+	/** 改本机主机的开关，返回保存后的值 */
+	setHostPrefs: (prefs: { keepOnClose: boolean }) => Promise<{ keepOnClose: boolean }>;
 }
 
 declare global {
@@ -73,8 +92,17 @@ declare global {
 
 const bridge = window.facet;
 
-const transport = new WsTransport({ url: bridge.endpoint });
+/**
+ * 当前要连的目标。
+ *
+ * 本机是固定标识，具体地址与令牌由主进程按发现文件给出；在清单里换主机时改这里，
+ * 下一次 connect 就换目标。
+ */
+let hostTarget = LOCAL_TARGET;
+
+const transport = makeTransport(bridge, () => hostTarget);
 const client = new SessionClient({ transport, pageSize: 200 });
+const terminalClient = new TerminalClient({ transport });
 
 type Phase = "connecting" | "ready" | "failed";
 
@@ -190,9 +218,11 @@ export function App() {
 	);
 	const [phase, setPhase] = useState<Phase>("connecting");
 	/** 当前连的主机端点，嵌入主机被重新拉起后会换 */
-	const [endpoint, setEndpoint] = useState(bridge.endpoint);
+	const [endpoint, setEndpoint] = useState(LOCAL_TARGET);
 	/** 与主机的连接是否可用，断开时输入区说明原因并禁用发送 */
 	const [isOnline, setIsOnline] = useState(false);
+	/** 正在自动重连：断线之后按退避重试，界面上写明状态 */
+	const [isReconnecting, setIsReconnecting] = useState(false);
 	const [failure, setFailure] = useState<string | undefined>(undefined);
 	const [sessions, setSessions] = useState<readonly SessionSummary[]>([]);
 	const [activeFile, setActiveFile] = useState<string | undefined>(undefined);
@@ -207,13 +237,15 @@ export function App() {
 	const [theme, setTheme] = useState<ThemeName>(readTheme);
 	/** 主机上的偏好设置；没读到之前先用缺省值 */
 	const [settings, setSettings] = useState<FacetSettings>(DEFAULT_SETTINGS);
+	/** 窄屏时侧栏是抽屉，这个开关控制它展开 */
+	const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 	/** 主区域显示对话还是设置 */
 	const [view, setView] = useState<"chat" | "settings">("chat");
 	/** 主机清单：本机之外用户添加的远程主机，以及当前连着的端点 */
 	const [hostList, setHostList] = useState(() => {
-		const saved = readHostList(localStorage, bridge.endpoint);
+		const saved = readHostList(localStorage, LOCAL_TARGET);
 		// 外部给了 FACET_ENDPOINT 就以它为准：上一次连的远程主机不该盖过这次显式指定的地址
-		return bridge.hostMode === "external" ? { ...saved, activeEndpoint: bridge.endpoint } : saved;
+		return bridge.hostMode === "external" ? { ...saved, activeEndpoint: LOCAL_TARGET } : saved;
 	});
 
 	/** 改主机清单并写回本地。 */
@@ -224,10 +256,13 @@ export function App() {
 
 	// 外部指定了端点时，把记着的那台改回来，别让下次启动被旧地址带着走
 	useEffect(() => {
-		if (bridge.hostMode === "external" && localStorage.getItem("facet.hosts.active") !== bridge.endpoint) {
-			writeHostList(localStorage, { ...hostList, activeEndpoint: bridge.endpoint });
+		if (bridge.hostMode === "external" && localStorage.getItem("facet.hosts.active") !== LOCAL_TARGET) {
+			writeHostList(localStorage, { ...hostList, activeEndpoint: LOCAL_TARGET });
 		}
 	}, [hostList]);
+
+	/** 关掉窗口后本机主机是否继续运行；开关在桌面的本地设置里 */
+	const [keepOnClose, setKeepOnClose] = useState(bridge.keepHostOnClose);
 
 	/** 右栏的状态；展开、分页与宽度都记在本地 */
 	const [panel, setPanel] = useState<RightPanelState>(() => readPanelState(localStorage));
@@ -243,6 +278,44 @@ export function App() {
 	});
 	/** 变更请求的序号，只采用最后一次的结果 */
 	const changesSeq = useRef(0);
+
+	/** 终端面板的状态：是否展开、高度、当前标签 */
+	const [dock, setDock] = useState<TerminalDockState>(() => readDockState(localStorage));
+	/** 主机上的终端清单，含已结束的 */
+	const [terminals, setTerminals] = useState<TerminalInfo[]>([]);
+	/** 开终端失败的原因 */
+	const [terminalError, setTerminalError] = useState<string | undefined>(undefined);
+
+	/** 改终端面板状态并写回本地存储。 */
+	const updateDock = useCallback((patch: Partial<TerminalDockState>) => {
+		setDock((current) => {
+			const next = { ...current, ...patch };
+			writeDockState(localStorage, next);
+			return next;
+		});
+	}, []);
+
+	/** 重新取终端清单。连不上或主机没有终端能力时按空处理。 */
+	const refreshTerminals = useCallback(async (): Promise<TerminalInfo[]> => {
+		try {
+			const list = await terminalClient.list();
+			setTerminals(list);
+			return list;
+		} catch {
+			setTerminals([]);
+			return [];
+		}
+	}, []);
+
+	/** 连上主机之后：会话与终端都从这里开始收动作。 */
+	const attachHost = useCallback(
+		(handshake: HostHandshake) => {
+			client.attach(handshake);
+			terminalClient.start();
+			void refreshTerminals();
+		},
+		[refreshTerminals],
+	);
 
 	/** 改右栏状态并写回本地存储。 */
 	const updatePanel = useCallback((patch: Partial<RightPanelState>) => {
@@ -291,12 +364,17 @@ export function App() {
 		void client.saveSettings(changed).catch(() => undefined);
 	}, [settings, theme]);
 
-	/** 拉一次全部会话。并发调用时只采用最后一次的结果,避免旧结果覆盖新结果。 */
+	/**
+	 * 拉一次全部会话。
+	 *
+	 * 平时靠主机推来的清单，这里用于启动、重连与用户手动刷新；清单通道补齐缺口时也会走
+	 * 这条路。并发调用只采用最后一次的结果，避免旧结果覆盖新结果。
+	 */
 	const refreshSessions = useCallback(async (): Promise<readonly SessionSummary[] | undefined> => {
 		listSeq.current += 1;
 		const seq = listSeq.current;
 		try {
-			const pool = await client.listSessions();
+			const pool = await client.refreshSessionList();
 			if (seq === listSeq.current) {
 				setSessions(pool);
 			}
@@ -306,6 +384,18 @@ export function App() {
 			return undefined;
 		}
 	}, []);
+
+	// 主机推来清单变化时侧栏跟着变，别的端新建、改名或删除会话这边立刻看到
+	useEffect(
+		() =>
+			client.store.subscribe(() => {
+				const pushed = client.store.sessionList();
+				if (pushed.length > 0) {
+					setSessions(pushed.map((entry) => entry.summary));
+				}
+			}),
+		[],
+	);
 
 	/** 拉一次项目清单。失败只标脏,已经显示的项目保持原样。 */
 	const refreshProjects = useCallback(async (): Promise<void> => {
@@ -324,12 +414,13 @@ export function App() {
 	 * 时刻只跑一次，手动重试与自动重连共用这条路。
 	 */
 	const reconnect = useCallback(async (): Promise<void> => {
+		setIsReconnecting(true);
 		reconnecting.current ??= (async () => {
 			let delay = 400;
 			for (;;) {
 				try {
 					const handshake = await transport.connect();
-					client.attach(handshake);
+					attachHost(handshake);
 					setHost(handshake);
 					// 会话回不来(例如它的文件已经不在了)时退回没有会话的状态,连接本身照常可用
 					const resumed = await client.resume().then(
@@ -343,16 +434,21 @@ export function App() {
 					await refreshSessions();
 					await refreshProjects();
 					return;
-				} catch {
+				} catch (error) {
+					// 重连失败的原因留在控制台，便于排查连不上的问题
+					console.log("[reconnect] 重连失败", error instanceof Error ? error.message : String(error));
 					await new Promise((done) => setTimeout(done, delay));
 					delay = Math.min(delay * 2, 8000);
 				}
 			}
-		})().finally(() => {
-			reconnecting.current = undefined;
-		});
+		})()
+			.catch(() => undefined)
+			.finally(() => {
+				reconnecting.current = undefined;
+				setIsReconnecting(false);
+			});
 		await reconnecting.current;
-	}, [refreshProjects, refreshSessions]);
+	}, [refreshProjects, refreshSessions, attachHost]);
 
 	// 断线之后自动重连，期间输入区提示连接已断开
 	useEffect(() => {
@@ -361,13 +457,14 @@ export function App() {
 		}
 	}, [isOnline, phase, reconnect]);
 
-	// 嵌入主机被重新拉起后端口会变：换地址再握手，会话由 resume 续订
+	// 本机主机重新拉起后端口与令牌都会变：按新的发现记录再握手，会话由 resume 续订
 	useEffect(
 		() =>
-			bridge.onEndpointChanged((next) => {
-				transport.setUrl(next);
-				setEndpoint(next);
-				setPhase("connecting");
+			bridge.onLocalHostChanged(() => {
+				hostTarget = LOCAL_TARGET;
+				setEndpoint(LOCAL_TARGET);
+				// 会话还在屏幕上时不退回连接屏，只把状态换成「重连中」
+				setPhase((current) => (current === "failed" ? "connecting" : current));
 				void reconnect().then(
 					() => setPhase("ready"),
 					(error: unknown) => {
@@ -386,6 +483,97 @@ export function App() {
 	const isChangesVisible = panel.open && panel.tab === "changes";
 	/** 会话所在的目录，git 命令都在它下面跑 */
 	const sessionCwd = session?.state.cwd;
+
+	/** 终端能力：主机没装 pty 后端时不给入口 */
+	const canUseTerminal = host?.capabilities.includes("terminal") ?? false;
+	/** 新建终端的启动目录：跟着当前会话，没有会话时用第一个项目 */
+	const terminalCwd = sessionCwd ?? projects[0]?.cwd;
+	/** 终端面板不能用的原因，能用时为空 */
+	const terminalDisabledReason = canUseTerminal ? undefined : "这台主机的终端不可用";
+
+	/** 终端外观：跟着界面配色与等宽字体走，主题一换就重算 */
+	const terminalAppearance = useMemo<TerminalAppearance>(() => {
+		const styles = getComputedStyle(document.documentElement);
+		const read = (name: string, fallback: string): string => styles.getPropertyValue(name).trim() || fallback;
+		return {
+			fontFamily: read("--font-mono", "ui-monospace, monospace"),
+			fontSize: 12.5,
+			lineHeight: 1.35,
+			cursorBlink: true,
+			scrollback: 5000,
+			background: read("--bg", "#ffffff"),
+			foreground: read("--t1", "#1a1a1e"),
+			cursor: read("--acc", "#239956"),
+			selection: read("--surface3", "#e4e4e7"),
+		};
+	}, []);
+
+	/** 在当前目录开一个终端，并把它设成当前标签。 */
+	const openTerminal = useCallback(async (): Promise<void> => {
+		setTerminalError(undefined);
+		try {
+			// 尺寸先给一个常用值，视图挂上之后 fit 出来的真实尺寸会再报一次
+			const info = await terminalClient.create(terminalCwd, 100, 24);
+			await refreshTerminals();
+			updateDock({ open: true, activeId: info.id });
+		} catch (error) {
+			setTerminalError(error instanceof Error ? error.message : String(error));
+			updateDock({ open: true });
+		}
+	}, [refreshTerminals, terminalCwd, updateDock]);
+
+	/** 关掉一个终端，清单跟着刷新。 */
+	const killTerminal = useCallback(
+		async (id: string): Promise<void> => {
+			try {
+				await terminalClient.kill(id);
+			} catch {
+				// 已经结束的终端再关一次没有影响
+			}
+			const list = await refreshTerminals();
+			const next = list.find((terminal) => !terminal.restored && terminal.exit === null);
+			updateDock({ activeId: next?.id });
+		},
+		[refreshTerminals, updateDock],
+	);
+
+	/** 展开或收起终端面板。 */
+	const toggleTerminal = useCallback(() => {
+		setDock((current) => {
+			const next = { ...current, open: !current.open };
+			writeDockState(localStorage, next);
+			return next;
+		});
+	}, []);
+
+	// 快捷键 Ctrl + ` 开关终端面板
+	useEffect(() => {
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key !== "`" || !(event.ctrlKey || event.metaKey)) {
+				return;
+			}
+			event.preventDefault();
+			toggleTerminal();
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [toggleTerminal]);
+
+	// 窗口变矮时把面板高度收回来，避免把对话挤没
+	useEffect(() => {
+		const onResize = () => {
+			setDock((current) => {
+				const next = clampDockHeight(current.height, window.innerHeight);
+				if (next === current.height) {
+					return current;
+				}
+				writeDockState(localStorage, { ...current, height: next });
+				return { ...current, height: next };
+			});
+		};
+		window.addEventListener("resize", onResize);
+		return () => window.removeEventListener("resize", onResize);
+	}, []);
 
 	/** 打开一个文件：取内容失败时把原因留在右栏。 */
 	const openFile = useCallback(
@@ -497,7 +685,7 @@ export function App() {
 			}
 			updateHostList({ ...hostList, activeEndpoint: nextEndpoint });
 			setEndpoint(nextEndpoint);
-			transport.setUrl(nextEndpoint);
+			hostTarget = nextEndpoint;
 			setActiveFile(undefined);
 			setSessions([]);
 			setProjects([]);
@@ -508,7 +696,7 @@ export function App() {
 			// 只握一次手：连不上就直接回到「连不上主机」那一屏，重试按钮走退避重连
 			try {
 				const handshake = await transport.connect();
-				client.attach(handshake);
+				attachHost(handshake);
 				setHost(handshake);
 				await client.resume().catch(() => undefined);
 				await refreshSessions();
@@ -521,7 +709,7 @@ export function App() {
 				setPhase("failed");
 			}
 		},
-		[endpoint, hostList, refreshCatalog, refreshProjects, refreshSessions, updateHostList],
+		[endpoint, hostList, refreshCatalog, refreshProjects, refreshSessions, updateHostList, attachHost],
 	);
 
 	/** 添加一台主机：地址收成端点，重复的直接回原因。 */
@@ -531,7 +719,7 @@ export function App() {
 			if (normalized === undefined) {
 				return "地址看不懂，写 host:port 或 ws://host:port/endpoint";
 			}
-			if (hasEndpoint(hostList, normalized, bridge.endpoint)) {
+			if (hasEndpoint(hostList, normalized, LOCAL_TARGET)) {
 				return "这台主机已经在清单里";
 			}
 			const host: SavedHost = {
@@ -545,17 +733,62 @@ export function App() {
 		[hostList, updateHostList],
 	);
 
+	/** 改一台远程主机的名字，名字从清单里读，不改连接。 */
+	const renameHost = useCallback(
+		(id: string, name: string): void => {
+			const trimmed = name.trim();
+			if (trimmed.length === 0) {
+				return;
+			}
+			updateHostList({
+				...hostList,
+				hosts: hostList.hosts.map((host) => (host.id === id ? { ...host, name: trimmed } : host)),
+			});
+		},
+		[hostList, updateHostList],
+	);
+
 	/** 从清单里删掉一台远程主机；删的是当前连接时回到本机。 */
 	const removeHost = useCallback(
 		(id: string): void => {
 			const target = hostList.hosts.find((host) => host.id === id);
 			updateHostList({ ...hostList, hosts: hostList.hosts.filter((host) => host.id !== id) });
 			if (target !== undefined && target.endpoint === endpoint) {
-				void switchHost(bridge.endpoint);
+				void switchHost(LOCAL_TARGET);
 			}
 		},
 		[endpoint, hostList, switchHost, updateHostList],
 	);
+
+	/** 改「关掉窗口后继续运行」，保存失败时保持界面上的旧值。 */
+	const toggleKeepOnClose = useCallback((next: boolean): void => {
+		setKeepOnClose(next);
+		void bridge.setHostPrefs({ keepOnClose: next }).then(
+			(saved) => setKeepOnClose(saved.keepOnClose),
+			() => setKeepOnClose(!next),
+		);
+	}, []);
+
+	/**
+	 * 结束当前主机；失败时把原因交回清单。
+	 *
+	 * 本机主机交给桌面主进程结束，那边才不会把它当成崩溃重新拉起；连的是远程主机时直接
+	 * 向主机发请求。主机应答后端点就断了，界面落到「连不上主机」。
+	 */
+	const shutdownHost = useCallback(async (): Promise<string | undefined> => {
+		try {
+			if (endpoint === LOCAL_TARGET) {
+				await bridge.stopHost();
+			} else {
+				await client.shutdownHost();
+			}
+			setFailure("主机已结束");
+			setPhase("failed");
+			return undefined;
+		} catch (error) {
+			return error instanceof Error ? error.message : String(error);
+		}
+	}, [endpoint]);
 
 	/** 输入区可选的模型：去掉设置里隐藏的那些。 */
 	const visibleModels = useMemo(
@@ -610,6 +843,8 @@ export function App() {
 	let blockedReason: string | undefined;
 	if (!isOnline) {
 		blockedReason = "与主机的连接已断开,恢复之后可以继续发送";
+	} else if (host?.role === "viewer") {
+		blockedReason = "这条连接是只读的,不能发送消息";
 	} else if (activity === "compacting") {
 		blockedReason = "正在压缩上下文,完成之后再发送";
 	} else if (activity === "stopping") {
@@ -747,12 +982,12 @@ export function App() {
 		void (async () => {
 			// 上次连的是远程主机时直接连回去，连不上会落到「连不上主机」那一屏
 			const startEndpoint = hostList.activeEndpoint;
-			if (startEndpoint !== bridge.endpoint) {
-				transport.setUrl(startEndpoint);
+			if (startEndpoint !== LOCAL_TARGET) {
+				hostTarget = startEndpoint;
 				setEndpoint(startEndpoint);
 			}
 			const handshake = await transport.connect();
-			client.attach(handshake);
+			attachHost(handshake);
 			setHost(handshake);
 			await refreshProjects();
 			// 设置读不到时用缺省值，界面照常可用
@@ -769,7 +1004,7 @@ export function App() {
 			setFailure(error instanceof Error ? error.message : String(error));
 			setPhase("failed");
 		});
-	}, [hostList.activeEndpoint, openSession, refreshCatalog, refreshProjects, refreshSessions]);
+	}, [hostList.activeEndpoint, openSession, refreshCatalog, refreshProjects, refreshSessions, attachHost]);
 
 	/** 当前草稿落在哪个键：打开的会话按文件路径分开存，没有会话时存到新会话页面。 */
 	const draftKey = activeFile ?? NEW_DRAFT_KEY;
@@ -994,10 +1229,10 @@ export function App() {
 					<button
 						type="button"
 						className="boot-host"
-						onClick={() => void switchHost(bridge.endpoint)}
-						disabled={endpoint === bridge.endpoint}
+						onClick={() => void switchHost(LOCAL_TARGET)}
+						disabled={endpoint === LOCAL_TARGET}
 					>
-						本机 · {endpointLabel(bridge.endpoint)}
+						本机 · {endpointLabel(LOCAL_TARGET)}
 					</button>
 					{hostList.hosts.map((host) => (
 						<button
@@ -1042,7 +1277,15 @@ export function App() {
 
 	return (
 		<CodeThemeProvider value={codeThemeValue}>
-			<div className="shell">
+			<div className={isSidebarOpen ? "shell has-drawer" : "shell"}>
+				{isSidebarOpen ? (
+					<button
+						type="button"
+						className="sb-backdrop"
+						aria-label="收起侧栏"
+						onClick={() => setIsSidebarOpen(false)}
+					/>
+				) : null}
 				<SessionSidebar
 					sessions={sessions}
 					projects={projects}
@@ -1072,22 +1315,40 @@ export function App() {
 					isSettingsOpen={view === "settings"}
 					onTogglePanel={() => updatePanel({ open: !panel.open })}
 					isPanelOpen={panel.open}
+					onToggleTerminal={toggleTerminal}
+					isTerminalOpen={dock.open}
 					hostName={host?.hostName}
+					hostStatus={isReconnecting ? "重连中" : host?.role === "viewer" ? "只读" : undefined}
+					isOpen={isSidebarOpen}
+					onNavigate={() => setIsSidebarOpen(false)}
 					hostSwitcher={
 						<HostSwitcher
-							localEndpoint={bridge.endpoint}
+							localEndpoint={LOCAL_TARGET}
 							localName={host?.hostName ?? "本机"}
 							activeEndpoint={hostList.activeEndpoint}
 							hosts={hostList.hosts}
 							isOnline={isOnline}
+							isReconnecting={isReconnecting}
 							onConnect={(next) => void switchHost(next)}
 							onAddHost={addHost}
 							onRemoveHost={removeHost}
+							onRenameHost={renameHost}
+							keepOnClose={keepOnClose}
+							onToggleKeepOnClose={toggleKeepOnClose}
+							onShutdownHost={shutdownHost}
 						/>
 					}
 				/>
 
 				<main className="main">
+					<button
+						type="button"
+						className="sb-toggle"
+						aria-label="展开侧栏"
+						onClick={() => setIsSidebarOpen((open) => !open)}
+					>
+						<PanelLeft size={16} strokeWidth={1.5} />
+					</button>
 					{session === undefined ? null : <ChatOutline items={transcript} container={scrollElement} />}
 					{session === undefined ? (
 						<div className="empty-wrap">
@@ -1178,6 +1439,37 @@ export function App() {
 							</div>
 						</>
 					)}
+
+					{terminalError === undefined ? null : (
+						<p className="term-dock-error">
+							{terminalError}
+							<button
+								type="button"
+								className="chg-retry"
+								onClick={() => {
+									setTerminalError(undefined);
+									void openTerminal();
+								}}
+							>
+								重试
+							</button>
+						</p>
+					)}
+					<TerminalDock
+						isOpen={dock.open}
+						height={dock.height}
+						terminals={terminals}
+						activeId={dock.activeId}
+						cwd={terminalCwd}
+						client={terminalClient}
+						appearance={terminalAppearance}
+						disabledReason={terminalDisabledReason}
+						onHeightChange={(height) => updateDock({ height })}
+						onSelect={(id) => updateDock({ activeId: id })}
+						onCreate={() => void openTerminal()}
+						onKill={(id) => void killTerminal(id)}
+						onClose={toggleTerminal}
+					/>
 				</main>
 
 				{panel.open ? (

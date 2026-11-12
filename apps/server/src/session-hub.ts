@@ -167,6 +167,8 @@ interface SessionState<A extends HubAgent> {
 	opening: Promise<void> | undefined;
 	/** 待关闭的倒计时 */
 	closeTimer: ReturnType<typeof setTimeout> | undefined;
+	/** 最近一次被用到的时间，按内存水位回收时从最旧的开始 */
+	lastUsedAt: number;
 	readonly channels: Map<Channel, ChannelState>;
 	readonly projector: ActionProjector;
 }
@@ -182,6 +184,13 @@ export interface SessionHubOptions<A extends HubAgent> {
 	readonly maxPageSize?: number;
 	/** 没人订阅且不在运行后,等多久回收,毫秒 */
 	readonly idleCloseMs?: number;
+	/**
+	 * 会话清单有变化。
+	 *
+	 * 新建、打开、分叉、改名、删除与一轮结束都会通知，端点据此把新的摘要推给所有端；
+	 * 会话文件为空的内存会话不通知。
+	 */
+	readonly onSessionChanged?: (file: string, change: "changed" | "removed") => void;
 }
 
 /** 文件是否存在。 */
@@ -218,12 +227,24 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 			max: options.maxPageSize ?? MAX_PAGE_SIZE,
 		};
 		this.idleCloseMs = options.idleCloseMs ?? DEFAULT_IDLE_CLOSE_MS;
+		this.onSessionChanged = options.onSessionChanged;
+	}
+
+	/** 通知清单变化的回调，没有接的时候什么都不做。 */
+	private readonly onSessionChanged: ((file: string, change: "changed" | "removed") => void) | undefined;
+
+	/** 会话文件的清单有变化，通知外面。 */
+	private noteSessions(file: string | undefined, change: "changed" | "removed"): void {
+		if (file !== undefined) {
+			this.onSessionChanged?.(file, change);
+		}
 	}
 
 	/** 建一个新会话并登记。会话文件立即建立,之后每条完成的消息追加写盘。 */
 	async createSession(options: PiAgentLaunchOptions = {}): Promise<SessionSnapshot> {
 		const agent = await this.factory.create(options);
 		this.attach(agent);
+		this.noteSessions(agent.file === undefined ? undefined : normalizeFile(agent.file), "changed");
 		return this.snapshotRow(this.requireRow(agent.id));
 	}
 
@@ -244,6 +265,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 			if (existing.opening !== undefined) {
 				await existing.opening;
 			}
+			this.noteSessions(key, "changed");
 			return this.snapshotRow(this.requireRow(sessionId));
 		}
 
@@ -259,6 +281,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 			phase: "opening",
 			opening: undefined,
 			closeTimer: undefined,
+			lastUsedAt: Date.now(),
 			channels: new Map(),
 			projector: new ActionProjector(sessionId),
 		};
@@ -272,6 +295,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		} finally {
 			row.opening = undefined;
 		}
+		this.noteSessions(key, "changed");
 		return this.snapshotRow(row);
 	}
 
@@ -302,6 +326,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 				...(options.cwd === undefined ? {} : { cwd: options.cwd }),
 			});
 			this.attach(agent);
+			this.noteSessions(agent.file === undefined ? undefined : normalizeFile(agent.file), "changed");
 			return this.snapshotRow(this.requireRow(agent.id));
 		} finally {
 			lease?.release();
@@ -352,6 +377,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 			phase: "open",
 			opening: undefined,
 			closeTimer: undefined,
+			lastUsedAt: Date.now(),
 			channels: new Map(),
 			projector: new ActionProjector(sessionId),
 		};
@@ -423,10 +449,12 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 			await this.withSession(sessionId, async (agent) => {
 				agent.setName(trimmed);
 			});
+			this.noteSessions(key, "changed");
 			return;
 		}
 		const manager = SessionManager.open(key);
 		manager.appendSessionInfo(trimmed);
+		this.noteSessions(key, "changed");
 	}
 
 	/**
@@ -447,6 +475,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 			this.drop(row);
 		}
 		await rm(key, { force: true });
+		this.noteSessions(key, "removed");
 	}
 
 	/**
@@ -465,6 +494,53 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		});
 		const leafId = this.requireRow(sessionId).agent?.leafEntryId() ?? null;
 		this.publish(row, row.projector.chatChannelFor(), { type: "chat/branchMoved", leafId });
+	}
+
+	/**
+	 * 按数量上限回收闲置会话。
+	 *
+	 * 只回收没有订阅、没有在途动作、也没在跑的那些，从最久没被用过的开始；keep 里的会话
+	 * 一律不动（界面正开着的那几个）。运行中的会话本身受保护，数量再多也不回收。
+	 */
+	enforceLimits(options: { maxSessions: number; keep?: readonly string[] }): string[] {
+		const rows = [...this.table.values()];
+		if (rows.length <= options.maxSessions) {
+			return [];
+		}
+		const keep = new Set(options.keep ?? []);
+		const idle = rows
+			.filter((row) => {
+				return (
+					!keep.has(row.sessionId) &&
+					row.phase !== "opening" &&
+					row.holders.size === 0 &&
+					row.holds === 0 &&
+					row.agent?.isBusy !== true
+				);
+			})
+			.sort((left, right) => left.lastUsedAt - right.lastUsedAt);
+		const removed: string[] = [];
+		let count = rows.length;
+		for (const row of idle) {
+			if (count <= options.maxSessions) {
+				break;
+			}
+			this.release(row.sessionId);
+			removed.push(row.sessionId);
+			count -= 1;
+		}
+		return removed;
+	}
+
+	/** 已装载的会话数与其中正在跑的数量，诊断与日志用。 */
+	stats(): { loaded: number; busy: number } {
+		let busy = 0;
+		for (const row of this.table.values()) {
+			if (row.agent?.isBusy === true) {
+				busy += 1;
+			}
+		}
+		return { loaded: this.table.size, busy };
 	}
 
 	/** 还在跑的会话文件。退出应用前用来判断会话会不会被连带终止。 */
@@ -557,6 +633,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		const { actions, resync } = target.log.replay(since ?? target.log.lastSeq);
 		target.sinks.add(sink);
 		row.holders.add(sink.id);
+		row.lastUsedAt = Date.now();
 		this.settle(row);
 		for (const item of actions) {
 			sink.send(this.toFrame(channel, item.action, item.seq));
@@ -703,6 +780,10 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 	private onAgentEvent(row: SessionState<A>, event: Parameters<Parameters<A["subscribe"]>[0]>[0]): void {
 		for (const projected of row.projector.project(event)) {
 			this.publish(row, projected.channel, projected.action);
+			// 改名与一轮结束都会改会话摘要里的字段，推一份新的给所有端
+			if (projected.action.type === "session/titleChanged" || projected.action.type === "chat/settled") {
+				this.noteSessions(row.file, "changed");
+			}
 		}
 		this.settle(row);
 	}
@@ -731,6 +812,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 
 	/** 读一次会话内容即续期,避免只翻历史不订阅的端在途中被回收。 */
 	private touch(row: SessionState<A>): void {
+		row.lastUsedAt = Date.now();
 		if (row.phase === "draining") {
 			this.clearCloseTimer(row);
 			this.scheduleClose(row);

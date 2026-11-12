@@ -52,12 +52,14 @@ export class TransportCore {
 		return this.currentHandshake;
 	}
 
-	/** 连上之后由具体传输调用，把令牌交出去并等 hello。 */
-	markOpen(send: (text: string) => void, token: string | undefined): void {
+	/** 连上之后由具体传输调用，把令牌与请求的权限档交出去并等 hello。 */
+	markOpen(send: (text: string) => void, token: string | undefined, role?: "operator" | "viewer"): void {
 		this.sender = send;
 		this.setState("connecting");
 		// 令牌是连接里的第一帧，主机校验通过才回 hello；不给令牌时也发一帧空串
-		send(`${JSON.stringify({ type: "auth", token: token ?? "" })}\n`);
+		const frame =
+			role === undefined ? { type: "auth", token: token ?? "" } : { type: "auth", token: token ?? "", role };
+		send(`${JSON.stringify(frame)}\n`);
 	}
 
 	/** 收到一帧解析后的内容。 */

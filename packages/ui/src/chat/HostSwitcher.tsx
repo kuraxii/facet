@@ -40,6 +40,8 @@ export interface HostSwitcherProps {
 	hosts: readonly SavedHost[];
 	/** 当前连接是否就绪 */
 	isOnline: boolean;
+	/** 是否正在自动重连 */
+	isReconnecting: boolean;
 	/** 连到某个端点 */
 	onConnect: (endpoint: string) => void;
 	/** 添加一台主机；端点重复时返回原因 */
@@ -62,6 +64,7 @@ export function HostSwitcher({
 	activeEndpoint,
 	hosts,
 	isOnline,
+	isReconnecting,
 	onConnect,
 	onAddHost,
 	onRemoveHost,
@@ -144,7 +147,11 @@ export function HostSwitcher({
 							<button type="button" className="host-main" onClick={() => onConnect(localEndpoint)}>
 								<i className={activeEndpoint === localEndpoint && isOnline ? "dot" : "dot is-off"} />
 								<span className="host-name">{localName}</span>
-								<span className="host-addr mono">{endpointLabel(localEndpoint)}</span>
+								<span className="host-addr mono">
+									{activeEndpoint === localEndpoint && isReconnecting
+										? "重连中"
+										: endpointLabel(localEndpoint)}
+								</span>
 							</button>
 						</li>
 						{hosts.map((host) =>
@@ -195,7 +202,11 @@ export function HostSwitcher({
 									<button type="button" className="host-main" onClick={() => onConnect(host.endpoint)}>
 										<i className={activeEndpoint === host.endpoint && isOnline ? "dot" : "dot is-off"} />
 										<span className="host-name">{host.name}</span>
-										<span className="host-addr mono">{endpointLabel(host.endpoint)}</span>
+										<span className="host-addr mono">
+											{activeEndpoint === host.endpoint && isReconnecting
+												? "重连中"
+												: endpointLabel(host.endpoint)}
+										</span>
 									</button>
 									<button
 										type="button"

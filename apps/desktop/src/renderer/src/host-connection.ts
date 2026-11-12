@@ -17,7 +17,13 @@ export interface HostChannelBridge {
 	openHostChannel: (
 		target: string,
 		handlers: { onData: (chunk: string) => void; onClose: (reason: string) => void },
-	) => Promise<{ id: number; token: string | undefined; write: (text: string) => void; close: () => void }>;
+	) => Promise<{
+		id: number;
+		token: string | undefined;
+		role: "operator" | "viewer" | undefined;
+		write: (text: string) => void;
+		close: () => void;
+	}>;
 }
 
 /**
@@ -44,8 +50,8 @@ export function makeTransport(bridge: HostChannelBridge, readTarget: () => strin
 				onData: (chunk) => dataListener?.(chunk),
 				onClose: (reason) => closeListener?.(reason),
 			});
-			// 令牌由主进程按目标给出：本机读发现文件，远程由 SSH 读远端的主机发现文件
-			transport.setToken(channel.token);
+			// 令牌与权限档由主进程按目标给出：本机读发现文件并给管理档，远程给操作档
+			transport.setToken(channel.token, channel.role);
 			return {
 				write: (text) => channel.write(text),
 				onData: (listener) => {

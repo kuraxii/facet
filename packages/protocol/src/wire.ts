@@ -92,6 +92,13 @@ export interface HelloFrame {
 export interface AuthFrame {
 	type: "auth";
 	token: string;
+	/**
+	 * 请求的权限档。
+	 *
+	 * 缺省按管理档处理（本机连接）；远程端自己声明要只读还是操作档，主机会按自己的配置
+	 * 收窄。能拿到令牌就等于能用这台主机，所以这里限制的是操作习惯，不是安全边界。
+	 */
+	role?: "operator" | "viewer";
 }
 
 /** 端点发出的请求。id 由端点生成,响应原样带回。 */

@@ -109,8 +109,8 @@ interface Connection {
 	readonly subscriptions: Map<Channel, ActionSink>;
 	/** 令牌是否已校验通过，通过之后才发 hello 并接受请求 */
 	authenticated: boolean;
-	/** 这条连接能做什么，由监听来源决定 */
-	readonly role: ClientRole;
+	/** 这条连接能做什么：认证帧里声明的档位，主机会按配置收窄 */
+	role: ClientRole;
 	/** 发一帧给对端 */
 	send(frame: ServerFrame): void;
 	/** 关掉连接，参数是给对端看的说明 */
@@ -150,10 +150,6 @@ export interface EndpointHandle {
 	readonly host: string;
 	/** unix socket 路径，TCP 模式下没有 */
 	readonly socketPath?: string;
-	/** 远程接入的 socket 路径，未开启时没有 */
-	readonly remoteSocketPath?: string;
-	/** 远程接入的端口，未开启时没有 */
-	readonly remotePort?: number;
 	/** 关闭监听并断开所有连接。会话由调用方负责释放。 */
 	close(): Promise<void>;
 }
@@ -717,6 +713,21 @@ async function handleDispatch(context: EndpointContext, connection: Connection, 
 	});
 }
 
+/**
+ * 认证帧里声明的档位换算成实际授予的档位。
+ *
+ * 不声明就是管理档（本机连接）；声明操作档时按主机配置收窄，配置为只读时一律给只读。
+ */
+function grantedRole(context: EndpointContext, requested: unknown): ClientRole {
+	if (requested === undefined) {
+		return "admin";
+	}
+	if (requested === "operator") {
+		return context.config.remotePermission === "operate" ? "operator" : "viewer";
+	}
+	return "viewer";
+}
+
 /** 令牌是否与主机配置一致。主机没设令牌时放行，只用于本机调试环境。 */
 function matchesToken(context: EndpointContext, token: string): boolean {
 	const expected = context.config.token;
@@ -744,6 +755,7 @@ async function handleFrame(context: EndpointContext, connection: Connection, tex
 		method?: unknown;
 		params?: unknown;
 		token?: unknown;
+		role?: unknown;
 	};
 	if (!connection.authenticated) {
 		// 首帧必须是令牌；校验不过直接断开，之后才发 hello
@@ -756,6 +768,7 @@ async function handleFrame(context: EndpointContext, connection: Connection, tex
 			return;
 		}
 		connection.authenticated = true;
+		connection.role = grantedRole(context, frame.role);
 		connection.send({
 			type: "hello",
 			protocolVersion: PROTOCOL_VERSION,
@@ -838,13 +851,14 @@ export async function startEndpoint(options: {
 	};
 
 	/** 一条新连接：按行切帧，首帧认令牌，通过后发 hello。 */
-	const accept = (socket: Socket, role: ClientRole): void => {
+	const accept = (socket: Socket): void => {
 		const connection: Connection = {
 			clientId: randomUUID(),
 			remoteAddress: socket.remoteAddress,
 			subscriptions: new Map(),
 			authenticated: false,
-			role,
+			// 认证帧里声明档位之后才确定，缺省按管理档
+			role: "admin",
 			send: (frame) => {
 				if (!socket.destroyed) {
 					socket.write(encodeFrame(frame));
@@ -877,7 +891,7 @@ export async function startEndpoint(options: {
 	};
 
 	const useUnixSocket = options.config.socketPath !== undefined && options.config.socketPath.length > 0;
-	const socketServer = createSocketServer((socket) => accept(socket, "admin"));
+	const socketServer = createSocketServer((socket) => accept(socket));
 
 	if (useUnixSocket) {
 		const path = options.config.socketPath as string;
@@ -903,36 +917,6 @@ export async function startEndpoint(options: {
 		});
 	}
 
-	/**
-	 * 远程接入的监听。
-	 *
-	 * 与本机那条分开：关掉它即关闭远程接入，本机连接不受影响。远程连接的权限档来自
-	 * 配置，缺省只读。
-	 */
-	const remoteRole: ClientRole = options.config.remotePermission === "operate" ? "operator" : "viewer";
-	let remoteServer: ReturnType<typeof createSocketServer> | undefined;
-	if (options.config.remoteSocketPath !== undefined || options.config.remotePort !== undefined) {
-		remoteServer = createSocketServer((socket) => accept(socket, remoteRole));
-		const remotePath = options.config.remoteSocketPath;
-		if (remotePath !== undefined) {
-			await rm(remotePath, { force: true }).catch(() => undefined);
-			await mkdir(dirname(remotePath), { recursive: true, mode: 0o700 }).catch(() => undefined);
-		}
-		const remote = remoteServer;
-		await new Promise<void>((resolve, reject) => {
-			remote.once("error", reject);
-			const done = (): void => {
-				remote.off("error", reject);
-				resolve();
-			};
-			if (remotePath === undefined) {
-				remote.listen(options.config.remotePort, options.config.host, done);
-				return;
-			}
-			remote.listen(remotePath, done);
-		});
-	}
-
 	const address = socketServer.address();
 	const port = typeof address === "object" && address !== null ? address.port : 0;
 
@@ -940,10 +924,6 @@ export async function startEndpoint(options: {
 		port,
 		host: options.config.host,
 		...(useUnixSocket ? { socketPath: options.config.socketPath as string } : {}),
-		...(options.config.remoteSocketPath === undefined
-			? {}
-			: { remoteSocketPath: options.config.remoteSocketPath }),
-		...(options.config.remotePort === undefined ? {} : { remotePort: options.config.remotePort }),
 		close: async () => {
 			for (const connection of [...context.connections]) {
 				connection.close(1001, "host shutting down");
@@ -953,11 +933,6 @@ export async function startEndpoint(options: {
 			await new Promise<void>((resolve) => {
 				socketServer.close(() => resolve());
 			});
-			if (remoteServer !== undefined) {
-				await new Promise<void>((resolve) => {
-					remoteServer?.close(() => resolve());
-				});
-			}
 		},
 	};
 }

@@ -674,6 +674,12 @@ svg.fl {
 	cursor: default;
 }
 
+.sb-foot-status {
+	margin-left: 6px;
+	color: var(--t3);
+	font-size: 10.5px;
+}
+
 .sb-foot-hint {
 	margin-left: auto;
 	font-variant-numeric: tabular-nums;

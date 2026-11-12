@@ -34,18 +34,10 @@ export interface ServerConfig {
 	/** 应用数据目录，缺省按 XDG 规范取 `$XDG_DATA_HOME/facet` */
 	dataDir: string;
 	/**
-	 * 远程接入的监听：给路径或端口时额外开一条给远程端用的监听。
+	 * 远程连接的权限上限。
 	 *
-	 * 本机那条（socketPath 或 TCP）只服务本机；远程端必须连这一条，关掉它就是关闭远程
-	 * 接入。缺省不开启，远程端因此连不上。
-	 */
-	remoteSocketPath: string | undefined;
-	/** 远程接入的 TCP 端口，与 remoteSocketPath 二选一（Windows 上只能用它） */
-	remotePort: number | undefined;
-	/**
-	 * 远程连接的权限档。
-	 *
-	 * view 只读，operate 能操作项目；改设置、凭证、增删项目与结束主机只允许本机。
+	 * 远程端在认证帧里声明要用只读还是操作档，主机按这里收窄：view 时一律只读，
+	 * operate 时才允许它自称操作档。改设置、凭证、增删项目与结束主机只允许本机。
 	 */
 	remotePermission: "view" | "operate";
 	/** 每个会话保留的事件条数，超出后丢弃最旧的，端点据此判断是否需要重新同步 */
@@ -99,9 +91,6 @@ export function loadServerConfig(env: Record<string, string | undefined> = proce
 		sessionDir: env.FACET_SESSION_DIR?.trim() || undefined,
 		dataDir: env.FACET_DATA_DIR?.trim() || defaultDataDir(env),
 		socketPath: env.FACET_SOCKET?.trim() || undefined,
-		remoteSocketPath: env.FACET_REMOTE_SOCKET?.trim() || undefined,
-		remotePort:
-			env.FACET_REMOTE_PORT === undefined ? undefined : readInt(env.FACET_REMOTE_PORT, 0) || undefined,
 		remotePermission: env.FACET_REMOTE_PERMISSION?.trim() === "operate" ? "operate" : "view",
 		token: env.FACET_NO_TOKEN === "1" ? undefined : env.FACET_TOKEN?.trim() || generateToken(),
 		replayLimit: readInt(env.FACET_REPLAY_LIMIT, DEFAULT_REPLAY_LIMIT) || DEFAULT_REPLAY_LIMIT,

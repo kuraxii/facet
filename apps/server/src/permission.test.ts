@@ -41,14 +41,14 @@ class Peer {
 		});
 	}
 
-	static async connect(path: string, token: string): Promise<Peer> {
+	static async connect(path: string, token: string, role?: "operator" | "viewer"): Promise<Peer> {
 		const socket = connect({ path });
 		await new Promise<void>((resolve, reject) => {
 			socket.once("connect", () => resolve());
 			socket.once("error", reject);
 		});
 		const peer = new Peer(socket);
-		socket.write(encodeFrame({ type: "auth", token }));
+		socket.write(encodeFrame(role === undefined ? { type: "auth", token } : { type: "auth", token, role }));
 		return peer;
 	}
 
@@ -110,8 +110,6 @@ function config(dataDir: string, overrides: Partial<ServerConfig> = {}): ServerC
 		agentDir: dataDir,
 		sessionDir: undefined,
 		dataDir,
-		remoteSocketPath: undefined,
-		remotePort: undefined,
 		remotePermission: "view",
 		replayLimit: 32,
 		sessionIdleMs: 60_000,
@@ -121,7 +119,7 @@ function config(dataDir: string, overrides: Partial<ServerConfig> = {}): ServerC
 	};
 }
 
-/** 起一台只监听两个 unix socket 的主机：本机一条、远程一条。 */
+/** 起一台只监听一个 unix socket 的主机；档位由认证帧声明，主机按配置收窄。 */
 async function start(overrides: Partial<ServerConfig> = {}): Promise<void> {
 	const hub = new SessionHub({
 		factory: {
@@ -175,9 +173,9 @@ afterEach(async () => {
 
 describe("权限档", () => {
 	it("本机连接是管理档，远程只读档拿不到管理操作", async () => {
-		await start({ socketPath: join(dir, "local.sock"), remoteSocketPath: join(dir, "remote.sock") });
+		await start({ socketPath: join(dir, "local.sock") });
 		const local = await Peer.connect(join(dir, "local.sock"), "令牌");
-		const remote = await Peer.connect(join(dir, "remote.sock"), "令牌");
+		const remote = await Peer.connect(join(dir, "local.sock"), "令牌", "viewer");
 		peerList.push(local, remote);
 		expect((await local.hello()).role).toBe("admin");
 		expect((await remote.hello()).role).toBe("viewer");
@@ -189,8 +187,8 @@ describe("权限档", () => {
 	});
 
 	it("只读档不能建会话、写文件，也不能派发动作", async () => {
-		await start({ socketPath: join(dir, "local.sock"), remoteSocketPath: join(dir, "remote.sock") });
-		const remote = await Peer.connect(join(dir, "remote.sock"), "令牌");
+		await start({ socketPath: join(dir, "local.sock") });
+		const remote = await Peer.connect(join(dir, "local.sock"), "令牌", "viewer");
 		peerList.push(remote);
 		expect((await remote.request("createSession", { cwd: dir })).message).toBe("这条连接是只读的");
 		expect(
@@ -202,12 +200,9 @@ describe("权限档", () => {
 	});
 
 	it("远程操作档能派发动作，但管理操作仍然拒绝", async () => {
-		await start({
-			socketPath: join(dir, "local.sock"),
-			remoteSocketPath: join(dir, "remote.sock"),
-			remotePermission: "operate",
-		});
-		const remote = await Peer.connect(join(dir, "remote.sock"), "令牌");
+		await start({ socketPath: join(dir, "local.sock"), remotePermission: "operate" });
+		// 声明操作档，主机的配置是 operate，所以给操作档
+		const remote = await Peer.connect(join(dir, "local.sock"), "令牌", "operator");
 		peerList.push(remote);
 		expect((await remote.hello()).role).toBe("operator");
 		expect((await remote.request("shutdownHost")).message).toBe("这个操作只允许在本机进行");
@@ -217,9 +212,9 @@ describe("权限档", () => {
 
 describe("远程操作审计", () => {
 	it("远程的写操作进审计文件，本机的不记", async () => {
-		await start({ socketPath: join(dir, "local.sock"), remoteSocketPath: join(dir, "remote.sock") });
+		await start({ socketPath: join(dir, "local.sock") });
 		const local = await Peer.connect(join(dir, "local.sock"), "令牌");
-		const remote = await Peer.connect(join(dir, "remote.sock"), "令牌");
+		const remote = await Peer.connect(join(dir, "local.sock"), "令牌", "viewer");
 		peerList.push(local, remote);
 		await local.request("getSettings");
 		await remote.request("createSession", { cwd: dir });

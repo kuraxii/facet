@@ -45,14 +45,6 @@ const payload: HostReadyPayload = {
 			? { transport: "tcp", url: `ws://${server.host}:${server.port}/endpoint` }
 			: { transport: "unix", path: server.socketPath },
 	token: config.token,
-	...(server.remoteSocketPath === undefined && server.remotePort === undefined
-		? {}
-		: {
-				remote:
-					server.remoteSocketPath === undefined
-						? { transport: "tcp" as const, port: server.remotePort as number }
-						: { transport: "unix" as const, path: server.remoteSocketPath },
-			}),
 	hostId: server.hostId,
 	agentDir: server.agentDir,
 	pid: process.pid,

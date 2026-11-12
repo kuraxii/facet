@@ -206,6 +206,8 @@ export function App() {
 	const [endpoint, setEndpoint] = useState(LOCAL_TARGET);
 	/** 与主机的连接是否可用，断开时输入区说明原因并禁用发送 */
 	const [isOnline, setIsOnline] = useState(false);
+	/** 正在自动重连：断线之后按退避重试，界面上写明状态 */
+	const [isReconnecting, setIsReconnecting] = useState(false);
 	const [failure, setFailure] = useState<string | undefined>(undefined);
 	const [sessions, setSessions] = useState<readonly SessionSummary[]>([]);
 	const [activeFile, setActiveFile] = useState<string | undefined>(undefined);
@@ -357,6 +359,7 @@ export function App() {
 	 * 时刻只跑一次，手动重试与自动重连共用这条路。
 	 */
 	const reconnect = useCallback(async (): Promise<void> => {
+		setIsReconnecting(true);
 		reconnecting.current ??= (async () => {
 			let delay = 400;
 			for (;;) {
@@ -376,14 +379,19 @@ export function App() {
 					await refreshSessions();
 					await refreshProjects();
 					return;
-				} catch {
+				} catch (error) {
+					// 重连失败的原因留在控制台，便于排查连不上的问题
+					console.log("[reconnect] 重连失败", error instanceof Error ? error.message : String(error));
 					await new Promise((done) => setTimeout(done, delay));
 					delay = Math.min(delay * 2, 8000);
 				}
 			}
-		})().finally(() => {
-			reconnecting.current = undefined;
-		});
+		})()
+			.catch(() => undefined)
+			.finally(() => {
+				reconnecting.current = undefined;
+				setIsReconnecting(false);
+			});
 		await reconnecting.current;
 	}, [refreshProjects, refreshSessions]);
 
@@ -400,7 +408,8 @@ export function App() {
 			bridge.onLocalHostChanged(() => {
 				hostTarget = LOCAL_TARGET;
 				setEndpoint(LOCAL_TARGET);
-				setPhase("connecting");
+				// 会话还在屏幕上时不退回连接屏，只把状态换成「重连中」
+				setPhase((current) => (current === "failed" ? "connecting" : current));
 				void reconnect().then(
 					() => setPhase("ready"),
 					(error: unknown) => {
@@ -1152,7 +1161,8 @@ export function App() {
 					isSettingsOpen={view === "settings"}
 					onTogglePanel={() => updatePanel({ open: !panel.open })}
 					isPanelOpen={panel.open}
-					hostName={host?.role === "viewer" ? `${host.hostName} · 只读` : host?.hostName}
+					hostName={host?.hostName}
+					hostStatus={isReconnecting ? "重连中" : host?.role === "viewer" ? "只读" : undefined}
 					hostSwitcher={
 						<HostSwitcher
 							localEndpoint={LOCAL_TARGET}
@@ -1160,6 +1170,7 @@ export function App() {
 							activeEndpoint={hostList.activeEndpoint}
 							hosts={hostList.hosts}
 							isOnline={isOnline}
+							isReconnecting={isReconnecting}
 							onConnect={(next) => void switchHost(next)}
 							onAddHost={addHost}
 							onRemoveHost={removeHost}

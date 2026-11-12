@@ -41,10 +41,16 @@ const api = {
 	openHostChannel: async (
 		target: string,
 		handlers: { onData: (chunk: string) => void; onClose: (reason: string) => void },
-	): Promise<{ id: number; token: string | undefined; write: (text: string) => void; close: () => void }> => {
+	): Promise<{
+		id: number;
+		token: string | undefined;
+		role: "operator" | "viewer" | undefined;
+		write: (text: string) => void;
+		close: () => void;
+	}> => {
 		const opened = (await ipcRenderer.invoke("facet:host-open", target).catch((error: unknown) => {
 			throw cleanIpcError(error);
-		})) as { id: number; token: string | undefined };
+		})) as { id: number; token: string | undefined; role: "operator" | "viewer" | undefined };
 		const id = opened.id;
 		const onData = (_event: unknown, channel: number, chunk: string): void => {
 			if (channel === id) {
@@ -66,6 +72,7 @@ const api = {
 		return {
 			id,
 			token: opened.token,
+			role: opened.role,
 			write: (text: string) => ipcRenderer.send("facet:host-write", id, text),
 			close: () => {
 				ipcRenderer.send("facet:host-close", id);

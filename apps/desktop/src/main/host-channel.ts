@@ -29,7 +29,13 @@ interface Channel {
 }
 
 /** 解析目标：本机取发现文件，`ssh://` 走 SSH，其余按 host:port 走 TCP。 */
-export type TargetResolver = (target: string) => DiscoveryRecord | { host: string; port: number } | undefined;
+export type TargetResolver = (
+	target: string,
+) =>
+	| DiscoveryRecord
+	| { host: string; port: number }
+	| undefined
+	| Promise<DiscoveryRecord | { host: string; port: number } | undefined>;
 
 export class HostChannels {
 	private next = 1;
@@ -48,13 +54,16 @@ export class HostChannels {
 	 * 远程主机走 SSH：先连 SSH，再用通道打开远端的 socket，令牌从远端发现文件里取。
 	 * 连不上时抛错，渲染进程据此显示「连不上主机」。
 	 */
-	async open(webContents: WebContents, target: string): Promise<{ id: number; token: string | undefined }> {
+	async open(
+		webContents: WebContents,
+		target: string,
+	): Promise<{ id: number; token: string | undefined; role: "operator" | "viewer" | undefined }> {
 		if (isSshTarget(target)) {
 			const opened = await this.ssh.open(target);
 			// SSH 通道已经是流，直接按行搬运
-			return this.attach(webContents, { stream: opened.stream }, opened.token);
+			return this.attach(webContents, { stream: opened.stream }, opened.token, opened.role);
 		}
-		const resolved = this.resolve(target);
+		const resolved = await this.resolve(target);
 		if (resolved === undefined) {
 			throw new Error(target === LOCAL_TARGET ? "没有发现正在运行的主机" : `主机地址无效:${target}`);
 		}
@@ -63,7 +72,9 @@ export class HostChannels {
 				? await connectToDiscovery(resolved)
 				: await connectTcp({ host: resolved.host, port: resolved.port });
 		const token = "endpoint" in resolved ? resolved.token : undefined;
-		return this.attach(webContents, { socket }, token);
+		// 直连的远程主机按操作档申请，主机按自己的配置收窄
+		const role = target === LOCAL_TARGET ? undefined : ("operator" as const);
+		return this.attach(webContents, { socket }, token, role);
 	}
 
 	/** 把一条已建好的连接接上界面：转发数据与关闭事件。 */
@@ -71,7 +82,8 @@ export class HostChannels {
 		webContents: WebContents,
 		source: { socket: Socket } | { stream: StreamLike },
 		token: string | undefined,
-	): { id: number; token: string | undefined } {
+		role: "operator" | "viewer" | undefined,
+	): { id: number; token: string | undefined; role: "operator" | "viewer" | undefined } {
 		const id = this.next;
 		this.next += 1;
 		const finish = (reason: string): void => {
@@ -111,7 +123,7 @@ export class HostChannels {
 				close: () => stream.close(),
 			});
 		}
-		return { id, token };
+		return { id, token, role };
 	}
 
 	/** 把界面写的一段文本转给主机。 */

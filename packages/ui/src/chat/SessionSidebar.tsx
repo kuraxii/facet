@@ -75,6 +75,8 @@ export interface SessionSidebarProps {
 	hostSwitcher?: ReactNode;
 	/** 当前主机名，显示在页脚右侧 */
 	hostName?: string;
+	/** 连接状态提示，例如「重连中」或「只读」 */
+	hostStatus?: string;
 }
 
 /** 会话行状态点的样式类。运行中与压缩中都走运行色，前者呼吸，后者常亮。 */
@@ -129,6 +131,7 @@ export function SessionSidebar({
 	isPanelOpen = false,
 	hostSwitcher,
 	hostName,
+	hostStatus,
 }: SessionSidebarProps) {
 	const [keyword, setKeyword] = useState("");
 	const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -805,7 +808,10 @@ export function SessionSidebar({
 				>
 					{theme === "dark" ? <SunIcon size={14} /> : <MoonIcon size={14} />}
 				</button>
-				<span className="sb-foot-hint">{hostName ?? "本机"}</span>
+				<span className="sb-foot-hint">
+					{hostName ?? "本机"}
+					{hostStatus === undefined ? null : <span className="sb-foot-status">{hostStatus}</span>}
+				</span>
 			</footer>
 		</aside>
 	);

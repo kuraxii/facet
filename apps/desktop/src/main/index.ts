@@ -6,6 +6,7 @@ import {
 	findRunningHost,
 	HostDaemon,
 	type HostDiscovery,
+	readDiscovery,
 	resolveDataDir,
 	stopDiscoveredHost,
 } from "./host-daemon.ts";
@@ -405,8 +406,13 @@ app.whenReady().then(async () => {
 	}
 
 	// 界面不直连主机：主进程按目标建通道，本机按发现记录，远程按 host:port
-	hostChannels = new HostChannels((target) => {
+	hostChannels = new HostChannels(async (target) => {
 		if (target === LOCAL_TARGET) {
+			// 每次都读最新的发现文件：主机重启后端口与令牌都会变，缓存的那份会连不上
+			const fresh = await readDiscovery(dataDir).catch(() => undefined);
+			if (fresh !== undefined) {
+				return fresh;
+			}
 			if (localHost !== undefined) {
 				return localHost;
 			}

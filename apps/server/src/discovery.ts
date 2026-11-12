@@ -16,11 +16,6 @@ export type DiscoveryEndpoint =
 	| { readonly transport: "unix"; readonly path: string }
 	| { readonly transport: "tcp"; readonly url: string };
 
-/** 远程接入的地址，与连接方式同形。 */
-export type RemoteEndpoint =
-	| { readonly transport: "unix"; readonly path: string }
-	| { readonly transport: "tcp"; readonly port: number };
-
 /** 写进 endpoint.json 的内容。 */
 export interface DiscoveryRecord {
 	/** 格式版本 */
@@ -29,8 +24,6 @@ export interface DiscoveryRecord {
 	endpoint: DiscoveryEndpoint;
 	/** 连接令牌，握手第一帧要带上 */
 	token: string | undefined;
-	/** 远程接入的地址；未开启时没有，远程端据此判断能不能连 */
-	remote?: RemoteEndpoint;
 	/** 主机标识 */
 	hostId: string;
 	/** 实际生效的 pi 数据目录 */
@@ -89,19 +82,10 @@ export function parseDiscovery(text: string): DiscoveryRecord | undefined {
 	if (typeof record.pid !== "number" || !Number.isInteger(record.pid) || record.pid <= 0) {
 		return undefined;
 	}
-	const remoteRaw = record.remote;
-	const remoteSection =
-		typeof remoteRaw === "object" && remoteRaw !== null ? (remoteRaw as Record<string, unknown>) : undefined;
-	const remote: RemoteEndpoint | undefined =
-		remoteSection?.transport === "unix" && typeof remoteSection.path === "string"
-			? { transport: "unix", path: remoteSection.path }
-			: remoteSection?.transport === "tcp" && typeof remoteSection.port === "number"
-				? { transport: "tcp", port: remoteSection.port }
-				: undefined;
 	return {
 		schemaVersion: typeof record.schemaVersion === "number" ? record.schemaVersion : 1,
 		endpoint: transport,
-		...(remote === undefined ? {} : { remote }),
+
 		token: typeof record.token === "string" ? record.token : undefined,
 		hostId: typeof record.hostId === "string" ? record.hostId : "",
 		agentDir: typeof record.agentDir === "string" ? record.agentDir : "",

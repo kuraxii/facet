@@ -123,7 +123,7 @@ export type { AuditEntry } from "./audit.ts";
 export { AuditLog } from "./audit.ts";
 export type { ServerConfig } from "./config.ts";
 export { generateToken, loadServerConfig } from "./config.ts";
-export type { DiscoveryEndpoint, DiscoveryRecord, RemoteEndpoint } from "./discovery.ts";
+export type { DiscoveryEndpoint, DiscoveryRecord } from "./discovery.ts";
 export {
 	DISCOVERY_SCHEMA_VERSION,
 	describeDiscovery,

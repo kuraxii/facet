@@ -19,29 +19,34 @@ import {
 	CreateProjectDialog,
 	DEFAULT_DARK_THEME,
 	EmptyState,
+	endpointLabel,
 	FilesPane,
+	HostSwitcher,
+	hasEndpoint,
 	isDarkTheme,
+	normalizeEndpoint,
 	QueueStrip,
 	RightPanel,
 	type RightPanelState,
+	readHostList,
 	readPanelState,
 	resolveUiTheme,
+	type SavedHost,
 	SessionSidebar,
 	type SettingsDataSource,
 	SettingsPage,
 	type SettingsSection,
-	type SidebarHost,
 	samePath,
 	THEME_MODES,
 	type ThemeName,
 	TrustDialog,
 	useStickToBottom,
+	writeHostList,
 	writePanelState,
 } from "@facet/ui";
 import { FileView } from "@facet/ui-editor";
 import { X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { PLACEHOLDER_HOSTS } from "./placeholder-hosts";
 
 /** 预加载脚本注入的启动参数 */
 interface FacetBridge {
@@ -202,6 +207,15 @@ export function App() {
 	const [settings, setSettings] = useState<FacetSettings>(DEFAULT_SETTINGS);
 	/** 主区域显示对话还是设置 */
 	const [view, setView] = useState<"chat" | "settings">("chat");
+	/** 主机清单：本机之外用户添加的远程主机，以及当前连着的端点 */
+	const [hostList, setHostList] = useState(() => readHostList(localStorage, bridge.endpoint));
+
+	/** 改主机清单并写回本地。 */
+	const updateHostList = useCallback((next: typeof hostList) => {
+		setHostList(next);
+		writeHostList(localStorage, next);
+	}, []);
+
 	/** 右栏的状态；展开、分页与宽度都记在本地 */
 	const [panel, setPanel] = useState<RightPanelState>(() => readPanelState(localStorage));
 
@@ -457,6 +471,79 @@ export function App() {
 		});
 	}, []);
 
+	/**
+	 * 切到另一台主机。
+	 *
+	 * 先放掉当前会话并清空列表，再换端点重新握手：设置、模型目录、项目与会话都属于主机，
+	 * 换过去之后整份重新取。连不上时交给重连逻辑退避重试，界面显示连不上主机那一屏。
+	 */
+	const switchHost = useCallback(
+		async (nextEndpoint: string): Promise<void> => {
+			if (nextEndpoint === endpoint) {
+				return;
+			}
+			updateHostList({ ...hostList, activeEndpoint: nextEndpoint });
+			setEndpoint(nextEndpoint);
+			transport.setUrl(nextEndpoint);
+			setActiveFile(undefined);
+			setSessions([]);
+			setProjects([]);
+			setOpenedFile(undefined);
+			setChanges({ isLoading: false });
+			await client.release().catch(() => undefined);
+			setPhase("connecting");
+			// 只握一次手：连不上就直接回到「连不上主机」那一屏，重试按钮走退避重连
+			try {
+				const handshake = await transport.connect();
+				client.attach(handshake);
+				setHost(handshake);
+				await client.resume().catch(() => undefined);
+				await refreshSessions();
+				await refreshProjects();
+				setSettings(await client.getSettings().catch(() => DEFAULT_SETTINGS));
+				await refreshCatalog();
+				setPhase("ready");
+			} catch (error) {
+				setFailure(error instanceof Error ? error.message : String(error));
+				setPhase("failed");
+			}
+		},
+		[endpoint, hostList, refreshCatalog, refreshProjects, refreshSessions, updateHostList],
+	);
+
+	/** 添加一台主机：地址收成端点，重复的直接回原因。 */
+	const addHost = useCallback(
+		(name: string, address: string): string | undefined => {
+			const normalized = normalizeEndpoint(address);
+			if (normalized === undefined) {
+				return "地址看不懂，写 host:port 或 ws://host:port/endpoint";
+			}
+			if (hasEndpoint(hostList, normalized, bridge.endpoint)) {
+				return "这台主机已经在清单里";
+			}
+			const host: SavedHost = {
+				id: `${Date.now().toString(36)}-${hostList.hosts.length}`,
+				name,
+				endpoint: normalized,
+			};
+			updateHostList({ ...hostList, hosts: [...hostList.hosts, host] });
+			return undefined;
+		},
+		[hostList, updateHostList],
+	);
+
+	/** 从清单里删掉一台远程主机；删的是当前连接时回到本机。 */
+	const removeHost = useCallback(
+		(id: string): void => {
+			const target = hostList.hosts.find((host) => host.id === id);
+			updateHostList({ ...hostList, hosts: hostList.hosts.filter((host) => host.id !== id) });
+			if (target !== undefined && target.endpoint === endpoint) {
+				void switchHost(bridge.endpoint);
+			}
+		},
+		[endpoint, hostList, switchHost, updateHostList],
+	);
+
 	/** 输入区可选的模型：去掉设置里隐藏的那些。 */
 	const visibleModels = useMemo(
 		() => catalog.models.filter((model) => !settings.hiddenModels.includes(`${model.provider}/${model.id}`)),
@@ -645,6 +732,12 @@ export function App() {
 		}
 		started.current = true;
 		void (async () => {
+			// 上次连的是远程主机时直接连回去，连不上会落到「连不上主机」那一屏
+			const startEndpoint = hostList.activeEndpoint;
+			if (startEndpoint !== bridge.endpoint) {
+				transport.setUrl(startEndpoint);
+				setEndpoint(startEndpoint);
+			}
 			const handshake = await transport.connect();
 			client.attach(handshake);
 			setHost(handshake);
@@ -663,7 +756,7 @@ export function App() {
 			setFailure(error instanceof Error ? error.message : String(error));
 			setPhase("failed");
 		});
-	}, [openSession, refreshCatalog, refreshProjects, refreshSessions]);
+	}, [hostList.activeEndpoint, openSession, refreshCatalog, refreshProjects, refreshSessions]);
 
 	/** 当前草稿落在哪个键：打开的会话按文件路径分开存，没有会话时存到新会话页面。 */
 	const draftKey = activeFile ?? NEW_DRAFT_KEY;
@@ -870,19 +963,6 @@ export function App() {
 		scrollToBottom,
 	} = useStickToBottom(transcript, activeFile);
 
-	const hosts = useMemo<readonly SidebarHost[]>(() => {
-		const local: SidebarHost = {
-			id: host?.hostId ?? "local",
-			name: host?.hostName ?? "本机",
-			detail: endpoint,
-			state: "connected",
-			isLocal: true,
-			projects: [],
-		};
-		return [local, ...PLACEHOLDER_HOSTS];
-	}, [host, endpoint]);
-
-	// 代码高亮的配色与深浅一起下发，正文里的代码块按它取 shiki 主题
 	const codeThemeValue = useMemo(
 		() => ({
 			theme: settings.appearance.codeTheme,
@@ -897,6 +977,27 @@ export function App() {
 				<h1>连不上主机</h1>
 				<p>{failure}</p>
 				<p>{endpoint}</p>
+				<div className="boot-hosts">
+					<button
+						type="button"
+						className="boot-host"
+						onClick={() => void switchHost(bridge.endpoint)}
+						disabled={endpoint === bridge.endpoint}
+					>
+						本机 · {endpointLabel(bridge.endpoint)}
+					</button>
+					{hostList.hosts.map((host) => (
+						<button
+							key={host.id}
+							type="button"
+							className="boot-host"
+							onClick={() => void switchHost(host.endpoint)}
+							disabled={endpoint === host.endpoint}
+						>
+							{host.name} · {endpointLabel(host.endpoint)}
+						</button>
+					))}
+				</div>
 				<button
 					type="button"
 					className="boot-retry"
@@ -931,7 +1032,6 @@ export function App() {
 			<div className="shell">
 				<SessionSidebar
 					sessions={sessions}
-					hosts={hosts}
 					projects={projects}
 					activeFile={activeFile}
 					runningFile={activity === "idle" ? undefined : activeFile}
@@ -959,6 +1059,19 @@ export function App() {
 					isSettingsOpen={view === "settings"}
 					onTogglePanel={() => updatePanel({ open: !panel.open })}
 					isPanelOpen={panel.open}
+					hostName={host?.hostName}
+					hostSwitcher={
+						<HostSwitcher
+							localEndpoint={bridge.endpoint}
+							localName={host?.hostName ?? "本机"}
+							activeEndpoint={hostList.activeEndpoint}
+							hosts={hostList.hosts}
+							isOnline={isOnline}
+							onConnect={(next) => void switchHost(next)}
+							onAddHost={addHost}
+							onRemoveHost={removeHost}
+						/>
+					}
 				/>
 
 				<main className="main">

@@ -643,48 +643,6 @@ svg.fl {
 	font-size: 12.5px;
 }
 
-.sb-hosts {
-	display: flex;
-	flex: none;
-	align-items: center;
-	gap: 6px;
-	margin: 4px 0 0;
-	padding: 8px 4px 0;
-	border-top: 1px solid var(--line);
-	overflow-x: auto;
-	list-style: none;
-	scrollbar-width: none;
-}
-
-.sb-hosts::-webkit-scrollbar {
-	display: none;
-}
-
-.sb-host {
-	display: inline-flex;
-	flex: none;
-	align-items: center;
-	gap: 5px;
-	max-width: 132px;
-	height: 22px;
-	padding: 0 7px;
-	border: 1px solid var(--line);
-	border-radius: 6px;
-	color: var(--t3);
-	font-size: 11.5px;
-}
-
-.sb-host.is-local {
-	border-color: var(--line2);
-	color: var(--t2);
-}
-
-.sb-host-count {
-	color: var(--t3);
-	font-size: 10.5px;
-	font-variant-numeric: tabular-nums;
-}
-
 .sb-foot {
 	display: flex;
 	flex: none;
@@ -1097,6 +1055,172 @@ svg.fl {
 	font-size: 12px;
 	line-height: 1.6;
 	text-align: center;
+}
+
+/* 连不上主机那一屏上的主机按钮 */
+.boot-hosts {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	justify-content: center;
+	margin-top: 14px;
+}
+
+.boot-host {
+	padding: 5px 10px;
+	border: 1px solid var(--line2);
+	border-radius: 7px;
+	background: transparent;
+	color: var(--t2);
+	font-size: 12px;
+}
+
+.boot-host:hover:not(:disabled) {
+	border-color: var(--acc);
+	color: var(--t1);
+}
+
+.boot-host:disabled {
+	color: var(--t3);
+	cursor: default;
+}
+
+/* 主机切换：页脚按钮与弹出的清单 */
+.host-switch {
+	position: relative;
+}
+
+.host-pop {
+	position: absolute;
+	bottom: calc(100% + 8px);
+	left: 0;
+	z-index: 40;
+	width: 248px;
+	padding: 6px;
+	border: 1px solid var(--line2);
+	border-radius: 10px;
+	background: var(--card2);
+	box-shadow: 0 12px 32px rgb(0 0 0 / 35%);
+}
+
+.host-list {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.host-row {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	border-radius: 6px;
+}
+
+.host-row.is-on {
+	background: var(--surface3);
+}
+
+.host-main {
+	display: flex;
+	flex: 1;
+	align-items: center;
+	gap: 7px;
+	min-width: 0;
+	height: 28px;
+	padding: 0 6px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--t2);
+	font-size: 12px;
+	text-align: left;
+}
+
+.host-main:hover {
+	color: var(--t1);
+}
+
+.host-row.is-on .host-main {
+	color: var(--t1);
+}
+
+.host-name {
+	flex: none;
+	max-width: 45%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.host-addr {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	color: var(--t3);
+	font-size: 11px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.host-remove {
+	display: grid;
+	flex: none;
+	place-items: center;
+	width: 20px;
+	height: 20px;
+	margin-right: 4px;
+	padding: 0;
+	border: 0;
+	border-radius: 5px;
+	background: transparent;
+	color: var(--t3);
+}
+
+.host-remove:hover {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+.host-add {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	height: 28px;
+	margin-top: 4px;
+	padding: 0 6px;
+	border: 0;
+	border-top: 1px solid var(--line);
+	border-radius: 6px;
+	background: transparent;
+	color: var(--t2);
+	font-size: 12px;
+	text-align: left;
+}
+
+.host-add:hover {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+.host-form {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-top: 6px;
+	padding-top: 6px;
+	border-top: 1px solid var(--line);
+}
+
+.host-error {
+	margin: 0;
+	color: var(--err);
+	font-size: 11.5px;
+}
+
+.host-form-actions {
+	display: flex;
+	gap: 6px;
 }
 
 /* 对话导航：贴在主区域左缘的一条竖轨，按轮次排列 */

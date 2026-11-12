@@ -14,6 +14,16 @@ export type { OutlinePrompt } from "./chat/chat-outline.ts";
 export { outlinePrompts } from "./chat/chat-outline.ts";
 export type { EmptyStateProps } from "./chat/EmptyState.tsx";
 export { EmptyState } from "./chat/EmptyState.tsx";
+export type { HostSwitcherProps } from "./chat/HostSwitcher.tsx";
+export { HostSwitcher } from "./chat/HostSwitcher.tsx";
+export type { HostListState, HostListStorage, SavedHost } from "./chat/host-list.ts";
+export {
+	endpointLabel,
+	hasEndpoint,
+	normalizeEndpoint,
+	readHostList,
+	writeHostList,
+} from "./chat/host-list.ts";
 export type { ProviderFormProps } from "./chat/ProviderForm.tsx";
 export { ProviderForm } from "./chat/ProviderForm.tsx";
 export type { QueueStripProps } from "./chat/QueueStrip.tsx";
@@ -28,12 +38,9 @@ export type {
 export { SettingsPage } from "./chat/SettingsPage.tsx";
 export type {
 	GroupKey,
-	HostState,
 	SessionDot,
 	SidebarData,
 	SidebarGroup,
-	SidebarHost,
-	SidebarHostStatus,
 	SidebarProject,
 	SidebarSession,
 } from "./chat/sidebar-model.ts";

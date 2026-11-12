@@ -1,21 +1,18 @@
 /**
  * 会话侧栏。
  *
- * 自上而下四块：标题与全局操作、新建会话、项目过滤器、会话队列；底部是主机状态条与页脚。
+ * 自上而下四块：标题与全局操作、新建会话、项目过滤器、会话队列；底部是页脚。
  * 项目过滤器同时决定队列的范围与新建会话的目录，队列按时间分组，分组规则见 sidebar-model。
  */
 import type { ProjectInfo, SessionSummary } from "@facet/protocol";
 import { FolderPlus, PanelRight, Plus, Search, Settings } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronIcon } from "../transcript/chevron.tsx";
 import { FolderIcon, MoonIcon, SunIcon } from "../transcript/icons.tsx";
 import {
 	baseName,
 	buildSidebar,
-	type HostState,
 	type SessionDot,
-	type SidebarHost,
-	type SidebarHostStatus,
 	type SidebarProject,
 	type SidebarSession,
 	samePath,
@@ -30,7 +27,6 @@ export interface SessionSidebarProps {
 	/** 当前主机的会话列表，已按时间倒序 */
 	sessions: readonly SessionSummary[];
 	/** 主机清单，第一项为当前主机 */
-	hosts: readonly SidebarHost[];
 	/** 用户添加的项目 */
 	projects: readonly ProjectInfo[];
 	/** 当前会话的文件路径，没有打开会话时为空 */
@@ -75,6 +71,10 @@ export interface SessionSidebarProps {
 	onTogglePanel?: () => void;
 	/** 右侧栏是否展开 */
 	isPanelOpen?: boolean;
+	/** 页脚的主机切换入口，由宿主给出 */
+	hostSwitcher?: ReactNode;
+	/** 当前主机名，显示在页脚右侧 */
+	hostName?: string;
 }
 
 /** 会话行状态点的样式类。运行中与压缩中都走运行色，前者呼吸，后者常亮。 */
@@ -83,23 +83,6 @@ function dotClass(dot: SessionDot): string {
 		return "dot is-run pulse";
 	}
 	return dot === "compacting" ? "dot is-run" : "dot is-off";
-}
-
-/** 主机状态点的样式类。 */
-function hostDotClass(state: HostState): string {
-	if (state === "connected") {
-		return "dot";
-	}
-	return state === "connecting" ? "dot is-warn pulse" : "dot is-off";
-}
-
-/** 主机的连接说明，用作悬浮提示。 */
-function hostHint(host: SidebarHostStatus): string {
-	if (host.state === "connected") {
-		return host.detail.length > 0 ? host.detail : host.name;
-	}
-	const reason = host.state === "connecting" ? "连接中" : "离线";
-	return `${reason} · ${host.lastSeen ?? host.detail}`;
 }
 
 /** 点击组件外部时关闭浮层，点击触发器本身不算外部。 */
@@ -122,7 +105,6 @@ function useDismiss(ref: React.RefObject<HTMLElement | null>, isOpen: boolean, c
 
 export function SessionSidebar({
 	sessions,
-	hosts,
 	projects: storedProjects,
 	activeFile,
 	runningFile,
@@ -145,6 +127,8 @@ export function SessionSidebar({
 	isSettingsOpen = false,
 	onTogglePanel,
 	isPanelOpen = false,
+	hostSwitcher,
+	hostName,
 }: SessionSidebarProps) {
 	const [keyword, setKeyword] = useState("");
 	const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -189,21 +173,19 @@ export function SessionSidebar({
 		() =>
 			buildSidebar({
 				sessions,
-				hosts,
 				projects: storedProjects,
 				runningFile,
 				runningDot,
 				projectCwd: scopeCwd,
 				keyword,
 			}),
-		[sessions, hosts, storedProjects, runningFile, runningDot, scopeCwd, keyword],
+		[sessions, storedProjects, runningFile, runningDot, scopeCwd, keyword],
 	);
 
 	const currentProject: SidebarProject | undefined =
 		scopeCwd === undefined ? undefined : data.projects.find((item) => samePath(item.cwd, scopeCwd));
 	const filterLabel = currentProject?.name ?? (scopeCwd === undefined ? "全部项目" : baseName(scopeCwd));
 	const filterCount = currentProject?.sessionCount ?? data.total;
-	const localHost = hosts.find((host) => host.isLocal);
 	const newSessionCwd = scopeCwd ?? createCwd;
 
 	const projectMatches = useMemo(() => {
@@ -802,19 +784,8 @@ export function SessionSidebar({
 				))}
 			</div>
 
-			<ul className="sb-hosts" aria-label="主机">
-				{data.hosts.map((host) => (
-					<li key={host.id} className={host.isLocal ? "sb-host is-local" : "sb-host"} title={hostHint(host)}>
-						<i className={hostDotClass(host.state)} />
-						<span className="ell">{host.name}</span>
-						{host.sessionCount === undefined ? null : (
-							<span className="sb-host-count mono">{host.sessionCount}</span>
-						)}
-					</li>
-				))}
-			</ul>
-
 			<footer className="sb-foot">
+				{hostSwitcher}
 				<button
 					type="button"
 					className={isSettingsOpen ? "sb-foot-btn is-icon is-on" : "sb-foot-btn is-icon"}
@@ -834,7 +805,7 @@ export function SessionSidebar({
 				>
 					{theme === "dark" ? <SunIcon size={14} /> : <MoonIcon size={14} />}
 				</button>
-				<span className="sb-foot-hint">{localHost?.name ?? "本机"}</span>
+				<span className="sb-foot-hint">{hostName ?? "本机"}</span>
 			</footer>
 		</aside>
 	);

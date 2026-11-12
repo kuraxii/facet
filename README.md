@@ -38,6 +38,15 @@ FACET_ENDPOINT=ws://192.168.1.20:4319/endpoint npm run dev:client
 
 开发时想跑打包那样的本机模式（桌面自己拉起主机）用 `FACET_EMBEDDED=1 npm run dev`；打包运行不带 `FACET_ENDPOINT` 时本来就是本机模式。
 
+## 连接方式与令牌
+
+主机只跑一套按行编码的协议，跑在哪条字节流上都一样：
+
+- **本机**：缺省监听 TCP 回环地址；用 `FACET_SOCKET=/run/user/1000/facet.sock` 之类给出路径时改成监听 unix socket（Windows 上是命名管道），不再开 TCP 端口。
+- **远程**：协议本身不依赖 WebSocket，后续接 SSH 通道或中继时不用改协议层。
+- **令牌**：主机会生成一个随机令牌写进发现文件（`FACET_TOKEN` 可指定，`FACET_NO_TOKEN=1` 关闭校验）。连接的第一帧是 `{type:"auth",token}`，不匹配直接断开，拿不到 hello。发现文件权限 `0600`、所在目录 `0700`，socket 本身也是 `0600`。
+- **桌面不直连主机**：渲染进程在沙箱里，连接由主进程按目标建通道（本机按发现文件，远程按 `host:port`），界面只搬运帧。
+
 ## 主机与桌面分开运行
 
 主机是独立的进程，桌面只是它的一个端：
@@ -135,7 +144,10 @@ scripts/build-fonts.sh <字体目录>
 | `FACET_REPLAY_LIMIT` | 每个通道保留的动作条数 |
 | `FACET_SESSION_IDLE_MS` | 没人订阅且空闲后多久回收会话 |
 | `FACET_DEBUG` | 打开主机侧调试日志 |
-| `FACET_ENDPOINT` | 桌面连这个主机，不再拉起本机主机 |
+| `FACET_ENDPOINT` | 桌面连这个主机（`host:port`），不再拉起本机主机 |
+| `FACET_SOCKET` | 主机监听的 unix socket 路径或命名管道名，给出后不再监听 TCP |
+| `FACET_TOKEN` | 连接令牌，缺省随机生成并写进发现文件 |
+| `FACET_NO_TOKEN` | 设为 `1` 时不校验令牌，只用于本机调试 |
 | `FACET_EMBEDDED` | 开发时设为 `1`，桌面像打包那样自己拉起本机主机 |
 | `FACET_PARENT_PID` | 让主机盯着一个进程，那个进程消失后主机自行结束；不再由桌面设置，调试残留进程时用得上 |
 | `FACET_PROJECT_DIR` | 启动时打开的项目目录 |

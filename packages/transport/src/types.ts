@@ -46,6 +46,26 @@ export interface SocketLike {
 /** 创建底层 socket。缺省用运行时自带的 WebSocket。 */
 export type SocketFactory = (url: string) => SocketLike;
 
+/**
+ * 一条双向字节流。
+ *
+ * unix socket、命名管道、SSH 通道、进程的标准输入输出都能收成这个形状；帧按行编码，
+ * 与 WebSocket 传输共用同一套状态机。
+ */
+export interface StreamLike {
+	/** 写一段文本。连接已断时抛错。 */
+	write(text: string): void;
+	/** 订阅收到的文本片段，返回取消订阅的函数 */
+	onData(listener: (chunk: string) => void): () => void;
+	/** 订阅连接关闭，参数是原因 */
+	onClose(listener: (reason: string) => void): () => void;
+	/** 关闭连接 */
+	close(): void;
+}
+
+/** 建立一条字节流。 */
+export type StreamFactory = () => Promise<StreamLike>;
+
 /** 主机端点的客户端。 */
 export interface Transport {
 	readonly state: ConnectionState;

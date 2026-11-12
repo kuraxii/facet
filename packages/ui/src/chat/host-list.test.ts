@@ -28,34 +28,31 @@ function createStorage(
 }
 
 describe("normalizeEndpoint", () => {
-	it("只写 host:port 时补协议与路径", () => {
-		expect(normalizeEndpoint("laptop:6767")).toBe("ws://laptop:6767/endpoint");
+	it("只写 host:port 时原样收下", () => {
+		expect(normalizeEndpoint("laptop:6767")).toBe("laptop:6767");
 	});
 
-	it("已经带协议与路径的原样保留", () => {
-		expect(normalizeEndpoint("ws://10.0.0.2:8080/endpoint")).toBe("ws://10.0.0.2:8080/endpoint");
+	it("带协议与路径的写法化成 host:port", () => {
+		expect(normalizeEndpoint("ws://10.0.0.2:8080/endpoint")).toBe("10.0.0.2:8080");
+		expect(normalizeEndpoint("http://h:1/endpoint")).toBe("h:1");
+		expect(normalizeEndpoint("https://h:1/endpoint")).toBe("h:1");
 	});
 
-	it("http 换成 ws，https 换成 wss", () => {
-		expect(normalizeEndpoint("http://h:1/endpoint")).toBe("ws://h:1/endpoint");
-		expect(normalizeEndpoint("https://h:1/endpoint")).toBe("wss://h:1/endpoint");
-	});
-
-	it("空串、非 ASCII 与不认识的协议给 undefined", () => {
+	it("空串与非 ASCII 给 undefined", () => {
 		expect(normalizeEndpoint("   ")).toBeUndefined();
 		expect(normalizeEndpoint("不是地址")).toBeUndefined();
-		expect(normalizeEndpoint("ftp://h:1")).toBeUndefined();
 	});
 
 	it("没写端口的也当填错", () => {
 		expect(normalizeEndpoint("/tmp/whatever")).toBeUndefined();
 		expect(normalizeEndpoint("ws://laptop/endpoint")).toBeUndefined();
+		expect(normalizeEndpoint("laptop")).toBeUndefined();
 	});
 });
 
 describe("endpointLabel", () => {
-	it("只留 host:port", () => {
-		expect(endpointLabel("ws://laptop:6767/endpoint")).toBe("laptop:6767");
+	it("直接给出 host:port", () => {
+		expect(endpointLabel("laptop:6767")).toBe("laptop:6767");
 		expect(endpointLabel("乱写的")).toBe("乱写的");
 	});
 });

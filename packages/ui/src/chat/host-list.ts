@@ -1,8 +1,8 @@
 /**
  * 主机清单。
  *
- * 清单记在这一台机器上：本机由桌面端拉起，地址由主进程给出；远程主机由用户自己添加。每台
- * 主机只存名字与端点，连接凭据不在这里（远程接入走 SSH，见需求 FR-XDEV）。
+ * 清单记在这一台机器上：本机用固定标识本地表示，地址与令牌由主进程按发现文件给出；远程
+ * 主机由用户自己添加，只存 `host:port`。连接凭据不进清单（远程接入走 SSH，见需求 FR-XDEV）。
  */
 
 /** 一台已保存的主机。 */
@@ -11,7 +11,7 @@ export interface SavedHost {
 	id: string;
 	/** 显示名 */
 	name: string;
-	/** WebSocket 端点，形如 ws://host:port/endpoint */
+	/** 主机地址，形如 host:port */
 	endpoint: string;
 }
 
@@ -34,10 +34,10 @@ export interface HostListStorage {
 }
 
 /**
- * 把用户填的地址收成端点。
+ * 把用户填的地址收成主机地址。
  *
- * 接受 `host:port`、`ws://host:port`、`http://host:port` 与带 `/endpoint` 的完整地址；
- * 没写协议时按 ws 处理，没写路径时补 `/endpoint`。空串与解析不出的返回 undefined。
+ * 接受 `host:port`，也接受带协议写法的 `ws://host:port`、`http://host:port` 与它们的
+ * `/endpoint` 路径，一律化成 `host:port`。没写端口、含非 ASCII 字符的一律按填错处理。
  */
 export function normalizeEndpoint(input: string): string | undefined {
 	const text = input.trim();
@@ -48,18 +48,12 @@ export function normalizeEndpoint(input: string): string | undefined {
 	if (!/^[\x20-\x7e]+$/.test(text)) {
 		return undefined;
 	}
-	const withScheme = /^[a-z]+:\/\//i.test(text) ? text : `ws://${text}`;
+	const withScheme = /^[a-z]+:\/\//i.test(text) ? text : `tcp://${text}`;
 	let url: URL;
 	try {
 		url = new URL(withScheme);
 	} catch {
 		return undefined;
-	}
-	if (url.protocol !== "ws:" && url.protocol !== "wss:") {
-		if (url.protocol !== "http:" && url.protocol !== "https:") {
-			return undefined;
-		}
-		url.protocol = url.protocol === "http:" ? "ws:" : "wss:";
 	}
 	if (url.hostname.length === 0) {
 		return undefined;
@@ -68,20 +62,12 @@ export function normalizeEndpoint(input: string): string | undefined {
 	if (url.port.length === 0) {
 		return undefined;
 	}
-	if (url.pathname === "/" || url.pathname.length === 0) {
-		url.pathname = "/endpoint";
-	}
-	return url.toString();
+	return `${url.hostname}:${url.port}`;
 }
 
-/** 端点里去掉协议与路径，只给人看 host:port。 */
+/** 端点给人看的写法：本机显示名字，其余就是 host:port。 */
 export function endpointLabel(endpoint: string): string {
-	try {
-		const url = new URL(endpoint);
-		return url.host;
-	} catch {
-		return endpoint;
-	}
+	return endpoint;
 }
 
 /** 从本地存储读主机清单；读不懂的条目跳过。 */

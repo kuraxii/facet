@@ -8,12 +8,61 @@ function readArgument(name: string): string {
 }
 
 const api = {
-	/** 主机端点地址 */
-	endpoint: readArgument("facet-endpoint"),
 	/** 主机是本机管的（local），还是外面跑着、这里只当客户端（external） */
 	hostMode: readArgument("facet-host-mode") || "local",
 	/** 关掉窗口后本机主机是否继续运行，来自桌面本地设置 */
 	keepHostOnClose: readArgument("facet-keep-host") !== "0",
+	/**
+	 * 本机主机的连接信息：目标、展示地址与连接令牌。
+	 *
+	 * 界面不自己解析发现文件，也不直连主机——所有帧都经主进程的通道转。
+	 */
+	getLocalHost: (): Promise<{ target: string; address: string; token: string | undefined } | undefined> =>
+		ipcRenderer.invoke("facet:local-host"),
+	/** 订阅本机主机变化（重启或重新拉起），界面据此重连 */
+	onLocalHostChanged: (listener: () => void): (() => void) => {
+		const handler = (): void => listener();
+		ipcRenderer.on("facet:host-changed", handler);
+		return () => {
+			ipcRenderer.off("facet:host-changed", handler);
+		};
+	},
+	/**
+	 * 打开一条到主机的字节流。
+	 *
+	 * 主进程负责真正的连接（本机 unix socket 或 TCP、远程 TCP），这里只按帧搬运。
+	 */
+	openHostChannel: async (
+		target: string,
+		handlers: { onData: (chunk: string) => void; onClose: (reason: string) => void },
+	): Promise<{ id: number; write: (text: string) => void; close: () => void }> => {
+		const id = (await ipcRenderer.invoke("facet:host-open", target)) as number;
+		const onData = (_event: unknown, channel: number, chunk: string): void => {
+			if (channel === id) {
+				handlers.onData(chunk);
+			}
+		};
+		const onClose = (_event: unknown, channel: number, reason: string): void => {
+			if (channel === id) {
+				stop();
+				handlers.onClose(reason);
+			}
+		};
+		const stop = (): void => {
+			ipcRenderer.off("facet:host-data", onData);
+			ipcRenderer.off("facet:host-close", onClose);
+		};
+		ipcRenderer.on("facet:host-data", onData);
+		ipcRenderer.on("facet:host-close", onClose);
+		return {
+			id,
+			write: (text: string) => ipcRenderer.send("facet:host-write", id, text),
+			close: () => {
+				ipcRenderer.send("facet:host-close", id);
+				stop();
+			},
+		};
+	},
 	/** 读本机主机的开关 */
 	getHostPrefs: (): Promise<{ keepOnClose: boolean }> => ipcRenderer.invoke("facet:host-prefs"),
 	/** 结束本机主机，之后不再自动重启 */
@@ -26,18 +75,6 @@ const api = {
 	platform: readArgument("facet-platform") || process.platform,
 	/** 应用版本，关于页展示用 */
 	appVersion: readArgument("facet-version"),
-	/**
-	 * 订阅主机端点变化。
-	 *
-	 * 嵌入主机被重新拉起后端口会变，界面收到新地址要重新握手。返回值用于取消订阅。
-	 */
-	onEndpointChanged: (listener: (endpoint: string) => void): (() => void) => {
-		const handler = (_event: unknown, next: string): void => listener(next);
-		ipcRenderer.on("facet:endpoint-changed", handler);
-		return () => {
-			ipcRenderer.off("facet:endpoint-changed", handler);
-		};
-	},
 	/** 打开系统的目录选择窗口,取消时返回空 */
 	pickDirectory: (): Promise<string | undefined> => ipcRenderer.invoke("facet:pick-directory"),
 	/** 用系统的保存窗口把一段文本写到文件,取消时返回 false */

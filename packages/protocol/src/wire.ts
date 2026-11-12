@@ -73,6 +73,17 @@ export interface HelloFrame {
 	capabilities: Capability[];
 }
 
+/**
+ * 连接建立后的第一帧。
+ *
+ * 主机校验通过才发 hello；令牌不对直接断开，端点拿不到 hello 也就无法发请求。
+ * 不设令牌的主机用 `withoutToken` 显式声明，用来隔离本地调试环境。
+ */
+export interface AuthFrame {
+	type: "auth";
+	token: string;
+}
+
 /** 端点发出的请求。id 由端点生成,响应原样带回。 */
 export interface RequestFrame {
 	type: "request";
@@ -117,7 +128,7 @@ export interface ActionFrame {
 export type ServerFrame = HelloFrame | ResponseFrame | ActionFrame;
 
 /** 端点发往主机的帧。 */
-export type ClientFrame = RequestFrame | DispatchFrame;
+export type ClientFrame = AuthFrame | RequestFrame | DispatchFrame;
 
 /** 订阅结果。 */
 export interface SubscribeResult {

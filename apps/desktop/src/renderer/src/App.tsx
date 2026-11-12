@@ -8,7 +8,6 @@ import {
 	type ProjectInfo,
 	type SessionSummary,
 } from "@facet/protocol";
-import { WsTransport } from "@facet/transport/ws";
 import {
 	ArrowDownIcon,
 	ChangesPane,
@@ -47,10 +46,10 @@ import {
 import { FileView } from "@facet/ui-editor";
 import { X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { type HostChannelBridge, LOCAL_TARGET, makeTransport } from "./host-connection.ts";
 
 /** 预加载脚本注入的启动参数 */
-interface FacetBridge {
-	endpoint: string;
+interface FacetBridge extends HostChannelBridge {
 	projectDir: string;
 	platform: string;
 	/** 应用版本 */
@@ -69,8 +68,6 @@ interface FacetBridge {
 	stopHost: () => Promise<void>;
 	/** 改本机主机的开关，返回保存后的值 */
 	setHostPrefs: (prefs: { keepOnClose: boolean }) => Promise<{ keepOnClose: boolean }>;
-	/** 订阅主机端点变化,返回取消订阅的函数 */
-	onEndpointChanged: (listener: (endpoint: string) => void) => () => void;
 }
 
 declare global {
@@ -81,7 +78,15 @@ declare global {
 
 const bridge = window.facet;
 
-const transport = new WsTransport({ url: bridge.endpoint });
+/**
+ * 当前要连的目标。
+ *
+ * 本机是固定标识，具体地址与令牌由主进程按发现文件给出；在清单里换主机时改这里，
+ * 下一次 connect 就换目标。
+ */
+let hostTarget = LOCAL_TARGET;
+
+const transport = makeTransport(bridge, () => hostTarget);
 const client = new SessionClient({ transport, pageSize: 200 });
 
 type Phase = "connecting" | "ready" | "failed";
@@ -198,7 +203,7 @@ export function App() {
 	);
 	const [phase, setPhase] = useState<Phase>("connecting");
 	/** 当前连的主机端点，嵌入主机被重新拉起后会换 */
-	const [endpoint, setEndpoint] = useState(bridge.endpoint);
+	const [endpoint, setEndpoint] = useState(LOCAL_TARGET);
 	/** 与主机的连接是否可用，断开时输入区说明原因并禁用发送 */
 	const [isOnline, setIsOnline] = useState(false);
 	const [failure, setFailure] = useState<string | undefined>(undefined);
@@ -219,9 +224,9 @@ export function App() {
 	const [view, setView] = useState<"chat" | "settings">("chat");
 	/** 主机清单：本机之外用户添加的远程主机，以及当前连着的端点 */
 	const [hostList, setHostList] = useState(() => {
-		const saved = readHostList(localStorage, bridge.endpoint);
+		const saved = readHostList(localStorage, LOCAL_TARGET);
 		// 外部给了 FACET_ENDPOINT 就以它为准：上一次连的远程主机不该盖过这次显式指定的地址
-		return bridge.hostMode === "external" ? { ...saved, activeEndpoint: bridge.endpoint } : saved;
+		return bridge.hostMode === "external" ? { ...saved, activeEndpoint: LOCAL_TARGET } : saved;
 	});
 
 	/** 改主机清单并写回本地。 */
@@ -232,8 +237,8 @@ export function App() {
 
 	// 外部指定了端点时，把记着的那台改回来，别让下次启动被旧地址带着走
 	useEffect(() => {
-		if (bridge.hostMode === "external" && localStorage.getItem("facet.hosts.active") !== bridge.endpoint) {
-			writeHostList(localStorage, { ...hostList, activeEndpoint: bridge.endpoint });
+		if (bridge.hostMode === "external" && localStorage.getItem("facet.hosts.active") !== LOCAL_TARGET) {
+			writeHostList(localStorage, { ...hostList, activeEndpoint: LOCAL_TARGET });
 		}
 	}, [hostList]);
 
@@ -389,12 +394,12 @@ export function App() {
 		}
 	}, [isOnline, phase, reconnect]);
 
-	// 嵌入主机被重新拉起后端口会变：换地址再握手，会话由 resume 续订
+	// 本机主机重新拉起后端口与令牌都会变：按新的发现记录再握手，会话由 resume 续订
 	useEffect(
 		() =>
-			bridge.onEndpointChanged((next) => {
-				transport.setUrl(next);
-				setEndpoint(next);
+			bridge.onLocalHostChanged(() => {
+				hostTarget = LOCAL_TARGET;
+				setEndpoint(LOCAL_TARGET);
 				setPhase("connecting");
 				void reconnect().then(
 					() => setPhase("ready"),
@@ -525,7 +530,7 @@ export function App() {
 			}
 			updateHostList({ ...hostList, activeEndpoint: nextEndpoint });
 			setEndpoint(nextEndpoint);
-			transport.setUrl(nextEndpoint);
+			hostTarget = nextEndpoint;
 			setActiveFile(undefined);
 			setSessions([]);
 			setProjects([]);
@@ -559,7 +564,7 @@ export function App() {
 			if (normalized === undefined) {
 				return "地址看不懂，写 host:port 或 ws://host:port/endpoint";
 			}
-			if (hasEndpoint(hostList, normalized, bridge.endpoint)) {
+			if (hasEndpoint(hostList, normalized, LOCAL_TARGET)) {
 				return "这台主机已经在清单里";
 			}
 			const host: SavedHost = {
@@ -579,7 +584,7 @@ export function App() {
 			const target = hostList.hosts.find((host) => host.id === id);
 			updateHostList({ ...hostList, hosts: hostList.hosts.filter((host) => host.id !== id) });
 			if (target !== undefined && target.endpoint === endpoint) {
-				void switchHost(bridge.endpoint);
+				void switchHost(LOCAL_TARGET);
 			}
 		},
 		[endpoint, hostList, switchHost, updateHostList],
@@ -602,7 +607,7 @@ export function App() {
 	 */
 	const shutdownHost = useCallback(async (): Promise<string | undefined> => {
 		try {
-			if (endpoint === bridge.endpoint) {
+			if (endpoint === LOCAL_TARGET) {
 				await bridge.stopHost();
 			} else {
 				await client.shutdownHost();
@@ -805,8 +810,8 @@ export function App() {
 		void (async () => {
 			// 上次连的是远程主机时直接连回去，连不上会落到「连不上主机」那一屏
 			const startEndpoint = hostList.activeEndpoint;
-			if (startEndpoint !== bridge.endpoint) {
-				transport.setUrl(startEndpoint);
+			if (startEndpoint !== LOCAL_TARGET) {
+				hostTarget = startEndpoint;
 				setEndpoint(startEndpoint);
 			}
 			const handshake = await transport.connect();
@@ -1052,10 +1057,10 @@ export function App() {
 					<button
 						type="button"
 						className="boot-host"
-						onClick={() => void switchHost(bridge.endpoint)}
-						disabled={endpoint === bridge.endpoint}
+						onClick={() => void switchHost(LOCAL_TARGET)}
+						disabled={endpoint === LOCAL_TARGET}
 					>
-						本机 · {endpointLabel(bridge.endpoint)}
+						本机 · {endpointLabel(LOCAL_TARGET)}
 					</button>
 					{hostList.hosts.map((host) => (
 						<button
@@ -1133,7 +1138,7 @@ export function App() {
 					hostName={host?.hostName}
 					hostSwitcher={
 						<HostSwitcher
-							localEndpoint={bridge.endpoint}
+							localEndpoint={LOCAL_TARGET}
 							localName={host?.hostName ?? "本机"}
 							activeEndpoint={hostList.activeEndpoint}
 							hosts={hostList.hosts}

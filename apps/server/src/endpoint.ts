@@ -6,9 +6,9 @@
  * 断线时该端的订阅全部解除,会话本身继续在主机上运行。
  */
 import { randomUUID } from "node:crypto";
-import { realpath, stat } from "node:fs/promises";
-import { createServer, type IncomingMessage } from "node:http";
-import { isAbsolute } from "node:path";
+import { chmod, mkdir, realpath, rm, stat } from "node:fs/promises";
+import { createServer as createSocketServer, type Socket } from "node:net";
+import { dirname, isAbsolute } from "node:path";
 import { InvalidProviderError, type PiAgentFactory } from "@facet/agent";
 import {
 	type Action,
@@ -17,7 +17,9 @@ import {
 	type Channel,
 	type CustomProviderInfo,
 	type ErrorCode,
+	encodeFrame,
 	type FacetSettings,
+	FrameDecoder,
 	type HelloFrame,
 	PROTOCOL_VERSION,
 	parseChannel,
@@ -26,7 +28,6 @@ import {
 	type ServerFrame,
 	type SessionSnapshot,
 } from "@facet/protocol";
-import { WebSocket, WebSocketServer } from "ws";
 import type { ServerConfig } from "./config.ts";
 import { buildDiagnostics } from "./diagnostics.ts";
 import { FileAccessError, listDirectory, readTextFile, writeTextFile } from "./files.ts";
@@ -47,9 +48,6 @@ import {
 import type { SessionsChannel } from "./sessions-channel.ts";
 import type { SettingsStore } from "./settings-store.ts";
 
-const ENDPOINT_PATH = "/endpoint";
-const MAX_FRAME_BYTES = 32 * 1024 * 1024;
-
 /** 当前主机已实现的能力。未列入的入口由端点隐藏。 */
 const CAPABILITIES: Capability[] = ["dispatch", "tools", "compaction", "export"];
 
@@ -63,14 +61,24 @@ class RequestError extends Error {
 	}
 }
 
+/**
+ * 一条连接。
+ *
+ * 承载方式（WebSocket 或字节流）只影响怎么收发字节，连接本身只认「发一帧」与「关掉」。
+ */
 interface Connection {
-	readonly ws: WebSocket;
 	/** 本次连接的端标识,写进回放动作的 origin */
 	readonly clientId: string;
 	/** 对端地址，只有回环地址能结束主机 */
 	readonly remoteAddress: string | undefined;
 	/** 已订阅的通道与其转发函数,用于取消订阅与断线清理 */
 	readonly subscriptions: Map<Channel, ActionSink>;
+	/** 令牌是否已校验通过，通过之后才发 hello 并接受请求 */
+	authenticated: boolean;
+	/** 发一帧给对端 */
+	send(frame: ServerFrame): void;
+	/** 关掉连接，参数是给对端看的说明 */
+	close(code: number, reason: string): void;
 }
 
 interface EndpointContext {
@@ -99,9 +107,11 @@ export function isLoopbackAddress(address: string | undefined): boolean {
 }
 
 export interface EndpointHandle {
-	/** 实际监听的端口,配置为 0 时由系统分配 */
+	/** 实际监听的端口,配置为 0 时由系统分配；unix socket 模式下为 0 */
 	readonly port: number;
 	readonly host: string;
+	/** unix socket 路径，TCP 模式下没有 */
+	readonly socketPath?: string;
 	/** 关闭监听并断开所有连接。会话由调用方负责释放。 */
 	close(): Promise<void>;
 }
@@ -181,15 +191,8 @@ function unsubscribeChannel(context: EndpointContext, channel: Channel, sink: Ac
 	context.hub.unsubscribe(channel, sink);
 }
 
-function send(ws: WebSocket, frame: ServerFrame): void {
-	if (ws.readyState !== WebSocket.OPEN) {
-		return;
-	}
-	ws.send(JSON.stringify(frame));
-}
-
 function toSink(connection: Connection): ActionSink {
-	return { id: connection.clientId, send: (frame) => send(connection.ws, frame) };
+	return { id: connection.clientId, send: (frame) => connection.send(frame) };
 }
 
 /** 建立会话并把审批应答接到该会话的中转上。 */
@@ -605,7 +608,7 @@ async function handleDispatch(context: EndpointContext, connection: Connection, 
 	// 不等待执行完成,否则同一端连续发出的动作会被前一条阻塞。
 	void applyAction(context, channel, action).catch((error) => {
 		const failure = toProtocolError(error);
-		send(connection.ws, {
+		connection.send({
 			type: "action",
 			channel,
 			action,
@@ -616,29 +619,65 @@ async function handleDispatch(context: EndpointContext, connection: Connection, 
 	});
 }
 
+/** 令牌是否与主机配置一致。主机没设令牌时放行，只用于本机调试环境。 */
+function matchesToken(context: EndpointContext, token: string): boolean {
+	const expected = context.config.token;
+	if (expected === undefined || expected.length === 0) {
+		return true;
+	}
+	return token === expected;
+}
+
 async function handleFrame(context: EndpointContext, connection: Connection, text: string): Promise<void> {
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(text);
 	} catch {
-		connection.ws.close(1003, "invalid json");
+		connection.close(1003, "invalid json");
 		return;
 	}
 	if (typeof parsed !== "object" || parsed === null) {
-		connection.ws.close(1003, "invalid frame");
+		connection.close(1003, "invalid frame");
 		return;
 	}
-	const frame = parsed as { type?: unknown; id?: unknown; method?: unknown; params?: unknown };
+	const frame = parsed as {
+		type?: unknown;
+		id?: unknown;
+		method?: unknown;
+		params?: unknown;
+		token?: unknown;
+	};
+	if (!connection.authenticated) {
+		// 首帧必须是令牌；校验不过直接断开，之后才发 hello
+		if (frame.type !== "auth" || typeof frame.token !== "string") {
+			connection.close(1008, "需要先认证");
+			return;
+		}
+		if (!matchesToken(context, frame.token)) {
+			connection.close(1008, "令牌不匹配");
+			return;
+		}
+		connection.authenticated = true;
+		connection.send({
+			type: "hello",
+			protocolVersion: PROTOCOL_VERSION,
+			hostId: context.hostId,
+			hostName: context.config.hostName,
+			clientId: connection.clientId,
+			capabilities: CAPABILITIES,
+		} satisfies HelloFrame);
+		return;
+	}
 	if (frame.type === "dispatch") {
 		try {
 			await handleDispatch(context, connection, frame);
 		} catch (error) {
-			connection.ws.close(1008, toProtocolError(error).message);
+			connection.close(1008, toProtocolError(error).message);
 		}
 		return;
 	}
 	if (frame.type !== "request" || typeof frame.id !== "string" || typeof frame.method !== "string") {
-		connection.ws.close(1003, "invalid frame");
+		connection.close(1003, "invalid frame");
 		return;
 	}
 	const response: ResponseFrame = await (async () => {
@@ -654,7 +693,7 @@ async function handleFrame(context: EndpointContext, connection: Connection, tex
 			} satisfies ResponseFrame;
 		}
 	})();
-	send(connection.ws, response);
+	connection.send(response);
 }
 
 /** 启动端点监听。返回实际端口,供嵌入方写入自己的握手信息。 */
@@ -685,72 +724,97 @@ export async function startEndpoint(options: {
 		sessions: options.sessions,
 	};
 
-	const httpServer = createServer((_request, response) => {
-		response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
-		response.end(`facet host endpoint, use websocket at ${ENDPOINT_PATH}\n`);
-	});
+	/** 连接关闭时的清理：退掉订阅、从表里摘掉。 */
+	const cleanup = (connection: Connection): void => {
+		if (!context.connections.delete(connection)) {
+			return;
+		}
+		for (const [channel, sink] of connection.subscriptions) {
+			unsubscribeChannel(context, channel, sink);
+		}
+		connection.subscriptions.clear();
+	};
 
-	const wss = new WebSocketServer({ server: httpServer, path: ENDPOINT_PATH, maxPayload: MAX_FRAME_BYTES });
-
-	wss.on("connection", (ws: WebSocket, request: IncomingMessage) => {
+	/** 一条新连接：按行切帧，首帧认令牌，通过后发 hello。 */
+	const accept = (socket: Socket): void => {
 		const connection: Connection = {
-			ws,
 			clientId: randomUUID(),
-			remoteAddress: request.socket.remoteAddress,
+			remoteAddress: socket.remoteAddress,
 			subscriptions: new Map(),
+			authenticated: false,
+			send: (frame) => {
+				if (!socket.destroyed) {
+					socket.write(encodeFrame(frame));
+				}
+			},
+			close: (_code, reason) => {
+				socket.end();
+				socket.destroy();
+				cleanup(connection);
+				void reason;
+			},
 		};
 		context.connections.add(connection);
-		const hello: HelloFrame = {
-			type: "hello",
-			protocolVersion: PROTOCOL_VERSION,
-			hostId: context.hostId,
-			hostName: context.config.hostName,
-			clientId: connection.clientId,
-			capabilities: CAPABILITIES,
-		};
-		send(ws, hello);
-		ws.on("message", (raw) => {
-			void handleFrame(context, connection, raw.toString());
-		});
-		ws.on("close", () => {
-			for (const [channel, sink] of connection.subscriptions) {
-				unsubscribeChannel(context, channel, sink);
+		const decoder = new FrameDecoder();
+		socket.setEncoding("utf8");
+		socket.on("data", (chunk: string) => {
+			let lines: string[];
+			try {
+				lines = decoder.push(chunk);
+			} catch {
+				connection.close(1009, "帧超过上限");
+				return;
 			}
-			connection.subscriptions.clear();
-			context.connections.delete(connection);
+			for (const line of lines) {
+				void handleFrame(context, connection, line);
+			}
 		});
-	});
+		socket.on("close", () => cleanup(connection));
+		socket.on("error", () => cleanup(connection));
+	};
 
-	await new Promise<void>((resolve, reject) => {
-		httpServer.once("error", reject);
-		httpServer.listen(options.config.port, options.config.host, () => {
-			httpServer.off("error", reject);
-			resolve();
+	const useUnixSocket = options.config.socketPath !== undefined && options.config.socketPath.length > 0;
+	const socketServer = createSocketServer((socket) => accept(socket));
+
+	if (useUnixSocket) {
+		const path = options.config.socketPath as string;
+		// 上一次异常退出可能留下同名的 socket 文件，先清掉再监听
+		await rm(path, { force: true }).catch(() => undefined);
+		await mkdir(dirname(path), { recursive: true, mode: 0o700 }).catch(() => undefined);
+		await new Promise<void>((resolve, reject) => {
+			socketServer.once("error", reject);
+			socketServer.listen(path, () => {
+				socketServer.off("error", reject);
+				resolve();
+			});
 		});
-	});
+		// socket 本身也收成仅本人可读写，同机的其他用户连不上
+		await chmod(path, 0o600).catch(() => undefined);
+	} else {
+		await new Promise<void>((resolve, reject) => {
+			socketServer.once("error", reject);
+			socketServer.listen(options.config.port, options.config.host, () => {
+				socketServer.off("error", reject);
+				resolve();
+			});
+		});
+	}
 
-	const address = httpServer.address();
-	const port = typeof address === "object" && address !== null ? address.port : options.config.port;
+	const address = socketServer.address();
+	const port = typeof address === "object" && address !== null ? address.port : 0;
 
 	return {
 		port,
 		host: options.config.host,
+		...(useUnixSocket ? { socketPath: options.config.socketPath as string } : {}),
 		close: async () => {
-			for (const connection of context.connections) {
-				connection.ws.close(1001, "host shutting down");
+			for (const connection of [...context.connections]) {
+				connection.close(1001, "host shutting down");
 			}
 			context.connections.clear();
 			context.sessions.clear();
-			// 端会立刻重连，光发关闭帧会让 wss 一直等下去，这里直接断开所有套接字
-			for (const client of wss.clients) {
-				client.terminate();
-			}
-			httpServer.closeAllConnections?.();
 			await new Promise<void>((resolve) => {
-				wss.close(() => resolve());
-			});
-			await new Promise<void>((resolve) => {
-				httpServer.close(() => resolve());
+				socketServer.close(() => resolve());
 			});
 		},
 	};

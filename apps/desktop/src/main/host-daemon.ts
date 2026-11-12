@@ -11,9 +11,11 @@
 import { spawn } from "node:child_process";
 import { closeSync, openSync } from "node:fs";
 import { readFile, rm } from "node:fs/promises";
+import { connect as connectSocket } from "node:net";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
-import { WsTransport } from "@facet/transport";
+import { type DiscoveryRecord, parseDiscovery } from "@facet/server";
+import { StreamTransport } from "@facet/transport";
 
 /** 发现文件名，与主机侧独立入口的约定一致。 */
 const DISCOVERY_FILE = "endpoint.json";
@@ -27,17 +29,8 @@ const PROBE_TIMEOUT_MS = 800;
 /** 重启退避：首次很快，连续失败时放慢到上限。 */
 const RESTART_DELAYS_MS = [200, 500, 1000, 2000, 5000, 10_000];
 
-/** endpoint.json 里的内容。 */
-export interface HostDiscovery {
-	/** WebSocket 端点地址 */
-	endpoint: string;
-	/** 主机标识 */
-	hostId: string;
-	/** 主机的进程标识，用来判断发现文件是否还有效 */
-	pid: number;
-	/** 实际生效的 pi 数据目录 */
-	agentDir: string;
-}
+/** endpoint.json 里的内容，格式由主机侧定义。 */
+export type HostDiscovery = DiscoveryRecord;
 
 /**
  * 按 XDG 规范取应用数据目录，与主机侧的规则保持一致。
@@ -56,27 +49,59 @@ export function resolveDataDir(env: Record<string, string | undefined>): string 
 
 /** 解析发现文件的内容，缺字段或读不懂时返回 undefined。 */
 export function readDiscoveryFile(text: string): HostDiscovery | undefined {
-	let data: unknown;
-	try {
-		data = JSON.parse(text);
-	} catch {
-		return undefined;
-	}
-	if (typeof data !== "object" || data === null) {
-		return undefined;
-	}
-	const record = data as Record<string, unknown>;
-	if (typeof record.endpoint !== "string" || record.endpoint.length === 0) {
-		return undefined;
-	}
-	if (typeof record.pid !== "number" || !Number.isInteger(record.pid) || record.pid <= 0) {
-		return undefined;
-	}
+	return parseDiscovery(text);
+}
+
+/** 这条发现记录对应的连接地址，日志与界面里显示它。 */
+export function discoveryAddress(discovery: HostDiscovery): string {
+	return discovery.endpoint.transport === "unix" ? discovery.endpoint.path : discovery.endpoint.url;
+}
+
+/**
+ * 按发现记录建一个已连好的传输，连不上时抛错。
+ *
+ * unix socket 走字节流，TCP 走 WebSocket；两者都要带连接令牌。
+ */
+export function connectToDiscovery(discovery: HostDiscovery, timeoutMs = PROBE_TIMEOUT_MS) {
+	const target =
+		discovery.endpoint.transport === "unix"
+			? { path: discovery.endpoint.path }
+			: {
+					host: new URL(discovery.endpoint.url).hostname,
+					port: Number(new URL(discovery.endpoint.url).port),
+				};
+	return new StreamTransport({
+		token: discovery.token,
+		handshakeTimeoutMs: timeoutMs,
+		createStream: async () => openStream(target),
+	});
+}
+
+/** 按 unix socket 或 TCP 建一条字节流。 */
+export async function openStream(target: { path: string } | { host: string; port: number }) {
+	const socket =
+		"path" in target
+			? connectSocket({ path: target.path })
+			: connectSocket({ host: target.host, port: target.port });
+	socket.setEncoding("utf8");
+	await new Promise<void>((resolve, reject) => {
+		socket.once("connect", () => resolve());
+		socket.once("error", reject);
+	});
 	return {
-		endpoint: record.endpoint,
-		hostId: typeof record.hostId === "string" ? record.hostId : "",
-		pid: record.pid,
-		agentDir: typeof record.agentDir === "string" ? record.agentDir : "",
+		write: (text: string) => socket.write(text),
+		onData: (listener: (chunk: string) => void) => {
+			socket.on("data", listener);
+			return () => socket.off("data", listener);
+		},
+		onClose: (listener: (reason: string) => void) => {
+			socket.on("close", () => listener("closed"));
+			return () => socket.removeAllListeners("close");
+		},
+		close: () => {
+			socket.end();
+			socket.destroy();
+		},
 	};
 }
 
@@ -91,8 +116,8 @@ export function isProcessAlive(pid: number): boolean {
 }
 
 /** 握手一次，连不上或超时返回 false。 */
-async function defaultProbe(endpoint: string): Promise<boolean> {
-	const transport = new WsTransport({ url: endpoint, handshakeTimeoutMs: PROBE_TIMEOUT_MS });
+async function defaultProbe(discovery: HostDiscovery): Promise<boolean> {
+	const transport = connectToDiscovery(discovery);
 	try {
 		await transport.connect();
 		return true;
@@ -107,7 +132,7 @@ export interface RunningHostOptions {
 	/** 数据目录，发现文件在这里 */
 	dataDir: string;
 	/** 握手探测，测试里换成本地实现 */
-	probe?: (endpoint: string) => Promise<boolean>;
+	probe?: (discovery: HostDiscovery) => Promise<boolean>;
 }
 
 /**
@@ -129,7 +154,7 @@ export async function findRunningHost(options: RunningHostOptions): Promise<Host
 		return undefined;
 	}
 	const probe = options.probe ?? defaultProbe;
-	if (!(await probe(discovery.endpoint))) {
+	if (!(await probe(discovery))) {
 		await rm(file, { force: true }).catch(() => undefined);
 		return undefined;
 	}
@@ -159,7 +184,7 @@ export interface HostDaemonOptions {
 	/** 日志行，来自 host.log 之外的主进程 */
 	log(line: string): void;
 	/** 找已存在的主机与判断就绪，测试里换成本地实现 */
-	probe?: (endpoint: string) => Promise<boolean>;
+	probe?: (discovery: HostDiscovery) => Promise<boolean>;
 }
 
 export class HostDaemon {
@@ -245,7 +270,7 @@ export class HostDaemon {
 		const probe = this.options.probe ?? defaultProbe;
 		while (this.child !== undefined && this.readyTimer !== undefined) {
 			const discovery = await readDiscovery(this.options.dataDir);
-			if (discovery !== undefined && discovery.pid !== undefined && (await probe(discovery.endpoint))) {
+			if (discovery !== undefined && discovery.pid !== undefined && (await probe(discovery))) {
 				this.clearTimers();
 				this.restartCount = 0;
 				this.options.onReady(discovery);
@@ -290,7 +315,7 @@ export async function stopDiscoveredHost(dataDir: string): Promise<void> {
 	}
 	const pid = discovery.pid;
 	// 请主机自己收尾，它会把发现文件删掉、端点关干净；信号对它不一定送达
-	if (await requestShutdown(discovery.endpoint)) {
+	if (await requestShutdown(discovery)) {
 		await waitForExit(pid, 3000);
 		if (!isProcessAlive(pid)) {
 			return;
@@ -300,8 +325,8 @@ export async function stopDiscoveredHost(dataDir: string): Promise<void> {
 }
 
 /** 发一个结束主机的请求，连不上或超时返回 false。 */
-async function requestShutdown(endpoint: string): Promise<boolean> {
-	const transport = new WsTransport({ url: endpoint, handshakeTimeoutMs: PROBE_TIMEOUT_MS });
+async function requestShutdown(discovery: HostDiscovery): Promise<boolean> {
+	const transport = connectToDiscovery(discovery);
 	try {
 		await transport.connect();
 		await transport.request("shutdownHost", {});

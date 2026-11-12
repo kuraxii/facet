@@ -136,8 +136,9 @@ describe("WsTransport", () => {
 		await new Promise((resolve) => setTimeout(resolve, 50));
 		const frames =
 			harness?.received.map((raw) => JSON.parse(raw) as { type: string; clientSeq: number }) ?? [];
-		expect(frames.map((frame) => frame.type)).toEqual(["dispatch", "dispatch"]);
-		expect(frames.map((frame) => frame.clientSeq)).toEqual([1, 2]);
+		// 首帧是令牌，之后才是派发的动作
+		expect(frames.map((frame) => frame.type)).toEqual(["auth", "dispatch", "dispatch"]);
+		expect(frames.slice(1).map((frame) => frame.clientSeq)).toEqual([1, 2]);
 	});
 
 	it("收到动作帧时通知订阅者", async () => {

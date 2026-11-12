@@ -23,19 +23,35 @@ afterEach(async () => {
 });
 
 describe("readDiscoveryFile", () => {
-	it("读出端点、标识、进程与数据目录", () => {
+	it("读出 unix socket、令牌、标识与进程", () => {
 		const text = JSON.stringify({
-			endpoint: "ws://127.0.0.1:4319/endpoint",
+			schemaVersion: 2,
+			endpoint: { transport: "unix", path: "/run/user/1000/facet.sock" },
+			token: "令牌",
 			hostId: "abc",
 			agentDir: "/home/u/.pi/agent-dev",
 			pid: 4242,
 			startedAt: 1,
 		});
 		expect(readDiscoveryFile(text)).toEqual({
-			endpoint: "ws://127.0.0.1:4319/endpoint",
+			schemaVersion: 2,
+			endpoint: { transport: "unix", path: "/run/user/1000/facet.sock" },
+			token: "令牌",
 			hostId: "abc",
 			agentDir: "/home/u/.pi/agent-dev",
 			pid: 4242,
+			startedAt: 1,
+		});
+	});
+
+	it("TCP 端点同样认", () => {
+		const text = JSON.stringify({
+			endpoint: { transport: "tcp", url: "ws://127.0.0.1:4319/endpoint" },
+			pid: 1,
+		});
+		expect(readDiscoveryFile(text)?.endpoint).toEqual({
+			transport: "tcp",
+			url: "ws://127.0.0.1:4319/endpoint",
 		});
 	});
 
@@ -43,8 +59,13 @@ describe("readDiscoveryFile", () => {
 		expect(readDiscoveryFile("{")).toBeUndefined();
 		expect(readDiscoveryFile("[]")).toBeUndefined();
 		expect(readDiscoveryFile(JSON.stringify({ pid: 1 }))).toBeUndefined();
-		expect(readDiscoveryFile(JSON.stringify({ endpoint: "ws://x", pid: 0 }))).toBeUndefined();
-		expect(readDiscoveryFile(JSON.stringify({ endpoint: "ws://x", pid: 1.5 }))).toBeUndefined();
+		expect(
+			readDiscoveryFile(JSON.stringify({ endpoint: { transport: "tcp", url: "x" }, pid: 0 })),
+		).toBeUndefined();
+		expect(
+			readDiscoveryFile(JSON.stringify({ endpoint: { transport: "tcp", url: "x" }, pid: 1.5 })),
+		).toBeUndefined();
+		expect(readDiscoveryFile(JSON.stringify({ endpoint: { transport: "pipe" }, pid: 1 }))).toBeUndefined();
 	});
 });
 
@@ -64,7 +85,11 @@ describe("findRunningHost", () => {
 		const dataDir = await tempDir();
 		await writeFile(
 			join(dataDir, "endpoint.json"),
-			JSON.stringify({ endpoint: "ws://127.0.0.1:4319/endpoint", hostId: "h", pid: process.pid }),
+			JSON.stringify({
+				endpoint: { transport: "unix", path: "/tmp/host.sock" },
+				hostId: "h",
+				pid: process.pid,
+			}),
 		);
 		const found = await findRunningHost({ dataDir, probe: async () => true });
 		expect(found?.hostId).toBe("h");

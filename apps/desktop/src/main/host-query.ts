@@ -4,14 +4,16 @@
  * 主进程不再持有主机对象，问一问端点有没有在跑的会话：连上、发一个 busySessions 请求、
  * 断开。查不到时按没有运行中的会话处理，免得网络问题挡住退出。
  */
-import { WsTransport } from "@facet/transport";
+
+import type { DiscoveryRecord } from "@facet/server";
+import { connectToDiscovery } from "./host-daemon.ts";
 
 /** 查询超时，毫秒。超过就当没查到。 */
 const QUERY_TIMEOUT_MS = 1500;
 
 /** 正在运行的会话数。查询失败时给 0。 */
-export async function countBusySessions(endpoint: string): Promise<number> {
-	const transport = new WsTransport({ url: endpoint, handshakeTimeoutMs: QUERY_TIMEOUT_MS });
+export async function countBusySessions(host: DiscoveryRecord): Promise<number> {
+	const transport = connectToDiscovery(host, QUERY_TIMEOUT_MS);
 	try {
 		await withTimeout(transport.connect(), QUERY_TIMEOUT_MS);
 		const { files } = await withTimeout(transport.request("busySessions", {}), QUERY_TIMEOUT_MS);

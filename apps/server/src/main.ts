@@ -5,28 +5,18 @@
  * 拿到端点地址；同时在数据目录写 endpoint.json 供外部工具发现。桌面端用 FACET_ENDPOINT 连
  * 外部主机时也可以手动启动它。
  */
-import { rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { rm } from "node:fs/promises";
 import { loadServerConfig } from "./config.ts";
+import { DISCOVERY_SCHEMA_VERSION, type DiscoveryRecord, writeDiscovery } from "./discovery.ts";
 import { type ServerHandle, startServer } from "./index.ts";
 
 /** 就绪行的标记，父进程按它从日志里挑出结构化信息。 */
 export const READY_MARKER = "facet-host-ready";
 
-/** 写进 endpoint.json 与就绪行的内容。 */
-export interface HostReadyPayload {
-	/** WebSocket 端点地址 */
-	endpoint: string;
-	/** 主机标识 */
-	hostId: string;
-	/** 实际生效的 pi 数据目录 */
-	agentDir: string;
-	/** 进程标识，外部工具据此判断发现文件是否还有效 */
-	pid: number;
-}
+/** 就绪行里的内容，与发现文件同源。 */
+export type HostReadyPayload = DiscoveryRecord;
 
 const config = loadServerConfig();
-const discoveryFile = join(config.dataDir, "endpoint.json");
 
 let server: ServerHandle | undefined;
 let closing = false;
@@ -40,7 +30,7 @@ const shutdown = (): void => {
 	const handle = server;
 	void (async () => {
 		// 发现文件先删：外部工具看到它就说明主机还在，留着会连到已经关闭的端口
-		await rm(discoveryFile, { force: true }).catch(() => undefined);
+		await rm(`${config.dataDir}/endpoint.json`, { force: true }).catch(() => undefined);
 		// 收尾给一点时间，端点关不干净也要退出，端会按断线自己重连
 		await Promise.race([handle.close(), new Promise((resolve) => setTimeout(resolve, 1500))]);
 		process.exit(0);
@@ -49,14 +39,23 @@ const shutdown = (): void => {
 
 server = await startServer(config, { requestShutdown: shutdown });
 const payload: HostReadyPayload = {
-	endpoint: `ws://${server.host}:${server.port}/endpoint`,
+	schemaVersion: DISCOVERY_SCHEMA_VERSION,
+	endpoint:
+		server.socketPath === undefined
+			? { transport: "tcp", url: `ws://${server.host}:${server.port}/endpoint` }
+			: { transport: "unix", path: server.socketPath },
+	token: config.token,
 	hostId: server.hostId,
 	agentDir: server.agentDir,
 	pid: process.pid,
+	startedAt: Date.now(),
 };
-await writeFile(discoveryFile, `${JSON.stringify({ ...payload, startedAt: Date.now() }, null, 2)}\n`, "utf8");
+await writeDiscovery(config.dataDir, payload);
 console.log(`${READY_MARKER} ${JSON.stringify(payload)}`);
 console.log(`数据目录 ${config.dataDir}`);
+console.log(
+	`连接方式 ${payload.endpoint.transport === "unix" ? payload.endpoint.path : payload.endpoint.url}`,
+);
 console.log("按 Ctrl+C 结束");
 
 process.on("SIGINT", shutdown);

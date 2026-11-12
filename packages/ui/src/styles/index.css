@@ -2055,17 +2055,6 @@ svg.fl {
 	font-size: 11.5px;
 }
 
-.chip-pop-action {
-	margin-top: 4px;
-	padding: 6px 8px 2px;
-	border: 0;
-	border-top: 1px solid var(--line);
-	background: transparent;
-	color: var(--acc);
-	font-size: 11.5px;
-	text-align: left;
-}
-
 /* 设置是浮在应用上的一层窗：遮罩复用对话框那一套，窗口自己定尺寸 */
 .set-page {
 	display: flex;

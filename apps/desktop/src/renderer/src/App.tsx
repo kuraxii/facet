@@ -912,21 +912,6 @@ export function App() {
 										providerAuth={providerAuth}
 										onModelChange={(next) => client.setModel({ provider: next.provider, id: next.id })}
 										onThinkingLevelChange={(level) => client.setThinkingLevel(level)}
-										onSetDefaultModel={(next) =>
-											void client
-												.saveSettings({
-													...settings,
-													defaultModel: { provider: next.provider, id: next.id },
-												})
-												.then(setSettings)
-												.catch(() => undefined)
-										}
-										onSetDefaultThinkingLevel={(level) =>
-											void client
-												.saveSettings({ ...settings, defaultThinkingLevel: level })
-												.then(setSettings)
-												.catch(() => undefined)
-										}
 										shiftEnterToSend={settings.input.sendKey === "shiftEnter"}
 										blockedReason={blockedReason}
 									/>

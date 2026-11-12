@@ -966,13 +966,16 @@ svg.fl {
 }
 
 .row.is-user:hover .copy-btn,
-.row.is-fork:hover .copy-btn,
 .copy-btn:focus-visible {
 	opacity: 1;
 }
 
+/* 收尾处的复制默认可见，指针落在按钮上才高亮 */
+.row.is-fork .copy-btn {
+	opacity: 1;
+}
+
 .copy-btn:hover {
-	background: var(--surface2);
 	color: var(--acc);
 }
 
@@ -1005,7 +1008,6 @@ svg.fl {
 }
 
 .revert-btn:hover {
-	background: var(--surface2);
 	color: var(--acc);
 }
 
@@ -1047,17 +1049,11 @@ svg.fl {
 	border-radius: 6px;
 	background: transparent;
 	color: var(--t3);
-	opacity: 0.65;
-	transition:
-		opacity var(--dur-fast) var(--ease),
-		color var(--dur-fast) var(--ease),
-		background-color var(--dur-fast) var(--ease);
+	transition: color var(--dur-fast) var(--ease);
 }
 
-.row.is-fork:hover .fork-btn,
+.fork-btn:hover:not(:disabled),
 .fork-btn:focus-visible {
-	opacity: 1;
-	background: var(--surface2);
 	color: var(--acc);
 }
 
@@ -1067,7 +1063,6 @@ svg.fl {
 }
 
 .fork-btn:disabled:hover {
-	background: transparent;
 	color: var(--t3);
 }
 

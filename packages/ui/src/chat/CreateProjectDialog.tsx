@@ -3,8 +3,11 @@
  *
  * 居中的对话框：填写名称，用系统文件管理器选目录，提交后由宿主写入项目清单。
  */
+
+import { FolderPlus, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CloseIcon, FolderIcon, FolderPlusIcon } from "../transcript/icons.tsx";
+import { ChevronIcon } from "../transcript/chevron.tsx";
+import { FolderIcon } from "../transcript/icons.tsx";
 import { RequestEpoch } from "./request-epoch.ts";
 
 /** 对话框参数。 */
@@ -140,7 +143,7 @@ export function CreateProjectDialog({ isOpen, onPickFolder, onCreate, onClose }:
 				<div className="dialog-head">
 					<h2 className="dialog-title">创建项目</h2>
 					<button type="button" className="dialog-close" aria-label="关闭" onClick={close}>
-						<CloseIcon size={18} />
+						<X size={18} strokeWidth={1.5} />
 					</button>
 				</div>
 
@@ -169,7 +172,7 @@ export function CreateProjectDialog({ isOpen, onPickFolder, onCreate, onClose }:
 					{cwd === undefined ? (
 						<span className="source-hint">
 							在此电脑上添加文件夹
-							<i className="chev is-open" />
+							<ChevronIcon isOpen={false} />
 						</span>
 					) : (
 						<span className="source-path mono" title={cwd}>
@@ -177,7 +180,7 @@ export function CreateProjectDialog({ isOpen, onPickFolder, onCreate, onClose }:
 						</span>
 					)}
 					<button type="button" className="source-add" onClick={() => void pickFolder()} disabled={isPicking}>
-						<FolderPlusIcon size={14} />
+						<FolderPlus size={14} strokeWidth={1.5} />
 						{isPicking ? "选择中…" : "添加"}
 					</button>
 				</div>

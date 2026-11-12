@@ -741,6 +741,85 @@ svg.fl {
 	min-height: 0;
 }
 
+/* 右栏：文件与变更。左缘一条分隔条，拖动改宽度 */
+.panel {
+	position: relative;
+	display: flex;
+	flex: none;
+	flex-direction: column;
+	min-width: 0;
+	border-left: 1px solid var(--line);
+	background: var(--bg);
+}
+
+.panel-resizer {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: -3px;
+	z-index: 2;
+	width: 6px;
+	cursor: col-resize;
+	background: transparent;
+}
+
+.panel-resizer:hover,
+.panel-resizer:active {
+	background: color-mix(in srgb, var(--acc) 40%, transparent);
+}
+
+.panel-head {
+	display: flex;
+	flex: none;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	height: 38px;
+	padding: 0 8px 0 10px;
+	border-bottom: 1px solid var(--line);
+}
+
+.panel-tabs {
+	display: flex;
+	gap: 2px;
+}
+
+.panel-tab {
+	height: 24px;
+	padding: 0 8px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--t3);
+	font-size: 12px;
+}
+
+.panel-tab:hover {
+	color: var(--t1);
+}
+
+.panel-tab.is-on {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+.panel-body {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	padding: 8px;
+}
+
+/* 右栏里的占位说明：还没有接上内容时用 */
+.panel-empty {
+	margin: 0;
+	padding: 24px 12px;
+	color: var(--t3);
+	font-size: 12px;
+	line-height: 1.6;
+	text-align: center;
+}
+
 /* 对话导航：贴在主区域左缘的一条竖轨，按轮次排列 */
 .outline {
 	position: absolute;
@@ -942,16 +1021,55 @@ svg.fl {
 .user-foot {
 	display: flex;
 	justify-content: flex-end;
+	gap: 4px;
 	width: 100%;
+}
+
+/* 复制一段原文，与回退同一套尺寸；复制成功后短暂换成对勾 */
+.copy-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	padding: 0;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--t3);
+	opacity: 0;
+	transition:
+		opacity var(--dur-fast) var(--ease),
+		color var(--dur-fast) var(--ease),
+		background-color var(--dur-fast) var(--ease);
+}
+
+/* 收尾处的复制默认可见，用户消息上的等整行悬停才出现 */
+.row.is-fork .copy-btn {
+	opacity: 1;
+}
+
+.row.is-user:hover .copy-btn,
+.copy-btn:focus-visible {
+	opacity: 1;
+}
+
+.copy-btn:hover {
+	color: var(--acc);
+}
+
+.copy-btn.is-done {
+	color: var(--ok);
 }
 
 .revert-btn {
 	display: inline-flex;
 	align-items: center;
-	gap: 4px;
+	justify-content: center;
+	width: 22px;
 	height: 22px;
-	padding: 0 8px;
-	border: 1px solid var(--line);
+	padding: 0;
+	border: 0;
 	border-radius: 6px;
 	background: transparent;
 	color: var(--t3);
@@ -960,7 +1078,7 @@ svg.fl {
 	transition:
 		opacity var(--dur-fast) var(--ease),
 		color var(--dur-fast) var(--ease),
-		border-color var(--dur-fast) var(--ease);
+		background-color var(--dur-fast) var(--ease);
 }
 
 .row.is-user:hover .revert-btn,
@@ -970,7 +1088,6 @@ svg.fl {
 
 .revert-btn:hover {
 	color: var(--acc);
-	border-color: var(--acc);
 }
 
 .bub {
@@ -994,28 +1111,29 @@ svg.fl {
 	margin-top: -6px;
 }
 
+/* 一轮收尾处的动作：复制在左，分叉在右 */
+.turn-actions {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
 .fork-btn {
 	display: grid;
 	place-items: center;
 	width: 26px;
 	height: 26px;
 	padding: 0;
-	border: 1px solid var(--line);
+	border: 0;
 	border-radius: 6px;
 	background: transparent;
 	color: var(--t3);
-	opacity: 0.65;
-	transition:
-		opacity var(--dur-fast) var(--ease),
-		color var(--dur-fast) var(--ease),
-		border-color var(--dur-fast) var(--ease);
+	transition: color var(--dur-fast) var(--ease);
 }
 
-.row.is-fork:hover .fork-btn,
+.fork-btn:hover:not(:disabled),
 .fork-btn:focus-visible {
-	opacity: 1;
 	color: var(--acc);
-	border-color: var(--acc);
 }
 
 .fork-btn:disabled {
@@ -1025,7 +1143,6 @@ svg.fl {
 
 .fork-btn:disabled:hover {
 	color: var(--t3);
-	border-color: var(--line);
 }
 
 .row-action {
@@ -1054,20 +1171,6 @@ svg.fl {
 
 .assistant-body {
 	min-width: 0;
-}
-
-.chev {
-	flex: none;
-	width: 6px;
-	height: 6px;
-	margin: 0 4px 0 2px;
-	border-right: 1.5px solid currentColor;
-	border-bottom: 1.5px solid currentColor;
-	transform: rotate(-45deg);
-}
-
-.chev.is-open {
-	transform: rotate(45deg);
 }
 
 .dot {
@@ -1493,10 +1596,6 @@ svg.fl {
 	border-color: var(--err);
 }
 
-.session-error .ib {
-	color: var(--err);
-}
-
 .btn.pri {
 	border-color: transparent;
 	background: var(--t1);
@@ -1575,15 +1674,54 @@ svg.fl {
 	margin-top: 4px;
 }
 
-.composer-row .chip {
-	height: 28px;
-	margin-left: 4px;
-	border-radius: 14px;
-	font-family: var(--font-mono);
+/* 输入区左侧的小图标按钮：默认只有图标，悬停时给一层底色并提亮图标 */
+.ib {
+	display: grid;
+	place-items: center;
+	width: 26px;
+	height: 26px;
+	padding: 0;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--t3);
+	transition:
+		background-color var(--dur-fast) var(--ease),
+		color var(--dur-fast) var(--ease);
 }
 
-.composer-row .chip:hover {
-	border-color: var(--line2);
+.ib:hover:not(:disabled),
+.ib[aria-expanded="true"] {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+.ib:disabled {
+	cursor: default;
+}
+
+/* 错误条上的图标按钮用危险色，不管悬停与否 */
+.session-error .ib {
+	color: var(--err);
+}
+
+/* 模型与档位芯片：默认只有文字，悬停或展开时给一层底色 */
+.composer-row .chip {
+	height: 28px;
+	margin-left: 2px;
+	padding: 0 8px;
+	border: 0;
+	border-radius: 14px;
+	background: transparent;
+	color: var(--t3);
+	transition:
+		background-color var(--dur-fast) var(--ease),
+		color var(--dur-fast) var(--ease);
+}
+
+.composer-row .chip:hover:not(:disabled),
+.composer-row .chip[aria-expanded="true"] {
+	background: var(--surface2);
 	color: var(--t1);
 }
 
@@ -2093,6 +2231,26 @@ svg.fl {
 	border-radius: 10px;
 	background: var(--card2);
 	box-shadow: 0 12px 32px rgb(0 0 0 / 35%);
+}
+
+/* 添加菜单只有两项，收窄一点，左图标右文字 */
+.chip-pop.is-attach {
+	min-width: 168px;
+}
+
+.chip-pop-item.is-row {
+	justify-content: flex-start;
+	gap: 8px;
+}
+
+.chip-pop-item:disabled {
+	color: var(--t3);
+	cursor: default;
+}
+
+.chip-pop-item:disabled:hover {
+	background: transparent;
+	color: var(--t3);
 }
 
 .chip-pop-group {

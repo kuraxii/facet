@@ -7,8 +7,10 @@
  */
 import type { ChatActivity } from "@facet/client-core";
 import type { ModelInfo, ThinkingLevel } from "@facet/protocol";
+import { Brain, FileUp, ImagePlus, Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ClipIcon, SendIcon, StopIcon } from "../transcript/icons.tsx";
+import { ChevronIcon } from "../transcript/chevron.tsx";
+import { SendIcon, StopIcon } from "../transcript/icons.tsx";
 
 /** 输入区参数。 */
 export interface ComposerProps {
@@ -44,18 +46,22 @@ export interface ComposerProps {
 
 /** 模型芯片的显示文本。 */
 function modelLabel(model: ModelInfo | undefined): string {
-	return model ? model.id : "无模型";
+	if (!model) {
+		return "无模型";
+	}
+	return model.name.trim().length > 0 ? model.name : model.id;
 }
 
 /** 思考档位的中文说明。 */
+/** 思考档位的显示名：直接用档位本身的取值，只把首字母大写 */
 const LEVEL_LABELS: Record<ThinkingLevel, string> = {
-	off: "不思考",
-	minimal: "极简",
-	low: "低",
-	medium: "中",
-	high: "高",
-	xhigh: "很高",
-	max: "最高",
+	off: "Off",
+	minimal: "Minimal",
+	low: "Low",
+	medium: "Medium",
+	high: "High",
+	xhigh: "XHigh",
+	max: "Max",
 };
 
 /** 模型键。 */
@@ -103,8 +109,9 @@ export function Composer({
 	const canSend =
 		blockedReason === undefined && value.trim().length > 0 && (activity === "idle" || activity === "running");
 	const isQueuing = activity === "running";
-	const [openMenu, setOpenMenu] = useState<"model" | "level" | undefined>(undefined);
+	const [openMenu, setOpenMenu] = useState<"model" | "level" | "attach" | undefined>(undefined);
 	const modelRef = useDismiss(openMenu === "model", () => setOpenMenu(undefined));
+	const attachRef = useDismiss(openMenu === "attach", () => setOpenMenu(undefined));
 	const levelRef = useDismiss(openMenu === "level", () => setOpenMenu(undefined));
 
 	// 没有给出可选模型时退化成只展示的芯片
@@ -159,12 +166,42 @@ export function Composer({
 				}}
 			/>
 			<div className="composer-row">
-				<button type="button" className="ib" aria-label="添加附件" disabled title="尚未实现">
-					<ClipIcon size={16} />
-				</button>
-				<button type="button" className="ib" aria-label="引用文件" disabled title="尚未实现">
-					@
-				</button>
+				<div className="chip-wrap" ref={attachRef}>
+					<button
+						type="button"
+						className="ib"
+						aria-label="添加"
+						title="添加图片或文件"
+						aria-expanded={openMenu === "attach"}
+						onClick={() => setOpenMenu(openMenu === "attach" ? undefined : "attach")}
+					>
+						<Plus size={16} strokeWidth={1.5} />
+					</button>
+					{openMenu === "attach" ? (
+						<div className="chip-pop is-attach" role="menu" aria-label="添加内容">
+							<button
+								type="button"
+								className="chip-pop-item is-row"
+								role="menuitem"
+								disabled
+								title="尚未接入"
+							>
+								<ImagePlus size={14} strokeWidth={1.5} />
+								<span className="ell">添加图片</span>
+							</button>
+							<button
+								type="button"
+								className="chip-pop-item is-row"
+								role="menuitem"
+								disabled
+								title="尚未接入"
+							>
+								<FileUp size={14} strokeWidth={1.5} />
+								<span className="ell">上传文件</span>
+							</button>
+						</div>
+					) : null}
+				</div>
 
 				<div className="chip-wrap" ref={modelRef}>
 					<button
@@ -176,7 +213,7 @@ export function Composer({
 						title={canPickModel ? "切换模型" : "当前模型"}
 					>
 						{modelLabel(model)}
-						{canPickModel ? <i className={openMenu === "model" ? "chev is-open" : "chev"} /> : null}
+						{canPickModel ? <ChevronIcon isOpen={openMenu === "model"} /> : null}
 					</button>
 					{openMenu === "model" ? (
 						<div className="chip-pop" role="dialog" aria-label="选择模型">
@@ -224,9 +261,11 @@ export function Composer({
 						disabled={!canPickLevel}
 						aria-expanded={openMenu === "level"}
 						title={canPickLevel ? "切换思考档位" : "当前思考档位"}
+						aria-label={`思考档位 ${thinkingLevel === undefined ? "默认" : LEVEL_LABELS[thinkingLevel]}`}
 					>
-						思考 · {thinkingLevel === undefined ? "默认" : LEVEL_LABELS[thinkingLevel]}
-						{canPickLevel ? <i className={openMenu === "level" ? "chev is-open" : "chev"} /> : null}
+						<Brain size={13} strokeWidth={1.5} />
+						{thinkingLevel === undefined ? "默认" : LEVEL_LABELS[thinkingLevel]}
+						{canPickLevel ? <ChevronIcon isOpen={openMenu === "level"} /> : null}
 					</button>
 					{openMenu === "level" ? (
 						<div className="chip-pop" role="dialog" aria-label="选择思考档位">
@@ -241,7 +280,6 @@ export function Composer({
 									}}
 								>
 									<span>{LEVEL_LABELS[level]}</span>
-									<span className="chip-pop-meta mono">{level}</span>
 								</button>
 							))}
 						</div>

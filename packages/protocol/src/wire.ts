@@ -7,6 +7,7 @@
  */
 import type { Action, ActionOrigin } from "./action.ts";
 import type { Channel } from "./channel.ts";
+import type { GitDiff, GitStatus } from "./git.ts";
 import type {
 	CustomProviderInfo,
 	CustomProviderInput,
@@ -166,6 +167,10 @@ export interface RequestParams {
 	availableModels: Record<string, never>;
 	/** 列出提供方及其凭证状态。 */
 	providers: Record<string, never>;
+	/** 列出项目工作树相对 HEAD 的改动。 */
+	gitStatus: { cwd: string };
+	/** 取单个文件的补丁。untracked 为真时按「从空文件新增」合成补丁。 */
+	gitDiff: { cwd: string; path: string; untracked?: boolean };
 	/** 列出用户添加的项目。 */
 	listProjects: Record<string, never>;
 	/** 添加项目，目录重复时主机侧拒绝。 */
@@ -237,6 +242,8 @@ export interface RequestResults {
 	models: { models: ModelInfo[] };
 	availableModels: { models: ModelInfo[] };
 	providers: { providers: ProviderInfo[] };
+	gitStatus: GitStatus;
+	gitDiff: GitDiff;
 	listProjects: { projects: ProjectInfo[] };
 	addProject: ProjectInfo;
 	renameProject: ProjectInfo;

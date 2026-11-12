@@ -29,6 +29,7 @@ import {
 import { WebSocket, WebSocketServer } from "ws";
 import type { ServerConfig } from "./config.ts";
 import { buildDiagnostics } from "./diagnostics.ts";
+import { gitDiff, gitStatus } from "./git.ts";
 import type { HostSource } from "./host-identity.ts";
 import { ProjectExistsError, ProjectNotFoundError, type ProjectStore } from "./project-store.ts";
 import { RevealFailedError, revealInFileManager } from "./reveal.ts";
@@ -311,6 +312,13 @@ async function handleRequest(
 			return { models: await context.factory.availableModels() };
 		case "providers":
 			return { providers: context.factory.providers() };
+		case "gitStatus":
+			return await gitStatus(await resolveProjectDirectory(requiredString(asObject(params), "cwd")));
+		case "gitDiff": {
+			const source = asObject(params);
+			const cwd = await resolveProjectDirectory(requiredString(source, "cwd"));
+			return await gitDiff(cwd, requiredString(source, "path"), source.untracked === true);
+		}
 		case "listProjects":
 			return { projects: [...context.projectStore.list()] };
 		case "addProject": {

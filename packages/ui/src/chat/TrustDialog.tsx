@@ -4,8 +4,10 @@
  * 目录里有项目级扩展、skill 或 MCP 配置时，第一次打开前问一次；决定会被记住，之后同一目录
  * 不再询问。不信任只是不加载这些项目级资源，会话本身照常可用。
  */
+
+import { X } from "lucide-react";
 import { useEffect, useRef } from "react";
-import { CloseIcon, ShieldIcon } from "../transcript/icons.tsx";
+import { ShieldIcon } from "../transcript/icons.tsx";
 
 /** 确认框参数。 */
 export interface TrustDialogProps {
@@ -41,7 +43,7 @@ export function TrustDialog({ cwd, onDecide, onCancel }: TrustDialogProps) {
 				<div className="dialog-head">
 					<h2 className="dialog-title">信任这个项目？</h2>
 					<button type="button" className="dialog-close" aria-label="关闭" onClick={onCancel}>
-						<CloseIcon size={18} />
+						<X size={18} strokeWidth={1.5} />
 					</button>
 				</div>
 

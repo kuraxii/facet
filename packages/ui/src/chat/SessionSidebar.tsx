@@ -5,9 +5,10 @@
  * 项目过滤器同时决定队列的范围与新建会话的目录，队列按时间分组，分组规则见 sidebar-model。
  */
 import type { ProjectInfo, SessionSummary } from "@facet/protocol";
-import { Settings } from "lucide-react";
+import { FolderPlus, PanelRight, Plus, Search, Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FolderIcon, FolderPlusIcon, MoonIcon, PlusIcon, SearchIcon, SunIcon } from "../transcript/icons.tsx";
+import { ChevronIcon } from "../transcript/chevron.tsx";
+import { FolderIcon, MoonIcon, SunIcon } from "../transcript/icons.tsx";
 import {
 	baseName,
 	buildSidebar,
@@ -70,6 +71,10 @@ export interface SessionSidebarProps {
 	onOpenSettings?: () => void;
 	/** 当前是否停在设置页 */
 	isSettingsOpen?: boolean;
+	/** 切换右侧栏展开与收起 */
+	onTogglePanel?: () => void;
+	/** 右侧栏是否展开 */
+	isPanelOpen?: boolean;
 }
 
 /** 会话行状态点的样式类。运行中与压缩中都走运行色，前者呼吸，后者常亮。 */
@@ -138,6 +143,8 @@ export function SessionSidebar({
 	onToggleTheme,
 	onOpenSettings,
 	isSettingsOpen = false,
+	onTogglePanel,
+	isPanelOpen = false,
 }: SessionSidebarProps) {
 	const [keyword, setKeyword] = useState("");
 	const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -403,11 +410,22 @@ export function SessionSidebar({
 							});
 						}}
 					>
-						<SearchIcon size={15} />
+						<Search size={15} strokeWidth={1.5} />
 					</button>
 					<button type="button" className="sb-tool" aria-label="添加项目" onClick={onAddProject}>
-						<FolderPlusIcon size={15} />
+						<FolderPlus size={15} strokeWidth={1.5} />
 					</button>
+					{onTogglePanel === undefined ? null : (
+						<button
+							type="button"
+							className="sb-tool"
+							aria-label={isPanelOpen ? "收起右侧栏" : "展开右侧栏"}
+							aria-pressed={isPanelOpen}
+							onClick={onTogglePanel}
+						>
+							<PanelRight size={15} strokeWidth={1.5} />
+						</button>
+					)}
 				</span>
 			</header>
 
@@ -418,7 +436,7 @@ export function SessionSidebar({
 				disabled={!canCreate || newSessionCwd.length === 0}
 				title={newSessionCwd.length === 0 ? "先添加项目" : `在 ${newSessionCwd} 新建`}
 			>
-				<PlusIcon size={14} />
+				<Plus size={14} strokeWidth={1.5} />
 				新建会话
 			</button>
 
@@ -434,7 +452,7 @@ export function SessionSidebar({
 					<FolderIcon size={14} />
 					<span className="sb-filter-name ell">{filterLabel}</span>
 					<span className="sb-filter-meta mono">{filterCount}</span>
-					<i className={isFilterOpen ? "chev is-open" : "chev"} />
+					<ChevronIcon isOpen={isFilterOpen} />
 				</button>
 
 				{isFilterOpen ? (
@@ -446,7 +464,7 @@ export function SessionSidebar({
 						onKeyDown={trapFocus}
 					>
 						<label className="sb-search">
-							<SearchIcon size={13} />
+							<Search size={13} strokeWidth={1.5} />
 							<input
 								ref={projectSearchRef}
 								value={projectKeyword}
@@ -621,7 +639,7 @@ export function SessionSidebar({
 								onAddProject();
 							}}
 						>
-							<PlusIcon size={13} />
+							<Plus size={13} strokeWidth={1.5} />
 							<span className="sb-opt-name">添加项目</span>
 						</button>
 					</div>
@@ -630,7 +648,7 @@ export function SessionSidebar({
 
 			{isSearchOpen ? (
 				<label className="sb-search is-inline">
-					<SearchIcon size={13} />
+					<Search size={13} strokeWidth={1.5} />
 					<input
 						ref={searchRef}
 						value={keyword}

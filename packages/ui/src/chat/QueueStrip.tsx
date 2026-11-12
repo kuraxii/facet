@@ -4,7 +4,7 @@
  * 运行中再发一条消息会插进当前轮次,这里列出还没插进去的内容,并提供整批收回的动作。
  */
 import type { QueuedInput } from "@facet/protocol";
-import { CloseIcon } from "../transcript/icons.tsx";
+import { X } from "lucide-react";
 
 /** 排队条参数。 */
 export interface QueueStripProps {
@@ -37,7 +37,7 @@ export function QueueStrip({ queued, onClear }: QueueStripProps) {
 				</span>
 			))}
 			<button type="button" className="queue-clear" onClick={onClear} title="收回排队内容">
-				<CloseIcon size={11} />
+				<X size={11} strokeWidth={1.5} />
 				收回
 			</button>
 		</div>

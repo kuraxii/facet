@@ -820,29 +820,7 @@ export function App() {
 				/>
 
 				<main className="main">
-					{view === "settings" ? (
-						<SettingsPage
-							section={settingsSection}
-							onSectionChange={setSettingsSection}
-							onClose={() => {
-								// 预览过但没保存的外观回到已保存的那份
-								applyAppearance(settings.appearance);
-								setTheme(resolveTheme(settings.appearance.theme));
-								setView("chat");
-							}}
-							data={settingsData}
-							onSettingsApplied={setSettings}
-							onAppearancePreview={(appearance) => {
-								applyAppearance(appearance);
-								setTheme(resolveTheme(appearance.theme));
-							}}
-							about={{
-								appVersion: bridge.appVersion,
-								runtime: `Electron ${bridge.platform}`,
-								endpoint,
-							}}
-						/>
-					) : session === undefined ? (
+					{session === undefined ? (
 						<div className="empty-wrap">
 							{errorBar}
 							<EmptyState
@@ -944,6 +922,30 @@ export function App() {
 						</>
 					)}
 				</main>
+
+				{view === "settings" ? (
+					<SettingsPage
+						section={settingsSection}
+						onSectionChange={setSettingsSection}
+						onClose={() => {
+							// 预览过但没保存的外观回到已保存的那份
+							applyAppearance(settings.appearance);
+							setTheme(resolveTheme(settings.appearance.theme));
+							setView("chat");
+						}}
+						data={settingsData}
+						onSettingsApplied={setSettings}
+						onAppearancePreview={(appearance) => {
+							applyAppearance(appearance);
+							setTheme(resolveTheme(appearance.theme));
+						}}
+						about={{
+							appVersion: bridge.appVersion,
+							runtime: `Electron ${bridge.platform}`,
+							endpoint,
+						}}
+					/>
+				) : null}
 
 				<CreateProjectDialog
 					isOpen={isProjectDialogOpen}

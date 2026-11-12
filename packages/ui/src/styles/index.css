@@ -2066,12 +2066,20 @@ svg.fl {
 	text-align: left;
 }
 
+/* 设置是浮在应用上的一层窗：遮罩复用对话框那一套，窗口自己定尺寸 */
 .set-page {
 	display: flex;
-	flex: 1;
 	flex-direction: column;
+	width: min(920px, 100%);
+	height: min(660px, 100%);
 	min-width: 0;
 	min-height: 0;
+	overflow: hidden;
+	border: 1px solid var(--line2);
+	border-radius: 16px;
+	background: var(--card);
+	box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+	outline: none;
 }
 
 .set-head {
@@ -2121,6 +2129,7 @@ svg.fl {
 	width: 148px;
 	padding: 12px 10px;
 	border-right: 1px solid var(--line);
+	background: var(--bg);
 }
 
 .set-nav-item {

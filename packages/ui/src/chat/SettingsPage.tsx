@@ -5,7 +5,7 @@
  * 保存失败时保留用户正在编辑的输入，可以直接重试。
  */
 import type { FacetSettings, ModelInfo, ModelRef, ProviderInfo } from "@facet/protocol";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CODE_THEME_OPTIONS, UI_THEME_OPTIONS } from "../theme.ts";
 import { CloseIcon } from "../transcript/icons.tsx";
 import { ProvidersSection } from "./ProvidersSection.tsx";
@@ -84,6 +84,41 @@ export function SettingsPage({
 	const [providers, setProviders] = useState<readonly ProviderInfo[] | undefined>(undefined);
 	const [providersError, setProvidersError] = useState<string | undefined>(undefined);
 
+	/** 关闭回调每次渲染都是新的，事件监听只挂一次，用 ref 转一手 */
+	const onCloseRef = useRef(onClose);
+	onCloseRef.current = onClose;
+
+	/** 设置窗口本身，打开时把焦点交给它 */
+	const windowRef = useRef<HTMLDivElement>(null);
+
+	useEffect(() => {
+		const previous = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
+		windowRef.current?.focus();
+		const onKeyDown = (event: KeyboardEvent): void => {
+			if (event.key === "Escape") {
+				onCloseRef.current();
+			}
+		};
+		document.addEventListener("keydown", onKeyDown);
+		return () => {
+			document.removeEventListener("keydown", onKeyDown);
+			// 关闭后焦点回到打开设置的那个按钮。放到下一轮事件循环里给：这一轮里窗口还在
+			// 移除中，而且点遮罩的 click 随后还会把焦点带回 body
+			if (previous !== undefined) {
+				setTimeout(() => previous.focus(), 0);
+			}
+		};
+	}, []);
+
+	/** 点窗口外面关闭。 */
+	const handleBackdropPointerDown = (event: React.PointerEvent<HTMLDivElement>): void => {
+		const window = windowRef.current;
+		if (window !== null && event.target instanceof Node && window.contains(event.target)) {
+			return;
+		}
+		onClose();
+	};
+
 	const loadSettings = useCallback(async () => {
 		setIsLoading(true);
 		setLoadError(undefined);
@@ -150,80 +185,89 @@ export function SettingsPage({
 		settings !== undefined && draft !== undefined && JSON.stringify(settings) !== JSON.stringify(draft);
 
 	return (
-		<div className="set-page">
-			<header className="set-head">
-				<h1 className="set-title">设置</h1>
-				<button type="button" className="set-close" aria-label="关闭设置" onClick={onClose}>
-					<CloseIcon size={16} />
-				</button>
-			</header>
+		<div className="dialog-backdrop" role="presentation" onPointerDown={handleBackdropPointerDown}>
+			<div
+				ref={windowRef}
+				className="set-page"
+				role="dialog"
+				aria-modal="true"
+				aria-label="设置"
+				tabIndex={-1}
+			>
+				<header className="set-head">
+					<h1 className="set-title">设置</h1>
+					<button type="button" className="set-close" aria-label="关闭设置" onClick={onClose}>
+						<CloseIcon size={16} />
+					</button>
+				</header>
 
-			<div className="set-body">
-				<nav className="set-nav" aria-label="设置分类">
-					{SECTIONS.map((item) => (
-						<button
-							type="button"
-							key={item.key}
-							className={item.key === section ? "set-nav-item is-on" : "set-nav-item"}
-							aria-current={item.key === section}
-							onClick={() => onSectionChange(item.key)}
-						>
-							{item.label}
-						</button>
-					))}
-				</nav>
+				<div className="set-body">
+					<nav className="set-nav" aria-label="设置分类">
+						{SECTIONS.map((item) => (
+							<button
+								type="button"
+								key={item.key}
+								className={item.key === section ? "set-nav-item is-on" : "set-nav-item"}
+								aria-current={item.key === section}
+								onClick={() => onSectionChange(item.key)}
+							>
+								{item.label}
+							</button>
+						))}
+					</nav>
 
-				<div className="set-content">
-					{section === "providers" ? (
-						<ProvidersSection
-							providers={providers}
-							error={providersError}
-							onReload={() => void loadProviders()}
-							data={data}
-						/>
-					) : null}
+					<div className="set-content">
+						{section === "providers" ? (
+							<ProvidersSection
+								providers={providers}
+								error={providersError}
+								onReload={() => void loadProviders()}
+								data={data}
+							/>
+						) : null}
 
-					{section === "about" ? <AboutSection about={about} data={data} /> : null}
+						{section === "about" ? <AboutSection about={about} data={data} /> : null}
 
-					{section === "models" || section === "appearance" || section === "input" ? (
-						<section className="set-section">
-							{loadError === undefined ? null : (
-								<StatusNote message={`读取设置失败:${loadError}`} onRetry={loadSettings} tone="error" />
-							)}
-							{isLoading ? <p className="set-hint">正在读取设置…</p> : null}
-							{draft === undefined ? null : (
-								<>
-									{section === "models" ? <ModelsSection draft={draft} patch={patch} data={data} /> : null}
-									{section === "appearance" ? (
-										<AppearanceSection draft={draft} patch={patch} onPreview={onAppearancePreview} />
-									) : null}
-									{section === "input" ? <InputSection draft={draft} patch={patch} /> : null}
-									{saveError === undefined ? null : (
-										<StatusNote
-											message={`保存失败:${saveError}`}
-											onRetry={() => void save(draft)}
-											tone="error"
-										/>
-									)}
-									<div className="set-actions">
-										<button
-											type="button"
-											className="set-save"
-											disabled={!isDirty || isSaving}
-											onClick={() => void save(draft)}
-										>
-											{isSaving ? "保存中…" : "保存"}
-										</button>
-										{isDirty ? (
-											<button type="button" className="set-reset" onClick={() => setDraft(settings)}>
-												放弃改动
-											</button>
+						{section === "models" || section === "appearance" || section === "input" ? (
+							<section className="set-section">
+								{loadError === undefined ? null : (
+									<StatusNote message={`读取设置失败:${loadError}`} onRetry={loadSettings} tone="error" />
+								)}
+								{isLoading ? <p className="set-hint">正在读取设置…</p> : null}
+								{draft === undefined ? null : (
+									<>
+										{section === "models" ? <ModelsSection draft={draft} patch={patch} data={data} /> : null}
+										{section === "appearance" ? (
+											<AppearanceSection draft={draft} patch={patch} onPreview={onAppearancePreview} />
 										) : null}
-									</div>
-								</>
-							)}
-						</section>
-					) : null}
+										{section === "input" ? <InputSection draft={draft} patch={patch} /> : null}
+										{saveError === undefined ? null : (
+											<StatusNote
+												message={`保存失败:${saveError}`}
+												onRetry={() => void save(draft)}
+												tone="error"
+											/>
+										)}
+										<div className="set-actions">
+											<button
+												type="button"
+												className="set-save"
+												disabled={!isDirty || isSaving}
+												onClick={() => void save(draft)}
+											>
+												{isSaving ? "保存中…" : "保存"}
+											</button>
+											{isDirty ? (
+												<button type="button" className="set-reset" onClick={() => setDraft(settings)}>
+													放弃改动
+												</button>
+											) : null}
+										</div>
+									</>
+								)}
+							</section>
+						) : null}
+					</div>
 				</div>
 			</div>
 		</div>

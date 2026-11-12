@@ -55,6 +55,8 @@ interface FacetBridge {
 	platform: string;
 	/** 应用版本 */
 	appVersion: string;
+	/** 主机是桌面拉起的（embedded），还是外面给的（external） */
+	hostMode: string;
 	/** 打开系统的目录选择窗口,取消时返回空 */
 	pickDirectory: () => Promise<string | undefined>;
 	/** 用系统的保存窗口写一段文本,取消时返回 false */
@@ -208,13 +210,24 @@ export function App() {
 	/** 主区域显示对话还是设置 */
 	const [view, setView] = useState<"chat" | "settings">("chat");
 	/** 主机清单：本机之外用户添加的远程主机，以及当前连着的端点 */
-	const [hostList, setHostList] = useState(() => readHostList(localStorage, bridge.endpoint));
+	const [hostList, setHostList] = useState(() => {
+		const saved = readHostList(localStorage, bridge.endpoint);
+		// 外部给了 FACET_ENDPOINT 就以它为准：上一次连的远程主机不该盖过这次显式指定的地址
+		return bridge.hostMode === "external" ? { ...saved, activeEndpoint: bridge.endpoint } : saved;
+	});
 
 	/** 改主机清单并写回本地。 */
 	const updateHostList = useCallback((next: typeof hostList) => {
 		setHostList(next);
 		writeHostList(localStorage, next);
 	}, []);
+
+	// 外部指定了端点时，把记着的那台改回来，别让下次启动被旧地址带着走
+	useEffect(() => {
+		if (bridge.hostMode === "external" && localStorage.getItem("facet.hosts.active") !== bridge.endpoint) {
+			writeHostList(localStorage, { ...hostList, activeEndpoint: bridge.endpoint });
+		}
+	}, [hostList]);
 
 	/** 右栏的状态；展开、分页与宽度都记在本地 */
 	const [panel, setPanel] = useState<RightPanelState>(() => readPanelState(localStorage));

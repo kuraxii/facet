@@ -131,6 +131,7 @@ function createWindow(initialEndpoint: string): BrowserWindow {
 			sandbox: true,
 			additionalArguments: [
 				`--facet-endpoint=${initialEndpoint}`,
+				`--facet-host-mode=${externalEndpoint === undefined ? "embedded" : "external"}`,
 				`--facet-project=${projectDir}`,
 				`--facet-platform=${process.platform}`,
 				`--facet-version=${app.getVersion()}`,

@@ -10,6 +10,8 @@ function readArgument(name: string): string {
 const api = {
 	/** 主机端点地址 */
 	endpoint: readArgument("facet-endpoint"),
+	/** 主机是这个进程拉起来的（embedded），还是外面跑着、这里只当客户端（external） */
+	hostMode: readArgument("facet-host-mode") || "embedded",
 	/** 默认打开的项目目录 */
 	projectDir: readArgument("facet-project"),
 	platform: readArgument("facet-platform") || process.platform,

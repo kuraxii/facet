@@ -56,6 +56,8 @@ export interface CodeSurfaceProps {
 	onChange?: (text: string) => void;
 	/** 编辑器就绪，宿主可以拿它做定位 */
 	onReady?: (view: EditorView) => void;
+	/** Mod+S 保存，编辑态给 */
+	onSaveShortcut?: () => void;
 }
 
 /** 按文件名找语言，找不到时按纯文本。 */
@@ -63,7 +65,14 @@ function languageFor(path: string): LanguageDescription | null {
 	return LanguageDescription.matchFilename(languages, path);
 }
 
-export function CodeSurface({ text, path, readOnly = true, onChange, onReady }: CodeSurfaceProps) {
+export function CodeSurface({
+	text,
+	path,
+	readOnly = true,
+	onChange,
+	onReady,
+	onSaveShortcut,
+}: CodeSurfaceProps) {
 	const host = useRef<HTMLDivElement>(null);
 	const view = useRef<EditorView | undefined>(undefined);
 	/** 语言与只读各占一个隔间，换内容时不重建视图 */
@@ -77,6 +86,8 @@ export function CodeSurface({ text, path, readOnly = true, onChange, onReady }: 
 	changeHandler.current = onChange;
 	const readyHandler = useRef(onReady);
 	readyHandler.current = onReady;
+	const saveHandler = useRef(onSaveShortcut);
+	saveHandler.current = onSaveShortcut;
 
 	useEffect(() => {
 		const element = host.current;
@@ -104,7 +115,20 @@ export function CodeSurface({ text, path, readOnly = true, onChange, onReady }: 
 					]),
 					languageSlot.current.of([]),
 					EditorView.lineWrapping,
-					keymap.of([...searchKeymap, indentWithTab, ...defaultKeymap, ...historyKeymap]),
+					keymap.of([
+						{
+							key: "Mod-s",
+							preventDefault: true,
+							run: () => {
+								saveHandler.current?.();
+								return true;
+							},
+						},
+						...searchKeymap,
+						indentWithTab,
+						...defaultKeymap,
+						...historyKeymap,
+					]),
 					EditorView.updateListener.of((update) => {
 						if (update.docChanged) {
 							changeHandler.current?.(update.state.doc.toString());

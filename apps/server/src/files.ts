@@ -8,7 +8,8 @@
 import { createHash } from "node:crypto";
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import type { FileContent, FileEntry } from "@facet/protocol";
+import { writeFileAtomic } from "@facet/agent";
+import type { FileContent, FileEntry, FileWriteResult } from "@facet/protocol";
 
 /** 列举时不出现的目录名：版本库、依赖与构建产物。 */
 const IGNORED_DIRECTORIES = new Set([
@@ -32,13 +33,22 @@ const MAX_ENTRIES = 500;
 /** 文本文件的大小上限，超过只给类型与大小。 */
 const MAX_TEXT_BYTES = 1024 * 1024;
 
+/** 写回时允许的最大字节数。 */
+const MAX_WRITE_BYTES = 2 * 1024 * 1024;
+
 /** 判断二进制时检查的前缀长度。 */
 const BINARY_SNIFF_BYTES = 8192;
 
 /** 路径不在项目内、或不存在之类的问题。 */
 export class FileAccessError extends Error {
 	/** 对外给的错误码，界面按它决定提示 */
-	readonly code: "outside_project" | "file_not_found" | "not_a_file" | "not_a_directory";
+	readonly code:
+		| "outside_project"
+		| "file_not_found"
+		| "not_a_file"
+		| "not_a_directory"
+		| "file_too_large"
+		| "file_conflict";
 
 	constructor(code: FileAccessError["code"], message: string) {
 		super(message);
@@ -161,4 +171,39 @@ export async function readTextFile(cwd: string, path: string): Promise<FileConte
 		revision,
 		modifiedAt: Math.round(info.mtimeMs),
 	};
+}
+
+/** 内容的 sha1，读写两侧共用同一个口径。 */
+function revisionOf(buffer: Buffer): string {
+	return createHash("sha1").update(buffer).digest("hex");
+}
+
+/**
+ * 写回一个文本文件。
+ *
+ * 先按 `expectedRevision` 核对磁盘上的内容：对不上说明文件被别处改过，回 `file_conflict`，
+ * 由界面决定重新加载还是覆盖。写盘走原子写，中途失败不会留下半个文件。
+ */
+export async function writeTextFile(
+	cwd: string,
+	path: string,
+	content: string,
+	expectedRevision: string,
+): Promise<FileWriteResult> {
+	const target = await resolveInsideProject(cwd, path);
+	const info = await stat(target);
+	if (!info.isFile()) {
+		throw new FileAccessError("not_a_file", `不是文件:${path}`);
+	}
+	const buffer = Buffer.from(content, "utf8");
+	if (buffer.byteLength > MAX_WRITE_BYTES) {
+		throw new FileAccessError("file_too_large", `内容超过 ${MAX_WRITE_BYTES} 字节:${path}`);
+	}
+	const current = await readFile(target);
+	if (revisionOf(current) !== expectedRevision) {
+		throw new FileAccessError("file_conflict", `文件已在磁盘上改动:${path}`);
+	}
+	await writeFileAtomic(target, content);
+	const written = await stat(target);
+	return { revision: revisionOf(buffer), modifiedAt: Math.round(written.mtimeMs) };
 }

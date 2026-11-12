@@ -29,7 +29,7 @@ import {
 import { WebSocket, WebSocketServer } from "ws";
 import type { ServerConfig } from "./config.ts";
 import { buildDiagnostics } from "./diagnostics.ts";
-import { FileAccessError, listDirectory, readTextFile } from "./files.ts";
+import { FileAccessError, listDirectory, readTextFile, writeTextFile } from "./files.ts";
 import { gitDiff, gitStatus } from "./git.ts";
 import type { HostSource } from "./host-identity.ts";
 import { ProjectExistsError, ProjectNotFoundError, type ProjectStore } from "./project-store.ts";
@@ -322,6 +322,18 @@ async function handleRequest(
 			const source = asObject(params);
 			const cwd = await resolveProjectDirectory(requiredString(source, "cwd"));
 			return await asFileError(readTextFile(cwd, requiredString(source, "path")));
+		}
+		case "writeFile": {
+			const source = asObject(params);
+			const cwd = await resolveProjectDirectory(requiredString(source, "cwd"));
+			return await asFileError(
+				writeTextFile(
+					cwd,
+					requiredString(source, "path"),
+					requiredString(source, "content"),
+					requiredString(source, "expectedRevision"),
+				),
+			);
 		}
 		case "gitStatus":
 			return await gitStatus(await resolveProjectDirectory(requiredString(asObject(params), "cwd")));

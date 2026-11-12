@@ -7,7 +7,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { FileAccessError, listDirectory, readTextFile } from "./files.ts";
+import { FileAccessError, listDirectory, readTextFile, writeTextFile } from "./files.ts";
 
 const roots: string[] = [];
 
@@ -132,5 +132,37 @@ describe("readTextFile", () => {
 	it("拒绝跳出项目的路径", async () => {
 		const root = await createProject();
 		await expectCode(readTextFile(root, "../outside.txt"), "outside_project");
+	});
+});
+
+describe("writeTextFile", () => {
+	it("摘要对得上时写回并给出新摘要", async () => {
+		const root = await createProject();
+		await writeFile(join(root, "a.txt"), "旧内容\n", "utf8");
+		const before = await readTextFile(root, "a.txt");
+		if (before.kind !== "text") {
+			throw new Error("应当是文本");
+		}
+		const result = await writeTextFile(root, "a.txt", "新内容\n", before.revision);
+		expect(result.revision).toMatch(/^[0-9a-f]{40}$/);
+		expect(result.revision).not.toBe(before.revision);
+		const after = await readTextFile(root, "a.txt");
+		expect(after.kind === "text" && after.content).toBe("新内容\n");
+	});
+
+	it("磁盘上的内容变了就拒绝写入", async () => {
+		const root = await createProject();
+		await writeFile(join(root, "a.txt"), "一\n", "utf8");
+		const before = await readTextFile(root, "a.txt");
+		if (before.kind !== "text") {
+			throw new Error("应当是文本");
+		}
+		await writeFile(join(root, "a.txt"), "别处改过\n", "utf8");
+		await expectCode(writeTextFile(root, "a.txt", "我的改动\n", before.revision), "file_conflict");
+	});
+
+	it("拒绝写到项目外", async () => {
+		const root = await createProject();
+		await expectCode(writeTextFile(root, "../逃逸.txt", "x", "0"), "outside_project");
 	});
 });

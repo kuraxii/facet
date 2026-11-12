@@ -48,3 +48,11 @@ export type FileContent =
 			/** 字节数 */
 			size: number;
 	  };
+
+/** 写文件的结果。 */
+export interface FileWriteResult {
+	/** 写完之后的摘要，下一次写回用它 */
+	revision: string;
+	/** 写完之后的修改时间，Unix 毫秒 */
+	modifiedAt: number;
+}

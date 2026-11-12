@@ -38,8 +38,8 @@ import {
 	useStickToBottom,
 	writePanelState,
 } from "@facet/ui";
-import { CodeSurface } from "@facet/ui-editor";
-import { ArrowLeft, X } from "lucide-react";
+import { FileView } from "@facet/ui-editor";
+import { X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { PLACEHOLDER_HOSTS } from "./placeholder-hosts";
 
@@ -1093,29 +1093,24 @@ export function App() {
 								</p>
 							)
 						) : (
-							<>
-								<div className="file-head">
-									<button
-										type="button"
-										className="ib"
-										aria-label="返回目录"
-										title="返回目录"
-										onClick={() => setOpenedFile(undefined)}
-									>
-										<ArrowLeft size={14} strokeWidth={1.5} />
-									</button>
-									<span className="file-path" title={openedFile.path}>
-										{openedFile.path}
-									</span>
-								</div>
-								{openedFile.content.kind === "text" ? (
-									<CodeSurface text={openedFile.content.content} path={openedFile.path} />
-								) : (
-									<p className="chg-note">
-										{openedFile.content.kind === "binary" ? "二进制文件，不预览" : "文件太大，不预览"}
-									</p>
-								)}
-							</>
+							<FileView
+								path={openedFile.path}
+								content={openedFile.content}
+								onClose={() => setOpenedFile(undefined)}
+								onSave={(text, expectedRevision) =>
+									sessionCwd === undefined
+										? Promise.reject(new Error("还没有打开会话"))
+										: client.writeFile(sessionCwd, openedFile.path, text, expectedRevision)
+								}
+								onReload={async () => {
+									if (sessionCwd === undefined) {
+										throw new Error("还没有打开会话");
+									}
+									const next = await client.readFile(sessionCwd, openedFile.path);
+									setOpenedFile({ path: openedFile.path, content: next });
+									return next;
+								}}
+							/>
 						)}
 					</RightPanel>
 				) : null}

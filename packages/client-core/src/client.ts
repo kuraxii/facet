@@ -18,6 +18,7 @@ import type {
 	FacetSettings,
 	FileContent,
 	FileEntry,
+	FileWriteResult,
 	GitDiff,
 	GitStatus,
 	ModelInfo,
@@ -254,6 +255,20 @@ export class SessionClient {
 	/** 读一个文件；文本按 UTF-8 解码，二进制与超大文件只给类型与大小。 */
 	async readFile(cwd: string, path: string): Promise<FileContent> {
 		return await this.transport.request("readFile", { cwd, path });
+	}
+
+	/**
+	 * 写回一个文本文件。
+	 *
+	 * 带上读或上次写拿到的 revision；磁盘上的内容已经变过时主机回 `file_conflict`。
+	 */
+	async writeFile(
+		cwd: string,
+		path: string,
+		content: string,
+		expectedRevision: string,
+	): Promise<FileWriteResult> {
+		return await this.transport.request("writeFile", { cwd, path, content, expectedRevision });
 	}
 
 	/**

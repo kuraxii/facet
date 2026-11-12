@@ -7,7 +7,7 @@
  */
 import type { Action, ActionOrigin } from "./action.ts";
 import type { Channel } from "./channel.ts";
-import type { FileContent, FileEntry } from "./file.ts";
+import type { FileContent, FileEntry, FileWriteResult } from "./file.ts";
 import type { GitDiff, GitStatus } from "./git.ts";
 import type {
 	CustomProviderInfo,
@@ -182,8 +182,17 @@ export interface RequestParams {
 	providers: Record<string, never>;
 	/** 列出项目里的一个目录。path 为空串表示项目根。 */
 	listDirectory: { cwd: string; path: string };
-	/** 读一个文件；文本按 UTF-8 解码，二进制与超大文件只给类型与大小。 */
+	/**
+	 * 读一个文件；文本按 UTF-8 解码，二进制与超大文件只给类型与大小。
+	 */
 	readFile: { cwd: string; path: string };
+	/**
+	 * 写回一个文本文件。
+	 *
+	 * expectedRevision 是读或上次写拿到的摘要；磁盘上的内容已经变过时主机拒绝写入并回
+	 * `file_conflict`，由界面决定重新加载还是覆盖。
+	 */
+	writeFile: { cwd: string; path: string; content: string; expectedRevision: string };
 	/** 列出项目工作树相对 HEAD 的改动。 */
 	gitStatus: { cwd: string };
 	/** 取单个文件的补丁。untracked 为真时按「从空文件新增」合成补丁。 */
@@ -261,6 +270,7 @@ export interface RequestResults {
 	providers: { providers: ProviderInfo[] };
 	listDirectory: { entries: FileEntry[] };
 	readFile: FileContent;
+	writeFile: FileWriteResult;
 	gitStatus: GitStatus;
 	gitDiff: GitDiff;
 	listProjects: { projects: ProjectInfo[] };

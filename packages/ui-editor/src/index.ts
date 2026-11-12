@@ -7,3 +7,5 @@ export type { CodeSurfaceProps } from "./code-surface.tsx";
 export { CodeSurface } from "./code-surface.tsx";
 export type { EditorPalette } from "./editor-theme.ts";
 export { editorTheme, readEditorPalette } from "./editor-theme.ts";
+export type { FileSaveResult, FileViewProps } from "./file-view.tsx";
+export { FileView } from "./file-view.tsx";

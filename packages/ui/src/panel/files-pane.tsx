@@ -6,7 +6,7 @@
  */
 
 import type { FileEntry } from "@facet/protocol";
-import { File as FileGlyph, Folder } from "lucide-react";
+import { File as FileGlyph, Folder, RefreshCw } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { ChevronIcon } from "../transcript/chevron.tsx";
 
@@ -69,6 +69,13 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath }: FilesPane
 		void load("");
 	}, [load]);
 
+	/** 重新取根目录：丢掉已缓存的目录与展开状态，之后按需要重新展开。 */
+	const refresh = useCallback((): void => {
+		setDirectories({});
+		setExpanded(new Set([""]));
+		void load("");
+	}, [load]);
+
 	/** 展开或收起一个目录。 */
 	const toggle = useCallback(
 		(entry: FileEntry): void => {
@@ -103,59 +110,91 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath }: FilesPane
 
 	const root = directories[""];
 
+	const header = (
+		<div className="tree-head">
+			<span className="tree-root">项目文件</span>
+			<button
+				type="button"
+				className="ib"
+				aria-label="刷新文件树"
+				title="刷新文件树"
+				disabled={root?.isLoading === true}
+				onClick={refresh}
+			>
+				<RefreshCw size={13} strokeWidth={1.5} />
+			</button>
+		</div>
+	);
+
 	if (root?.error !== undefined) {
 		return (
-			<p className="chg-note is-error">
-				{root.error}
-				<button type="button" className="chg-retry" onClick={() => void load("")}>
-					重试
-				</button>
-			</p>
+			<>
+				{header}
+				<p className="chg-note is-error">
+					{root.error}
+					<button type="button" className="chg-retry" onClick={() => void load("")}>
+						重试
+					</button>
+				</p>
+			</>
 		);
 	}
 
 	if (root?.entries === undefined) {
-		return <p className="chg-note">正在读取目录…</p>;
+		return (
+			<>
+				{header}
+				<p className="chg-note">正在读取目录…</p>
+			</>
+		);
 	}
 
 	if (rows.length === 0) {
-		return <p className="chg-note">这个目录是空的。</p>;
+		return (
+			<>
+				{header}
+				<p className="chg-note">这个目录是空的。</p>
+			</>
+		);
 	}
 
 	return (
-		<div className="tree" role="tree" aria-label="项目文件">
-			{rows.map(({ entry, depth }): ReactNode => {
-				const isDirectory = entry.kind === "directory";
-				const isOpen = expanded.has(entry.path);
-				const state = directories[entry.path];
-				const isSelected = entry.path === selectedPath;
-				return (
-					<div key={entry.path} className="tree-item">
-						<button
-							type="button"
-							className={isSelected ? "tree-row is-on" : "tree-row"}
-							style={{ paddingLeft: `${6 + depth * 12}px` }}
-							title={entry.path}
-							aria-expanded={isDirectory ? isOpen : undefined}
-							onClick={() => (isDirectory ? toggle(entry) : onOpenFile(entry.path))}
-						>
-							{isDirectory ? <ChevronIcon isOpen={isOpen} size={11} /> : <span className="tree-spacer" />}
-							{isDirectory ? (
-								<Folder size={13} strokeWidth={1.5} className="tree-icon" />
-							) : (
-								<FileGlyph size={13} strokeWidth={1.5} className="tree-icon" />
-							)}
-							<span className="tree-name">{entry.name}</span>
-							{state?.isLoading === true ? <span className="tree-note">…</span> : null}
-							{state?.error === undefined ? null : (
-								<span className="tree-note is-error" title={state.error}>
-									读取失败
-								</span>
-							)}
-						</button>
-					</div>
-				);
-			})}
-		</div>
+		<>
+			{header}
+			<div className="tree" role="tree" aria-label="项目文件">
+				{rows.map(({ entry, depth }): ReactNode => {
+					const isDirectory = entry.kind === "directory";
+					const isOpen = expanded.has(entry.path);
+					const state = directories[entry.path];
+					const isSelected = entry.path === selectedPath;
+					return (
+						<div key={entry.path} className="tree-item">
+							<button
+								type="button"
+								className={isSelected ? "tree-row is-on" : "tree-row"}
+								style={{ paddingLeft: `${6 + depth * 12}px` }}
+								title={entry.path}
+								aria-expanded={isDirectory ? isOpen : undefined}
+								onClick={() => (isDirectory ? toggle(entry) : onOpenFile(entry.path))}
+							>
+								{isDirectory ? <ChevronIcon isOpen={isOpen} size={11} /> : <span className="tree-spacer" />}
+								{isDirectory ? (
+									<Folder size={13} strokeWidth={1.5} className="tree-icon" />
+								) : (
+									<FileGlyph size={13} strokeWidth={1.5} className="tree-icon" />
+								)}
+								<span className="tree-name">{entry.name}</span>
+								{state?.isLoading === true ? <span className="tree-note">…</span> : null}
+								{state?.error === undefined ? null : (
+									<span className="tree-note is-error" title={state.error}>
+										读取失败
+									</span>
+								)}
+							</button>
+						</div>
+					);
+				})}
+			</div>
+		</>
 	);
 }

@@ -349,6 +349,13 @@ async function applyAction(context: EndpointContext, channel: Channel, action: A
 			case "chat/turnCancelled":
 				await agent.abort();
 				return;
+			case "session/compact":
+				// 压缩要读整条分支写摘要，与运行中的回合不能同时进行
+				if (agent.isBusy) {
+					throw new RequestError("rejected", "这一轮还没结束,等它停下再压缩上下文");
+				}
+				await agent.compact();
+				return;
 			case "session/pendingMessageSet":
 				if (action.kind === "steering") {
 					await agent.steer(action.text);

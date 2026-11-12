@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import type {
 	ActionFrame,
+	ContextUsage,
 	Entry,
 	SessionEvent,
 	SessionEventListener,
@@ -112,6 +113,17 @@ class FakeAgent implements HubAgent {
 		}
 		const leaf = this.stored[this.stored.length - 1];
 		return { entries: this.stored.slice(index + 1), leafId: leaf?.id ?? null };
+	}
+
+	/** 手动压缩：用例里只记下调用次数 */
+	compactCalls = 0;
+
+	async compact(): Promise<void> {
+		this.compactCalls += 1;
+	}
+
+	contextUsage(): ContextUsage | undefined {
+		return undefined;
 	}
 
 	snapshot(): SessionSnapshot {

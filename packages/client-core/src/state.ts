@@ -7,6 +7,7 @@
 
 import type {
 	Channel,
+	ContextUsage,
 	DeltaKind,
 	Entry,
 	Maintenance,
@@ -92,6 +93,8 @@ export interface SessionState {
 	readonly phase: TurnPhase;
 	/** 与本轮并行的维护动作 */
 	readonly maintenance: Maintenance | undefined;
+	/** 上下文用量，刚压缩完或估算不出来时为空 */
+	readonly contextUsage: ContextUsage | undefined;
 	readonly queued: QueuedInput;
 }
 
@@ -157,6 +160,7 @@ export function createSessionView(channel: Channel, snapshot?: SessionSnapshot):
 			availableThinkingLevels: snapshot?.availableThinkingLevels ?? [],
 			phase: snapshot?.phase ?? "idle",
 			maintenance: snapshot?.maintenance,
+			contextUsage: snapshot?.contextUsage,
 			queued: snapshot?.queued ?? { steering: [], followUp: [] },
 		},
 	};

@@ -42,6 +42,27 @@ const CODE_BLOCK_OPTIONS = {
 	disableVirtualizationBuffers: true,
 } as const;
 
+/**
+ * 流程图（mermaid）的排版。
+ *
+ * 主题由 `isDark` 决定：库会在源码前注入 `%%{init: {"theme": "dark"|"default"}}%%`。
+ * 高度封顶，长图在块内滚动，不把整段对话顶走；渲染失败时进 error 态，`showModeToggle`
+ * 让使用者随时切到源码；严格模式关掉交互与 html 标签。
+ */
+const MERMAID_PROPS = {
+	maxHeight: "420px",
+	showHeader: true,
+	showModeToggle: true,
+	showCopyButton: true,
+	showFullscreenButton: true,
+	showZoomControls: false,
+	showCollapseButton: false,
+	enableWheelZoom: false,
+	enableMermaidInteractions: false,
+	isStrict: true,
+	showTooltips: false,
+} as const;
+
 /** 打开平滑输出时,系统偏好减弱动效的场合不启用。 */
 function prefersReducedMotion(): boolean {
 	return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -82,6 +103,7 @@ export function Markdown({ text, isStreaming, indexKey }: MarkdownProps) {
 				codeBlockLightTheme={blockThemes[1]}
 				themes={blockThemes}
 				codeBlockProps={CODE_BLOCK_PROPS}
+				mermaidProps={MERMAID_PROPS}
 				codeBlockOptions={CODE_BLOCK_OPTIONS}
 				showTooltips={false}
 				// 关闭按可见性延迟渲染:占位条只在内容更新时被顺带刷新,流一停就永久留下

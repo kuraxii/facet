@@ -7,7 +7,7 @@
  */
 import type { ChatActivity } from "@facet/client-core";
 import type { ModelInfo, ThinkingLevel } from "@facet/protocol";
-import { FileUp, ImagePlus, Plus } from "lucide-react";
+import { Brain, FileUp, ImagePlus, Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SendIcon, StopIcon } from "../transcript/icons.tsx";
 
@@ -45,18 +45,22 @@ export interface ComposerProps {
 
 /** 模型芯片的显示文本。 */
 function modelLabel(model: ModelInfo | undefined): string {
-	return model ? model.id : "无模型";
+	if (!model) {
+		return "无模型";
+	}
+	return model.name.trim().length > 0 ? model.name : model.id;
 }
 
 /** 思考档位的中文说明。 */
+/** 思考档位的显示名：直接用档位本身的取值，只把首字母大写 */
 const LEVEL_LABELS: Record<ThinkingLevel, string> = {
-	off: "不思考",
-	minimal: "极简",
-	low: "低",
-	medium: "中",
-	high: "高",
-	xhigh: "很高",
-	max: "最高",
+	off: "Off",
+	minimal: "Minimal",
+	low: "Low",
+	medium: "Medium",
+	high: "High",
+	xhigh: "XHigh",
+	max: "Max",
 };
 
 /** 模型键。 */
@@ -256,8 +260,10 @@ export function Composer({
 						disabled={!canPickLevel}
 						aria-expanded={openMenu === "level"}
 						title={canPickLevel ? "切换思考档位" : "当前思考档位"}
+						aria-label={`思考档位 ${thinkingLevel === undefined ? "默认" : LEVEL_LABELS[thinkingLevel]}`}
 					>
-						思考 · {thinkingLevel === undefined ? "默认" : LEVEL_LABELS[thinkingLevel]}
+						<Brain size={13} strokeWidth={1.5} />
+						{thinkingLevel === undefined ? "默认" : LEVEL_LABELS[thinkingLevel]}
 						{canPickLevel ? <i className={openMenu === "level" ? "chev is-open" : "chev"} /> : null}
 					</button>
 					{openMenu === "level" ? (
@@ -273,7 +279,6 @@ export function Composer({
 									}}
 								>
 									<span>{LEVEL_LABELS[level]}</span>
-									<span className="chip-pop-meta mono">{level}</span>
 								</button>
 							))}
 						</div>

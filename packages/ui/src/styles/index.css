@@ -1094,6 +1094,7 @@ svg.fl {
 	min-width: 0;
 }
 
+/* 下拉箭头：收起时朝下，展开时朝上 */
 .chev {
 	flex: none;
 	width: 6px;
@@ -1101,11 +1102,11 @@ svg.fl {
 	margin: 0 4px 0 2px;
 	border-right: 1.5px solid currentColor;
 	border-bottom: 1.5px solid currentColor;
-	transform: rotate(-45deg);
+	transform: rotate(45deg);
 }
 
 .chev.is-open {
-	transform: rotate(45deg);
+	transform: rotate(-135deg);
 }
 
 .dot {
@@ -1640,15 +1641,23 @@ svg.fl {
 	color: var(--err);
 }
 
+/* 模型与档位芯片：默认只有文字，悬停或展开时给一层底色 */
 .composer-row .chip {
 	height: 28px;
-	margin-left: 4px;
+	margin-left: 2px;
+	padding: 0 8px;
+	border: 0;
 	border-radius: 14px;
-	font-family: var(--font-mono);
+	background: transparent;
+	color: var(--t3);
+	transition:
+		background-color var(--dur-fast) var(--ease),
+		color var(--dur-fast) var(--ease);
 }
 
-.composer-row .chip:hover {
-	border-color: var(--line2);
+.composer-row .chip:hover:not(:disabled),
+.composer-row .chip[aria-expanded="true"] {
+	background: var(--surface2);
 	color: var(--t1);
 }
 

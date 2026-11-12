@@ -89,9 +89,30 @@ describe("模型与思考档位芯片", () => {
 				onModelChange: () => {},
 			}),
 		);
-		const modelChip = html.match(/<button[^>]*class="chip"[^>]*>m1/);
+		// 模型芯片显示模型名，后面跟箭头
+		const modelChip = html.match(/<button[^>]*class="chip"[^>]*>模型一/);
 		expect(modelChip?.[0]).toBeDefined();
 		expect(modelChip?.[0]).not.toContain("disabled");
+	});
+
+	it("思考档位芯片用大脑图标加档位取值，不翻译", () => {
+		const html = renderToStaticMarkup(
+			createElement(Composer, {
+				value: "",
+				onChange: () => {},
+				onSend: () => {},
+				onStop: () => {},
+				activity: "idle",
+				model: undefined,
+				thinkingLevel: "max",
+				onThinkingLevelChange: () => {},
+			}),
+		);
+		const levelChip = html.match(/<button[^>]*aria-label="思考档位 Max"[^>]*>.*?<\/button>/);
+		expect(levelChip?.[0]).toBeDefined();
+		expect(levelChip?.[0]).toContain('class="lucide lucide-brain"');
+		expect(levelChip?.[0]).toContain("Max");
+		expect(levelChip?.[0]).not.toContain("思考 ·");
 	});
 
 	it("不给回调时模型芯片只展示", () => {

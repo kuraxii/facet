@@ -6,6 +6,7 @@
  */
 import type { FacetSettings, ModelInfo, ModelRef, ProviderInfo } from "@facet/protocol";
 import { useCallback, useEffect, useState } from "react";
+import { CODE_THEME_OPTIONS, UI_THEME_OPTIONS } from "../theme.ts";
 import { CloseIcon } from "../transcript/icons.tsx";
 import { ProvidersSection } from "./ProvidersSection.tsx";
 import type { SettingsDataSource } from "./settings-data-source.ts";
@@ -35,8 +36,10 @@ export interface SettingsPageProps {
 	onClose: () => void;
 	/** 数据来源 */
 	data: SettingsDataSource;
-	/** 设置变化后通知宿主应用，例如外观立刻生效 */
+	/** 设置保存成功后通知宿主应用 */
 	onSettingsApplied?: (settings: FacetSettings) => void;
+	/** 外观改动时先带给宿主预览，保存之前不落盘 */
+	onAppearancePreview?: (appearance: FacetSettings["appearance"]) => void;
 	/** 应用版本等只读信息 */
 	about: { appVersion: string; runtime: string; endpoint: string };
 }
@@ -67,6 +70,7 @@ export function SettingsPage({
 	onClose,
 	data,
 	onSettingsApplied,
+	onAppearancePreview,
 	about,
 }: SettingsPageProps) {
 	/** 已加载的设置；为空表示还没读到 */
@@ -190,7 +194,9 @@ export function SettingsPage({
 							{draft === undefined ? null : (
 								<>
 									{section === "models" ? <ModelsSection draft={draft} patch={patch} data={data} /> : null}
-									{section === "appearance" ? <AppearanceSection draft={draft} patch={patch} /> : null}
+									{section === "appearance" ? (
+										<AppearanceSection draft={draft} patch={patch} onPreview={onAppearancePreview} />
+									) : null}
 									{section === "input" ? <InputSection draft={draft} patch={patch} /> : null}
 									{saveError === undefined ? null : (
 										<StatusNote
@@ -429,33 +435,69 @@ type ThinkingLevelValue = (typeof THINKING_LEVEL_OPTIONS)[number];
 function AppearanceSection({
 	draft,
 	patch,
+	onPreview,
 }: {
 	draft: FacetSettings;
 	patch: (change: (current: FacetSettings) => FacetSettings) => void;
+	onPreview: ((appearance: FacetSettings["appearance"]) => void) | undefined;
 }) {
 	const appearance = draft.appearance;
+	// 外观改动立刻作用到界面上，关掉设置页而不保存时由宿主恢复
+	const patchAppearance = (next: FacetSettings["appearance"]): void => {
+		patch((current) => ({ ...current, appearance: next }));
+		onPreview?.(next);
+	};
 	return (
 		<>
 			<h2 className="set-section-title">外观</h2>
+			<fieldset className="set-field">
+				<legend className="set-label">主题</legend>
+				<div className="set-swatches">
+					{UI_THEME_OPTIONS.map((option) => (
+						<button
+							key={option.id}
+							type="button"
+							className={appearance.theme === option.id ? "set-swatch is-active" : "set-swatch"}
+							title={option.label}
+							aria-label={option.label}
+							aria-pressed={appearance.theme === option.id}
+							onClick={() => patchAppearance({ ...appearance, theme: option.id })}
+						>
+							<i className="set-swatch-chip" style={{ background: option.swatch }} />
+							<span className="set-swatch-name">{option.label}</span>
+						</button>
+					))}
+					<button
+						type="button"
+						className={appearance.theme === "system" ? "set-swatch is-active" : "set-swatch"}
+						title="跟随系统"
+						aria-label="跟随系统"
+						aria-pressed={appearance.theme === "system"}
+						onClick={() => patchAppearance({ ...appearance, theme: "system" })}
+					>
+						<i className="set-swatch-chip is-system" />
+						<span className="set-swatch-name">跟随系统</span>
+					</button>
+				</div>
+			</fieldset>
 			<label className="set-field">
-				<span className="set-label">主题</span>
+				<span className="set-label">代码配色</span>
 				<select
 					className="set-input"
-					value={appearance.theme}
+					value={appearance.codeTheme}
 					onChange={(event) =>
-						patch((current) => ({
-							...current,
-							appearance: {
-								...current.appearance,
-								theme: event.target.value as FacetSettings["appearance"]["theme"],
-							},
-						}))
+						patchAppearance({
+							...appearance,
+							codeTheme: event.target.value as FacetSettings["appearance"]["codeTheme"],
+						})
 					}
-					aria-label="主题"
+					aria-label="代码配色"
 				>
-					<option value="dark">深色</option>
-					<option value="light">浅色</option>
-					<option value="system">跟随系统</option>
+					{CODE_THEME_OPTIONS.map((option) => (
+						<option key={option.id} value={option.id}>
+							{option.label}
+						</option>
+					))}
 				</select>
 			</label>
 			<label className="set-field">
@@ -463,12 +505,7 @@ function AppearanceSection({
 				<input
 					className="set-input"
 					value={appearance.bodyFont}
-					onChange={(event) =>
-						patch((current) => ({
-							...current,
-							appearance: { ...current.appearance, bodyFont: event.target.value },
-						}))
-					}
+					onChange={(event) => patchAppearance({ ...appearance, bodyFont: event.target.value })}
 					placeholder="留空使用 Inter"
 					aria-label="正文字体"
 				/>
@@ -478,12 +515,7 @@ function AppearanceSection({
 				<input
 					className="set-input"
 					value={appearance.codeFont}
-					onChange={(event) =>
-						patch((current) => ({
-							...current,
-							appearance: { ...current.appearance, codeFont: event.target.value },
-						}))
-					}
+					onChange={(event) => patchAppearance({ ...appearance, codeFont: event.target.value })}
 					placeholder="留空使用 Maple Mono"
 					aria-label="代码字体"
 				/>
@@ -498,13 +530,10 @@ function AppearanceSection({
 					value={appearance.fontSize}
 					onChange={(event) => {
 						const value = Number(event.target.value);
-						patch((current) => ({
-							...current,
-							appearance: {
-								...current.appearance,
-								fontSize: Number.isFinite(value) ? value : current.appearance.fontSize,
-							},
-						}));
+						patchAppearance({
+							...appearance,
+							fontSize: Number.isFinite(value) ? value : appearance.fontSize,
+						});
 					}}
 					aria-label="正文字号"
 				/>
@@ -513,12 +542,7 @@ function AppearanceSection({
 				<input
 					type="checkbox"
 					checked={appearance.reducedMotion}
-					onChange={(event) =>
-						patch((current) => ({
-							...current,
-							appearance: { ...current.appearance, reducedMotion: event.target.checked },
-						}))
-					}
+					onChange={(event) => patchAppearance({ ...appearance, reducedMotion: event.target.checked })}
 				/>
 				<span>减少动效</span>
 			</label>

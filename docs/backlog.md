@@ -38,10 +38,8 @@ PoC 不做,记在这里,按「影响基本使用」到「结构」排序。
 | # | 项 | 需求 | 说明 |
 |---|---|---|---|
 | 8 | 依赖边界检查 | — | 遍历 import 与 `package.json` 校验方向,挂进 `npm run lint`;现在只靠人守 |
-| 9 | 浅色主题验证 | FR-SET | 变量已写,没跑过;界面里还没有设置 `data-theme` 的入口,markstream 主题名、代码块、diff 颜色都要看 |
-| 10 | mermaid 与公式 | FR-CHAT-05 | mermaid 只在 `package.json` 里,代码没有引用;KaTeX 样式已随正文引入,两者都缺容器规格与失败降级 |
-| 11 | 代码块按设计稿调色 | FR-CHAT-04 | 现在用 shiki 的 vitesse 主题,未按设计稿配色 |
-| 12 | Web 端与远端接入 | FR-XDEV | `apps/web` 复用 `packages/ui`;鉴权与 SSH 隧道 |
+| 9 | mermaid 与公式 | FR-CHAT-05 | mermaid 只在 `package.json` 里,代码没有引用;KaTeX 样式已随正文引入,两者都缺容器规格与失败降级 |
+| 10 | Web 端与远端接入 | FR-XDEV | `apps/web` 复用 `packages/ui`;鉴权与 SSH 隧道 |
 
 ## 三、已知取舍
 
@@ -58,6 +56,7 @@ PoC 不做,记在这里,按「影响基本使用」到「结构」排序。
 - **同一会话的动作串行执行**,后到的动作看到前一个动作完成后的状态;`PiAgent.prompt` 在运行开始后即返回,不再等整轮结束,停止请求不会被整轮阻塞
 - **撤回消息**在同一个会话里挪分支指针:pi 的会话文件只追加,撤回只是把叶子挪到目标消息的前一条,原文回到输入框,被放弃的一段留在文件里成为另一条分支;不新建会话,跑动中不允许撤回
 - **排队消息**走 steering:运行中发送的文本插进当前轮次,排队条列出待插入内容,收回时把文字拼回输入框;followUp 的入口还没做,协议里留了 kind
+- **配色**取自 paseo:七套界面配色写在 `theme.css` 的 `data-theme` 选择器里,组件只读同一组变量;代码高亮另选八套,浅深跟随界面主题,单版配色两边共用一份
 - **字体**随构建产物一起打进应用:界面用 Inter(@fontsource),代码的 Latin 与符号用 Maple Mono(packages/ui/src/assets/fonts 下的 woff2,OFL-1.1),汉字与中文标点由 @automann/maple-mono-cn 的 400 分片补上;分片按 unicode-range 只加载渲染到的那几片
 - **设置**分两处:界面偏好与新建会话的默认值在 facet 自己的 settings.json,模型、凭证与提供方配置交给 pi 的 models.json 与 auth.json;两边各管一件事,不互相改写
 - **凭证**经 facet 自己的文件实现读写 auth.json:先写盘再让运行态用上,重启之后仍在;密钥只上行,界面只显示是否已配置与来源

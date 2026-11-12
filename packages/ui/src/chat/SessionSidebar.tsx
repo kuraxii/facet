@@ -71,12 +71,12 @@ export interface SessionSidebarProps {
 	isSettingsOpen?: boolean;
 }
 
-/** 会话行状态点的样式类。压缩中用强调色常亮，运行中用警告色呼吸。 */
+/** 会话行状态点的样式类。运行中与压缩中都走运行色，前者呼吸，后者常亮。 */
 function dotClass(dot: SessionDot): string {
 	if (dot === "running") {
-		return "dot is-warn pulse";
+		return "dot is-run pulse";
 	}
-	return dot === "compacting" ? "dot is-acc" : "dot is-off";
+	return dot === "compacting" ? "dot is-run" : "dot is-off";
 }
 
 /** 主机状态点的样式类。 */

@@ -8,15 +8,11 @@
 
 import { type ReactNode, useEffect, useState } from "react";
 import type { CodeBlockNode } from "stream-markdown-parser";
+import { codeThemeName } from "../theme.ts";
 import { shouldShowCodeBlock } from "./code-block-state.ts";
 import { resolveCodeLang } from "./code-lang.ts";
-import {
-	CODE_DARK_THEME,
-	CODE_LIGHT_THEME,
-	getHighlighter,
-	type HighlightLine,
-	highlightLines,
-} from "./highlighter.ts";
+import { useCodeTheme } from "./code-theme.tsx";
+import { getHighlighterFor, type HighlightLine, highlightLines } from "./highlighter.ts";
 
 /** 自定义组件从库里拿到的参数,只取用得到的部分。 */
 export interface CodeBlockStaticProps {
@@ -24,8 +20,6 @@ export interface CodeBlockStaticProps {
 	node: CodeBlockNode;
 	/** 是否仍在流式写入 */
 	stream?: boolean;
-	/** 当前是否深色 */
-	isDark?: boolean;
 }
 
 /** 纯文本按行拆开,高亮就绪前与分词失败时使用。 */
@@ -110,13 +104,14 @@ function lineRows(lines: readonly HighlightLine[]): ReactNode[] {
 }
 
 /** 代码块卡片。 */
-function CodeCard({ code, language, isDark }: { code: string; language: string; isDark: boolean }) {
+function CodeCard({ code, language }: { code: string; language: string }) {
+	const codeTheme = useCodeTheme();
 	const [lines, setLines] = useState<readonly HighlightLine[] | undefined>(undefined);
-	const theme = isDark ? CODE_DARK_THEME : CODE_LIGHT_THEME;
+	const theme = codeThemeName(codeTheme.theme, codeTheme.isDark);
 
 	useEffect(() => {
 		let cancelled = false;
-		void getHighlighter().then(
+		void getHighlighterFor(codeTheme.theme, codeTheme.isDark).then(
 			(instance) => {
 				if (cancelled) {
 					return;
@@ -132,7 +127,7 @@ function CodeCard({ code, language, isDark }: { code: string; language: string; 
 		return () => {
 			cancelled = true;
 		};
-	}, [code, language, theme]);
+	}, [code, language, theme, codeTheme.theme, codeTheme.isDark]);
 
 	const body = lines ?? plainLines(code);
 	return (
@@ -149,12 +144,12 @@ function CodeCard({ code, language, isDark }: { code: string; language: string; 
 /**
  * 代码块入口。围栏未写完且无正文时不出卡片,diff 围栏固定用 diff 语法。
  */
-export function CodeBlockStatic({ node, isDark = true }: CodeBlockStaticProps) {
+export function CodeBlockStatic({ node }: CodeBlockStaticProps) {
 	const isDiff = node.diff === true;
 	// diff 围栏用统一文本,去掉围栏行之后的内容才能按行着色
 	const code = (isDiff ? node.raw : node.code) ?? "";
 	if (!shouldShowCodeBlock({ loading: node.loading, code })) {
 		return null;
 	}
-	return <CodeCard code={code} language={isDiff ? "diff" : resolveCodeLang(node.language)} isDark={isDark} />;
+	return <CodeCard code={code} language={isDiff ? "diff" : resolveCodeLang(node.language)} />;
 }

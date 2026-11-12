@@ -12,16 +12,21 @@ import {
 	ArrowDownIcon,
 	ChatTranscript,
 	CloseIcon,
+	CodeThemeProvider,
 	Composer,
 	CreateProjectDialog,
+	DEFAULT_DARK_THEME,
 	EmptyState,
+	isDarkTheme,
 	QueueStrip,
+	resolveUiTheme,
 	SessionSidebar,
 	type SettingsDataSource,
 	SettingsPage,
 	type SettingsSection,
 	type SidebarHost,
 	samePath,
+	THEME_MODES,
 	type ThemeName,
 	TrustDialog,
 	useStickToBottom,
@@ -89,16 +94,16 @@ function readDrafts(): Record<string, string> {
 	}
 }
 
-/** 读取上次选择的主题，缺省深色 */
+/** 系统是否偏浅色。 */
+function prefersLight(): boolean {
+	return window.matchMedia("(prefers-color-scheme: light)").matches;
+}
+
+/** 读取上次的主题，只用来在设置读到之前避免闪一下，缺省深色 */
 function readTheme(): ThemeName {
 	const stored = localStorage.getItem(THEME_KEY);
-	if (stored === "light") {
-		return "light";
-	}
-	if (stored === "system") {
-		return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
-	}
-	return "dark";
+	const mode = THEME_MODES.find((candidate) => candidate === stored) ?? DEFAULT_DARK_THEME;
+	return isDarkTheme(resolveUiTheme(mode, prefersLight())) ? "dark" : "light";
 }
 
 /**
@@ -109,7 +114,7 @@ function readTheme(): ThemeName {
  */
 function applyAppearance(appearance: FacetSettings["appearance"]): void {
 	const root = document.documentElement;
-	root.dataset.theme = appearance.theme === "light" ? "light" : "dark";
+	root.dataset.theme = resolveUiTheme(appearance.theme, prefersLight());
 	root.dataset.motion = appearance.reducedMotion ? "reduced" : "full";
 	if (appearance.bodyFont.trim().length > 0) {
 		root.style.setProperty("--font-sans", appearance.bodyFont.trim());
@@ -125,12 +130,9 @@ function applyAppearance(appearance: FacetSettings["appearance"]): void {
 	localStorage.setItem(THEME_KEY, appearance.theme);
 }
 
-/** 把设置里的主题换成实际生效的深浅色。 */
+/** 把设置里的主题换成实际生效的深浅色，侧栏的切换按钮按它决定图标与文案。 */
 function resolveTheme(mode: FacetSettings["appearance"]["theme"]): ThemeName {
-	if (mode === "system") {
-		return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
-	}
-	return mode;
+	return isDarkTheme(resolveUiTheme(mode, prefersLight())) ? "dark" : "light";
 }
 
 /** 把一条项目并进列表：同一个标识就替换，没有就追加，保持原有顺序。 */
@@ -237,9 +239,10 @@ export function App() {
 	 *
 	 * 外观立刻生效，同时写回设置；写不进去时界面按新主题显示，下次启动回到原来的值。
 	 */
+	// 侧栏的快捷切换只在浅色与缺省深色之间来回，其余配色在设置页里选
 	const toggleTheme = useCallback(() => {
-		const next = theme === "dark" ? "light" : "dark";
-		setTheme(next);
+		const next = theme === "dark" ? "light" : DEFAULT_DARK_THEME;
+		setTheme(next === "light" ? "light" : "dark");
 		const changed: FacetSettings = {
 			...settings,
 			appearance: { ...settings.appearance, theme: next },
@@ -739,6 +742,15 @@ export function App() {
 		return [local, ...PLACEHOLDER_HOSTS];
 	}, [host, endpoint]);
 
+	// 代码高亮的配色与深浅一起下发，正文里的代码块按它取 shiki 主题
+	const codeThemeValue = useMemo(
+		() => ({
+			theme: settings.appearance.codeTheme,
+			isDark: resolveTheme(settings.appearance.theme) === "dark",
+		}),
+		[settings.appearance.codeTheme, settings.appearance.theme],
+	);
+
 	if (phase === "failed") {
 		return (
 			<main className="boot">
@@ -775,168 +787,179 @@ export function App() {
 	}
 
 	return (
-		<div className="shell">
-			<SessionSidebar
-				sessions={sessions}
-				hosts={hosts}
-				projects={projects}
-				activeFile={activeFile}
-				runningFile={activity === "idle" ? undefined : activeFile}
-				runningDot={activity === "compacting" ? "compacting" : "running"}
-				createCwd={createCwd}
-				theme={theme}
-				onSelect={(path) => void openSession(path)}
-				onCreate={(cwd) => {
-					setCreateCwd(cwd);
-					void createSession(cwd);
-				}}
-				canCreate={phase === "ready"}
-				onAddProject={() => setIsProjectDialogOpen(true)}
-				isProjectsStale={isProjectsStale}
-				onRefreshProjects={() => void refreshProjects()}
-				onRenameProject={renameProject}
-				onRemoveProject={removeProject}
-				onRevealProject={revealProject}
-				onRenameSession={renameSession}
-				onDeleteSession={deleteSession}
-				onToggleTheme={toggleTheme}
-				onOpenSettings={() => {
-					setView("settings");
-				}}
-				isSettingsOpen={view === "settings"}
-			/>
-
-			<main className="main">
-				{view === "settings" ? (
-					<SettingsPage
-						section={settingsSection}
-						onSectionChange={setSettingsSection}
-						onClose={() => setView("chat")}
-						data={settingsData}
-						onSettingsApplied={setSettings}
-						about={{
-							appVersion: bridge.appVersion,
-							runtime: `Electron ${bridge.platform}`,
-							endpoint,
-						}}
-					/>
-				) : session === undefined ? (
-					<div className="empty-wrap">
-						{errorBar}
-						<EmptyState
-							cwd={emptyCreateCwd}
-							canCreate={phase === "ready"}
-							onCreate={() => {
-								if (emptyCreateCwd !== undefined) {
-									createSession(emptyCreateCwd);
-								}
-							}}
-							onAddProject={() => setIsProjectDialogOpen(true)}
-						/>
-					</div>
-				) : (
-					<>
-						<section className="scroll" ref={scrollRef}>
-							<div className="column">
-								<ChatTranscript
-									items={transcript}
-									canFork={canFork}
-									onFork={forkTurn}
-									canRevert={canFork}
-									onRevert={revertTo}
-									retry={retryOf(session.state.maintenance)}
-									onRetryTurn={retryTurn}
-									onOpenSettings={() => {
-										setSettingsSection("providers");
-										setView("settings");
-									}}
-									onCopyDetails={(text) => {
-										void navigator.clipboard.writeText(text).catch(() => undefined);
-									}}
-									renames={chat?.renames}
-									emptyHint="还没有消息,输入内容开始"
-								/>
-							</div>
-						</section>
-
-						<div className="footer">
-							{isPinned ? null : (
-								<button
-									type="button"
-									className="to-bottom"
-									aria-label="回到底部"
-									onClick={() => scrollToBottom("smooth")}
-								>
-									<ArrowDownIcon size={16} />
-								</button>
-							)}
-							<div className="footer-column">
-								{errorBar}
-								<QueueStrip queued={queued} onClear={takeBackQueue} />
-								<Composer
-									value={draft}
-									onChange={updateDraft}
-									onSend={send}
-									onStop={() => client.cancel()}
-									activity={activity}
-									model={session.state.model}
-									thinkingLevel={session.state.thinkingLevel}
-									thinkingLevels={session.state.availableThinkingLevels}
-									models={visibleModels}
-									providerAuth={providerAuth}
-									onModelChange={(next) => client.setModel({ provider: next.provider, id: next.id })}
-									onThinkingLevelChange={(level) => client.setThinkingLevel(level)}
-									onSetDefaultModel={(next) =>
-										void client
-											.saveSettings({
-												...settings,
-												defaultModel: { provider: next.provider, id: next.id },
-											})
-											.then(setSettings)
-											.catch(() => undefined)
-									}
-									onSetDefaultThinkingLevel={(level) =>
-										void client
-											.saveSettings({ ...settings, defaultThinkingLevel: level })
-											.then(setSettings)
-											.catch(() => undefined)
-									}
-									shiftEnterToSend={settings.input.sendKey === "shiftEnter"}
-									blockedReason={blockedReason}
-								/>
-
-								{chat && chat.notices.length > 0 ? (
-									<div className="notices">
-										{chat.notices.map((notice) => (
-											<span
-												key={`${notice.level}:${notice.message}`}
-												className={notice.level === "error" ? "chip is-error" : "chip"}
-											>
-												{notice.message}
-											</span>
-										))}
-									</div>
-								) : null}
-							</div>
-						</div>
-					</>
-				)}
-			</main>
-
-			<CreateProjectDialog
-				isOpen={isProjectDialogOpen}
-				onPickFolder={() => window.facet.pickDirectory()}
-				onCreate={createProject}
-				onClose={() => setIsProjectDialogOpen(false)}
-			/>
-
-			{trustPrompt ? (
-				<TrustDialog
-					cwd={trustPrompt.cwd}
-					onDecide={decideTrust}
-					onCancel={() => setTrustPrompt(undefined)}
+		<CodeThemeProvider value={codeThemeValue}>
+			<div className="shell">
+				<SessionSidebar
+					sessions={sessions}
+					hosts={hosts}
+					projects={projects}
+					activeFile={activeFile}
+					runningFile={activity === "idle" ? undefined : activeFile}
+					runningDot={activity === "compacting" ? "compacting" : "running"}
+					createCwd={createCwd}
+					theme={theme}
+					onSelect={(path) => void openSession(path)}
+					onCreate={(cwd) => {
+						setCreateCwd(cwd);
+						void createSession(cwd);
+					}}
+					canCreate={phase === "ready"}
+					onAddProject={() => setIsProjectDialogOpen(true)}
+					isProjectsStale={isProjectsStale}
+					onRefreshProjects={() => void refreshProjects()}
+					onRenameProject={renameProject}
+					onRemoveProject={removeProject}
+					onRevealProject={revealProject}
+					onRenameSession={renameSession}
+					onDeleteSession={deleteSession}
+					onToggleTheme={toggleTheme}
+					onOpenSettings={() => {
+						setView("settings");
+					}}
+					isSettingsOpen={view === "settings"}
 				/>
-			) : null}
-		</div>
+
+				<main className="main">
+					{view === "settings" ? (
+						<SettingsPage
+							section={settingsSection}
+							onSectionChange={setSettingsSection}
+							onClose={() => {
+								// 预览过但没保存的外观回到已保存的那份
+								applyAppearance(settings.appearance);
+								setTheme(resolveTheme(settings.appearance.theme));
+								setView("chat");
+							}}
+							data={settingsData}
+							onSettingsApplied={setSettings}
+							onAppearancePreview={(appearance) => {
+								applyAppearance(appearance);
+								setTheme(resolveTheme(appearance.theme));
+							}}
+							about={{
+								appVersion: bridge.appVersion,
+								runtime: `Electron ${bridge.platform}`,
+								endpoint,
+							}}
+						/>
+					) : session === undefined ? (
+						<div className="empty-wrap">
+							{errorBar}
+							<EmptyState
+								cwd={emptyCreateCwd}
+								canCreate={phase === "ready"}
+								onCreate={() => {
+									if (emptyCreateCwd !== undefined) {
+										createSession(emptyCreateCwd);
+									}
+								}}
+								onAddProject={() => setIsProjectDialogOpen(true)}
+							/>
+						</div>
+					) : (
+						<>
+							<section className="scroll" ref={scrollRef}>
+								<div className="column">
+									<ChatTranscript
+										items={transcript}
+										canFork={canFork}
+										onFork={forkTurn}
+										canRevert={canFork}
+										onRevert={revertTo}
+										retry={retryOf(session.state.maintenance)}
+										onRetryTurn={retryTurn}
+										onOpenSettings={() => {
+											setSettingsSection("providers");
+											setView("settings");
+										}}
+										onCopyDetails={(text) => {
+											void navigator.clipboard.writeText(text).catch(() => undefined);
+										}}
+										renames={chat?.renames}
+										emptyHint="还没有消息,输入内容开始"
+									/>
+								</div>
+							</section>
+
+							<div className="footer">
+								{isPinned ? null : (
+									<button
+										type="button"
+										className="to-bottom"
+										aria-label="回到底部"
+										onClick={() => scrollToBottom("smooth")}
+									>
+										<ArrowDownIcon size={16} />
+									</button>
+								)}
+								<div className="footer-column">
+									{errorBar}
+									<QueueStrip queued={queued} onClear={takeBackQueue} />
+									<Composer
+										value={draft}
+										onChange={updateDraft}
+										onSend={send}
+										onStop={() => client.cancel()}
+										activity={activity}
+										model={session.state.model}
+										thinkingLevel={session.state.thinkingLevel}
+										thinkingLevels={session.state.availableThinkingLevels}
+										models={visibleModels}
+										providerAuth={providerAuth}
+										onModelChange={(next) => client.setModel({ provider: next.provider, id: next.id })}
+										onThinkingLevelChange={(level) => client.setThinkingLevel(level)}
+										onSetDefaultModel={(next) =>
+											void client
+												.saveSettings({
+													...settings,
+													defaultModel: { provider: next.provider, id: next.id },
+												})
+												.then(setSettings)
+												.catch(() => undefined)
+										}
+										onSetDefaultThinkingLevel={(level) =>
+											void client
+												.saveSettings({ ...settings, defaultThinkingLevel: level })
+												.then(setSettings)
+												.catch(() => undefined)
+										}
+										shiftEnterToSend={settings.input.sendKey === "shiftEnter"}
+										blockedReason={blockedReason}
+									/>
+
+									{chat && chat.notices.length > 0 ? (
+										<div className="notices">
+											{chat.notices.map((notice) => (
+												<span
+													key={`${notice.level}:${notice.message}`}
+													className={notice.level === "error" ? "chip is-error" : "chip"}
+												>
+													{notice.message}
+												</span>
+											))}
+										</div>
+									) : null}
+								</div>
+							</div>
+						</>
+					)}
+				</main>
+
+				<CreateProjectDialog
+					isOpen={isProjectDialogOpen}
+					onPickFolder={() => window.facet.pickDirectory()}
+					onCreate={createProject}
+					onClose={() => setIsProjectDialogOpen(false)}
+				/>
+
+				{trustPrompt ? (
+					<TrustDialog
+						cwd={trustPrompt.cwd}
+						onDecide={decideTrust}
+						onCancel={() => setTrustPrompt(undefined)}
+					/>
+				) : null}
+			</div>
+		</CodeThemeProvider>
 	);
 }

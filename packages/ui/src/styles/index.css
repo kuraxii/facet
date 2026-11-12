@@ -1,39 +1,11 @@
-/* 界面样式。深色为默认，变量集中在此，浅色主题另加一组覆盖。 */
+/* 界面样式。配色变量在 theme.css，这里放与配色无关的变量与全部组件样式。 */
 @import "./fonts.css";
 @import "@fontsource/inter/400.css";
 @import "@fontsource/inter/500.css";
 @import "@fontsource/inter/600.css";
+@import "./theme.css";
 
 :root {
-	color-scheme: dark;
-	--bg: #0b0b0d;
-	--sb: #0f1012;
-	--card: #131316;
-	--card2: #1a1a1f;
-	/* 悬浮与选中态，分别对应设计里的 Surface 2 与 Surface 3 */
-	--surface2: #16161a;
-	--surface3: #1e1e24;
-	/* 强调色底上的文字色 */
-	--on-acc: #0b0b0d;
-	--line: #222228;
-	--line2: #2e2e36;
-	--t1: #ececf0;
-	--t2: #a6a6b0;
-	--t3: #81818b;
-	--acc: #8b93ff;
-	--accbg: #1c1e3d;
-	--ok: #6ee7a8;
-	--okbg: #12281d;
-	--err: #f08a8a;
-	--errbg: #2a1517;
-	--warn: #e0b889;
-	--warnbg: #241d11;
-	--warnbd: #4a3a1c;
-	--add: #6fbf7f;
-	--del: #e58088;
-	--addbg: #10231a;
-	--delbg: #2a1316;
-	--user: #1b1c24;
 	/* 界面字体与代码字体，两者都随构建产物一起打进应用 */
 	--font-sans: Inter, "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
 	--font-mono: "Maple Mono", "Maple Mono CN", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -43,45 +15,8 @@
 	--ease: cubic-bezier(0.2, 0.6, 0.3, 1);
 	--dur-fast: 120ms;
 	--dur-slow: 180ms;
-	/* 代码块卡片的底色,比正文卡片略深一档 */
-	--code-surface: #101013;
-	--markdown-code-text: #d4d4db;
-	--markdown-code-bg: #1a1a1f;
 	/* 代码字号乘数,由设置里的字号档位写入 */
 	--fs-code-scale: 1;
-}
-
-:root[data-theme="light"] {
-	color-scheme: light;
-	--bg: #fbfbfc;
-	--sb: #f5f5f7;
-	--card: #ffffff;
-	--card2: #f1f1f4;
-	--surface2: #ececf0;
-	--surface3: #e2e2e9;
-	--on-acc: #ffffff;
-	--line: #e6e6ea;
-	--line2: #d6d6dc;
-	--t1: #1b1b1f;
-	--t2: #4a4a55;
-	--t3: #71717d;
-	--acc: #4c56cf;
-	--accbg: #ecedfb;
-	--ok: #2f8f57;
-	--okbg: #e8f6ee;
-	--err: #c2454f;
-	--errbg: #fdeced;
-	--warn: #8a6222;
-	--warnbg: #fdf3e2;
-	--warnbd: #eed9b4;
-	--add: #2f8f57;
-	--del: #c2454f;
-	--addbg: #eaf6ee;
-	--delbg: #fdecee;
-	--user: #f2f2f6;
-	--code-surface: #f7f7f9;
-	--markdown-code-text: #3f3f46;
-	--markdown-code-bg: #f1f1f4;
 }
 
 * {
@@ -226,7 +161,7 @@ svg.fl {
 	padding: 0 10px;
 	border: 0;
 	border-radius: 6px;
-	background: var(--acc);
+	background: var(--acc-fill);
 	color: var(--on-acc);
 	font-size: 13px;
 	font-weight: 500;
@@ -617,7 +552,7 @@ svg.fl {
 }
 
 .sb-row.is-active {
-	background: var(--surface3);
+	background: var(--surface4);
 	color: var(--t1);
 }
 
@@ -1043,7 +978,11 @@ svg.fl {
 	width: 7px;
 	height: 7px;
 	border-radius: 50%;
-	background: var(--ok);
+	background: var(--dot-ok);
+}
+
+.dot.is-run {
+	background: var(--dot-run);
 }
 
 .dot.is-acc {
@@ -1051,7 +990,7 @@ svg.fl {
 }
 
 .dot.is-warn {
-	background: var(--warn);
+	background: var(--dot-warn);
 }
 
 .dot.is-off {
@@ -1468,7 +1407,7 @@ svg.fl {
 }
 
 .btn.pri:hover {
-	background: #fff;
+	filter: brightness(1.12);
 }
 
 /* 底部区 */
@@ -1564,8 +1503,8 @@ svg.fl {
 	height: 34px;
 	border: 0;
 	border-radius: 10px;
-	background: var(--acc);
-	color: #0b0b0d;
+	background: var(--acc-fill);
+	color: var(--on-acc);
 }
 
 .send:disabled {
@@ -1626,20 +1565,20 @@ svg.fl {
 /* markstream 自己的变量换成本项目的配色 */
 .md .markstream-react,
 .md .markstream-react.dark {
-	--background: #131316;
-	--foreground: #ececf0;
-	--border: #222228;
-	--secondary: #1a1a1f;
-	--muted: #1a1a1f;
-	--muted-foreground: #a6a6b0;
-	--code-bg: #131316;
-	--code-fg: #a6a6b0;
-	--code-border: #222228;
-	--code-header-bg: #131316;
-	--code-action-fg: #81818b;
-	--code-action-hover-bg: #1a1a1f;
-	--code-action-hover-fg: #ececf0;
-	--code-line-number: #81818b;
+	--background: var(--card);
+	--foreground: var(--t1);
+	--border: var(--line);
+	--secondary: var(--card2);
+	--muted: var(--card2);
+	--muted-foreground: var(--t2);
+	--code-bg: var(--code-surface);
+	--code-fg: var(--t2);
+	--code-border: var(--line);
+	--code-header-bg: var(--code-surface);
+	--code-action-fg: var(--t3);
+	--code-action-hover-bg: var(--card2);
+	--code-action-hover-fg: var(--t1);
+	--code-line-number: var(--t3);
 	--ms-font-sans: var(--font-sans);
 	--ms-size-code-max-height: 360px;
 	font-size: 14px;
@@ -2253,6 +2192,11 @@ svg.fl {
 	display: flex;
 	flex-direction: column;
 	gap: 5px;
+	/* 主题那一组用 fieldset 承载，去掉它自带的边框与缩进 */
+	margin: 0;
+	padding: 0;
+	border: 0;
+	min-width: 0;
 }
 
 .set-label {
@@ -2276,6 +2220,52 @@ svg.fl {
 	gap: 7px;
 	color: var(--t2);
 	font-size: 12.5px;
+}
+
+/* 主题色板：一排放得下，选中时描边用强调色 */
+.set-swatches {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.set-swatch {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 28px;
+	padding: 0 9px 0 6px;
+	border: 1px solid var(--line2);
+	border-radius: 7px;
+	background: var(--card2);
+	color: var(--t2);
+	font-size: 12px;
+}
+
+.set-swatch:hover {
+	border-color: var(--t3);
+	color: var(--t1);
+}
+
+.set-swatch.is-active {
+	border-color: var(--acc);
+	color: var(--t1);
+}
+
+.set-swatch-chip {
+	width: 14px;
+	height: 14px;
+	border: 1px solid var(--line2);
+	border-radius: 4px;
+}
+
+/* 跟随系统没有单一颜色，用深浅各一半表示 */
+.set-swatch-chip.is-system {
+	background: linear-gradient(135deg, #f4f4f5 0 50%, #272a29 50% 100%);
+}
+
+.set-swatch-name {
+	white-space: nowrap;
 }
 
 .set-list {
@@ -2431,8 +2421,8 @@ svg.fl {
 	padding: 0 16px;
 	border: 0;
 	border-radius: 7px;
-	background: var(--acc);
-	color: #fff;
+	background: var(--acc-fill);
+	color: var(--on-acc);
 	font-size: 12.5px;
 }
 
@@ -2501,8 +2491,8 @@ svg.fl {
 	padding: 0 14px;
 	border: 0;
 	border-radius: 8px;
-	background: var(--acc);
-	color: #fff;
+	background: var(--acc-fill);
+	color: var(--on-acc);
 	font-size: 12.5px;
 	font-weight: 500;
 }

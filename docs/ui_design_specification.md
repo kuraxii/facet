@@ -7,28 +7,41 @@
 ## 1. 设计系统基础 (Design Tokens)
 
 ### 1.1 颜色系统 (Color System)
-系统全面支持浅色 (Light) 和深色 (Dark) 双主题，所有颜色应作为变量/枚举（Tokens）在系统中全局定义。
+配色取自 paseo：一套浅色加六套深色，全部以 CSS 变量定义在 `packages/ui/src/styles/theme.css`，组件只读变量。缺省为深色的 `paseo`，`跟随系统` 在系统偏浅时用 `light`，否则用 `paseo`。
+
+| 配色 | 取向 | 代表色 |
+|---|---|---|
+| `light` | 浅色 | `#ffffff` |
+| `paseo` | 深色（缺省） | `#2d8b62` |
+| `zinc` | 深色，中性灰 | `#808080` |
+| `midnight` | 深色，蓝调 | `#4a6ba8` |
+| `claude` | 深色，暖棕 | `#d97757` |
+| `ghostty` | 深色，石板蓝 | `#8caaee` |
+| `pureBlack` | 深色，纯黑底 | `#000000` |
+
+每套配色都填满同一组变量，取值含义如下。表里的参考值是 `paseo` 与 `light` 两套。
 
 *   **表面背景色 (Surfaces)**：用于构建层级关系。
-    *   `Surface 0`：最底层背景（主视口区）。深色 `#0b0b0d` / 浅色 `#fbfbfc`
-    *   `Surface 1`：一级面板（侧边栏、文件栏、代码块底色）。深色 `#0f1012` / 浅色 `#f5f5f7`
-    *   `Surface 2`：悬浮状态、二级面板（Hover状态、弹窗底色）。深色 `#16161a` / 浅色 `#ececf0`
-    *   `Surface 3`：高亮选中态（当前激活项）。深色 `#1e1e24` / 浅色 `#e2e2e9`
+    *   `--bg`：最底层背景（主视口区）。paseo `#181b1a` / light `#ffffff`
+    *   `--sb`：侧边栏。paseo `#141716` / light `#f4f4f5`
+    *   `--card` / `--card2`：一级面板与其中的卡片。paseo `#1e2120` / `#272a29`，light `#fafafa` / `#f4f4f5`
+    *   `--surface2` / `--surface3` / `--surface4`：悬浮、选中与按下三档。选中的会话行用 `--surface4`
 *   **文本颜色 (Text)**：
-    *   `Text 1`：主文本（标题、正文）。深色 `#ececf0` / 浅色 `#16161a`
-    *   `Text 2`：次文本（描述、次要信息）。深色 `#a6a6b0` / 浅色 `#4b4b56`
-    *   `Text 3`：弱文本（占位符、辅助时间/数据）。深色 `#8a8a94` / 浅色 `#6b6b76`
+    *   `--t1`：主文本（标题、正文）。paseo `#fafafa` / light `#1a1a1e`
+    *   `--t2`：次文本（描述、次要信息）。paseo `#a1a5a4` / light `#71717a`
+    *   `--t3`：弱文本（占位符、辅助时间/数据）。paseo `#717574` / light `#a1a1aa`
 *   **边框与分割线 (Lines)**：
-    *   `Line`：常规分割线、边框。深色 `#22222a` / 浅色 `#e2e2e8`
-    *   `Line Strong`：强调边框（输入框默认边框）。深色 `#6b6b76` / 浅色 `#74747c`
+    *   `--line`：常规分割线、边框。paseo `#252b2a` / light `#e4e4e7`
+    *   `--line2`：强调边框（输入框默认边框）。paseo `#2f3534` / light `#ececf1`
 *   **语义色 (Semantic)**：
-    *   `Accent`：品牌主题色（按钮、激活焦点、链接）。深色 `#8b93ff` / 浅色 `#4c56cf`
-    *   `Success/Ok`：成功状态。深色 `#6ee7a8` / 浅色 `#2f8f57`
-    *   `Warning/Warn`：警告、进行中。深色 `#e0b889` / 浅色 `#8a6222`
-    *   `Error/Err`：失败、错误。深色 `#f08a8a` / 浅色 `#c2454f`
+    *   `--acc`：强调色的文字版（链接、聚焦描边、指示条）。paseo `#7ccba0` / light `#239956`
+    *   `--acc-fill`：强调色的填充版（主按钮底色），配 `--on-acc` 的文字。paseo `#20744a` / light `#20744a`
+    *   `--ok` / `--warn` / `--err`：成功、警告、失败。状态文字与图标用它，底纹用同色的 `--okbg` / `--warnbg` / `--errbg`
+    *   `--dot-ok` / `--dot-warn` / `--dot-err` / `--dot-run`：列表行上的状态点。点只有 6pt，彩度比状态色更高一档
 *   **Diff 差异色 (Code Diff)**：
-    *   `Add` (文本): 深 `#6fbf7f` / 浅 `#2f8f57` | `Add BG` (背景): 深 `#10231a` / 浅 `#eaf6ee`
-    *   `Del` (文本): 深 `#e58088` / 浅 `#c2454f` | `Del BG` (背景): 深 `#2a1316` / 浅 `#fdecee`
+    *   `--add` / `--del`：差异文本色。paseo `#4ade80` / `#ef4444`，light `#15803d` / `#b91c1c`
+    *   `--addbg` / `--delbg`：差异行的底色，取同色 16% 透明度
+*   **代码配色 (Code Highlight)**：代码块与差异视图的语法高亮另有一套配色，可选 GitHub、Catppuccin、Dracula、Tokyo Night、One、Nord、Gruvbox、Solarized，浅深跟随界面主题。
 
 ### 1.2 排版规范 (Typography)
 *   **无衬线字体 (Sans-serif)**：`Inter`（随构建打包）, `Noto Sans SC`, 系统默认字体。用于常规界面文本；汉字由系统字体承担。
@@ -79,7 +92,7 @@
         *   空心圆环：离线/未激活。
 *   **底部区域**：
     *   **主机状态条 (Hosts Bar)**：横向排列，展示当前连接的主机及会话数。
-    *   **页脚 (Footer)**：设置按钮和深浅色切换按钮。
+    *   **页脚 (Footer)**：设置按钮和主题切换按钮，后者在浅色与缺省深色之间来回。
 
 ### 3.2 主工作区 (Main - 聊天与编辑器)
 *   **顶部导航 (Workspace Header)**：
@@ -127,7 +140,7 @@
 
 1.  **组件溢出 (Overflow)**：文件路径、项目名称等长文本必须处理文本截断，统一使用单行省略号 (`text-overflow: ellipsis`)。
 2.  **状态互斥 (State Toggling)**：
-    *   深浅色模式切换会改变根节点的 CSS 变量。
+    *   主题切换会改写根节点的 `data-theme`，配色按此选择变量组；代码配色同时随深浅切换版本。
     *   右面板的隐藏与显示会改变整体 Grid 的列数分配或触发弹窗定位。
     *   对话输入时的“引用文件”，可通过在代码编辑器中点击行号（支持 Shift 多选）触发引用标签生成。
 3.  **浮出层定位 (Popover Positioning)**：项目选择下拉菜单需自动计算上下可用空间。如果底部空间不足且顶部空间充足，菜单应当向上弹出（底对齐），防止遮挡视口。

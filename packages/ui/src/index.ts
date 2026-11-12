@@ -47,8 +47,21 @@ export { useStickToBottom } from "./chat/use-stick-to-bottom.ts";
 export type { CodeBlockShape } from "./markdown/code-block-state.ts";
 export { shouldShowCodeBlock } from "./markdown/code-block-state.ts";
 export { extractLangToken, PLAIN, resolveCodeLang } from "./markdown/code-lang.ts";
+export type { CodeThemeValue } from "./markdown/code-theme.tsx";
+export { CodeThemeProvider, useCodeTheme } from "./markdown/code-theme.tsx";
 export type { MarkdownProps } from "./markdown/Markdown.tsx";
 export { Markdown } from "./markdown/Markdown.tsx";
+export type { CodeThemeOption, UiThemeOption } from "./theme.ts";
+export {
+	CODE_THEME_OPTIONS,
+	codeThemeName,
+	DEFAULT_DARK_THEME,
+	isDarkTheme,
+	resolveUiTheme,
+	THEME_MODES,
+	UI_THEME_OPTIONS,
+	uiThemeLabel,
+} from "./theme.ts";
 export type { DiffChunk, DisplayRow, ForkPoint, RowKind } from "./transcript/group.ts";
 export { formatDuration, groupRows, metaSummary } from "./transcript/group.ts";
 export { ArrowDownIcon, CloseIcon } from "./transcript/icons.tsx";

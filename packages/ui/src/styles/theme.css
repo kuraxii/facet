@@ -1,0 +1,276 @@
+/*
+ * 界面配色。
+ *
+ * 取自 paseo 的调色板：一套浅色加六套深色。所有主题用同一组变量名，组件只读变量，
+ * 不关心当前是哪一套。深色为缺省（paseo），浅色与跟随系统都由 data-theme 决定。
+ */
+
+:root,
+:root[data-theme="paseo"] {
+	color-scheme: dark;
+	--bg: #181b1a;
+	--sb: #141716;
+	--card: #1e2120;
+	--card2: #272a29;
+	--surface2: #272a29;
+	--surface3: #434645;
+	--surface4: #595b5b;
+	--line: #252b2a;
+	--line2: #2f3534;
+	--t1: #fafafa;
+	--t2: #a1a5a4;
+	--t3: #717574;
+	/* 强调色的文字版与填充版：填充版才够深到能压住白字 */
+	--acc: #7ccba0;
+	--acc-fill: #20744a;
+	--on-acc: #ffffff;
+	--ok: #6cb17b;
+	--okbg: #6cb17b29;
+	--err: #d8847b;
+	--errbg: #d8847b29;
+	--warn: #c09664;
+	--warnbg: #c0966429;
+	--warnbd: #4a3f28;
+	--add: #4ade80;
+	--del: #ef4444;
+	--addbg: #4ade8029;
+	--delbg: #ef444429;
+	--user: #272a29;
+	/* 状态点比状态文字更亮，6pt 的点要靠彩度站住 */
+	--dot-ok: #35c264;
+	--dot-warn: #db932e;
+	--dot-err: #f7796d;
+	--dot-run: #5caaf6;
+	--code-surface: #252827;
+	--markdown-code-text: #d4d4d8;
+	--markdown-code-bg: #252827;
+}
+
+:root[data-theme="light"] {
+	color-scheme: light;
+	--bg: #ffffff;
+	--sb: #f4f4f5;
+	--card: #fafafa;
+	--card2: #f4f4f5;
+	--surface2: #f4f4f5;
+	--surface3: #e4e4e7;
+	--surface4: #d4d4d8;
+	--line: #e4e4e7;
+	--line2: #ececf1;
+	--t1: #1a1a1e;
+	--t2: #71717a;
+	--t3: #a1a1aa;
+	--acc: #239956;
+	--acc-fill: #20744a;
+	--on-acc: #ffffff;
+	--ok: #3e704a;
+	--okbg: #3e704a1f;
+	--err: #9d433b;
+	--errbg: #9d433b1f;
+	--warn: #7b5d39;
+	--warnbg: #7b5d391f;
+	--warnbd: #eed9b4;
+	--add: #15803d;
+	--del: #b91c1c;
+	--addbg: #15803d1f;
+	--delbg: #b91c1c1f;
+	--user: #f4f4f5;
+	--dot-ok: #299f51;
+	--dot-warn: #b37824;
+	--dot-err: #f12e2f;
+	--dot-run: #268ae0;
+	--code-surface: #f6f6f6;
+	--markdown-code-text: #3f3f46;
+	--markdown-code-bg: #f6f6f6;
+}
+
+:root[data-theme="zinc"] {
+	color-scheme: dark;
+	--bg: #18181b;
+	--sb: #131316;
+	--card: #1f1f22;
+	--card2: #27272a;
+	--surface2: #27272a;
+	--surface3: #3f3f46;
+	--surface4: #52525b;
+	--line: #27272a;
+	--line2: #303036;
+	--t1: #fafafa;
+	--t2: #a1a1aa;
+	--t3: #71717a;
+	/* 单色强调：近白的强调色配深色文字 */
+	--acc: #e4e4e7;
+	--acc-fill: #e4e4e7;
+	--on-acc: #18181b;
+	--ok: #6cb17b;
+	--okbg: #6cb17b29;
+	--err: #d8847b;
+	--errbg: #d8847b29;
+	--warn: #c09664;
+	--warnbg: #c0966429;
+	--warnbd: #4a4436;
+	--add: #4ade80;
+	--del: #ef4444;
+	--addbg: #4ade8029;
+	--delbg: #ef444429;
+	--user: #27272a;
+	--dot-ok: #35c264;
+	--dot-warn: #db932e;
+	--dot-err: #f7796d;
+	--dot-run: #5caaf6;
+	--code-surface: #242427;
+	--markdown-code-text: #d4d4d8;
+	--markdown-code-bg: #242427;
+}
+
+:root[data-theme="midnight"] {
+	color-scheme: dark;
+	--bg: #161820;
+	--sb: #121420;
+	--card: #1c1e27;
+	--card2: #252731;
+	--surface2: #252731;
+	--surface3: #3c3e4c;
+	--surface4: #535564;
+	--line: #242636;
+	--line2: #2e3040;
+	--t1: #fafafa;
+	--t2: #9a9db0;
+	--t3: #6b6e82;
+	--acc: #7eaaeb;
+	--acc-fill: #3b6fcf;
+	--on-acc: #ffffff;
+	--ok: #6cb17b;
+	--okbg: #6cb17b29;
+	--err: #d8847b;
+	--errbg: #d8847b29;
+	--warn: #c09664;
+	--warnbg: #c0966429;
+	--warnbd: #443d28;
+	--add: #4ade80;
+	--del: #ef4444;
+	--addbg: #4ade8029;
+	--delbg: #ef444429;
+	--user: #252731;
+	--dot-ok: #35c264;
+	--dot-warn: #db932e;
+	--dot-err: #f7796d;
+	--dot-run: #5caaf6;
+	--code-surface: #222430;
+	--markdown-code-text: #d4d4d8;
+	--markdown-code-bg: #222430;
+}
+
+:root[data-theme="claude"] {
+	color-scheme: dark;
+	--bg: #1f1f1e;
+	--sb: #1a1918;
+	--card: #262523;
+	--card2: #2f2d2b;
+	--surface2: #2f2d2b;
+	--surface3: #4a4745;
+	--surface4: #605d5b;
+	--line: #2c2a27;
+	--line2: #36332f;
+	--t1: #fafafa;
+	--t2: #ada9a5;
+	--t3: #78746f;
+	--acc: #e89a7f;
+	--acc-fill: #d97757;
+	--on-acc: #ffffff;
+	--ok: #6cb17b;
+	--okbg: #6cb17b29;
+	--err: #d8847b;
+	--errbg: #d8847b29;
+	--warn: #c09664;
+	--warnbg: #c0966429;
+	--warnbd: #4a4029;
+	--add: #4ade80;
+	--del: #ef4444;
+	--addbg: #4ade8029;
+	--delbg: #ef444429;
+	--user: #2f2d2b;
+	--dot-ok: #35c264;
+	--dot-warn: #db932e;
+	--dot-err: #f7796d;
+	--dot-run: #5caaf6;
+	--code-surface: #2a2826;
+	--markdown-code-text: #d4d4d8;
+	--markdown-code-bg: #2a2826;
+}
+
+:root[data-theme="ghostty"] {
+	color-scheme: dark;
+	--bg: #282c34;
+	--sb: #21252d;
+	--card: #2f333d;
+	--card2: #383c48;
+	--surface2: #383c48;
+	--surface3: #4a4f5e;
+	--surface4: #5b6175;
+	--line: #353a47;
+	--line2: #3f4454;
+	--t1: #fafafa;
+	--t2: #c8ccd8;
+	--t3: #a0a4b2;
+	--acc: #b4d0fc;
+	--acc-fill: #3570e0;
+	--on-acc: #ffffff;
+	--ok: #6cb17b;
+	--okbg: #6cb17b29;
+	--err: #d8847b;
+	--errbg: #d8847b29;
+	--warn: #c09664;
+	--warnbg: #c0966429;
+	--warnbd: #4a4436;
+	--add: #4ade80;
+	--del: #ef4444;
+	--addbg: #4ade8029;
+	--delbg: #ef444429;
+	--user: #383c48;
+	--dot-ok: #35c264;
+	--dot-warn: #db932e;
+	--dot-err: #f7796d;
+	--dot-run: #5caaf6;
+	--code-surface: #323643;
+	--markdown-code-text: #d4d4d8;
+	--markdown-code-bg: #323643;
+}
+
+:root[data-theme="pureBlack"] {
+	color-scheme: dark;
+	--bg: #000000;
+	--sb: #000000;
+	--card: #0a0a0a;
+	--card2: #111111;
+	--surface2: #111111;
+	--surface3: #202020;
+	--surface4: #2d2d2d;
+	--line: #1c1c1c;
+	--line2: #242424;
+	--t1: #fafafa;
+	--t2: #a1a1aa;
+	--t3: #71717a;
+	--acc: #7ccba0;
+	--acc-fill: #20744a;
+	--on-acc: #ffffff;
+	--ok: #6cb17b;
+	--okbg: #6cb17b29;
+	--err: #d8847b;
+	--errbg: #d8847b29;
+	--warn: #c09664;
+	--warnbg: #c0966429;
+	--warnbd: #4a4436;
+	--add: #4ade80;
+	--del: #ef4444;
+	--addbg: #4ade8029;
+	--delbg: #ef444429;
+	--user: #111111;
+	--dot-ok: #35c264;
+	--dot-warn: #db932e;
+	--dot-err: #f7796d;
+	--dot-run: #5caaf6;
+	--code-surface: #0c0c0c;
+	--markdown-code-text: #d4d4d8;
+	--markdown-code-bg: #0c0c0c;
+}

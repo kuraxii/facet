@@ -6,7 +6,15 @@
  */
 import { readFile, rename } from "node:fs/promises";
 import { writeFileAtomic } from "@facet/agent";
-import { DEFAULT_SETTINGS, type FacetSettings, type SendKey, type ThemeMode } from "@facet/protocol";
+import {
+	CODE_THEMES,
+	type CodeTheme,
+	DEFAULT_SETTINGS,
+	type FacetSettings,
+	type SendKey,
+	type ThemeMode,
+	UI_THEMES,
+} from "@facet/protocol";
 
 /** 文件格式版本，读取时按它判断能否兼容。 */
 const FILE_VERSION = 1;
@@ -85,8 +93,13 @@ export function parseSettings(value: unknown): FacetSettings {
 		appearance: {
 			theme: readChoice<ThemeMode>(
 				appearance.theme,
-				["dark", "light", "system"],
+				[...UI_THEMES, "system"],
 				DEFAULT_SETTINGS.appearance.theme,
+			),
+			codeTheme: readChoice<CodeTheme>(
+				appearance.codeTheme,
+				CODE_THEMES,
+				DEFAULT_SETTINGS.appearance.codeTheme,
 			),
 			bodyFont: readString(appearance.bodyFont, DEFAULT_SETTINGS.appearance.bodyFont),
 			codeFont: readString(appearance.codeFont, DEFAULT_SETTINGS.appearance.codeFont),

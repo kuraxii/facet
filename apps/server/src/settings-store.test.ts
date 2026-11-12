@@ -66,6 +66,25 @@ describe("设置读取", () => {
 		expect(settings.appearance.reducedMotion).toBe(true);
 		expect(settings.input.sendKey).toBe(DEFAULT_SETTINGS.input.sendKey);
 		expect(settings.layout.sidebarWidth).toBe(200);
+		expect(settings.appearance.codeTheme).toBe(DEFAULT_SETTINGS.appearance.codeTheme);
+	});
+
+	it("清单外的主题取值回落到缺省配色", async () => {
+		await writeFile(file, JSON.stringify({ version: 1, appearance: { theme: "dark" } }), "utf8");
+		expect((await SettingsStore.open({ file })).get().appearance.theme).toBe(
+			DEFAULT_SETTINGS.appearance.theme,
+		);
+	});
+
+	it("主题与代码配色都只接受清单里的取值", async () => {
+		await writeFile(
+			file,
+			JSON.stringify({ version: 1, appearance: { theme: "midnight", codeTheme: "nord" } }),
+			"utf8",
+		);
+		const settings = (await SettingsStore.open({ file })).get();
+		expect(settings.appearance.theme).toBe("midnight");
+		expect(settings.appearance.codeTheme).toBe("nord");
 	});
 
 	it("版本不认识时回到缺省值", () => {

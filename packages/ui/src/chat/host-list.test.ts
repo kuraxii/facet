@@ -43,6 +43,15 @@ describe("normalizeEndpoint", () => {
 		expect(normalizeEndpoint("不是地址")).toBeUndefined();
 	});
 
+	it("user@host 收成 SSH 目标，端口 22 不写出来", () => {
+		expect(normalizeEndpoint("laptop")).toBeUndefined();
+		expect(normalizeEndpoint("dev@laptop")).toBe("ssh://dev@laptop");
+		expect(normalizeEndpoint("ssh://dev@laptop:2222")).toBe("ssh://dev@laptop:2222");
+		expect(normalizeEndpoint("ssh://dev@laptop:22")).toBe("ssh://dev@laptop");
+		expect(normalizeEndpoint("dev@[::1]:2200")).toBe("ssh://dev@[::1]:2200");
+		expect(normalizeEndpoint("dev@")).toBeUndefined();
+	});
+
 	it("没写端口的也当填错", () => {
 		expect(normalizeEndpoint("/tmp/whatever")).toBeUndefined();
 		expect(normalizeEndpoint("ws://laptop/endpoint")).toBeUndefined();
@@ -51,8 +60,9 @@ describe("normalizeEndpoint", () => {
 });
 
 describe("endpointLabel", () => {
-	it("直接给出 host:port", () => {
+	it("直接给出 host:port，SSH 目标去掉前缀", () => {
 		expect(endpointLabel("laptop:6767")).toBe("laptop:6767");
+		expect(endpointLabel("ssh://dev@laptop")).toBe("dev@laptop");
 		expect(endpointLabel("乱写的")).toBe("乱写的");
 	});
 });

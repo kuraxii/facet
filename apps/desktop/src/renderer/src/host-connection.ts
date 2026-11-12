@@ -17,7 +17,19 @@ export interface HostChannelBridge {
 	openHostChannel: (
 		target: string,
 		handlers: { onData: (chunk: string) => void; onClose: (reason: string) => void },
-	) => Promise<{ id: number; write: (text: string) => void; close: () => void }>;
+	) => Promise<{ id: number; token: string | undefined; write: (text: string) => void; close: () => void }>;
+}
+
+/**
+ * 去掉 IPC 包装，只留主进程给的说明。
+ *
+ * Electron 把 ipcMain 抛出的错误包成 `Error invoking remote method 'x': Error: 说明`，
+ * 界面上直接显示这串前缀看不懂。
+ */
+export function cleanHostError(error: unknown): Error {
+	const text = error instanceof Error ? error.message : String(error);
+	const stripped = text.replace(/^Error invoking remote method '[^']*': (?:\w*Error: )?/, "");
+	return new Error(stripped);
 }
 
 /** 建一个走主进程通道的传输。readTarget 每次重连都会重新读，切换主机后立即生效。 */
@@ -28,13 +40,12 @@ export function makeTransport(bridge: HostChannelBridge, readTarget: () => strin
 	const transport = new StreamTransport({
 		createStream: async () => {
 			const target = readTarget();
-			const local = await bridge.getLocalHost();
-			const token = target === LOCAL_TARGET ? local?.token : undefined;
 			const channel = await bridge.openHostChannel(target, {
 				onData: (chunk) => dataListener?.(chunk),
 				onClose: (reason) => closeListener?.(reason),
 			});
-			transport.setToken(token);
+			// 令牌由主进程按目标给出：本机读发现文件，远程由 SSH 读远端的主机发现文件
+			transport.setToken(channel.token);
 			return {
 				write: (text) => channel.write(text),
 				onData: (listener) => {
@@ -53,5 +64,15 @@ export function makeTransport(bridge: HostChannelBridge, readTarget: () => strin
 			};
 		},
 	});
+
+	// createStream 的失败会带着 IPC 前缀进到传输层，这里换成干净的说明
+	const connect = transport.connect.bind(transport);
+	transport.connect = async () => {
+		try {
+			return await connect();
+		} catch (error) {
+			throw cleanHostError(error);
+		}
+	};
 	return transport;
 }

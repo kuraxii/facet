@@ -43,7 +43,7 @@ FACET_ENDPOINT=ws://192.168.1.20:4319/endpoint npm run dev:client
 主机只跑一套按行编码的协议，跑在哪条字节流上都一样：
 
 - **本机**：缺省监听 TCP 回环地址；用 `FACET_SOCKET=/run/user/1000/facet.sock` 之类给出路径时改成监听 unix socket（Windows 上是命名管道），不再开 TCP 端口。
-- **远程**：协议本身不依赖 WebSocket，后续接 SSH 通道或中继时不用改协议层。
+- **远程**：主机清单里填 `user@host`（或 `ssh://user@host:端口`），桌面用进程内的 SSH 库连过去，读远端的发现文件拿到 socket 路径与令牌，再在远端 socket 上开一条通道；远端不开端口、本地也不开端口，协议层一行不用改。认证复用 `~/.ssh/config`、ssh-agent 与私钥；主机密钥按 `known_hosts` 校验（支持哈希条目），未知或变更的密钥直接拒绝。Windows 远端只监听命名管道时无法用 SSH 通道，退回走远端的 TCP 回环地址。
 - **令牌**：主机会生成一个随机令牌写进发现文件（`FACET_TOKEN` 可指定，`FACET_NO_TOKEN=1` 关闭校验）。连接的第一帧是 `{type:"auth",token}`，不匹配直接断开，拿不到 hello。发现文件权限 `0600`、所在目录 `0700`，socket 本身也是 `0600`。
 - **桌面不直连主机**：渲染进程在沙箱里，连接由主进程按目标建通道（本机按发现文件，远程按 `host:port`），界面只搬运帧。
 

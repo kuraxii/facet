@@ -7,7 +7,9 @@
  */
 import { connect, type Socket } from "node:net";
 import { type DiscoveryRecord, describeDiscovery } from "@facet/server";
+import type { StreamLike } from "@facet/transport";
 import type { WebContents } from "electron";
+import { isSshTarget, SshHosts } from "./ssh-host.ts";
 
 /** 数据帧事件：通道标识加一段文本。 */
 export const HOST_DATA_EVENT = "facet:host-data";
@@ -18,24 +20,40 @@ export const HOST_CLOSE_EVENT = "facet:host-close";
 export const LOCAL_TARGET = "local";
 
 interface Channel {
-	readonly socket: Socket;
+	/** 写一段文本给主机 */
+	write(text: string): void;
+	/** 关掉这条通道 */
+	close(): void;
+	/** 通道属于哪个窗口 */
 	readonly owner: number;
 }
 
-/** 解析目标：本机取发现文件，其他按 host:port 走 TCP。 */
+/** 解析目标：本机取发现文件，`ssh://` 走 SSH，其余按 host:port 走 TCP。 */
 export type TargetResolver = (target: string) => DiscoveryRecord | { host: string; port: number } | undefined;
 
 export class HostChannels {
 	private next = 1;
 	private readonly channels = new Map<number, Channel>();
 	private readonly resolve: TargetResolver;
+	private readonly ssh: SshHosts;
 
-	constructor(resolve: TargetResolver) {
+	constructor(resolve: TargetResolver, ssh: SshHosts = new SshHosts()) {
 		this.resolve = resolve;
+		this.ssh = ssh;
 	}
 
-	/** 连到目标，返回通道标识；连不上时抛错，渲染进程据此显示「连不上主机」。 */
-	async open(webContents: WebContents, target: string): Promise<number> {
+	/**
+	 * 连到目标，返回通道标识与连接令牌。
+	 *
+	 * 远程主机走 SSH：先连 SSH，再用通道打开远端的 socket，令牌从远端发现文件里取。
+	 * 连不上时抛错，渲染进程据此显示「连不上主机」。
+	 */
+	async open(webContents: WebContents, target: string): Promise<{ id: number; token: string | undefined }> {
+		if (isSshTarget(target)) {
+			const opened = await this.ssh.open(target);
+			// SSH 通道已经是流，直接按行搬运
+			return this.attach(webContents, { stream: opened.stream }, opened.token);
+		}
 		const resolved = this.resolve(target);
 		if (resolved === undefined) {
 			throw new Error(target === LOCAL_TARGET ? "没有发现正在运行的主机" : `主机地址无效:${target}`);
@@ -44,15 +62,18 @@ export class HostChannels {
 			"endpoint" in resolved
 				? await connectToDiscovery(resolved)
 				: await connectTcp({ host: resolved.host, port: resolved.port });
+		const token = "endpoint" in resolved ? resolved.token : undefined;
+		return this.attach(webContents, { socket }, token);
+	}
+
+	/** 把一条已建好的连接接上界面：转发数据与关闭事件。 */
+	private attach(
+		webContents: WebContents,
+		source: { socket: Socket } | { stream: StreamLike },
+		token: string | undefined,
+	): { id: number; token: string | undefined } {
 		const id = this.next;
 		this.next += 1;
-		this.channels.set(id, { socket, owner: webContents.id });
-		socket.setEncoding("utf8");
-		socket.on("data", (chunk: string) => {
-			if (!webContents.isDestroyed()) {
-				webContents.send(HOST_DATA_EVENT, id, chunk);
-			}
-		});
 		const finish = (reason: string): void => {
 			if (!this.channels.delete(id)) {
 				return;
@@ -61,17 +82,41 @@ export class HostChannels {
 				webContents.send(HOST_CLOSE_EVENT, id, reason);
 			}
 		};
-		socket.on("close", () => finish("closed"));
-		socket.on("error", (error: Error) => finish(error.message));
-		return id;
+		const deliver = (chunk: string): void => {
+			if (!webContents.isDestroyed()) {
+				webContents.send(HOST_DATA_EVENT, id, chunk);
+			}
+		};
+		if ("socket" in source) {
+			const socket = source.socket;
+			socket.setEncoding("utf8");
+			socket.on("data", deliver);
+			socket.on("close", () => finish("closed"));
+			socket.on("error", (error: Error) => finish(error.message));
+			this.channels.set(id, {
+				owner: webContents.id,
+				write: (text) => socket.write(text),
+				close: () => {
+					socket.end();
+					socket.destroy();
+				},
+			});
+		} else {
+			const stream = source.stream;
+			stream.onData(deliver);
+			stream.onClose((reason) => finish(reason));
+			this.channels.set(id, {
+				owner: webContents.id,
+				write: (text) => stream.write(text),
+				close: () => stream.close(),
+			});
+		}
+		return { id, token };
 	}
 
 	/** 把界面写的一段文本转给主机。 */
 	write(id: number, text: string): void {
-		const channel = this.channels.get(id);
-		if (channel !== undefined && !channel.socket.destroyed) {
-			channel.socket.write(text);
-		}
+		this.channels.get(id)?.write(text);
 	}
 
 	/** 关掉一条通道。 */
@@ -81,8 +126,7 @@ export class HostChannels {
 			return;
 		}
 		this.channels.delete(id);
-		channel.socket.end();
-		channel.socket.destroy();
+		channel.close();
 	}
 
 	/** 窗口关掉时清掉它名下的通道。 */

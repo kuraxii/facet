@@ -7,6 +7,12 @@ function readArgument(name: string): string {
 	return found === undefined ? "" : found.slice(prefix.length);
 }
 
+/** 去掉 Electron 给 IPC 失败加的前缀，界面只看到自己的说明。 */
+function cleanIpcError(error: unknown): Error {
+	const text = error instanceof Error ? error.message : String(error);
+	return new Error(text.replace(/^Error invoking remote method '[^']*': (?:\w*Error: )?/, ""));
+}
+
 const api = {
 	/** 主机是本机管的（local），还是外面跑着、这里只当客户端（external） */
 	hostMode: readArgument("facet-host-mode") || "local",
@@ -35,8 +41,11 @@ const api = {
 	openHostChannel: async (
 		target: string,
 		handlers: { onData: (chunk: string) => void; onClose: (reason: string) => void },
-	): Promise<{ id: number; write: (text: string) => void; close: () => void }> => {
-		const id = (await ipcRenderer.invoke("facet:host-open", target)) as number;
+	): Promise<{ id: number; token: string | undefined; write: (text: string) => void; close: () => void }> => {
+		const opened = (await ipcRenderer.invoke("facet:host-open", target).catch((error: unknown) => {
+			throw cleanIpcError(error);
+		})) as { id: number; token: string | undefined };
+		const id = opened.id;
 		const onData = (_event: unknown, channel: number, chunk: string): void => {
 			if (channel === id) {
 				handlers.onData(chunk);
@@ -56,6 +65,7 @@ const api = {
 		ipcRenderer.on("facet:host-close", onClose);
 		return {
 			id,
+			token: opened.token,
 			write: (text: string) => ipcRenderer.send("facet:host-write", id, text),
 			close: () => {
 				ipcRenderer.send("facet:host-close", id);

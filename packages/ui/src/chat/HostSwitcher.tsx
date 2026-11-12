@@ -166,7 +166,7 @@ export function HostSwitcher({
 								className="set-input mono"
 								value={address}
 								onChange={(event) => setAddress(event.target.value)}
-								placeholder="host:port 或 ws://host:port/endpoint"
+								placeholder="user@host 或 host:port"
 								aria-label="主机地址"
 								ref={addressRef}
 							/>

@@ -44,7 +44,7 @@
 *   **代码配色 (Code Highlight)**：代码块与差异视图的语法高亮另有一套配色，可选 GitHub、Catppuccin、Dracula、Tokyo Night、One、Nord、Gruvbox、Solarized，浅深跟随界面主题。
 
 ### 1.2 排版规范 (Typography)
-*   **无衬线字体 (Sans-serif)**：`Inter`（随构建打包）, `Noto Sans SC`, 系统默认字体。用于常规界面文本；汉字由系统字体承担。
+*   **无衬线字体 (Sans-serif)**：`Inter` 与 `Noto Sans SC Variable`（都随构建打包）, 系统默认字体。Latin 与数字用 Inter，汉字与中文标点用 Noto Sans SC Variable。用于常规界面文本。
 *   **等宽字体 (Monospace)**：`Maple Mono` 与 `Maple Mono CN`（都随构建打包）, 等宽字体。用于代码、文件路径、时间、统计数字。必须启用 `tabular-nums`（等宽数字特性）以保证数字宽度一致。
 *   **基础字号 (Base Size)**：全局默认 `13px`。
 *   **行高 (Line Height)**：基础行高 `1.55`，对话气泡内采用 `1.7`。

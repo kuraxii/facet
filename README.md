@@ -75,11 +75,12 @@ npm run dist -w @facet/desktop # 出安装包
 
 | 用途 | 字体 | 字重 | 来源 |
 |---|---|---|---|
-| 界面 | Inter | 400 / 500 / 600 | `@fontsource/inter` |
-| 代码的中文之外部分 | Maple Mono | 400 / 500 / 600 | `packages/ui/src/assets/fonts/` 下的 woff2，OFL-1.1，许可文本同目录 |
+| 界面 Latin 与数字 | Inter | 400 / 500 / 600 | `@fontsource/inter` |
+| 界面汉字与中文标点 | Noto Sans SC Variable | 100–900（可变字体） | `@fontsource-variable/noto-sans-sc`，按 unicode-range 分片，OFL-1.1 |
+| 代码里中文之外的部分 | Maple Mono | 400 / 500 / 600 | `packages/ui/src/assets/fonts/` 下的 woff2，OFL-1.1，许可文本同目录 |
 | 代码里的汉字与中文标点 | Maple Mono CN | 400 | `@automann/maple-mono-cn`，按 unicode-range 分片，OFL-1.1 |
 
-汉字那一段由 `packages/ui/src/styles/fonts.css` 顶部的 `@import "@automann/maple-mono-cn/400.css";` 引入，覆盖整个 CJK 基本区（U+4E00–U+9FA5），13px 字号下每个汉字占两格宽。分片只在渲染到对应字符时才加载，代码块里没有中文就不下载任何一片。这个包只发布 400 一个字重：代码正文用的就是 400，600 只出现在 `.tool-name` 的英文工具名上，汉字遇到粗体由浏览器合成。
+两段汉字都由 `packages/ui/src/styles/fonts.css` 顶部的 `@import` 引入，按 unicode-range 分片，渲染到对应字符才加载，界面上没有中文就不下载任何一片。Noto Sans SC 那一段是可变字体，4.3 MB 分 101 片，字重 100–900 共用同一批文件，覆盖 GB2312 全部汉字的 99.5%、中文标点全中；缺的字由系统字体补上。Maple Mono CN 那一段覆盖整个 CJK 基本区（U+4E00–U+9FA5），13px 字号下每个汉字占两格宽；这个包只发布 400 一个字重，代码正文用的就是 400，600 只出现在 `.tool-name` 的英文工具名上，汉字遇到粗体由浏览器合成。
 
 Latin、符号与制表符那三个 woff2 取自本机的 Maple Mono NL NF CN v7.9，要重新生成：
 

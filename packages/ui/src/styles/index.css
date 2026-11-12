@@ -7,7 +7,7 @@
 
 :root {
 	/* 界面字体与代码字体，两者都随构建产物一起打进应用 */
-	--font-sans: Inter, "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
+	--font-sans: Inter, "Noto Sans SC Variable", "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
 	--font-mono: "Maple Mono", "Maple Mono CN", ui-monospace, SFMono-Regular, Menlo, monospace;
 	/* 正文字号，由设置里的字号写入 */
 	--text-size: 13px;

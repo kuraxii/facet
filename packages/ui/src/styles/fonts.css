@@ -1,17 +1,20 @@
 /*
  * 自带字体，随构建产物一起打进应用，不依赖系统装没装。
  *
- * Inter 是界面字体，来自 @fontsource/inter。
+ * 界面字体分两段：Latin 与数字来自 @fontsource/inter（400 / 500 / 600），汉字与中文标点来自
+ * @fontsource-variable/noto-sans-sc，一个可变字体文件按 unicode-range 切成 101 片，字重 100–900
+ * 由同一个文件承担，渲染到哪片才加载哪片。
  *
- * 代码字体分两段：Latin、符号与制表符来自 src/assets/fonts 下的 woff2（由
+ * 代码字体同样分两段：Latin、符号与制表符来自 src/assets/fonts 下的 woff2（由
  * scripts/build-fonts.sh 切出，400 / 500 / 600），汉字与中文标点来自
- * @automann/maple-mono-cn 的 400.css，按 unicode-range 分片，只加载渲染时用到的片。
+ * @automann/maple-mono-cn 的 400.css。
  *
  * Maple Mono CN 只发布 400 一个字重：代码正文继承 400，600 只用在 .tool-name 的英文工具名上，
  * 汉字遇到粗体由浏览器合成。
  */
 
 @import "@automann/maple-mono-cn/400.css";
+@import "@fontsource-variable/noto-sans-sc";
 
 @font-face {
 	font-family: "Maple Mono";

@@ -30,6 +30,13 @@ describe("自带字体", () => {
 		expect(pkg.dependencies?.["@automann/maple-mono-cn"]).toMatch(/^(\^|~)?7\.9\./);
 	});
 
+	it("界面字体的汉字由 noto-sans-sc 可变字体补上", () => {
+		const sansImport = '@import "@fontsource-variable/noto-sans-sc";';
+		expect(fonts).toContain(sansImport);
+		expect(fonts.indexOf(sansImport)).toBeLessThan(fonts.indexOf("@font-face"));
+		expect(index).toMatch(/--font-sans: Inter, "Noto Sans SC Variable",/);
+	});
+
 	it("界面字体与代码字体的变量三处一致", () => {
 		expect(index).toContain('@import "./fonts.css";');
 		expect(index).toMatch(/--font-sans: Inter,/);
@@ -38,11 +45,12 @@ describe("自带字体", () => {
 		expect(index).toContain("--ms-font-sans: var(--font-sans);");
 	});
 
-	it("字体包只有 Inter 与 maple-mono-cn", () => {
+	it("字体包只有 Inter、noto-sans-sc 与 maple-mono-cn", () => {
 		const imported = [...(index + fonts).matchAll(/@import\s+"(@[^"]+)"/g)].map((match) => match[1]);
 		expect(new Set(imported)).toEqual(
 			new Set([
 				"@automann/maple-mono-cn/400.css",
+				"@fontsource-variable/noto-sans-sc",
 				"@fontsource/inter/400.css",
 				"@fontsource/inter/500.css",
 				"@fontsource/inter/600.css",

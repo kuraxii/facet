@@ -66,6 +66,7 @@ FACET_WEB_ROOT=apps/desktop/out/renderer \
 - **令牌**：地址栏给的会记进 localStorage，之后的连接直接用它
 - **权限档**：Web 是远程入口，缺省只读（认证帧可以申请操作档，主机按 `FACET_REMOTE_PERMISSION` 收窄）
 - 桌面与 Web 共用 `apps/desktop/src/renderer` 这一份界面：桌面用 preload 注入的桥，浏览器用 `web-bridge.ts` 补一个同样的桥
+- 窄屏（880px 以下）侧栏收成抽屉，左上角按钮展开、点遮罩或选中会话收起，右侧栏改成覆盖式
 
 ## 主机与桌面分开运行
 

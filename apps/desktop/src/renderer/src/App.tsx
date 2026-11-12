@@ -44,7 +44,7 @@ import {
 	writePanelState,
 } from "@facet/ui";
 import { FileView } from "@facet/ui-editor";
-import { X } from "lucide-react";
+import { PanelLeft, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { type HostChannelBridge, LOCAL_TARGET, makeTransport } from "./host-connection.ts";
 
@@ -222,6 +222,8 @@ export function App() {
 	const [theme, setTheme] = useState<ThemeName>(readTheme);
 	/** 主机上的偏好设置；没读到之前先用缺省值 */
 	const [settings, setSettings] = useState<FacetSettings>(DEFAULT_SETTINGS);
+	/** 窄屏时侧栏是抽屉，这个开关控制它展开 */
+	const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 	/** 主区域显示对话还是设置 */
 	const [view, setView] = useState<"chat" | "settings">("chat");
 	/** 主机清单：本机之外用户添加的远程主机，以及当前连着的端点 */
@@ -1131,7 +1133,15 @@ export function App() {
 
 	return (
 		<CodeThemeProvider value={codeThemeValue}>
-			<div className="shell">
+			<div className={isSidebarOpen ? "shell has-drawer" : "shell"}>
+				{isSidebarOpen ? (
+					<button
+						type="button"
+						className="sb-backdrop"
+						aria-label="收起侧栏"
+						onClick={() => setIsSidebarOpen(false)}
+					/>
+				) : null}
 				<SessionSidebar
 					sessions={sessions}
 					projects={projects}
@@ -1163,6 +1173,8 @@ export function App() {
 					isPanelOpen={panel.open}
 					hostName={host?.hostName}
 					hostStatus={isReconnecting ? "重连中" : host?.role === "viewer" ? "只读" : undefined}
+					isOpen={isSidebarOpen}
+					onNavigate={() => setIsSidebarOpen(false)}
 					hostSwitcher={
 						<HostSwitcher
 							localEndpoint={LOCAL_TARGET}
@@ -1183,6 +1195,14 @@ export function App() {
 				/>
 
 				<main className="main">
+					<button
+						type="button"
+						className="sb-toggle"
+						aria-label="展开侧栏"
+						onClick={() => setIsSidebarOpen((open) => !open)}
+					>
+						<PanelLeft size={16} strokeWidth={1.5} />
+					</button>
 					{session === undefined ? null : <ChatOutline items={transcript} container={scrollElement} />}
 					{session === undefined ? (
 						<div className="empty-wrap">

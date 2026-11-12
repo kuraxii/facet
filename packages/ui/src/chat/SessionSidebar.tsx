@@ -77,6 +77,10 @@ export interface SessionSidebarProps {
 	hostName?: string;
 	/** 连接状态提示，例如「重连中」或「只读」 */
 	hostStatus?: string;
+	/** 窄屏时侧栏是抽屉，展开状态由这个开关控制 */
+	isOpen?: boolean;
+	/** 窄屏抽屉里选完会话后收起 */
+	onNavigate?: () => void;
 }
 
 /** 会话行状态点的样式类。运行中与压缩中都走运行色，前者呼吸，后者常亮。 */
@@ -132,6 +136,8 @@ export function SessionSidebar({
 	hostSwitcher,
 	hostName,
 	hostStatus,
+	isOpen = true,
+	onNavigate,
 }: SessionSidebarProps) {
 	const [keyword, setKeyword] = useState("");
 	const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -366,6 +372,7 @@ export function SessionSidebar({
 	const openSession = (session: SidebarSession): void => {
 		if (session.isPlaceholder !== true) {
 			onSelect(session.path);
+			onNavigate?.();
 		}
 	};
 
@@ -377,7 +384,7 @@ export function SessionSidebar({
 			: "这个项目还没有会话";
 
 	return (
-		<aside className="sb">
+		<aside className={isOpen ? "sb is-open" : "sb"}>
 			<header className="sb-head">
 				<span className="sb-title">Facet</span>
 				<span className="sb-tools">
@@ -417,7 +424,10 @@ export function SessionSidebar({
 			<button
 				type="button"
 				className="sb-new"
-				onClick={() => onCreate(newSessionCwd)}
+				onClick={() => {
+					onCreate(newSessionCwd);
+					onNavigate?.();
+				}}
 				disabled={!canCreate || newSessionCwd.length === 0}
 				title={newSessionCwd.length === 0 ? "先添加项目" : `在 ${newSessionCwd} 新建`}
 			>

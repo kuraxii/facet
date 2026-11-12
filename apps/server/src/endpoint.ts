@@ -44,6 +44,7 @@ import {
 	type SessionHub,
 	SessionNotFoundError,
 } from "./session-hub.ts";
+import type { SessionsChannel } from "./sessions-channel.ts";
 import type { SettingsStore } from "./settings-store.ts";
 
 const ENDPOINT_PATH = "/endpoint";
@@ -84,6 +85,8 @@ interface EndpointContext {
 	readonly connections: Set<Connection>;
 	/** 收到结束主机的请求后调用，由进程入口决定怎么收尾 */
 	readonly requestShutdown: () => void;
+	/** 会话清单通道，所有端订阅同一条 */
+	readonly sessions: SessionsChannel;
 }
 
 /** 这个对端地址是否是回环地址。IPv4、IPv6 与 IPv4 映射地址都算。 */
@@ -158,6 +161,24 @@ function requiredChannel(source: Record<string, unknown>, key: string): Channel 
 		throw new RequestError("unknown_channel", `unsupported channel: ${raw}`);
 	}
 	return raw as Channel;
+}
+
+/** 订阅与退订接受会话清单通道，写操作只针对会话与对话通道。 */
+function subscribableChannel(source: Record<string, unknown>, key: string): Channel {
+	const raw = requiredString(source, key);
+	if (parseChannel(raw)?.kind === "sessions") {
+		return raw as Channel;
+	}
+	return requiredChannel(source, key);
+}
+
+/** 退掉一个通道的订阅，会话、对话与清单通道各走各的表。 */
+function unsubscribeChannel(context: EndpointContext, channel: Channel, sink: ActionSink): void {
+	if (parseChannel(channel)?.kind === "sessions") {
+		context.sessions.unsubscribe(sink);
+		return;
+	}
+	context.hub.unsubscribe(channel, sink);
 }
 
 function send(ws: WebSocket, frame: ServerFrame): void {
@@ -299,21 +320,28 @@ async function handleRequest(
 		}
 		case "subscribe": {
 			const source = asObject(params);
-			const channel = requiredChannel(source, "channel");
+			const channel = subscribableChannel(source, "channel");
 			const previous = connection.subscriptions.get(channel);
 			if (previous) {
-				context.hub.unsubscribe(channel, previous);
+				unsubscribeChannel(context, channel, previous);
 			}
 			const sink = toSink(connection);
 			connection.subscriptions.set(channel, sink);
+			if (parseChannel(channel)?.kind === "sessions") {
+				// 清单通道只有一条，标识对不上的按未知通道拒绝
+				if (parseChannel(channel)?.id !== context.hostId) {
+					throw new RequestError("unknown_channel", `unsupported channel: ${channel}`);
+				}
+				return context.sessions.subscribe(channel, optionalNumber(source, "since"), sink);
+			}
 			return await context.hub.subscribe(channel, optionalNumber(source, "since"), sink);
 		}
 		case "unsubscribe": {
 			const source = asObject(params);
-			const channel = requiredChannel(source, "channel");
+			const channel = subscribableChannel(source, "channel");
 			const sink = connection.subscriptions.get(channel);
 			if (sink) {
-				context.hub.unsubscribe(channel, sink);
+				unsubscribeChannel(context, channel, sink);
 				connection.subscriptions.delete(channel);
 			}
 			return {};
@@ -641,6 +669,8 @@ export async function startEndpoint(options: {
 	hostSource?: HostSource;
 	/** 收到 shutdownHost 请求后调用 */
 	requestShutdown?: () => void;
+	/** 会话清单通道 */
+	sessions: SessionsChannel;
 }): Promise<EndpointHandle> {
 	const context: EndpointContext = {
 		config: options.config,
@@ -652,6 +682,7 @@ export async function startEndpoint(options: {
 		hostSource: options.hostSource ?? "machine-id",
 		connections: new Set(),
 		requestShutdown: options.requestShutdown ?? (() => {}),
+		sessions: options.sessions,
 	};
 
 	const httpServer = createServer((_request, response) => {
@@ -683,7 +714,7 @@ export async function startEndpoint(options: {
 		});
 		ws.on("close", () => {
 			for (const [channel, sink] of connection.subscriptions) {
-				context.hub.unsubscribe(channel, sink);
+				unsubscribeChannel(context, channel, sink);
 			}
 			connection.subscriptions.clear();
 			context.connections.delete(connection);
@@ -709,6 +740,7 @@ export async function startEndpoint(options: {
 				connection.ws.close(1001, "host shutting down");
 			}
 			context.connections.clear();
+			context.sessions.clear();
 			// 端会立刻重连，光发关闭帧会让 wss 一直等下去，这里直接断开所有套接字
 			for (const client of wss.clients) {
 				client.terminate();

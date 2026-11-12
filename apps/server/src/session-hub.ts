@@ -182,6 +182,13 @@ export interface SessionHubOptions<A extends HubAgent> {
 	readonly maxPageSize?: number;
 	/** 没人订阅且不在运行后,等多久回收,毫秒 */
 	readonly idleCloseMs?: number;
+	/**
+	 * 会话清单有变化。
+	 *
+	 * 新建、打开、分叉、改名、删除与一轮结束都会通知，端点据此把新的摘要推给所有端；
+	 * 会话文件为空的内存会话不通知。
+	 */
+	readonly onSessionChanged?: (file: string, change: "changed" | "removed") => void;
 }
 
 /** 文件是否存在。 */
@@ -218,12 +225,24 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 			max: options.maxPageSize ?? MAX_PAGE_SIZE,
 		};
 		this.idleCloseMs = options.idleCloseMs ?? DEFAULT_IDLE_CLOSE_MS;
+		this.onSessionChanged = options.onSessionChanged;
+	}
+
+	/** 通知清单变化的回调，没有接的时候什么都不做。 */
+	private readonly onSessionChanged: ((file: string, change: "changed" | "removed") => void) | undefined;
+
+	/** 会话文件的清单有变化，通知外面。 */
+	private noteSessions(file: string | undefined, change: "changed" | "removed"): void {
+		if (file !== undefined) {
+			this.onSessionChanged?.(file, change);
+		}
 	}
 
 	/** 建一个新会话并登记。会话文件立即建立,之后每条完成的消息追加写盘。 */
 	async createSession(options: PiAgentLaunchOptions = {}): Promise<SessionSnapshot> {
 		const agent = await this.factory.create(options);
 		this.attach(agent);
+		this.noteSessions(agent.file === undefined ? undefined : normalizeFile(agent.file), "changed");
 		return this.snapshotRow(this.requireRow(agent.id));
 	}
 
@@ -244,6 +263,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 			if (existing.opening !== undefined) {
 				await existing.opening;
 			}
+			this.noteSessions(key, "changed");
 			return this.snapshotRow(this.requireRow(sessionId));
 		}
 
@@ -272,6 +292,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		} finally {
 			row.opening = undefined;
 		}
+		this.noteSessions(key, "changed");
 		return this.snapshotRow(row);
 	}
 
@@ -302,6 +323,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 				...(options.cwd === undefined ? {} : { cwd: options.cwd }),
 			});
 			this.attach(agent);
+			this.noteSessions(agent.file === undefined ? undefined : normalizeFile(agent.file), "changed");
 			return this.snapshotRow(this.requireRow(agent.id));
 		} finally {
 			lease?.release();
@@ -423,10 +445,12 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 			await this.withSession(sessionId, async (agent) => {
 				agent.setName(trimmed);
 			});
+			this.noteSessions(key, "changed");
 			return;
 		}
 		const manager = SessionManager.open(key);
 		manager.appendSessionInfo(trimmed);
+		this.noteSessions(key, "changed");
 	}
 
 	/**
@@ -447,6 +471,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 			this.drop(row);
 		}
 		await rm(key, { force: true });
+		this.noteSessions(key, "removed");
 	}
 
 	/**
@@ -703,6 +728,10 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 	private onAgentEvent(row: SessionState<A>, event: Parameters<Parameters<A["subscribe"]>[0]>[0]): void {
 		for (const projected of row.projector.project(event)) {
 			this.publish(row, projected.channel, projected.action);
+			// 改名与一轮结束都会改会话摘要里的字段，推一份新的给所有端
+			if (projected.action.type === "session/titleChanged" || projected.action.type === "chat/settled") {
+				this.noteSessions(row.file, "changed");
+			}
 		}
 		this.settle(row);
 	}

@@ -302,12 +302,17 @@ export function App() {
 		void client.saveSettings(changed).catch(() => undefined);
 	}, [settings, theme]);
 
-	/** 拉一次全部会话。并发调用时只采用最后一次的结果,避免旧结果覆盖新结果。 */
+	/**
+	 * 拉一次全部会话。
+	 *
+	 * 平时靠主机推来的清单，这里用于启动、重连与用户手动刷新；清单通道补齐缺口时也会走
+	 * 这条路。并发调用只采用最后一次的结果，避免旧结果覆盖新结果。
+	 */
 	const refreshSessions = useCallback(async (): Promise<readonly SessionSummary[] | undefined> => {
 		listSeq.current += 1;
 		const seq = listSeq.current;
 		try {
-			const pool = await client.listSessions();
+			const pool = await client.refreshSessionList();
 			if (seq === listSeq.current) {
 				setSessions(pool);
 			}
@@ -317,6 +322,18 @@ export function App() {
 			return undefined;
 		}
 	}, []);
+
+	// 主机推来清单变化时侧栏跟着变，别的端新建、改名或删除会话这边立刻看到
+	useEffect(
+		() =>
+			client.store.subscribe(() => {
+				const pushed = client.store.sessionList();
+				if (pushed.length > 0) {
+					setSessions(pushed.map((entry) => entry.summary));
+				}
+			}),
+		[],
+	);
 
 	/** 拉一次项目清单。失败只标脏,已经显示的项目保持原样。 */
 	const refreshProjects = useCallback(async (): Promise<void> => {

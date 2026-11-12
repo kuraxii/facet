@@ -222,6 +222,54 @@ afterEach(() => {
 
 const sink = (id: string) => ({ id, send: () => {} });
 
+describe("会话清单通知", () => {
+	/** 换一个记下清单变化的 hub，覆盖新建、改名、删除与一轮结束。 */
+	function hubWithNotes(): { hub: SessionHub<FakeAgent>; notes: [string, string][] } {
+		const notes: [string, string][] = [];
+		const noted = new SessionHub<FakeAgent>({
+			factory,
+			replayLimit: 8,
+			idleCloseMs: IDLE_MS,
+			onSessionChanged: (file, change) => notes.push([file, change]),
+		});
+		return { hub: noted, notes };
+	}
+
+	it("新建、打开、改名与删除都会通知", async () => {
+		const { hub: local, notes } = hubWithNotes();
+		await local.createSession({ cwd: "/tmp" });
+		expect(notes).toContainEqual(["/tmp/new-1.jsonl", "changed"]);
+
+		const dir = await mkdtemp(join(tmpdir(), "facet-notes-"));
+		const file = join(dir, "s1.jsonl");
+		await writeFile(
+			file,
+			`${JSON.stringify({ type: "session", id: "s1", cwd: dir })}
+`,
+		);
+		notes.length = 0;
+		await local.openSession(file);
+		expect(notes).toContainEqual([file, "changed"]);
+		notes.length = 0;
+		await local.renameSession(file, "新名字");
+		expect(notes).toContainEqual([file, "changed"]);
+		notes.length = 0;
+		await local.deleteSession(file);
+		expect(notes).toContainEqual([file, "removed"]);
+		await rm(dir, { recursive: true, force: true });
+		local.dispose();
+	});
+
+	it("一轮结束时通知", async () => {
+		const { hub: local, notes } = hubWithNotes();
+		const snapshot = await local.openSession("/tmp/s1.jsonl");
+		notes.length = 0;
+		local.agent(snapshot.id).emit({ type: "settled", aborted: false } as never);
+		expect(notes).toContainEqual(["/tmp/s1.jsonl", "changed"]);
+		local.dispose();
+	});
+});
+
 describe("会话建立与复用", () => {
 	it("打开同一文件复用同一份运行态", async () => {
 		const first = await hub.openSession("/tmp/s1.jsonl");

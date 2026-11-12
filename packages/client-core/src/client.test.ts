@@ -147,7 +147,7 @@ class FakeTransport implements SessionTransport {
 					if (this.failSubscribe.has(channel)) {
 						throw new Error("subscribe 失败");
 					}
-					if (this.unknownSession) {
+					if (this.unknownSession && !channel.startsWith("sessions:")) {
 						// 主机刚重启时不认识旧会话,重新打开之后就记得了
 						this.unknownSession = false;
 						throw Object.assign(new Error("会话不存在:s1"), { code: "unknown_session" });
@@ -243,11 +243,12 @@ describe("SessionClient", () => {
 	it("打开会话时订阅两条通道", async () => {
 		const { transport, client } = createClient(10, { initialPages: 1, pageSize: 5 });
 		await client.openSession("/tmp/s1.jsonl");
-		const subscriptions = transport.calls.filter((call) => call.method === "subscribe");
-		expect(subscriptions.map((call) => (call.params as { channel: Channel }).channel)).toEqual([
-			SESSION,
-			CHAT,
-		]);
+		const subscriptions = transport.calls
+			.filter((call) => call.method === "subscribe")
+			.map((call) => (call.params as { channel: Channel }).channel)
+			// 清单通道在 attach 时就订上了，与打开会话无关
+			.filter((channel) => !channel.startsWith("sessions:"));
+		expect(subscriptions).toEqual([SESSION, CHAT]);
 		expect(client.current?.sessionId).toBe("s1");
 	});
 
@@ -700,8 +701,40 @@ describe("SessionClient", () => {
 		transport.emit(CHAT, { type: "chat/turnStarted", text: "hi" }, 1);
 		const before = transport.calls.length;
 		await client.resume();
-		const subscriptions = transport.calls.slice(before).filter((call) => call.method === "subscribe");
-		expect(subscriptions.map((call) => (call.params as { since?: number }).since)).toEqual([2, 1]);
+		const subscriptions = transport.calls
+			.slice(before)
+			.filter((call) => call.method === "subscribe")
+			.map((call) => call.params as { channel: Channel; since?: number })
+			.filter((call) => !call.channel.startsWith("sessions:"));
+		expect(subscriptions.map((call) => call.since)).toEqual([2, 1]);
+	});
+
+	it("attach 之后订阅清单，收到推送就更新列表", async () => {
+		const { transport, client } = createClient(2);
+		const listChannel = "sessions:/h" as Channel;
+		expect(
+			transport.calls.some(
+				(call) =>
+					call.method === "subscribe" && (call.params as { channel: Channel }).channel === listChannel,
+			),
+		).toBe(true);
+		transport.emit(listChannel, {
+			type: "sessions/changed",
+			summary: {
+				id: "s1",
+				path: "/work/a/s1.jsonl",
+				cwd: "/work/a",
+				name: undefined,
+				parentSessionPath: undefined,
+				created: 1,
+				modified: 2,
+				messageCount: 1,
+				firstMessage: "你好",
+			},
+			busy: true,
+		});
+		expect(client.store.sessionList().map((entry) => entry.summary.path)).toEqual(["/work/a/s1.jsonl"]);
+		expect(client.store.isSessionBusy("/work/a/s1.jsonl")).toBe(true);
 	});
 
 	it("重复 attach 不叠加动作监听", async () => {
@@ -791,7 +824,8 @@ describe("回退", () => {
 	it("列可用模型走 availableModels 请求", async () => {
 		const { transport, client } = createClient(1);
 		const models = await client.listAvailableModels();
-		expect(transport.calls.at(-1)?.method).toBe("availableModels");
+		// attach 时会顺带订阅清单并取一次会话列表，这里只看模型请求本身
+		expect(transport.calls.filter((call) => call.method === "availableModels")).toHaveLength(1);
 		expect(models.map((model) => `${model.provider}/${model.id}`)).toEqual(["deepseek/deepseek-v4-flash"]);
 	});
 

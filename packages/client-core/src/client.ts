@@ -32,7 +32,7 @@ import type {
 	SessionSummary,
 	ThinkingLevel,
 } from "@facet/protocol";
-import { makeChannel, parseChannel } from "@facet/protocol";
+import { makeChannel, parseChannel, sessionsChannelFor } from "@facet/protocol";
 import { debugLog } from "./log.ts";
 import type { ChatView, SessionView } from "./state.ts";
 import type { ChannelGap } from "./store.ts";
@@ -172,6 +172,40 @@ export class SessionClient {
 				});
 			}
 		});
+		void this.followSessionList().catch((error: unknown) => {
+			debugLog("client", "订阅会话清单失败", { error: String(error) });
+		});
+	}
+
+	/**
+	 * 订阅会话清单。
+	 *
+	 * 主机把新增、改名、删除与一轮结束的变化推给所有订阅的端，多个端因此看到同一份列表；
+	 * 补不上缺口时重新取一份完整清单。
+	 */
+	async followSessionList(): Promise<void> {
+		const hostId = this.handshake?.hostId;
+		if (hostId === undefined) {
+			return;
+		}
+		const channel = sessionsChannelFor(hostId);
+		const result = await this.transport.request("subscribe", {
+			channel,
+			since: this.state.sessionListSeq,
+		});
+		this.state.markSessionListSeq(result.seq);
+		if (result.resync || this.state.sessionList().length === 0) {
+			await this.refreshSessionList();
+		}
+	}
+
+	/** 重取一份完整清单替换本地这份，重连与补齐缺口之后用。 */
+	async refreshSessionList(cwd?: string): Promise<readonly SessionSummary[]> {
+		const sessions = await this.listSessions(cwd);
+		this.state.replaceSessionList(
+			sessions.map((summary) => ({ summary, busy: this.state.isSessionBusy(summary.path) })),
+		);
+		return sessions;
 	}
 
 	/** 列出会话。指定 cwd 时只列该目录,主机上的全部会话用空参数。 */
@@ -551,6 +585,10 @@ export class SessionClient {
 	 * 缓冲能补齐就只补发,补不上就整体重新对齐。
 	 */
 	async resume(): Promise<void> {
+		// 清单通道与打开的会话无关，重连后总要续订一次
+		await this.followSessionList().catch((error: unknown) => {
+			debugLog("client", "重连后订阅会话清单失败", { error: String(error) });
+		});
 		const opened = this.opened;
 		if (!opened) {
 			return;

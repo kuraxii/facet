@@ -1,4 +1,4 @@
-import type { ActionFrame, AssistantMessage, Entry, SessionSnapshot } from "@facet/protocol";
+import type { ActionFrame, AssistantMessage, Entry, SessionSnapshot, SessionSummary } from "@facet/protocol";
 import { describe, expect, it } from "vitest";
 import { isHistoryMessageId } from "./message-id.ts";
 import type { ChannelGap } from "./store.ts";
@@ -249,6 +249,108 @@ describe("SessionStore", () => {
 
 	it("成对给出会话与对话通道", () => {
 		expect(SessionStore.channelsFor("s1")).toEqual({ session: "session:/s1", chat: "chat:/s1" });
+	});
+});
+
+describe("会话清单", () => {
+	const listChannel = "sessions:/h" as const;
+
+	function summary(path: string, modified: number): SessionSummary {
+		return {
+			id: path,
+			path,
+			cwd: "/tmp",
+			name: undefined,
+			parentSessionPath: undefined,
+			created: 1,
+			modified,
+			messageCount: 1,
+			firstMessage: "你好",
+		};
+	}
+
+	it("收到变化后进清单，按修改时间从新到旧", () => {
+		const store = new SessionStore();
+		store.apply({
+			type: "action",
+			channel: listChannel,
+			serverSeq: 1,
+			origin: undefined,
+			action: { type: "sessions/changed", summary: summary("/a/s1.jsonl", 2), busy: false },
+		});
+		store.apply({
+			type: "action",
+			channel: listChannel,
+			serverSeq: 2,
+			origin: undefined,
+			action: { type: "sessions/changed", summary: summary("/a/s2.jsonl", 5), busy: true },
+		});
+		expect(store.sessionList().map((entry) => entry.summary.path)).toEqual(["/a/s2.jsonl", "/a/s1.jsonl"]);
+		expect(store.isSessionBusy("/a/s2.jsonl")).toBe(true);
+	});
+
+	it("同路径的新摘要覆盖旧的", () => {
+		const store = new SessionStore();
+		store.apply({
+			type: "action",
+			channel: listChannel,
+			serverSeq: 1,
+			origin: undefined,
+			action: { type: "sessions/changed", summary: summary("/a/s1.jsonl", 1), busy: false },
+		});
+		store.apply({
+			type: "action",
+			channel: listChannel,
+			serverSeq: 2,
+			origin: undefined,
+			action: {
+				type: "sessions/changed",
+				summary: { ...summary("/a/s1.jsonl", 9), name: "改过" },
+				busy: false,
+			},
+		});
+		expect(store.sessionList()).toHaveLength(1);
+		expect(store.sessionList()[0]?.summary.name).toBe("改过");
+	});
+
+	it("删除后就从清单里消失", () => {
+		const store = new SessionStore();
+		store.apply({
+			type: "action",
+			channel: listChannel,
+			serverSeq: 1,
+			origin: undefined,
+			action: { type: "sessions/changed", summary: summary("/a/s1.jsonl", 1), busy: false },
+		});
+		store.apply({
+			type: "action",
+			channel: listChannel,
+			serverSeq: 2,
+			origin: undefined,
+			action: { type: "sessions/removed", path: "/a/s1.jsonl" },
+		});
+		expect(store.sessionList()).toEqual([]);
+	});
+
+	it("序号不大于已应用的帧丢掉", () => {
+		const store = new SessionStore();
+		store.markSessionListSeq(5);
+		store.apply({
+			type: "action",
+			channel: listChannel,
+			serverSeq: 5,
+			origin: undefined,
+			action: { type: "sessions/removed", path: "/a/s1.jsonl" },
+		});
+		expect(store.sessionListSeq).toBe(5);
+	});
+
+	it("完整清单替换掉本地这份", () => {
+		const store = new SessionStore();
+		store.replaceSessionList([{ summary: summary("/a/s1.jsonl", 1), busy: false }]);
+		expect(store.sessionList()).toHaveLength(1);
+		store.replaceSessionList([]);
+		expect(store.sessionList()).toEqual([]);
 	});
 });
 

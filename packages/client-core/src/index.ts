@@ -19,7 +19,7 @@ export type {
 	ToolCallView,
 } from "./state.ts";
 export { appendNotice, chatActivity, createChatView, createSessionView } from "./state.ts";
-export type { ChannelGap } from "./store.ts";
+export type { ChannelGap, SessionListEntry } from "./store.ts";
 export { messageDisplayText, messageText, SessionStore } from "./store.ts";
 export type {
 	Part,

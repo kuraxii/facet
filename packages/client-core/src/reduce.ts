@@ -88,6 +88,9 @@ export function reduceSession(view: SessionView, action: Action): SessionView {
 		// 回退由主机改分支指针，历史在收到 chat/branchMoved 后重新装载
 		case "chat/revertTo":
 		case "chat/branchMoved":
+		// 会话清单动作走 SessionStore 的清单表，不进单个会话的视图
+		case "sessions/changed":
+		case "sessions/removed":
 			return view;
 		default:
 			return unhandled(action);
@@ -203,6 +206,8 @@ export function reduceChat(view: ChatView, action: Action): ChatView {
 		case "session/configChanged":
 		case "session/pendingMessageSet":
 		case "session/queueCleared":
+		case "sessions/changed":
+		case "sessions/removed":
 			return view;
 		default:
 			return unhandled(action);

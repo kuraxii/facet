@@ -5,6 +5,7 @@
  */
 import { join } from "node:path";
 import { PiAgentFactory } from "@facet/agent";
+import { sessionsChannelFor } from "@facet/protocol";
 import { loadServerConfig, type ServerConfig } from "./config.ts";
 import { type EndpointHandle, startEndpoint } from "./endpoint.ts";
 import { type HostIdentity, loadOrCreateHostId } from "./host-identity.ts";
@@ -12,6 +13,8 @@ import { debugLog, setDebugLog } from "./log.ts";
 import { ProjectCatalog } from "./project-catalog.ts";
 import { ProjectStore } from "./project-store.ts";
 import { SessionHub } from "./session-hub.ts";
+import { SessionIndex } from "./session-index.ts";
+import { SessionsChannel } from "./sessions-channel.ts";
 import { SettingsStore } from "./settings-store.ts";
 
 /** 主机启动后的句柄。port 为实际监听端口，hostId 是本进程的主机标识。 */
@@ -29,6 +32,8 @@ export interface ServerHandle extends EndpointHandle {
 	readonly projectStore: ProjectStore;
 	/** 界面偏好设置，持久化在数据目录里 */
 	readonly settingsStore: SettingsStore;
+	/** 会话清单通道，所有端订阅同一条 */
+	readonly sessions: SessionsChannel;
 	/** 关闭端点并释放全部会话与运行时 */
 	close(): Promise<void>;
 }
@@ -54,10 +59,25 @@ export async function startServer(
 		agentDir: config.agentDir,
 		sessionDir: config.sessionDir,
 	});
+	const hostIdentity = await loadOrCreateHostId({ dataDir: config.dataDir });
+	const hostId = hostIdentity.id;
+	const sessions = new SessionsChannel(config.replayLimit);
+	let sessionIndex: SessionIndex | undefined;
 	const hub = new SessionHub({
 		factory,
 		replayLimit: config.replayLimit,
 		idleCloseMs: config.sessionIdleMs,
+		onSessionChanged: (file, change) => sessionIndex?.note(file, change),
+	});
+	// 索引要读会话目录与运行状态，两样都在 hub 建好之后才齐
+	sessionIndex = new SessionIndex({
+		channel: sessions,
+		uri: sessionsChannelFor(hostId),
+		source: {
+			listSessions: (cwd) => factory.listSessions(cwd),
+			peekSessionCwd: (file) => factory.peekSessionCwd(file),
+			busyFiles: () => hub.busyFiles(),
+		},
 	});
 	const projects = new ProjectCatalog(factory);
 	await projects.refresh().catch((error: unknown) => {
@@ -65,8 +85,6 @@ export async function startServer(
 	});
 	const projectStore = await ProjectStore.open({ file: join(config.dataDir, "projects.json") });
 	const settingsStore = await SettingsStore.open({ file: join(config.dataDir, "settings.json") });
-	const hostIdentity = await loadOrCreateHostId({ dataDir: config.dataDir });
-	const hostId = hostIdentity.id;
 	const endpoint = await startEndpoint({
 		config,
 		factory,
@@ -76,6 +94,7 @@ export async function startServer(
 		hostId,
 		hostSource: hostIdentity.source,
 		...(hooks.requestShutdown === undefined ? {} : { requestShutdown: hooks.requestShutdown }),
+		sessions,
 	});
 	debugLog("server", "主机端点就绪", { endpoint: `ws://${endpoint.host}:${endpoint.port}/endpoint`, hostId });
 
@@ -88,7 +107,9 @@ export async function startServer(
 		projects,
 		projectStore,
 		settingsStore,
+		sessions,
 		close: async () => {
+			sessionIndex?.stop();
 			await endpoint.close();
 			hub.dispose();
 			factory.dispose();
@@ -116,3 +137,6 @@ export {
 	SessionHub,
 	SessionNotFoundError,
 } from "./session-hub.ts";
+export type { SessionChange, SessionIndexSource } from "./session-index.ts";
+export { SessionIndex } from "./session-index.ts";
+export { SessionsChannel } from "./sessions-channel.ts";

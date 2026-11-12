@@ -3,7 +3,14 @@ import type { DeltaKind, NoticeLevel } from "./event.ts";
 import type { Message } from "./message.ts";
 import type { ModelInfo, ModelRef, ThinkingLevel } from "./model.ts";
 import type { StreamingBehavior } from "./request.ts";
-import type { Maintenance, TurnPhase } from "./session.ts";
+import type { Maintenance, SessionSummary, TurnPhase } from "./session.ts";
+
+/** 会话清单动作。主机推给所有订阅清单通道的端,多端看到同一份列表。 */
+export type SessionsAction =
+	/** 新建、改名或一轮结束之后,用新的摘要覆盖同路径的那一条 */
+	| { type: "sessions/changed"; summary: SessionSummary; busy: boolean }
+	/** 会话文件被删掉 */
+	| { type: "sessions/removed"; path: string };
 
 /** 会话动作。 */
 export type SessionAction =
@@ -74,7 +81,7 @@ export type ChatAction =
 	| { type: "chat/branchMoved"; leafId: string | null };
 
 /** 动作联合。按 `type` 前缀决定归属通道。 */
-export type Action = SessionAction | ChatAction;
+export type Action = SessionAction | ChatAction | SessionsAction;
 
 /** 动作来源。缺省表示主机侧产生。 */
 export interface ActionOrigin {

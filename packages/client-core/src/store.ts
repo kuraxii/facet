@@ -4,7 +4,15 @@
  * 只做三件事:按通道保存视图、按序号去重与察觉缺口、在视图变化后通知订阅者。
  * 序号缺口意味着主机侧的缓冲已经丢掉更早的动作,调用方需要重新拉取快照与历史。
  */
-import type { ActionFrame, Channel, Entry, Message, SessionSnapshot } from "@facet/protocol";
+import type {
+	Action,
+	ActionFrame,
+	Channel,
+	Entry,
+	Message,
+	SessionSnapshot,
+	SessionSummary,
+} from "@facet/protocol";
 import { makeChannel, parseChannel } from "@facet/protocol";
 import { historyMessageId, isHistoryMessageId } from "./message-id.ts";
 import { reduceChat, reduceSession } from "./reduce.ts";
@@ -37,9 +45,21 @@ interface ChatSlot {
 	lastSeq: number;
 }
 
+/** 清单里的一条：会话摘要加上它在主机上是否跑着。 */
+export interface SessionListEntry {
+	/** 会话摘要，字段与会话文件一致 */
+	summary: SessionSummary;
+	/** 主机上是否有正在进行的任务 */
+	busy: boolean;
+}
+
 export class SessionStore {
 	private readonly sessions = new Map<Channel, SessionSlot>();
 	private readonly chats = new Map<Channel, ChatSlot>();
+	/** 会话清单，按会话文件路径索引；多个端拿到的是主机推的同一份 */
+	private readonly sessionIndex = new Map<string, SessionListEntry>();
+	/** 清单通道已应用的序号 */
+	private sessionIndexSeq = 0;
 	private readonly listeners = new Set<(version: number) => void>();
 	private readonly gapListeners = new Set<(gap: ChannelGap) => void>();
 	private version = 0;
@@ -77,6 +97,41 @@ export class SessionStore {
 		this.chats.set(channel, { view, lastSeq: 0 });
 		this.markChanged();
 		return view;
+	}
+
+	/**
+	 * 清单里的全部会话，按修改时间从新到旧。
+	 *
+	 * 界面直接用它渲染侧栏，不再自己扫盘：主机推什么就是什么，多个端因此一致。
+	 */
+	sessionList(): readonly SessionListEntry[] {
+		return [...this.sessionIndex.values()].sort(
+			(left, right) => right.summary.modified - left.summary.modified,
+		);
+	}
+
+	/** 清单通道已应用到的序号，重连时据此续订。 */
+	get sessionListSeq(): number {
+		return this.sessionIndexSeq;
+	}
+
+	/** 记录清单通道订阅返回的序号。 */
+	markSessionListSeq(seq: number): void {
+		this.sessionIndexSeq = seq;
+	}
+
+	/** 用一份完整清单替换本地这份，重连或补齐缺口之后用。 */
+	replaceSessionList(entries: readonly SessionListEntry[]): void {
+		this.sessionIndex.clear();
+		for (const entry of entries) {
+			this.sessionIndex.set(entry.summary.path, entry);
+		}
+		this.markChanged();
+	}
+
+	/** 清单里某个会话是否在主机上跑着。 */
+	isSessionBusy(path: string): boolean {
+		return this.sessionIndex.get(path)?.busy === true;
 	}
 
 	sessionView(channel: Channel): SessionView | undefined {
@@ -122,6 +177,14 @@ export class SessionStore {
 		if (!parsed) {
 			return;
 		}
+		if (parsed.kind === "sessions") {
+			if (frame.serverSeq <= this.sessionIndexSeq) {
+				return;
+			}
+			this.applySessionList(frame.action);
+			this.sessionIndexSeq = Math.max(this.sessionIndexSeq, frame.serverSeq);
+			return;
+		}
 		if (parsed.kind === "session") {
 			const slot = this.sessions.get(frame.channel) ?? this.createSessionSlot(frame.channel);
 			if (this.isDuplicate(frame, slot.lastSeq)) {
@@ -142,6 +205,20 @@ export class SessionStore {
 			slot.view = reduceChat(slot.view, frame.action);
 			slot.lastSeq = Math.max(slot.lastSeq, frame.serverSeq);
 			this.markChanged();
+		}
+	}
+
+	/** 归约一条清单动作。认不出的动作原样跳过，清单仍然可用。 */
+	private applySessionList(action: Action): void {
+		if (action.type === "sessions/changed") {
+			this.sessionIndex.set(action.summary.path, { summary: action.summary, busy: action.busy });
+			this.markChanged();
+			return;
+		}
+		if (action.type === "sessions/removed") {
+			if (this.sessionIndex.delete(action.path)) {
+				this.markChanged();
+			}
 		}
 	}
 

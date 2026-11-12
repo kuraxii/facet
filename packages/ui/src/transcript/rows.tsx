@@ -5,7 +5,7 @@
  * 默认只有过程行与文件改动行收起,其余行展开。
  */
 import type { Part, ToolCallPart, TranscriptItem } from "@facet/client-core";
-import { Split, Undo2 } from "lucide-react";
+import { Check, Copy, Split, Undo2 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { Markdown } from "../markdown/Markdown.tsx";
 import { type DiffChunk, type DisplayRow, groupRows, metaSummary } from "./group.ts";
@@ -31,6 +31,8 @@ export interface ChatTranscriptProps {
 	onOpenSettings?: (() => void) | undefined;
 	/** 复制错误详情 */
 	onCopyDetails?: ((text: string) => void) | undefined;
+	/** 复制一条消息的原文，用户消息与最终答复都用它 */
+	onCopyText?: ((text: string) => void) | undefined;
 	/** 没有任何内容时显示的提示 */
 	emptyHint?: string;
 	/** 实时消息提升为历史消息时的标识迁移，用来搬动按行标识保存的收起状态 */
@@ -79,6 +81,36 @@ function textOf(parts: readonly Part[]): string {
 		.map((part) => (part.kind === "text" ? part.text : ""))
 		.join("")
 		.trim();
+}
+
+/**
+ * 复制一段原文。
+ *
+ * 复制成功之后对勾亮一小会儿再换回复制图标，避免连点时分不清是没反应还是已经复制过。
+ */
+function CopyButton({ text, onCopy }: { text: string; onCopy: (text: string) => void }) {
+	const [isDone, setIsDone] = useState(false);
+	useEffect(() => {
+		if (!isDone) {
+			return;
+		}
+		const timer = setTimeout(() => setIsDone(false), 1200);
+		return () => clearTimeout(timer);
+	}, [isDone]);
+	return (
+		<button
+			type="button"
+			className={isDone ? "copy-btn is-done" : "copy-btn"}
+			aria-label={isDone ? "已复制" : "复制原文"}
+			title={isDone ? "已复制" : "复制原文"}
+			onClick={() => {
+				onCopy(text);
+				setIsDone(true);
+			}}
+		>
+			{isDone ? <Check size={13} strokeWidth={1.5} /> : <Copy size={13} strokeWidth={1.5} />}
+		</button>
+	);
 }
 
 /** 收起时显示的一行预览。 */
@@ -345,6 +377,7 @@ export function ChatTranscript({
 	onRetryTurn,
 	onOpenSettings,
 	onCopyDetails,
+	onCopyText,
 	emptyHint,
 	renames,
 }: ChatTranscriptProps) {
@@ -396,10 +429,17 @@ export function ChatTranscript({
 		return <div className="empty">{emptyHint ?? "还没有消息"}</div>;
 	}
 
+	/** 这一轮最后一条助手答复的原文，分叉行上的复制按钮用它 */
+	let lastAnswerText = "";
+
 	return (
 		<>
 			{rows.map((row) => {
 				const isCollapsed = overrides.get(row.id) ?? isCollapsedByDefault(row.kind);
+
+				if (row.kind === "assistant") {
+					lastAnswerText = textOf(row.items.flatMap((item) => item.parts));
+				}
 
 				if (row.kind === "diff") {
 					return (
@@ -414,18 +454,24 @@ export function ChatTranscript({
 					if (fork === undefined) {
 						return null;
 					}
+					// 复制在分叉左边：两者一起收在这一轮的收尾处，悬停这一行时显形
 					return (
 						<Shell key={row.id} className="is-fork">
-							<button
-								type="button"
-								className="fork-btn"
-								aria-label="从这一轮往后继续"
-								title="从这一轮往后继续"
-								disabled={fork.needsSettle && !canFork}
-								onClick={() => onFork(fork.beforeEntryId)}
-							>
-								<Split size={14} strokeWidth={1.5} />
-							</button>
+							<div className="turn-actions">
+								{onCopyText === undefined || lastAnswerText.length === 0 || row.isStreaming ? null : (
+									<CopyButton text={lastAnswerText} onCopy={onCopyText} />
+								)}
+								<button
+									type="button"
+									className="fork-btn"
+									aria-label="从这一轮往后继续"
+									title="从这一轮往后继续"
+									disabled={fork.needsSettle && !canFork}
+									onClick={() => onFork(fork.beforeEntryId)}
+								>
+									<Split size={14} strokeWidth={1.5} />
+								</button>
+							</div>
 						</Shell>
 					);
 				}
@@ -496,24 +542,29 @@ export function ChatTranscript({
 					const text = textOf(row.items.flatMap((item) => item.parts));
 					// 回退要有落地过的条目:实时消息在提升之前没有条目 id
 					const entryId = row.items[0]?.entryId;
+					// 第一条用户消息之前没有可回退的轮次
+					const canRevertThis = canRevert && entryId !== undefined && row.id !== firstUserRowId;
 					return (
 						<Shell key={row.id} className="is-user" outlineKey={entryId ?? row.id}>
 							<div className="user-line">
 								<div className="bub">{text}</div>
 							</div>
-							{canRevert && entryId !== undefined && row.id !== firstUserRowId ? (
+							{!canRevertThis && onCopyText === undefined ? null : (
 								<div className="user-foot">
-									<button
-										type="button"
-										className="revert-btn"
-										aria-label="回退到这条消息之前"
-										title="回退到这条消息之前"
-										onClick={() => onRevert(entryId, text)}
-									>
-										<Undo2 size={12} strokeWidth={1.5} />
-									</button>
+									{canRevertThis ? (
+										<button
+											type="button"
+											className="revert-btn"
+											aria-label="回退到这条消息之前"
+											title="回退到这条消息之前"
+											onClick={() => onRevert(entryId, text)}
+										>
+											<Undo2 size={12} strokeWidth={1.5} />
+										</button>
+									) : null}
+									{onCopyText === undefined ? null : <CopyButton text={text} onCopy={onCopyText} />}
 								</div>
-							) : null}
+							)}
 						</Shell>
 					);
 				}

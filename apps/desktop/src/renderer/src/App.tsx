@@ -886,6 +886,9 @@ export function App() {
 										onCopyDetails={(text) => {
 											void navigator.clipboard.writeText(text).catch(() => undefined);
 										}}
+										onCopyText={(text) => {
+											void navigator.clipboard.writeText(text).catch(() => undefined);
+										}}
 										renames={chat?.renames}
 										emptyHint="还没有消息,输入内容开始"
 									/>

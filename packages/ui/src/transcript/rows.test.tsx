@@ -32,7 +32,12 @@ function assistantItem(id: string, text: string): TranscriptItem {
 	};
 }
 
-function render(items: TranscriptItem[], canRevert: boolean, reverted: string[] = []): string {
+function render(
+	items: TranscriptItem[],
+	canRevert: boolean,
+	reverted: string[] = [],
+	options: { withCopy?: boolean } = {},
+): string {
 	return renderToStaticMarkup(
 		createElement(ChatTranscript, {
 			items,
@@ -40,6 +45,7 @@ function render(items: TranscriptItem[], canRevert: boolean, reverted: string[] 
 			onFork: () => {},
 			canRevert,
 			onRevert: (entryId: string) => reverted.push(entryId),
+			...(options.withCopy === true ? { onCopyText: () => {} } : {}),
 		}),
 	);
 }
@@ -155,5 +161,27 @@ describe("错误卡片", () => {
 			}),
 		);
 		expect(html).not.toContain(">重试<");
+	});
+});
+
+describe("复制原文", () => {
+	it("给了复制回调时，用户消息与收尾处各有一个复制按钮", () => {
+		const html = render(twoTurns, true, [], { withCopy: true });
+		// 两条用户消息 + 两轮的收尾动作区
+		expect((html.match(/copy-btn/g) ?? []).length).toBe(4);
+		expect((html.match(/user-foot/g) ?? []).length).toBe(2);
+		expect(html).toContain("复制原文");
+	});
+
+	it("没有复制回调时不出现复制按钮", () => {
+		expect(render(twoTurns, true)).not.toContain("copy-btn");
+	});
+
+	it("每一轮的收尾处也放一个复制按钮，紧挨在分叉左边", () => {
+		const html = render(twoTurns, true, [], { withCopy: true });
+		// 两轮各一个收尾动作区，复制在分叉之前
+		expect((html.match(/turn-actions/g) ?? []).length).toBe(2);
+		const actions = html.indexOf("turn-actions");
+		expect(html.indexOf("copy-btn", actions)).toBeLessThan(html.indexOf("fork-btn", actions));
 	});
 });

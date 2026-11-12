@@ -942,7 +942,43 @@ svg.fl {
 .user-foot {
 	display: flex;
 	justify-content: flex-end;
+	gap: 4px;
 	width: 100%;
+}
+
+/* 复制一段原文，与回退同一套尺寸；复制成功后短暂换成对勾 */
+.copy-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	padding: 0;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	background: transparent;
+	color: var(--t3);
+	opacity: 0;
+	transition:
+		opacity var(--dur-fast) var(--ease),
+		color var(--dur-fast) var(--ease),
+		border-color var(--dur-fast) var(--ease);
+}
+
+.row.is-user:hover .copy-btn,
+.row.is-fork:hover .copy-btn,
+.copy-btn:focus-visible {
+	opacity: 1;
+}
+
+.copy-btn:hover {
+	color: var(--acc);
+	border-color: var(--acc);
+}
+
+.copy-btn.is-done {
+	color: var(--ok);
+	border-color: var(--ok);
 }
 
 .revert-btn {
@@ -993,6 +1029,13 @@ svg.fl {
 .row.is-fork {
 	justify-content: flex-end;
 	margin-top: -6px;
+}
+
+/* 一轮收尾处的动作：复制在左，分叉在右 */
+.turn-actions {
+	display: flex;
+	align-items: center;
+	gap: 4px;
 }
 
 .fork-btn {

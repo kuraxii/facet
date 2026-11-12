@@ -6,6 +6,7 @@
 
 import { FolderPlus, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronIcon } from "../transcript/chevron.tsx";
 import { FolderIcon } from "../transcript/icons.tsx";
 import { RequestEpoch } from "./request-epoch.ts";
 
@@ -171,7 +172,7 @@ export function CreateProjectDialog({ isOpen, onPickFolder, onCreate, onClose }:
 					{cwd === undefined ? (
 						<span className="source-hint">
 							在此电脑上添加文件夹
-							<i className="chev is-open" />
+							<ChevronIcon isOpen={false} />
 						</span>
 					) : (
 						<span className="source-path mono" title={cwd}>

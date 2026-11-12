@@ -7,6 +7,7 @@
 import type { ProjectInfo, SessionSummary } from "@facet/protocol";
 import { FolderPlus, Plus, Search, Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronIcon } from "../transcript/chevron.tsx";
 import { FolderIcon, MoonIcon, SunIcon } from "../transcript/icons.tsx";
 import {
 	baseName,
@@ -434,7 +435,7 @@ export function SessionSidebar({
 					<FolderIcon size={14} />
 					<span className="sb-filter-name ell">{filterLabel}</span>
 					<span className="sb-filter-meta mono">{filterCount}</span>
-					<i className={isFilterOpen ? "chev is-open" : "chev"} />
+					<ChevronIcon isOpen={isFilterOpen} />
 				</button>
 
 				{isFilterOpen ? (

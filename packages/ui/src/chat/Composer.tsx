@@ -9,6 +9,7 @@ import type { ChatActivity } from "@facet/client-core";
 import type { ModelInfo, ThinkingLevel } from "@facet/protocol";
 import { Brain, FileUp, ImagePlus, Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronIcon } from "../transcript/chevron.tsx";
 import { SendIcon, StopIcon } from "../transcript/icons.tsx";
 
 /** 输入区参数。 */
@@ -212,7 +213,7 @@ export function Composer({
 						title={canPickModel ? "切换模型" : "当前模型"}
 					>
 						{modelLabel(model)}
-						{canPickModel ? <i className={openMenu === "model" ? "chev is-open" : "chev"} /> : null}
+						{canPickModel ? <ChevronIcon isOpen={openMenu === "model"} /> : null}
 					</button>
 					{openMenu === "model" ? (
 						<div className="chip-pop" role="dialog" aria-label="选择模型">
@@ -264,7 +265,7 @@ export function Composer({
 					>
 						<Brain size={13} strokeWidth={1.5} />
 						{thinkingLevel === undefined ? "默认" : LEVEL_LABELS[thinkingLevel]}
-						{canPickLevel ? <i className={openMenu === "level" ? "chev is-open" : "chev"} /> : null}
+						{canPickLevel ? <ChevronIcon isOpen={openMenu === "level"} /> : null}
 					</button>
 					{openMenu === "level" ? (
 						<div className="chip-pop" role="dialog" aria-label="选择思考档位">

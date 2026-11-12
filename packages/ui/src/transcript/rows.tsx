@@ -8,6 +8,7 @@ import type { Part, ToolCallPart, TranscriptItem } from "@facet/client-core";
 import { Check, Copy, Split, Undo2 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { Markdown } from "../markdown/Markdown.tsx";
+import { ChevronIcon } from "./chevron.tsx";
 import { type DiffChunk, type DisplayRow, groupRows, metaSummary } from "./group.ts";
 import { foldOutput, toolStatusText, toolTarget } from "./tool-text.ts";
 
@@ -196,7 +197,7 @@ function ToolCard({ part }: { part: ToolCallPart }) {
 	return (
 		<div className={`tool is-${part.status}`}>
 			<button type="button" className="tool-head" onClick={() => setOpen((open) => !open)}>
-				<i className={isOpen ? "chev is-open" : "chev"} />
+				<ChevronIcon isOpen={isOpen} />
 				<span className="tool-name">{part.name}</span>
 				{target.length > 0 ? <span className="tool-arg">{target}</span> : null}
 				<span className="tool-status">
@@ -220,7 +221,7 @@ function ThinkingLine({ text }: { text: string }) {
 	return (
 		<>
 			<button type="button" className="think" onClick={() => setOpen((open) => !open)}>
-				<i className={isOpen ? "chev is-open" : "chev"} />
+				<ChevronIcon isOpen={isOpen} />
 				<em>思考</em>
 				{isOpen ? null : <span className="preview">{preview(text, 60)}</span>}
 			</button>
@@ -265,7 +266,7 @@ function FilesRow({ diffs }: { diffs: readonly DiffChunk[] }) {
 					const isOpen = opened.has(diff.callId);
 					return (
 						<button key={diff.callId} type="button" className="fc" onClick={() => toggle(diff.callId)}>
-							<i className={isOpen ? "chev is-open" : "chev"} />
+							<ChevronIcon isOpen={isOpen} />
 							<span className="path" title={file ?? ""}>
 								{file === undefined ? "未命名文件" : shortPath(file)}
 							</span>

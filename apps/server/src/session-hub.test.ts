@@ -1,7 +1,14 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
-import type { Entry, SessionEvent, SessionEventListener, SessionSnapshot } from "@facet/protocol";
+import type {
+	ActionFrame,
+	Entry,
+	SessionEvent,
+	SessionEventListener,
+	SessionSnapshot,
+} from "@facet/protocol";
+import { makeChannel } from "@facet/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	type ActionSink,
@@ -532,6 +539,74 @@ describe("空闲回收", () => {
 		await hub.snapshot(snapshot.id);
 		await vi.advanceTimersByTimeAsync(IDLE_MS + 1);
 		expect(hub.has(snapshot.id)).toBe(false);
+	});
+});
+
+describe("多端", () => {
+	/** 记账用的订阅者：收下的帧按顺序存起来。 */
+	function recorder(id: string) {
+		const frames: ActionFrame[] = [];
+		return { frames, sink: { id, send: (frame: ActionFrame) => frames.push(frame) } };
+	}
+
+	it("两个端订阅同一会话时收到同一串动作", async () => {
+		const snapshot = await hub.openSession("/tmp/s1.jsonl");
+		const first = recorder("端一");
+		const second = recorder("端二");
+		for (const { sink } of [first, second]) {
+			await hub.subscribe(makeChannel("session", snapshot.id), undefined, sink);
+			await hub.subscribe(makeChannel("chat", snapshot.id), undefined, sink);
+		}
+		const agent = hub.agent(snapshot.id);
+		agent.emit({ type: "queue", steering: ["排队一句"], followUp: [] } as never);
+		agent.emit({ type: "settled", aborted: false } as never);
+		expect(first.frames.length).toBeGreaterThan(0);
+		expect(first.frames).toEqual(second.frames);
+	});
+
+	it("两个端同时写同一会话时按到达顺序执行，后一个看到前一个的结果", async () => {
+		const snapshot = await hub.createSession();
+		const order: string[] = [];
+		let running = 0;
+		await Promise.all([
+			hub.withSession(snapshot.id, async () => {
+				running += 1;
+				order.push(`端一 ${running}`);
+				await Promise.resolve();
+			}),
+			hub.withSession(snapshot.id, async () => {
+				running += 1;
+				order.push(`端二 ${running}`);
+			}),
+		]);
+		// 同一时刻只有一个动作在跑，第二个看到的 running 已经是 2
+		expect(order).toEqual(["端一 1", "端二 2"]);
+	});
+
+	it("排队变化推给所有订阅者", async () => {
+		const snapshot = await hub.openSession("/tmp/s1.jsonl");
+		const first = recorder("端一");
+		const second = recorder("端二");
+		const channel = makeChannel("session", snapshot.id);
+		await hub.subscribe(channel, undefined, first.sink);
+		await hub.subscribe(channel, undefined, second.sink);
+		hub.agent(snapshot.id).emit({ type: "queue", steering: ["补充"], followUp: ["收尾"] } as never);
+		const actions = first.frames.map((frame) => frame.action);
+		expect(actions).toContainEqual({ type: "session/queueChanged", steering: ["补充"], followUp: ["收尾"] });
+		expect(second.frames.map((frame) => frame.action)).toEqual(actions);
+	});
+
+	it("退订之后不再收到，另一个端照常", async () => {
+		const snapshot = await hub.openSession("/tmp/s1.jsonl");
+		const first = recorder("端一");
+		const second = recorder("端二");
+		const channel = makeChannel("session", snapshot.id);
+		await hub.subscribe(channel, undefined, first.sink);
+		await hub.subscribe(channel, undefined, second.sink);
+		hub.unsubscribe(channel, first.sink);
+		hub.agent(snapshot.id).emit({ type: "queue", steering: ["再说一句"], followUp: [] } as never);
+		expect(first.frames).toEqual([]);
+		expect(second.frames).toHaveLength(1);
 	});
 });
 

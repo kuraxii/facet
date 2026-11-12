@@ -11,6 +11,7 @@ import type {
 } from "@facet/protocol";
 import { describe, expect, it, vi } from "vitest";
 import { type HostHandshake, SessionClient, type SessionTransport } from "./client.ts";
+import { toTranscript } from "./transcript.ts";
 
 const CHAT = "chat:/s1" as const;
 const SESSION = "session:/s1" as const;
@@ -33,6 +34,11 @@ function assistant(text: string): Message {
 		stopReason: "stop",
 		timestamp: 1,
 	};
+}
+
+/** 用户消息。 */
+function user(text: string): Message {
+	return { role: "user", content: [{ type: "text", text }], timestamp: 1 };
 }
 
 /** 带工具调用的助手消息。 */
@@ -807,6 +813,57 @@ describe("重连", () => {
 		await client.openSession("/tmp/s1.jsonl");
 		transport.failSubscribe.add("session:/s1");
 		await expect(client.resume()).rejects.toThrow("subscribe 失败");
+	});
+});
+
+describe("多端视图一致", () => {
+	/** 取对话投影；没有打开会话时给空数组。 */
+	function transcriptOf(client: SessionClient) {
+		const view = client.chatView();
+		return view === undefined ? [] : toTranscript(view);
+	}
+
+	it("同一串动作喂给两个端，会话状态与对话内容逐条相等", async () => {
+		const one = createClient(3, { initialPages: 1, pageSize: 5 });
+		const two = createClient(3, { initialPages: 1, pageSize: 5 });
+		await one.client.openSession("/tmp/s1.jsonl");
+		await two.client.openSession("/tmp/s1.jsonl");
+
+		const frames: [Channel, Action][] = [
+			[SESSION, { type: "session/phase", phase: "running", maintenance: undefined }],
+			[CHAT, { type: "chat/turnStarted", text: "你好" }],
+			[CHAT, { type: "chat/messageAppended", messageId: "m1", message: assistant("收到") }],
+			[SESSION, { type: "session/queueChanged", steering: ["补充"], followUp: [] }],
+			[CHAT, { type: "chat/settled", aborted: false }],
+		];
+		for (const [channel, action] of frames) {
+			one.transport.emit(channel, action);
+			two.transport.emit(channel, action);
+		}
+
+		expect(one.client.sessionView()?.state.phase).toBe(two.client.sessionView()?.state.phase);
+		expect(one.client.sessionView()?.state.queued).toEqual(two.client.sessionView()?.state.queued);
+		expect(transcriptOf(one.client)).toEqual(transcriptOf(two.client));
+	});
+
+	it("一个端发出的写操作由主机广播回两端，自己不先改状态", async () => {
+		const one = createClient(2, { initialPages: 1, pageSize: 5 });
+		const two = createClient(2, { initialPages: 1, pageSize: 5 });
+		await one.client.openSession("/tmp/s1.jsonl");
+		await two.client.openSession("/tmp/s1.jsonl");
+		const before = transcriptOf(one.client).length;
+		one.client.send("一起看这句");
+		// 主机还没广播，发出这条消息的端也不先把它塞进对话
+		expect(transcriptOf(one.client)).toHaveLength(before);
+		expect(transcriptOf(two.client)).toHaveLength(before);
+		const broadcast: [Channel, Action] = [
+			CHAT,
+			{ type: "chat/messageAppended", messageId: "m1", message: user("一起看这句") },
+		];
+		one.transport.emit(...broadcast);
+		two.transport.emit(...broadcast);
+		expect(transcriptOf(one.client)).toHaveLength(before + 1);
+		expect(transcriptOf(one.client)).toEqual(transcriptOf(two.client));
 	});
 });
 

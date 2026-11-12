@@ -1,0 +1,53 @@
+# 发行包配置。只出 Linux 的 rpm 与 deb 两种，macOS、Windows、AppImage 不做。
+#
+# 三个入口都要进包：桌面本体、嵌入主机、以及主机再往下起的 pty 子进程，三者在 out/main
+# 下同级，`pty-host.js` 按同目录解析。
+appId: app.facet.desktop
+productName: Facet
+copyright: Facet
+
+directories:
+  buildResources: build
+  output: dist
+
+# 只带构建产物与运行时要解析的依赖。工作区的 @facet/* 已经被打进 out/main，不必再带源码。
+files:
+  - out/**
+  - package.json
+  - "!**/*.map"
+  # node-pty 只留 linux 的构建产物与运行时脚本，源码和其它平台的预编译都不要
+  - "!node_modules/node-pty/{src,deps,third_party,scripts,typings}/**"
+  - "!node_modules/node-pty/prebuilds/{win32-x64,win32-arm64,darwin-x64,darwin-arm64}/**"
+
+asar: true
+
+# node-pty 是原生模块，.node 与 spawn-helper 必须在 asar 外面才能被加载
+asarUnpack:
+  - "**/node_modules/node-pty/**"
+
+linux:
+  artifactName: facet-${version}-${arch}.${ext}
+  target:
+    - rpm
+    - deb
+  category: Development
+  executableName: facet
+  # .desktop 名与 Electron 的 app_id 一致，桌面环境才能把窗口归到图标上
+  syncDesktopName: true
+  icon: build/icon.png
+  description: Facet 是 pi 编码助手的桌面端，主机与界面分进程，可以连本机也可以连远程。
+  desktop:
+    entry:
+      Name: Facet
+      Comment: Pi 编码助手的桌面端
+      Categories: Development;Utility;
+
+deb:
+  maintainer: Facet <facet@localhost>
+  packageName: facet
+  priority: optional
+
+rpm:
+  maintainer: Facet <facet@localhost>
+  packageName: facet
+  synopsis: Pi 编码助手的桌面端

@@ -180,9 +180,34 @@ scripts/build-fonts.sh <字体目录>
 | `$XDG_DATA_HOME/facet`（缺省 `~/.local/share/facet`） | 主机身份 `host.json`、项目清单 `projects.json`、界面设置 `settings.json`、终端登记 `terminals.json`、审计 `audit.log`；独立启动时还有发现文件 `endpoint.json` | `FACET_DATA_DIR` |
 | `$XDG_CONFIG_HOME/facet`（缺省 `~/.config/facet`） | 桌面本地记录 `desktop.json`：窗口位置与尺寸 | — |
 
+开发实例的两处目录都带 `-dev` 后缀：数据目录是 `~/.local/share/facet-dev`，配置目录是 `~/.config/facet-dev`。`npm run dev`、`dev:split`、`dev:host` 三者都用这份，因此开发时跑的东西与装好的包互不影响，`projects.json` 与主机身份各有一份。
+
 用 `agent-dev` 而不是 `~/.pi/agent`，是为了和 pi 命令行共用凭证与模型配置，同时不把开发期的会话混进真实目录。
 
 主机标识在首次启动时生成并写入 `host.json`：取 `/etc/machine-id` 拼上数据目录做 SHA-256，取前 20 位；读不到 machine-id 时改用时间戳加随机串。同一台机器跑多份（不同数据目录）各有各的标识，删掉 `host.json` 即可换一个。
+
+## 打包
+
+只出 Linux 的两种安装包：
+
+```bash
+npm run dist -w @facet/desktop
+```
+
+产物在 `apps/desktop/dist/`：
+
+| 文件 | 说明 |
+|---|---|
+| `facet-<版本>-x86_64.rpm` | Fedora、RHEL 系 |
+| `facet-<版本>-amd64.deb` | Debian、Ubuntu 系 |
+
+- 安装到 `/opt/Facet`，可执行文件是 `facet`，桌面项 `facet.desktop` 与 `StartupWMClass` 都是 `facet`，图标 512×512
+- 依赖走 electron-builder 的缺省清单（deb：`libgtk-3-0`、`libnss3`、`libxss1`、`libxtst6` 等；rpm：`gtk3`、`nss`、`libXScrnSaver` 等），不手写
+- `node-pty` 的原生模块与 `spawn-helper` 解包在 `resources/app.asar.unpacked`，打包时只留 linux 的构建产物，源码与其它平台的预编译都剔掉
+- 构建 deb/rpm 用的 `fpm` 由 electron-builder 自己下载到 `~/.cache/electron-builder`，不需要系统装 fpm
+- 渲染产物约 45 MB，主要是随包打的字体（Inter、Noto Sans SC、Maple Mono）；Electron 本身约 100 MB
+
+包里的主机与开发时是同一个入口：桌面用 `process.execPath` 加 `ELECTRON_RUN_AS_NODE=1` 拉起 `out/main/host.js`，主机再起同目录的 `pty-host.js`。
 
 ## 环境变量
 

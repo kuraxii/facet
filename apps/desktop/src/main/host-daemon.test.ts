@@ -74,6 +74,11 @@ describe("resolveDataDir", () => {
 		expect(resolveDataDir({ FACET_DATA_DIR: "/data/facet", XDG_DATA_HOME: "/xdg" })).toBe("/data/facet");
 	});
 
+	it("开发实例的数据目录带 -dev 后缀，与发布实例分开", () => {
+		expect(resolveDataDir({ XDG_DATA_HOME: "/xdg" }, { isDev: true })).toBe("/xdg/facet-dev");
+		expect(resolveDataDir({ XDG_DATA_HOME: "/xdg" })).toBe("/xdg/facet");
+	});
+
 	it("按 XDG_DATA_HOME 取，没有或不是绝对路径时用家目录", () => {
 		expect(resolveDataDir({ XDG_DATA_HOME: "/xdg" })).toBe("/xdg/facet");
 		expect(resolveDataDir({ XDG_DATA_HOME: "relative" }).endsWith("/.local/share/facet")).toBe(true);

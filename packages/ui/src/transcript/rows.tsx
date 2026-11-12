@@ -551,6 +551,7 @@ export function ChatTranscript({
 							</div>
 							{!canRevertThis && onCopyText === undefined ? null : (
 								<div className="user-foot">
+									{onCopyText === undefined ? null : <CopyButton text={text} onCopy={onCopyText} />}
 									{canRevertThis ? (
 										<button
 											type="button"
@@ -562,7 +563,6 @@ export function ChatTranscript({
 											<Undo2 size={12} strokeWidth={1.5} />
 										</button>
 									) : null}
-									{onCopyText === undefined ? null : <CopyButton text={text} onCopy={onCopyText} />}
 								</div>
 							)}
 						</Shell>

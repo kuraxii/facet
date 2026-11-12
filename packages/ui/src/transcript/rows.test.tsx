@@ -173,6 +173,12 @@ describe("复制原文", () => {
 		expect(html).toContain("复制原文");
 	});
 
+	it("用户消息里复制排在回退左边", () => {
+		const html = render(twoTurns, true, [], { withCopy: true });
+		const foot = html.slice(html.indexOf("user-foot"));
+		expect(foot.indexOf("copy-btn")).toBeLessThan(foot.indexOf("revert-btn"));
+	});
+
 	it("没有复制回调时不出现复制按钮", () => {
 		expect(render(twoTurns, true)).not.toContain("copy-btn");
 	});

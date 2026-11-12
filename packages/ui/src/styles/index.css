@@ -954,7 +954,7 @@ svg.fl {
 	width: 22px;
 	height: 22px;
 	padding: 0;
-	border: 1px solid var(--line);
+	border: 0;
 	border-radius: 6px;
 	background: transparent;
 	color: var(--t3);
@@ -962,7 +962,7 @@ svg.fl {
 	transition:
 		opacity var(--dur-fast) var(--ease),
 		color var(--dur-fast) var(--ease),
-		border-color var(--dur-fast) var(--ease);
+		background-color var(--dur-fast) var(--ease);
 }
 
 .row.is-user:hover .copy-btn,
@@ -972,13 +972,12 @@ svg.fl {
 }
 
 .copy-btn:hover {
+	background: var(--surface2);
 	color: var(--acc);
-	border-color: var(--acc);
 }
 
 .copy-btn.is-done {
 	color: var(--ok);
-	border-color: var(--ok);
 }
 
 .revert-btn {
@@ -988,7 +987,7 @@ svg.fl {
 	width: 22px;
 	height: 22px;
 	padding: 0;
-	border: 1px solid var(--line);
+	border: 0;
 	border-radius: 6px;
 	background: transparent;
 	color: var(--t3);
@@ -997,7 +996,7 @@ svg.fl {
 	transition:
 		opacity var(--dur-fast) var(--ease),
 		color var(--dur-fast) var(--ease),
-		border-color var(--dur-fast) var(--ease);
+		background-color var(--dur-fast) var(--ease);
 }
 
 .row.is-user:hover .revert-btn,
@@ -1006,8 +1005,8 @@ svg.fl {
 }
 
 .revert-btn:hover {
+	background: var(--surface2);
 	color: var(--acc);
-	border-color: var(--acc);
 }
 
 .bub {
@@ -1044,7 +1043,7 @@ svg.fl {
 	width: 26px;
 	height: 26px;
 	padding: 0;
-	border: 1px solid var(--line);
+	border: 0;
 	border-radius: 6px;
 	background: transparent;
 	color: var(--t3);
@@ -1052,14 +1051,14 @@ svg.fl {
 	transition:
 		opacity var(--dur-fast) var(--ease),
 		color var(--dur-fast) var(--ease),
-		border-color var(--dur-fast) var(--ease);
+		background-color var(--dur-fast) var(--ease);
 }
 
 .row.is-fork:hover .fork-btn,
 .fork-btn:focus-visible {
 	opacity: 1;
+	background: var(--surface2);
 	color: var(--acc);
-	border-color: var(--acc);
 }
 
 .fork-btn:disabled {
@@ -1068,8 +1067,8 @@ svg.fl {
 }
 
 .fork-btn:disabled:hover {
+	background: transparent;
 	color: var(--t3);
-	border-color: var(--line);
 }
 
 .row-action {

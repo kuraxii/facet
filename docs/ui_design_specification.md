@@ -42,6 +42,9 @@
     *   `--addbg` / `--delbg`：差异行的底色，取同色 16% 透明度
 *   **代码配色 (Code Highlight)**：代码块与差异视图的语法高亮另有一套配色，可选 GitHub、Catppuccin、Dracula、Tokyo Night、One、Nord、Gruvbox、Solarized，浅深跟随界面主题。
 
+### 1.1.1 图标 (Icons)
+界面图标与 lucide 一致：`lucide-react` 的 24 栅格线性图标，`size` 12 至 16，笔画 `1.5`，颜色跟随文字变量（`currentColor`）。只导入用到的图标，未用的不进入产物。侧栏页脚的设置入口即 `Settings`。
+
 ### 1.2 排版规范 (Typography)
 *   **无衬线字体 (Sans-serif)**：`Inter` 与 `Noto Sans SC Variable`（都随构建打包）, 系统默认字体。Latin 与数字用 Inter，汉字与中文标点用 Noto Sans SC Variable。用于常规界面文本。
 *   **等宽字体 (Monospace)**：`Maple Mono` 与 `Maple Mono CN`（都随构建打包）, 等宽字体。用于代码、文件路径、时间、统计数字。必须启用 `tabular-nums`（等宽数字特性）以保证数字宽度一致。

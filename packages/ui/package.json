@@ -20,6 +20,7 @@
 		"@fontsource-variable/noto-sans-sc": "^5.3.1",
 		"@fontsource/inter": "^5.3.0",
 		"katex": "^0.19.1",
+		"lucide-react": "^1.72.0",
 		"markstream-react": "^2.0.24",
 		"mermaid": "^12.3.0",
 		"shiki": "^4.6.0",

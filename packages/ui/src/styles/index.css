@@ -706,6 +706,11 @@ svg.fl {
 	font-size: 12px;
 }
 
+.sb-foot-btn.is-on {
+	background: var(--surface3);
+	color: var(--t1);
+}
+
 .sb-foot-btn:disabled {
 	color: var(--t3);
 	cursor: default;

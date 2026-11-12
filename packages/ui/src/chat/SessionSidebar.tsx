@@ -5,6 +5,7 @@
  * 项目过滤器同时决定队列的范围与新建会话的目录，队列按时间分组，分组规则见 sidebar-model。
  */
 import type { ProjectInfo, SessionSummary } from "@facet/protocol";
+import { Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FolderIcon, FolderPlusIcon, MoonIcon, PlusIcon, SearchIcon, SunIcon } from "../transcript/icons.tsx";
 import {
@@ -798,11 +799,13 @@ export function SessionSidebar({
 			<footer className="sb-foot">
 				<button
 					type="button"
-					className={isSettingsOpen ? "sb-foot-btn is-on" : "sb-foot-btn"}
+					className={isSettingsOpen ? "sb-foot-btn is-icon is-on" : "sb-foot-btn is-icon"}
+					aria-label="设置"
+					title="设置"
 					aria-pressed={isSettingsOpen}
 					onClick={() => onOpenSettings?.()}
 				>
-					设置
+					<Settings size={14} strokeWidth={1.5} />
 				</button>
 				<button
 					type="button"

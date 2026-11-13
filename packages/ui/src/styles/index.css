@@ -1996,10 +1996,6 @@ svg.fl {
 	font-size: 11.5px;
 }
 
-.tr-status.is-err {
-	color: var(--err);
-}
-
 .tr-dot {
 	margin-left: auto;
 }

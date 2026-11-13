@@ -37,11 +37,11 @@ import {
 	hasEndpoint,
 	isDarkTheme,
 	normalizeEndpoint,
+	PanelToggle,
 	parseCommand,
 	QueueStrip,
 	RightPanel,
 	type RightPanelState,
-	TopBar,
 	readHostList,
 	readPanelState,
 	resolveUiTheme,
@@ -50,6 +50,7 @@ import {
 	type SettingsDataSource,
 	SettingsPage,
 	type SettingsSection,
+	SidebarToggle,
 	samePath,
 	THEME_MODES,
 	type ThemeName,
@@ -1477,16 +1478,10 @@ export function App() {
 						}
 					/>
 
-					<TopBar
-						isSidebarOpen={isSidebarOpen}
-						onToggleSidebar={toggleSidebar}
-						isPanelOpen={panel.open}
-						onTogglePanel={() => updatePanel({ open: !panel.open })}
-						panelTab={panel.tab}
-						onSelectPanelTab={(tab) => updatePanel({ tab, open: true })}
-					/>
+					<PanelToggle isOpen={panel.open} onToggle={() => updatePanel({ open: !panel.open })} />
 
 					<main className="main">
+						<SidebarToggle isOpen={isSidebarOpen} onToggle={toggleSidebar} />
 						{session === undefined ? null : <ChatOutline items={transcript} container={scrollElement} />}
 						{session === undefined ? (
 							<div className="empty-wrap">
@@ -1617,6 +1612,7 @@ export function App() {
 					{panel.open ? (
 						<RightPanel
 							tab={panel.tab}
+							onTabChange={(tab) => updatePanel({ tab })}
 							width={panel.width}
 							onWidthChange={(width) => updatePanel({ width })}
 						>

@@ -156,21 +156,11 @@ svg.fl {
 	-webkit-app-region: drag;
 }
 
-/* 顶部工具条：中间是右栏分页，两侧是左右栏开关；整组不参与拖动 */
-.top-bar {
+/* 顶部两端的开关：左栏开关贴主区左上角，右栏开关贴窗口右上角、窗口按钮左边 */
+.chrome-toggle {
 	position: absolute;
-	top: 0;
-	left: 50%;
+	top: 4px;
 	z-index: 2;
-	display: flex;
-	align-items: center;
-	gap: 2px;
-	height: var(--chrome-height);
-	transform: translateX(-50%);
-	-webkit-app-region: no-drag;
-}
-
-.top-bar-btn {
 	display: grid;
 	place-items: center;
 	width: 28px;
@@ -179,38 +169,20 @@ svg.fl {
 	border-radius: 6px;
 	background: transparent;
 	color: var(--t3);
+	-webkit-app-region: no-drag;
 }
 
-.top-bar-btn:hover {
+.chrome-toggle:hover {
 	background: var(--surface2);
 	color: var(--t1);
 }
 
-.top-bar-tabs {
-	display: flex;
-	align-items: center;
-	gap: 2px;
-	margin: 0 4px;
+.chrome-toggle.is-sidebar {
+	left: 4px;
 }
 
-.top-bar-tab {
-	height: 26px;
-	padding: 0 10px;
-	border: 0;
-	border-radius: 6px;
-	background: transparent;
-	color: var(--t3);
-	font-size: 12.5px;
-}
-
-.top-bar-tab:hover {
-	background: var(--surface2);
-	color: var(--t1);
-}
-
-.top-bar-tab.is-on {
-	background: var(--surface2);
-	color: var(--t1);
+.chrome-toggle.is-panel {
+	right: calc(var(--window-button-width) * 3 + 4px);
 }
 
 /* 窗口按钮：浮在拖动区之上，自己标 no-drag */
@@ -253,9 +225,6 @@ svg.fl {
 	overflow: hidden;
 }
 
-.shell.is-sb-hidden .sb {
-	display: none;
-}
 /* 侧栏 */
 
 .sb {
@@ -289,6 +258,11 @@ svg.fl {
 	font-size: 14px;
 	font-weight: 600;
 	letter-spacing: 0.2px;
+}
+
+/* 宽屏收起左栏 */
+.shell.is-sb-hidden .sb {
+	display: none;
 }
 
 .sb-tools {
@@ -915,6 +889,40 @@ svg.fl {
 		color-mix(in srgb, var(--acc) 40%, transparent) 3px 5px,
 		transparent 5px 100%
 	);
+}
+
+.panel-head {
+	display: flex;
+	flex: none;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	height: 34px;
+	padding: 0 8px 0 10px;
+}
+
+.panel-tabs {
+	display: flex;
+	gap: 2px;
+}
+
+.panel-tab {
+	height: 24px;
+	padding: 0 8px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--t3);
+	font-size: 12px;
+}
+
+.panel-tab:hover {
+	color: var(--t1);
+}
+
+.panel-tab.is-on {
+	background: var(--surface2);
+	color: var(--t1);
 }
 
 .panel-body {

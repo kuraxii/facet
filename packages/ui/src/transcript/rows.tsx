@@ -29,8 +29,6 @@ export interface ChatTranscriptProps {
 	retry?: { attempt: number; maxAttempts: number; delayMs: number } | undefined;
 	/** 重试这一轮:按最后一条用户消息重新发一次,不重复添加用户消息 */
 	onRetryTurn?: ((entryId: string, text: string) => void) | undefined;
-	/** 打开设置里与错误有关的那一页 */
-	onOpenSettings?: (() => void) | undefined;
 	/** 复制错误详情 */
 	onCopyDetails?: ((text: string) => void) | undefined;
 	/** 复制一条消息的原文，用户消息与最终答复都用它 */
@@ -332,7 +330,6 @@ export function ChatTranscript({
 	onRevert,
 	retry,
 	onRetryTurn,
-	onOpenSettings,
 	onCopyDetails,
 	onCopyText,
 	emptyHint,
@@ -480,11 +477,6 @@ export function ChatTranscript({
 										重试
 									</button>
 								) : null}
-								{onOpenSettings === undefined ? null : (
-									<button type="button" className="btn" onClick={onOpenSettings}>
-										打开设置
-									</button>
-								)}
 								{onCopyDetails === undefined ? null : (
 									<button type="button" className="btn" onClick={() => onCopyDetails(message)}>
 										复制详情

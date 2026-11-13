@@ -1423,10 +1423,6 @@ export function App() {
 										onRevert={revertTo}
 										retry={retryOf(session.state.maintenance)}
 										onRetryTurn={retryTurn}
-										onOpenSettings={() => {
-											setSettingsSection("models");
-											setView("settings");
-										}}
 										onCopyDetails={(text) => {
 											void navigator.clipboard.writeText(text).catch(() => undefined);
 										}}

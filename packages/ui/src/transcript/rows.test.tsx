@@ -135,18 +135,17 @@ describe("错误卡片", () => {
 				canRevert: true,
 				onRevert: () => {},
 				onRetryTurn,
-				onOpenSettings: () => {},
 				onCopyDetails: () => {},
 			}),
 		);
 	}
 
-	it("显示错误原文与三个动作", () => {
+	it("显示错误原文与两个动作", () => {
 		const html = renderWithActions(() => {});
 		expect(html).toContain("429 请求过多");
 		expect(html).toContain("重试");
-		expect(html).toContain("打开设置");
 		expect(html).toContain("复制详情");
+		expect(html).not.toContain("打开设置");
 	});
 
 	it("运行中不给重试入口", () => {

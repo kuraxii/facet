@@ -781,7 +781,6 @@ svg.fl {
 	gap: 8px;
 	height: 38px;
 	padding: 0 8px 0 10px;
-	border-bottom: 1px solid var(--line);
 }
 
 .panel-tabs {
@@ -832,7 +831,6 @@ svg.fl {
 	gap: 8px;
 	margin-bottom: 6px;
 	padding: 0 2px 6px;
-	border-bottom: 1px solid var(--line);
 }
 
 .chg-branch {
@@ -978,7 +976,6 @@ svg.fl {
 	justify-content: space-between;
 	margin-bottom: 4px;
 	padding: 0 2px 4px;
-	border-bottom: 1px solid var(--line);
 }
 
 .tree-root {
@@ -1051,7 +1048,6 @@ svg.fl {
 	gap: 6px;
 	margin-bottom: 6px;
 	padding-bottom: 6px;
-	border-bottom: 1px solid var(--line);
 }
 
 .file-path {

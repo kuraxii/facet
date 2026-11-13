@@ -1898,6 +1898,13 @@ svg.fl {
 	word-break: break-word;
 }
 
+/* 直接放在答复正文里的思考行（这一轮没有工具调用）：与 Markdown 左对齐，不缩进 */
+.assistant-body > .tr .tr-head,
+.assistant-body > .tr .tr-think {
+	margin-left: -8px;
+	padding-left: 8px;
+}
+
 /* 这一轮收尾：时长、复制、分叉 */
 
 .turn-time {

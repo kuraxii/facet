@@ -31,6 +31,7 @@ import type {
 	RequestResults,
 	SessionSnapshot,
 	SessionSummary,
+	SlashCommand,
 	ThinkingLevel,
 } from "@facet/protocol";
 import { makeChannel, parseChannel, sessionsChannelFor } from "@facet/protocol";
@@ -324,15 +325,6 @@ export class SessionClient {
 			"gitDiff",
 			untracked ? { cwd, path, untracked: true } : { cwd, path },
 		);
-	}
-
-	/**
-	 * 结束主机。
-	 *
-	 * 主机应答后关闭端点并退出进程，调用方的连接随后断开。只有本机连接能这么做。
-	 */
-	async shutdownHost(): Promise<void> {
-		await this.transport.request("shutdownHost", {});
 	}
 
 	/** 列出用户自己添加的提供方。 */
@@ -752,6 +744,13 @@ export class SessionClient {
 	 */
 	cancel(): number {
 		return this.transport.dispatch(this.requireOpened().chatChannel, { type: "chat/turnCancelled" });
+	}
+
+	/** 会话里能用的命令：界面自带的几条，加上扩展命令、提示词模板与技能。 */
+	async listCommands(): Promise<SlashCommand[]> {
+		const opened = this.requireOpened();
+		const result = await this.transport.request("listCommands", { sessionId: opened.snapshot.id });
+		return result.commands;
 	}
 
 	/**

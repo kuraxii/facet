@@ -20,6 +20,7 @@ import type {
 	SessionEventListener,
 	SessionSnapshot,
 	SessionStats,
+	SlashCommand,
 	ThinkingLevel,
 	ToolInfo,
 	TurnPhase,
@@ -63,6 +64,42 @@ function toEntry(entry: SessionEntry): Entry {
 			return base;
 	}
 }
+
+/**
+ * 图形界面自己实现的基础命令。
+ *
+ * 只列真的能用的几条：别的内置命令（`/tree`、`/export`、`/login` 之类）要么是终端里的交互，
+ * 要么这边没有对应入口，列出来点了也没反应。
+ */
+export const FACET_COMMANDS: readonly SlashCommand[] = [
+	{
+		name: "model",
+		description: "切换当前会话的模型",
+		argumentHint: "<provider/model>",
+		source: "builtin",
+		handler: "facet",
+	},
+	{
+		name: "thinking",
+		description: "切换思考档位",
+		argumentHint: "<off|low|medium|high>",
+		source: "builtin",
+		handler: "facet",
+	},
+	{
+		name: "compact",
+		description: "把较早的历史压成摘要，腾出上下文",
+		source: "builtin",
+		handler: "facet",
+	},
+	{
+		name: "name",
+		description: "给这个会话改名",
+		argumentHint: "<名字>",
+		source: "builtin",
+		handler: "facet",
+	},
+];
 
 export class PiAgent {
 	/** 会话 id，与持久化文件里的会话 id 一致 */
@@ -387,6 +424,38 @@ export class PiAgent {
 
 	contextUsage(): ContextUsage | undefined {
 		return this.session.getContextUsage();
+	}
+
+	/**
+	 * 会话里能用的命令。
+	 *
+	 * 界面自己实现的四条放前面，后面接扩展注册的命令、提示词模板与技能。后面这些发出去就是
+	 * 一条消息，由 pi 分发或展开，图形界面不必逐条实现。
+	 */
+	commands(): SlashCommand[] {
+		const extensionCommands = this.session.extensionRunner.getRegisteredCommands().map((command) => ({
+			name: command.invocationName,
+			...(command.description === undefined ? {} : { description: command.description }),
+			source: "extension" as const,
+			handler: "pi" as const,
+			...(command.sourceInfo?.path === undefined ? {} : { origin: command.sourceInfo.path }),
+		}));
+		const templates = this.session.promptTemplates.map((template) => ({
+			name: template.name,
+			description: template.description,
+			...(template.argumentHint === undefined ? {} : { argumentHint: template.argumentHint }),
+			source: "prompt" as const,
+			handler: "pi" as const,
+			...(template.sourceInfo?.path === undefined ? {} : { origin: template.sourceInfo.path }),
+		}));
+		const skills = this.session.resourceLoader.getSkills().skills.map((skill) => ({
+			name: `skill:${skill.name}`,
+			...(skill.description === undefined ? {} : { description: skill.description }),
+			source: "skill" as const,
+			handler: "pi" as const,
+			...(skill.sourceInfo?.path === undefined ? {} : { origin: skill.sourceInfo.path }),
+		}));
+		return [...FACET_COMMANDS, ...extensionCommands, ...templates, ...skills];
 	}
 
 	/**

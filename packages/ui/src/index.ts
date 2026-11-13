@@ -8,12 +8,19 @@ export type { ChatOutlineProps } from "./chat/ChatOutline.tsx";
 export { ChatOutline } from "./chat/ChatOutline.tsx";
 export type { ComposerProps } from "./chat/Composer.tsx";
 export { Composer } from "./chat/Composer.tsx";
-export type { ContextUsageBarProps } from "./chat/ContextUsageBar.tsx";
-export { ContextUsageBar, formatTokens, usageLabel } from "./chat/ContextUsageBar.tsx";
+export type { ContextRingProps, UsageLevel } from "./chat/ContextRing.tsx";
+export { ContextRing, formatTokens, usageLabel, usageLevel } from "./chat/ContextRing.tsx";
 export type { CreateProjectDialogProps } from "./chat/CreateProjectDialog.tsx";
 export { CreateProjectDialog } from "./chat/CreateProjectDialog.tsx";
 export type { OutlinePrompt } from "./chat/chat-outline.ts";
 export { outlinePrompts } from "./chat/chat-outline.ts";
+export {
+	commandQuery,
+	filterCommands,
+	isFacetCommand,
+	parseCommand,
+	SOURCE_LABELS,
+} from "./chat/command-palette.ts";
 export type { EmptyStateProps } from "./chat/EmptyState.tsx";
 export { EmptyState } from "./chat/EmptyState.tsx";
 export type { HostSwitcherProps } from "./chat/HostSwitcher.tsx";

@@ -207,7 +207,9 @@ describe("权限档", () => {
 		const remote = await Peer.connect(join(dir, "local.sock"), "令牌", "operator");
 		peerList.push(remote);
 		expect((await remote.hello()).role).toBe("operator");
-		expect((await remote.request("shutdownHost")).message).toBe("这个操作只允许在本机进行");
+		expect((await remote.request("updateSettings", { settings: {} })).message).toBe(
+			"这个操作只允许在本机进行",
+		);
 		expect((await remote.request("diagnostics")).ok).toBe(false);
 	});
 });

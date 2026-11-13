@@ -27,8 +27,8 @@ const MAIN_ENTRIES = {
  * node_modules 里的实现保持外置：ws 由内嵌的主机用到，运行时从 node_modules 解析，
  * 避免把它自带的可选原生依赖打进包里。
  */
-const WORKSPACE_PACKAGES = Object.keys({ ...PACKAGE.dependencies, ...PACKAGE.devDependencies }).filter((name) =>
-	name.startsWith("@facet/"),
+const WORKSPACE_PACKAGES = Object.keys({ ...PACKAGE.dependencies, ...PACKAGE.devDependencies }).filter(
+	(name) => name.startsWith("@facet/"),
 );
 
 export default defineConfig({

@@ -24,19 +24,21 @@ npm install
 开发时主机固定跑在 `ws://127.0.0.1:4319/endpoint`，桌面缺省连这个地址：
 
 ```bash
+npm run dev            # 主机与桌面一起起，各自热重启
+npm run dev:desktop    # 只起桌面，连 4319
 npm run dev:host       # 只起主机，固定 4319 端口（FACET_PORT 可换）
-npm run dev            # 只起桌面，连 4319
-npm run dev:client     # 同上，给需要并排调试时用
-npm run dev:split      # 主机与桌面一起起，各自热重启
+npm run dev:split      # 与 dev 相同，保留这个更明确的名字
 ```
+
+要分开看两边日志时用 `npm run dev:host` 加 `npm run dev:desktop` 各起一个终端。
 
 主机端口由 `FACET_PORT` 决定，缺省 4319；桌面端点由 `FACET_ENDPOINT` 决定，开发时缺省是 `ws://127.0.0.1:4319/endpoint`。要连别处的主机：
 
 ```bash
-FACET_ENDPOINT=ws://192.168.1.20:4319/endpoint npm run dev:client
+FACET_ENDPOINT=ws://192.168.1.20:4319/endpoint npm run dev:desktop
 ```
 
-开发时想跑打包那样的本机模式（桌面自己拉起主机）用 `FACET_EMBEDDED=1 npm run dev`；打包运行不带 `FACET_ENDPOINT` 时本来就是本机模式。
+开发时想跑打包那样的本机模式（桌面自己拉起主机）用 `FACET_EMBEDDED=1 npm run dev:desktop`；打包运行不带 `FACET_ENDPOINT` 时本来就是本机模式。
 
 ## 连接方式与令牌
 
@@ -45,7 +47,7 @@ FACET_ENDPOINT=ws://192.168.1.20:4319/endpoint npm run dev:client
 - **本机**：缺省监听 TCP 回环地址；用 `FACET_SOCKET=/run/user/1000/facet.sock` 之类给出路径时改成监听 unix socket（Windows 上是命名管道），不再开 TCP 端口。
 - **远程**：主机清单里填 `user@host`（或 `ssh://user@host:端口`），桌面用进程内的 SSH 库连过去，读远端的发现文件拿到 socket 路径与令牌，再在远端 socket 上开一条通道；远端不开端口、本地也不开端口，协议层一行不用改。认证复用 `~/.ssh/config`、ssh-agent 与私钥；主机密钥按 `known_hosts` 校验（支持哈希条目），未知或变更的密钥直接拒绝。Windows 远端只监听命名管道时无法用 SSH 通道，退回走远端的 TCP 回环地址。
 - **远程端不需要开关**：SSH 与主机密钥就是信任边界，远程端连的是同一个 socket，认证帧里声明自己要只读还是操作档，主机按 `FACET_REMOTE_PERMISSION` 收窄。只有以后的 Web 端才需要单独的接入开关与端点。
-- **权限档**：本机连接是管理档；远程连接按 `FACET_REMOTE_PERMISSION` 给操作档或只读档。设置与凭证、提供方、项目增删与信任、诊断、结束主机只允许本机；只读档连会话与文件都不能改，输入区写明原因。远程的写操作记进 `$FACET_DATA_DIR/audit.log`（时间、连接标识、权限档、操作与结果，不含参数与内容）。
+- **权限档**：本机连接是管理档；远程连接按 `FACET_REMOTE_PERMISSION` 给操作档或只读档。设置与凭证、提供方、项目增删与信任、诊断只允许本机；只读档连会话与文件都不能改，输入区写明原因。远程的写操作记进 `$FACET_DATA_DIR/audit.log`（时间、连接标识、权限档、操作与结果，不含参数与内容）。
 - **令牌**：主机会生成一个随机令牌写进发现文件（`FACET_TOKEN` 可指定，`FACET_NO_TOKEN=1` 关闭校验）。连接的第一帧是 `{type:"auth",token}`，不匹配直接断开，拿不到 hello。发现文件权限 `0600`、所在目录 `0700`，socket 本身也是 `0600`。
 - **桌面不直连主机**：渲染进程在沙箱里，连接由主进程按目标建通道（本机按发现文件，远程按 `host:port`），界面只搬运帧。
 
@@ -76,9 +78,19 @@ FACET_WEB_ROOT=apps/desktop/out/renderer \
 - 图表高度封顶 420 像素，宽图在块内滚动，不把整段对话顶走；公式块也能横向滚动
 - 渲染失败时块内留一行说明，标题栏的「源码」切换能看到原始定义；坏的公式或流程图不影响其余正文
 
+## 斜杠命令
+
+在输入框里打 `/` 会列出可用的命令，列表贴在输入框上方：上下键选、回车或 Tab 选中、Esc 收起。列表来自当前会话，换会话会重取。
+
+- **界面自带**：`/model <提供方>/<模型>`、`/thinking <档位>`、`/compact`、`/name <名字>`，选中就地执行，不会当成消息发出去
+- **交给 pi**：扩展注册的命令、`.pi/prompts` 里的模板、技能（`skill:名字`），选中后填进输入框，补完参数发出去，由 pi 分发或展开
+- 列表只有名字命中了才显示，名字一条都没中时才会去说明里找，避免打两个字母翻出一堆不相干的技能
+
 ## 上下文用量与压缩
 
-输入区上方一行：占用比例、已用量与窗口大小。接近 80% 转提醒色并提示可以压缩；估不出来时写「上下文用量未知」。右侧的「压缩」按钮把较早的历史压成摘要，走会话通道的 `session/compact`，这一轮在跑或正在压缩时不可点。压缩结束后主机重算用量推给所有端（`session/usageChanged`），对话里留一条「上下文已压缩」的分隔行。
+输入区动作行的右边、发送按钮左边是一个用量环：占用越高弧越长，70% 起转提醒色、90% 以上转错误色。点开是浮层，三行依次是「上下文窗口」「已使用 37%」「393k / 1m tokens」，下面一个「压缩上下文」按钮；估不出来时环只剩底环，浮层第二行写「暂无数据」。
+
+压缩走会话通道的 `session/compact`，这一轮在跑或正在压缩时按钮不可点。压缩结束后主机重算用量推给所有端（`session/usageChanged`），对话里留一条「上下文已压缩」的分隔行。
 
 ## 终端
 
@@ -105,8 +117,7 @@ FACET_WEB_ROOT=apps/desktop/out/renderer \
 
 - 主机就绪后把端点写进 `$FACET_DATA_DIR/endpoint.json`（Linux 缺省 `~/.local/share/facet`），日志写进同目录的 `host.log`。
 - 桌面拉起主机时让它自成一组，应用退出后主机留在后台；下次启动读到发现文件并与主机握上手，就直接接上，会话与运行中的任务都还在。
-- 关掉窗口后是否继续在主机清单里切换：「关掉窗口后继续运行」勾上时应用退出不动主机，取消勾选则应用退出会连主机一起结束。
-- 主机清单里的「结束主机」需要再点一次确认，结束后停在「连不上主机」，可以直接重启应用或用 `npm run dev:host` 再起一台。
+- 关掉窗口后主机一律留在后台：应用里没有「退出时结束主机」的开关，也没有结束主机的按钮。要停就按数据目录里的 `endpoint.json` 找进程号自行结束，开发时在起主机的终端里 Ctrl+C。
 
 首次启动会读取 `~/.pi/agent-dev` 下的凭证与模型配置；没有凭证时先在设置页的提供方里配好密钥，或改用自定义提供方。
 
@@ -180,7 +191,7 @@ scripts/build-fonts.sh <字体目录>
 | `$XDG_DATA_HOME/facet`（缺省 `~/.local/share/facet`） | 主机身份 `host.json`、项目清单 `projects.json`、界面设置 `settings.json`、终端登记 `terminals.json`、审计 `audit.log`；独立启动时还有发现文件 `endpoint.json` | `FACET_DATA_DIR` |
 | `$XDG_CONFIG_HOME/facet`（缺省 `~/.config/facet`） | 桌面本地记录 `desktop.json`：窗口位置与尺寸 | — |
 
-开发实例的两处目录都带 `-dev` 后缀：数据目录是 `~/.local/share/facet-dev`，配置目录是 `~/.config/facet-dev`。`npm run dev`、`dev:split`、`dev:host` 三者都用这份，因此开发时跑的东西与装好的包互不影响，`projects.json` 与主机身份各有一份。
+开发实例的两处目录都带 `-dev` 后缀：数据目录是 `~/.local/share/facet-dev`，配置目录是 `~/.config/facet-dev`。`npm run dev`（即 `dev:split`）、`dev:host`、`dev:desktop` 都用这份，因此开发时跑的东西与装好的包互不影响，`projects.json` 与主机身份各有一份。
 
 用 `agent-dev` 而不是 `~/.pi/agent`，是为了和 pi 命令行共用凭证与模型配置，同时不把开发期的会话混进真实目录。
 

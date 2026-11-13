@@ -8,6 +8,7 @@ import type {
 	SessionEvent,
 	SessionEventListener,
 	SessionSnapshot,
+	SlashCommand,
 } from "@facet/protocol";
 import { makeChannel } from "@facet/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -124,6 +125,10 @@ class FakeAgent implements HubAgent {
 
 	contextUsage(): ContextUsage | undefined {
 		return undefined;
+	}
+
+	commands(): SlashCommand[] {
+		return [{ name: "命令", source: "extension", handler: "pi" }];
 	}
 
 	snapshot(): SessionSnapshot {

@@ -2,8 +2,8 @@
  * 主机切换。
  *
  * 页脚一个服务器图标按钮，点开是主机清单：本机永远在最上面，下面是用户添加过的远程主机；
- * 每行显示状态点、名字与地址，当前连着的那台高亮。清单底部是「添加主机」，展开一个填名字与
- * 地址的小表单；再往下是本机主机的两个开关：关掉窗口后是否继续运行、结束主机。
+ * 每行显示状态点、名字与地址，当前连着的那台高亮；清单底部是「添加主机」，展开一个填名字与
+ * 地址的小表单。
  */
 import { Check, Pencil, Plus, Server, Settings2, X } from "lucide-react";
 import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
@@ -50,12 +50,6 @@ export interface HostSwitcherProps {
 	onRemoveHost: (id: string) => void;
 	/** 改一台远程主机的名字 */
 	onRenameHost: (id: string, name: string) => void;
-	/** 关掉窗口后本机主机是否继续运行 */
-	keepOnClose: boolean;
-	/** 改「关掉窗口后继续运行」 */
-	onToggleKeepOnClose: (next: boolean) => void;
-	/** 结束本机主机；失败时返回原因 */
-	onShutdownHost: () => Promise<string | undefined>;
 }
 
 export function HostSwitcher({
@@ -69,16 +63,9 @@ export function HostSwitcher({
 	onAddHost,
 	onRemoveHost,
 	onRenameHost,
-	keepOnClose,
-	onToggleKeepOnClose,
-	onShutdownHost,
 }: HostSwitcherProps): ReactNode {
 	const [isOpen, setIsOpen] = useState(false);
 	const [isAdding, setIsAdding] = useState(false);
-	/** 结束主机要先确认一次，避免点错把运行中的任务带走 */
-	const [isConfirming, setIsConfirming] = useState(false);
-	/** 结束主机失败的原因 */
-	const [shutdownError, setShutdownError] = useState<string | undefined>(undefined);
 	/** 正在改名的主机与草稿 */
 	const [renaming, setRenaming] = useState<{ id: string; draft: string } | undefined>(undefined);
 	/** 改名输入框，展开时把焦点送过去 */
@@ -103,9 +90,7 @@ export function HostSwitcher({
 	const wrap = useDismiss(isOpen, () => {
 		setIsOpen(false);
 		setIsAdding(false);
-		setIsConfirming(false);
 		setError(undefined);
-		setShutdownError(undefined);
 	});
 
 	/** 提交新增：成功后收起表单，失败把原因留在表单里。 */
@@ -277,50 +262,6 @@ export function HostSwitcher({
 							添加主机
 						</button>
 					)}
-					<div className="host-foot">
-						<label className="host-check">
-							<input
-								type="checkbox"
-								checked={keepOnClose}
-								onChange={(event) => onToggleKeepOnClose(event.target.checked)}
-							/>
-							关掉窗口后继续运行
-						</label>
-						{isConfirming ? (
-							<div className="host-confirm">
-								<span>结束主机会停掉上面正在跑的任务。</span>
-								<div className="host-confirm-actions">
-									<button
-										type="button"
-										className="host-danger"
-										onClick={() => {
-											setIsConfirming(false);
-											setShutdownError(undefined);
-											void onShutdownHost().then((failure) => setShutdownError(failure));
-										}}
-									>
-										确认结束
-									</button>
-									<button type="button" className="set-reset" onClick={() => setIsConfirming(false)}>
-										取消
-									</button>
-								</div>
-							</div>
-						) : (
-							<button
-								type="button"
-								className="host-shutdown"
-								disabled={!isOnline}
-								onClick={() => {
-									setIsConfirming(true);
-									setShutdownError(undefined);
-								}}
-							>
-								结束主机
-							</button>
-						)}
-						{shutdownError === undefined ? null : <p className="host-error">{shutdownError}</p>}
-					</div>
 				</div>
 			) : null}
 		</div>

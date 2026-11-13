@@ -17,6 +17,8 @@
 	left: 0;
 	right: 0;
 	height: 6px;
+	margin: 0;
+	border: 0;
 	cursor: row-resize;
 	z-index: 2;
 }

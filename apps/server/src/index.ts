@@ -48,15 +48,7 @@ export interface ServerHandle extends EndpointHandle {
  * 缺省只监听回环地址、由系统分配端口，因此适合嵌入到桌面主进程；独立运行时通过
  * FACET_PORT 指定固定端口。
  */
-export interface ServerHooks {
-	/** 收到结束主机的请求后调用，独立进程入口在这里走正常的收尾流程 */
-	requestShutdown?: () => void;
-}
-
-export async function startServer(
-	options: Partial<ServerConfig> = {},
-	hooks: ServerHooks = {},
-): Promise<ServerHandle> {
+export async function startServer(options: Partial<ServerConfig> = {}): Promise<ServerHandle> {
 	const config: ServerConfig = { ...loadServerConfig(), ...options };
 	setDebugLog(config.debug);
 	const factory = await PiAgentFactory.create({
@@ -120,7 +112,6 @@ export async function startServer(
 		settingsStore,
 		hostId,
 		hostSource: hostIdentity.source,
-		...(hooks.requestShutdown === undefined ? {} : { requestShutdown: hooks.requestShutdown }),
 		sessions,
 		terminals,
 	});

@@ -37,7 +37,7 @@ const shutdown = (): void => {
 	})();
 };
 
-server = await startServer(config, { requestShutdown: shutdown });
+server = await startServer(config);
 const payload: HostReadyPayload = {
 	schemaVersion: DISCOVERY_SCHEMA_VERSION,
 	endpoint:

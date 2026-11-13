@@ -5,7 +5,14 @@ import {
 	TerminalClient,
 	toTranscript,
 } from "@facet/client-core";
-import type { FileContent, GitFileChange, GitStatus, TerminalInfo } from "@facet/protocol";
+import type {
+	FileContent,
+	GitFileChange,
+	GitStatus,
+	SlashCommand,
+	TerminalInfo,
+	ThinkingLevel,
+} from "@facet/protocol";
 import {
 	DEFAULT_SETTINGS,
 	type FacetSettings,
@@ -21,7 +28,6 @@ import {
 	ChatTranscript,
 	CodeThemeProvider,
 	Composer,
-	ContextUsageBar,
 	CreateProjectDialog,
 	DEFAULT_DARK_THEME,
 	EmptyState,
@@ -31,6 +37,7 @@ import {
 	hasEndpoint,
 	isDarkTheme,
 	normalizeEndpoint,
+	parseCommand,
 	QueueStrip,
 	RightPanel,
 	type RightPanelState,
@@ -75,14 +82,6 @@ interface FacetBridge extends HostChannelBridge {
 	pickDirectory: () => Promise<string | undefined>;
 	/** 用系统的保存窗口写一段文本,取消时返回 false */
 	saveText: (suggestedName: string, text: string) => Promise<boolean>;
-	/** 关掉窗口后本机主机是否继续运行 */
-	keepHostOnClose: boolean;
-	/** 读本机主机的开关 */
-	getHostPrefs: () => Promise<{ keepOnClose: boolean }>;
-	/** 结束本机主机 */
-	stopHost: () => Promise<void>;
-	/** 改本机主机的开关，返回保存后的值 */
-	setHostPrefs: (prefs: { keepOnClose: boolean }) => Promise<{ keepOnClose: boolean }>;
 }
 
 declare global {
@@ -262,9 +261,6 @@ export function App() {
 		}
 	}, [hostList]);
 
-	/** 关掉窗口后本机主机是否继续运行；开关在桌面的本地设置里 */
-	const [keepOnClose, setKeepOnClose] = useState(bridge.keepHostOnClose);
-
 	/** 右栏的状态；展开、分页与宽度都记在本地 */
 	const [panel, setPanel] = useState<RightPanelState>(() => readPanelState(localStorage));
 
@@ -279,6 +275,9 @@ export function App() {
 	});
 	/** 变更请求的序号，只采用最后一次的结果 */
 	const changesSeq = useRef(0);
+
+	/** 输入区能用的命令：界面自带几条，加会话里的扩展、模板与技能 */
+	const [commands, setCommands] = useState<SlashCommand[]>([]);
 
 	/** 终端面板的状态：是否展开、高度、当前标签 */
 	const [dock, setDock] = useState<TerminalDockState>(() => readDockState(localStorage));
@@ -761,36 +760,6 @@ export function App() {
 		[endpoint, hostList, switchHost, updateHostList],
 	);
 
-	/** 改「关掉窗口后继续运行」，保存失败时保持界面上的旧值。 */
-	const toggleKeepOnClose = useCallback((next: boolean): void => {
-		setKeepOnClose(next);
-		void bridge.setHostPrefs({ keepOnClose: next }).then(
-			(saved) => setKeepOnClose(saved.keepOnClose),
-			() => setKeepOnClose(!next),
-		);
-	}, []);
-
-	/**
-	 * 结束当前主机；失败时把原因交回清单。
-	 *
-	 * 本机主机交给桌面主进程结束，那边才不会把它当成崩溃重新拉起；连的是远程主机时直接
-	 * 向主机发请求。主机应答后端点就断了，界面落到「连不上主机」。
-	 */
-	const shutdownHost = useCallback(async (): Promise<string | undefined> => {
-		try {
-			if (endpoint === LOCAL_TARGET) {
-				await bridge.stopHost();
-			} else {
-				await client.shutdownHost();
-			}
-			setFailure("主机已结束");
-			setPhase("failed");
-			return undefined;
-		} catch (error) {
-			return error instanceof Error ? error.message : String(error);
-		}
-	}, [endpoint]);
-
 	/** 输入区可选的模型：去掉设置里隐藏的那些。 */
 	const visibleModels = useMemo(
 		() => catalog.models.filter((model) => !settings.hiddenModels.includes(`${model.provider}/${model.id}`)),
@@ -1033,9 +1002,73 @@ export function App() {
 		localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts));
 	}, [drafts]);
 
+	/**
+	 * 跑一条界面自己处理的命令。
+	 *
+	 * 这些命令在图形界面里有对应入口，就地执行，不当成消息发出去；参数不对时把说明留在
+	 * 错误条上，草稿不丢。
+	 */
+	const runFacetCommand = useCallback(
+		(name: string, args: string): boolean => {
+			if (name === "compact") {
+				client.compact();
+				return true;
+			}
+			if (name === "model") {
+				const [provider, id] = args.split("/");
+				if (provider === undefined || id === undefined || provider.length === 0 || id.length === 0) {
+					setSessionError({
+						message: "用法：/model <提供方>/<模型>，例如 /model openai/gpt-5",
+						retry: () => {},
+					});
+					return true;
+				}
+				client.setModel({ provider, id });
+				return true;
+			}
+			if (name === "thinking") {
+				const level = args as ThinkingLevel;
+				const allowed = session?.state.availableThinkingLevels ?? [];
+				if (!allowed.includes(level)) {
+					setSessionError({
+						message: allowed.length === 0 ? "当前模型没有可选的思考档位" : `可选档位：${allowed.join(" / ")}`,
+						retry: () => {},
+					});
+					return true;
+				}
+				client.setThinkingLevel(level);
+				return true;
+			}
+			if (name === "name") {
+				if (args.length === 0) {
+					setSessionError({ message: "用法：/name <名字>", retry: () => {} });
+					return true;
+				}
+				void client.renameSession(activeFile ?? "", args).then(
+					() => void refreshSessions(),
+					(error: unknown) => setSessionError({ message: String(error), retry: () => {} }),
+				);
+				return true;
+			}
+			return false;
+		},
+		[activeFile, refreshSessions, session?.state.availableThinkingLevels],
+	);
+
 	const send = useCallback(() => {
 		const text = draft.trim();
 		if (text.length === 0) {
+			return;
+		}
+		// 界面自己处理的命令就地执行，不当消息发出去
+		const command = parseCommand(text);
+		if (
+			command !== undefined &&
+			commands.some((item) => item.name === command.name && item.handler === "facet")
+		) {
+			if (runFacetCommand(command.name, command.args)) {
+				updateDraft("");
+			}
 			return;
 		}
 		// 草稿留到主机确认再收,发送被拒时不用重打
@@ -1044,7 +1077,7 @@ export function App() {
 			return;
 		}
 		client.send(text);
-	}, [activity, draft]);
+	}, [activity, commands, draft, runFacetCommand, updateDraft]);
 
 	/**
 	 * 收回排队内容:清空主机侧队列,把文字拼回输入框。
@@ -1204,6 +1237,31 @@ export function App() {
 			</div>
 		);
 
+	// 换会话时重取命令清单：扩展、模板与技能都跟着会话走
+	const openedSessionId = session === undefined ? undefined : client.current?.snapshot.id;
+	useEffect(() => {
+		if (openedSessionId === undefined) {
+			setCommands([]);
+			return;
+		}
+		let cancelled = false;
+		void client.listCommands().then(
+			(list) => {
+				if (!cancelled) {
+					setCommands(list);
+				}
+			},
+			() => {
+				if (!cancelled) {
+					setCommands([]);
+				}
+			},
+		);
+		return () => {
+			cancelled = true;
+		};
+	}, [openedSessionId]);
+
 	const transcript = useMemo(() => (chat ? toTranscript(chat) : []), [chat]);
 	const {
 		scrollRef,
@@ -1318,7 +1376,6 @@ export function App() {
 					isPanelOpen={panel.open}
 					onToggleTerminal={toggleTerminal}
 					isTerminalOpen={dock.open}
-					hostName={host?.hostName}
 					hostStatus={isReconnecting ? "重连中" : host?.role === "viewer" ? "只读" : undefined}
 					isOpen={isSidebarOpen}
 					onNavigate={() => setIsSidebarOpen(false)}
@@ -1334,9 +1391,6 @@ export function App() {
 							onAddHost={addHost}
 							onRemoveHost={removeHost}
 							onRenameHost={renameHost}
-							keepOnClose={keepOnClose}
-							onToggleKeepOnClose={toggleKeepOnClose}
-							onShutdownHost={shutdownHost}
 						/>
 					}
 				/>
@@ -1406,12 +1460,6 @@ export function App() {
 								)}
 								<div className="footer-column">
 									{errorBar}
-									<ContextUsageBar
-										usage={session.state.contextUsage}
-										isCompacting={activity === "compacting"}
-										isRunning={activity === "running" || activity === "stopping"}
-										onCompact={() => client.compact()}
-									/>
 									<QueueStrip queued={queued} onClear={takeBackQueue} />
 									<Composer
 										value={draft}
@@ -1428,6 +1476,14 @@ export function App() {
 										onThinkingLevelChange={(level) => client.setThinkingLevel(level)}
 										shiftEnterToSend={settings.input.sendKey === "shiftEnter"}
 										blockedReason={blockedReason}
+										contextUsage={session.state.contextUsage}
+										isCompacting={activity === "compacting"}
+										canCompact={activity === "idle"}
+										onCompact={() => client.compact()}
+										commands={commands}
+										onRunCommand={(command, args) => {
+											runFacetCommand(command.name, args);
+										}}
 									/>
 
 									{chat && chat.notices.length > 0 ? (

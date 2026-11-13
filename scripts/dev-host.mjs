@@ -4,9 +4,10 @@
  * 端口缺省固定成 4319，和 `dev:split` 用的是同一个；要换端口用 FACET_PORT 覆盖。主机自己
  * 的缺省端口是 0（系统分配），开发时每次都不一样，桌面端就不好填端点了。
  */
+
+import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
-import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));

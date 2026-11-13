@@ -1,41 +1,22 @@
 /**
  * 右侧栏。
  *
- * 「文件 / 变更」两个分页落在窗口顶部那条带里，贴在面板左上角；正文从那条带下面开始。
- * 左边一条可以拖动的分隔条，宽度拖一次记一次。收起入口在右上角的右栏开关上，这里不给。
+ * 只有正文与左缘那条可以拖动的分隔条，宽度拖一次记一次。分页与收起在窗口顶部那条带里，
+ * 由外壳排布。
  */
 import { type ReactNode, type PointerEvent as ReactPointerEvent, useCallback, useRef } from "react";
-import { clampPanelWidth, PANEL_MAX_WIDTH, PANEL_MIN_WIDTH, type RightPanelTab } from "./panel-state.ts";
+import { clampPanelWidth, PANEL_MAX_WIDTH, PANEL_MIN_WIDTH } from "./panel-state.ts";
 
 export interface RightPanelProps {
-	/** 当前分页 */
-	tab: RightPanelTab;
-	/** 切换分页 */
-	onTabChange: (tab: RightPanelTab) => void;
 	/** 宽度，单位 px */
 	width: number;
 	/** 拖动分隔条时给出新宽度 */
 	onWidthChange: (width: number) => void;
-	/** 分页行最前面的一项，右栏展开时右栏开关放在这里 */
-	headerLeading?: ReactNode;
 	/** 分页内容 */
 	children: ReactNode;
 }
 
-/** 两个分页的名称。 */
-const TABS: readonly { id: RightPanelTab; label: string }[] = [
-	{ id: "files", label: "文件" },
-	{ id: "changes", label: "变更" },
-];
-
-export function RightPanel({
-	tab,
-	onTabChange,
-	width,
-	onWidthChange,
-	headerLeading,
-	children,
-}: RightPanelProps) {
+export function RightPanel({ width, onWidthChange, children }: RightPanelProps) {
 	const dragging = useRef<{ startX: number; startWidth: number } | undefined>(undefined);
 
 	/** 按住分隔条开始拖：记住起点，指针捕获到分隔条上，拖出栏外也不会断。 */
@@ -79,23 +60,6 @@ export function RightPanel({
 				onPointerUp={handlePointerUp}
 				onPointerCancel={handlePointerUp}
 			/>
-			<div className="panel-tabs">
-				{headerLeading}
-				<div className="panel-tab-list" role="tablist" aria-label="右侧栏分页">
-					{TABS.map((item) => (
-						<button
-							key={item.id}
-							type="button"
-							role="tab"
-							className={item.id === tab ? "panel-tab is-on" : "panel-tab"}
-							aria-selected={item.id === tab}
-							onClick={() => onTabChange(item.id)}
-						>
-							{item.label}
-						</button>
-					))}
-				</div>
-			</div>
 			<div className="panel-body" role="tabpanel">
 				{children}
 			</div>

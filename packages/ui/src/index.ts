@@ -45,6 +45,8 @@ export type {
 	SettingsSection,
 } from "./chat/SettingsPage.tsx";
 export { SettingsPage } from "./chat/SettingsPage.tsx";
+export type { SidebarHeaderProps } from "./chat/sidebar-header.tsx";
+export { SidebarHeader } from "./chat/sidebar-header.tsx";
 export type {
 	GroupKey,
 	SessionDot,
@@ -86,6 +88,7 @@ export {
 	readPanelState,
 	writePanelState,
 } from "./panel/panel-state.ts";
+export { PanelTabs } from "./panel/panel-tabs.tsx";
 export type { RightPanelProps } from "./panel/right-panel.tsx";
 export { RightPanel } from "./panel/right-panel.tsx";
 export { PanelToggle, SidebarToggle } from "./panel/top-bar.tsx";

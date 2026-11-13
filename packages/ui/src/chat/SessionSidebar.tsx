@@ -5,10 +5,11 @@
  * 项目过滤器同时决定队列的范围与新建会话的目录，队列按时间分组，分组规则见 sidebar-model。
  */
 import type { ProjectInfo, SessionSummary } from "@facet/protocol";
-import { FolderPlus, Plus, Search, Settings } from "lucide-react";
+import { Plus, Search, Settings } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronIcon } from "../transcript/chevron.tsx";
 import { FolderIcon, MoonIcon, SunIcon } from "../transcript/icons.tsx";
+import { SidebarHeader } from "./sidebar-header.tsx";
 import {
 	baseName,
 	buildSidebar,
@@ -47,6 +48,12 @@ export interface SessionSidebarProps {
 	canCreate: boolean;
 	/** 打开添加项目 */
 	onAddProject: () => void;
+	/** 会话搜索框是否展开；头部在外壳里，状态由外面保管 */
+	isSearchOpen: boolean;
+	/** 开合会话搜索框 */
+	onSearchOpenChange: (open: boolean) => void;
+	/** 头部是否画在自己身上；窄屏抽屉里要自己带一份，宽屏时头部在外壳顶带里 */
+	showHeader?: boolean;
 	/** 项目列表上一次刷新失败，过滤器里给出重试入口 */
 	isProjectsStale?: boolean;
 	/** 重新拉取项目列表 */
@@ -117,6 +124,9 @@ export function SessionSidebar({
 	onCreate,
 	canCreate,
 	onAddProject,
+	isSearchOpen,
+	onSearchOpenChange,
+	showHeader = false,
 	isProjectsStale = false,
 	onRefreshProjects,
 	onRenameProject,
@@ -133,7 +143,6 @@ export function SessionSidebar({
 	onNavigate,
 }: SessionSidebarProps) {
 	const [keyword, setKeyword] = useState("");
-	const [isSearchOpen, setIsSearchOpen] = useState(false);
 	const [projectKeyword, setProjectKeyword] = useState("");
 	const [isFilterOpen, setIsFilterOpen] = useState(false);
 	const [isFilterUp, setIsFilterUp] = useState(false);
@@ -219,7 +228,7 @@ export function SessionSidebar({
 		const onKeyDown = (event: KeyboardEvent) => {
 			if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
 				event.preventDefault();
-				setIsSearchOpen(true);
+				onSearchOpenChange(true);
 			}
 		};
 		window.addEventListener("keydown", onKeyDown);
@@ -378,31 +387,13 @@ export function SessionSidebar({
 
 	return (
 		<aside className={isOpen ? "sb is-open" : "sb"}>
-			<header className="sb-head">
-				<span className="sb-title">Facet</span>
-				<span className="sb-tools">
-					<button
-						type="button"
-						className="sb-tool"
-						aria-label="搜索会话"
-						aria-pressed={isSearchOpen}
-						onClick={() => {
-							setIsSearchOpen((open) => {
-								if (open) {
-									setKeyword("");
-								}
-								return !open;
-							});
-						}}
-					>
-						<Search size={15} strokeWidth={1.5} />
-					</button>
-					<button type="button" className="sb-tool" aria-label="添加项目" onClick={onAddProject}>
-						<FolderPlus size={15} strokeWidth={1.5} />
-					</button>
-				</span>
-			</header>
-
+			{showHeader ? (
+				<SidebarHeader
+					isSearchOpen={isSearchOpen}
+					onToggleSearch={() => onSearchOpenChange(!isSearchOpen)}
+					onAddProject={onAddProject}
+				/>
+			) : null}
 			<button
 				type="button"
 				className="sb-new"
@@ -632,13 +623,13 @@ export function SessionSidebar({
 						onChange={(event) => setKeyword(event.target.value)}
 						onBlur={() => {
 							if (keyword.trim().length === 0) {
-								setIsSearchOpen(false);
+								onSearchOpenChange(false);
 							}
 						}}
 						onKeyDown={(event) => {
 							if (event.key === "Escape") {
 								setKeyword("");
-								setIsSearchOpen(false);
+								onSearchOpenChange(false);
 							}
 						}}
 						placeholder="搜索会话"

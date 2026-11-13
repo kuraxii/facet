@@ -37,6 +37,7 @@ import {
 	hasEndpoint,
 	isDarkTheme,
 	normalizeEndpoint,
+	PanelTabs,
 	PanelToggle,
 	parseCommand,
 	QueueStrip,
@@ -50,6 +51,7 @@ import {
 	type SettingsDataSource,
 	SettingsPage,
 	type SettingsSection,
+	SidebarHeader,
 	SidebarToggle,
 	samePath,
 	THEME_MODES,
@@ -151,19 +153,39 @@ function shellClassName(
 /**
  * 应用外壳。
  *
- * 没有专门的标题栏：顶部一条透明的拖动区，三个窗口按钮浮在右上角。连接中与连不上的界面也
- * 套这一层，否则无边框窗口连关闭按钮都没有。浏览器里没有窗口动作，拖动区与按钮都不渲染。
+ * 顶部那条 36px 的带是一行真正的布局行：左边一格放侧栏头部，中间一格放左栏开关，右边一格
+ * 放右栏开关、分页与窗口按钮。下面才是三栏正文。带上的格子宽度与正文三栏共用
+ * `--sidebar-width` 与 `--panel-width` 两个变量，所以不会各算各的。
+ *
+ * 连接中与连不上的界面只放窗口按钮，否则无边框窗口没有关闭入口。浏览器里没有窗口动作，
+ * 拖动区与按钮都不渲染。
  */
-function AppFrame({ children }: { children: ReactNode }): ReactNode {
+function AppFrame({
+	children,
+	chrome,
+	vars,
+}: {
+	children: ReactNode;
+	/** 顶带里的内容；不给时这条带只放窗口按钮 */
+	chrome?: ReactNode;
+	/** 三栏宽度变量，由调用方按当前状态给出 */
+	vars?: Record<string, string>;
+}): ReactNode {
 	const controls = readWindowControls(bridge);
 	return (
-		<div className="app">
-			{controls === undefined ? null : (
-				<>
-					<div className="app-drag" />
-					<WindowControls controls={controls} />
-				</>
-			)}
+		<div className="app" style={vars}>
+			{controls === undefined ? null : <div className="app-drag" />}
+			<div className="app-chrome">
+				{chrome ?? (
+					<>
+						<div className="chrome-slot is-main" />
+						<div className="chrome-slot is-panel is-compact">
+							<span className="chrome-spacer" />
+							{controls === undefined ? null : <WindowControls controls={controls} />}
+						</div>
+					</>
+				)}
+			</div>
 			{children}
 		</div>
 	);
@@ -322,9 +344,13 @@ export function App() {
 	const [settings, setSettings] = useState<FacetSettings>(DEFAULT_SETTINGS);
 	/** 窄屏时侧栏是抽屉，这个开关控制它展开；宽屏时侧栏常驻，另行记收起的意图 */
 	const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+	/** 侧栏头部那个会话搜索框是否展开；头部在顶带里，状态放在这里 */
+	const [isSidebarSearchOpen, setIsSidebarSearchOpen] = useState(false);
 	const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 	/** 880px 以下走抽屉；侧栏开关在两套行为之间切换 */
 	const isNarrow = useSyncExternalStore(subscribeResize, readIsNarrow);
+	/** 窗口按钮；浏览器端没有 */
+	const windowControls = readWindowControls(bridge);
 	const isSidebarOpen = isNarrow ? isDrawerOpen : !isSidebarCollapsed;
 	const toggleSidebar = useCallback(() => {
 		if (isNarrow) {
@@ -1422,7 +1448,36 @@ export function App() {
 
 	return (
 		<CodeThemeProvider value={codeThemeValue}>
-			<AppFrame>
+			<AppFrame
+				vars={{
+					"--sidebar-width": isSidebarOpen && !isNarrow ? "272px" : "0px",
+					"--panel-width": panel.open ? `${panel.width}px` : "0px",
+				}}
+				chrome={
+					<>
+						<div className="chrome-slot is-sidebar">
+							{isNarrow ? null : (
+								<SidebarHeader
+									isSearchOpen={isSidebarSearchOpen}
+									onToggleSearch={() => {
+										setIsSidebarSearchOpen((open) => !open);
+									}}
+									onAddProject={() => setIsProjectDialogOpen(true)}
+								/>
+							)}
+						</div>
+						<div className="chrome-slot is-main">
+							<SidebarToggle isOpen={isSidebarOpen} onToggle={toggleSidebar} />
+						</div>
+						<div className={panel.open ? "chrome-slot is-panel" : "chrome-slot is-panel is-compact"}>
+							<PanelToggle isOpen={panel.open} onToggle={() => updatePanel({ open: !panel.open })} />
+							{panel.open ? <PanelTabs tab={panel.tab} onTabChange={(tab) => updatePanel({ tab })} /> : null}
+							<span className="chrome-spacer" />
+							{windowControls === undefined ? null : <WindowControls controls={windowControls} />}
+						</div>
+					</>
+				}
+			>
 				<div className={shellClassName(isSidebarOpen, isDrawerOpen, isSidebarCollapsed, isNarrow)}>
 					{isDrawerOpen ? (
 						<button
@@ -1447,6 +1502,9 @@ export function App() {
 						}}
 						canCreate={phase === "ready"}
 						onAddProject={() => setIsProjectDialogOpen(true)}
+						isSearchOpen={isSidebarSearchOpen}
+						onSearchOpenChange={setIsSidebarSearchOpen}
+						showHeader={isNarrow}
 						isProjectsStale={isProjectsStale}
 						onRefreshProjects={() => void refreshProjects()}
 						onRenameProject={renameProject}
@@ -1479,11 +1537,6 @@ export function App() {
 					/>
 
 					<main className="main">
-						<SidebarToggle isOpen={isSidebarOpen} onToggle={toggleSidebar} />
-						{/* 右栏收起时开关贴在窗口右上角、窗口按钮左边；展开后挪到右栏分页行最前面 */}
-						{panel.open ? null : (
-							<PanelToggle isOpen={false} onToggle={() => updatePanel({ open: true })} />
-						)}
 						{session === undefined ? null : <ChatOutline items={transcript} container={scrollElement} />}
 						{session === undefined ? (
 							<div className="empty-wrap">
@@ -1612,15 +1665,7 @@ export function App() {
 					</main>
 
 					{panel.open ? (
-						<RightPanel
-							tab={panel.tab}
-							onTabChange={(tab) => updatePanel({ tab })}
-							headerLeading={
-								<PanelToggle isOpen onToggle={() => updatePanel({ open: false })} />
-							}
-							width={panel.width}
-							onWidthChange={(width) => updatePanel({ width })}
-						>
+						<RightPanel width={panel.width} onWidthChange={(width) => updatePanel({ width })}>
 							{panel.tab === "changes" ? (
 								<ChangesPane
 									status={changes.status}

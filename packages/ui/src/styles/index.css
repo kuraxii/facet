@@ -20,9 +20,12 @@
 	--dur-slow: 180ms;
 	/* 代码字号乘数,由设置里的字号档位写入 */
 	--fs-code-scale: 1;
-	/* 顶部拖动区的高度与每个窗口按钮的宽度 */
+	/* 顶部那条带的高度与每个窗口按钮的宽度 */
 	--chrome-height: 36px;
 	--window-button-width: 44px;
+	/* 三栏宽度：顶带的格子与下面的正文共用，由界面按当前状态写入 */
+	--sidebar-width: 272px;
+	--panel-width: 0px;
 	/* 过程组的缩进：竖线到行内容的距离，以及竖线本身相对正文列的位置
 	   （后者来自展开箭头字形在图标盒子里的内缩，改箭头图标时跟着调） */
 	--indent-rail-offset: 16px;
@@ -139,13 +142,16 @@ svg.fl {
 
 /* 外壳 */
 
-/* 应用外壳：没有标题栏，顶部一条透明拖动区，窗口按钮浮在右上角 */
+/* 应用外壳：顶带是一行真正的布局行，下面是三栏正文；两处宽度共用变量 */
 .app {
 	position: relative;
+	display: flex;
+	flex-direction: column;
 	height: 100%;
 	overflow: hidden;
 }
 
+/* 拖动区盖住整条顶带，格子里的控件自己标 no-drag */
 .app-drag {
 	position: absolute;
 	top: 0;
@@ -156,12 +162,56 @@ svg.fl {
 	-webkit-app-region: drag;
 }
 
-/* 顶部两端的开关：左栏开关贴主区左上角，右栏开关贴窗口右上角、窗口按钮左边 */
-.chrome-toggle {
-	position: absolute;
-	top: 4px;
+.app-chrome {
+	position: relative;
 	z-index: 2;
+	display: flex;
+	flex: none;
+	align-items: center;
+	height: var(--chrome-height);
+}
+
+.chrome-slot {
+	display: flex;
+	flex: none;
+	align-items: center;
+	height: 100%;
+	min-width: 0;
+}
+
+/* 侧栏那一格：宽度与正文的侧栏一致 */
+.chrome-slot.is-sidebar {
+	width: var(--sidebar-width);
+	overflow: hidden;
+}
+
+/* 主区那一格：占满剩下的宽度，左栏开关贴在它的左边 */
+.chrome-slot.is-main {
+	flex: 1;
+	padding-left: 4px;
+}
+
+/* 右栏那一格：展开时与右栏同宽，窗口按钮压在这一格最右边；收起时收到只剩开关与按钮 */
+.chrome-slot.is-panel {
+	flex: none;
+	gap: 4px;
+	width: var(--panel-width);
+	padding-left: 4px;
+	-webkit-app-region: no-drag;
+}
+
+.chrome-slot.is-panel.is-compact {
+	width: auto;
+	padding-left: 0;
+}
+
+.chrome-spacer {
+	flex: 1;
+}
+
+.chrome-toggle {
 	display: grid;
+	flex: none;
 	place-items: center;
 	width: 28px;
 	height: 28px;
@@ -181,25 +231,9 @@ svg.fl {
 	color: var(--t1);
 }
 
-.chrome-toggle.is-sidebar {
-	left: 4px;
-}
-
-.chrome-toggle.is-panel {
-	right: calc(var(--window-button-width) * 3 + 4px);
-}
-
-/* 展开后它排在右栏分页行最前面，不再绝对定位 */
-.panel-tabs .chrome-toggle {
-	position: static;
-}
-
-/* 窗口按钮：浮在拖动区之上，自己标 no-drag */
 .window-controls {
-	position: absolute;
-	top: 0;
-	right: 0;
-	z-index: 3;
+	display: flex;
+	flex: none;
 	-webkit-app-region: no-drag;
 }
 
@@ -230,7 +264,8 @@ svg.fl {
 .shell {
 	position: relative;
 	display: flex;
-	height: 100%;
+	flex: 1;
+	min-height: 0;
 	overflow: hidden;
 }
 
@@ -240,7 +275,7 @@ svg.fl {
 	display: flex;
 	flex: none;
 	flex-direction: column;
-	width: 272px;
+	width: var(--sidebar-width);
 	height: 100%;
 	padding: 10px 10px 8px;
 	border-right: 1px solid var(--line);
@@ -860,7 +895,6 @@ svg.fl {
 	flex-direction: column;
 	min-width: 0;
 	min-height: 0;
-	padding-top: var(--chrome-height);
 }
 
 /* 右栏：文件与变更。左缘一条分隔条，拖动改宽度 */
@@ -869,8 +903,8 @@ svg.fl {
 	display: flex;
 	flex: none;
 	flex-direction: column;
+	width: var(--panel-width);
 	min-width: 0;
-	padding-top: var(--chrome-height);
 	border-left: 1px solid var(--line);
 	background: var(--bg);
 }
@@ -900,22 +934,11 @@ svg.fl {
 	);
 }
 
-/* 分页落在窗口顶部那条带里，贴在面板左上角；带下面才是正文 */
 .panel-tabs {
-	position: absolute;
-	top: 0;
-	left: 6px;
-	z-index: 2;
 	display: flex;
-	align-items: center;
-	gap: 4px;
-	height: var(--chrome-height);
-	-webkit-app-region: no-drag;
-}
-
-.panel-tab-list {
-	display: flex;
+	flex: none;
 	gap: 2px;
+	-webkit-app-region: no-drag;
 }
 
 .panel-tab {
@@ -2563,7 +2586,6 @@ svg.fl {
 	justify-content: center;
 	gap: 8px;
 	min-height: 0;
-	padding-top: var(--chrome-height);
 }
 
 .boot h1 {

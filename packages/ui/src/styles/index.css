@@ -771,11 +771,6 @@ svg.fl {
 	background: transparent;
 }
 
-.panel-resizer:hover,
-.panel-resizer:active {
-	background: color-mix(in srgb, var(--acc) 40%, transparent);
-}
-
 .panel-head {
 	display: flex;
 	flex: none;

@@ -42,8 +42,8 @@ export function readEditorPalette(): EditorPalette {
 		accent: readVar("--acc", "#fafafa"),
 		selection: readVar("--surface3", "#3f3f46"),
 		activeLine: readVar("--surface2", "#27272a"),
-		monoFont: readVar("--font-mono", "ui-monospace, monospace"),
-		fontSize: readVar("--text-size", "13px"),
+		monoFont: readVar("--font-editor", readVar("--font-mono", "ui-monospace, monospace")),
+		fontSize: readVar("--editor-size", "13px"),
 	};
 }
 

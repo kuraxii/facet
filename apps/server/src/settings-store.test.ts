@@ -28,13 +28,13 @@ describe("设置读取", () => {
 		const saved = await store.save({
 			...store.get(),
 			defaultModel: { provider: "new api", id: "deepseek-v4-flash" },
-			appearance: { ...store.get().appearance, theme: "light", fontSize: 15 },
+			appearance: { ...store.get().appearance, theme: "light", uiFontSize: 15 },
 		});
 		expect(saved.appearance.theme).toBe("light");
 
 		const reopened = await SettingsStore.open({ file });
 		expect(reopened.get().defaultModel).toEqual({ provider: "new api", id: "deepseek-v4-flash" });
-		expect(reopened.get().appearance.fontSize).toBe(15);
+		expect(reopened.get().appearance.uiFontSize).toBe(15);
 	});
 
 	it("内容读不懂时留档并回到缺省值", async () => {
@@ -51,8 +51,8 @@ describe("设置读取", () => {
 			JSON.stringify({
 				version: 1,
 				defaultModel: { provider: "p" },
-				hiddenModels: ["a/b", 3],
-				appearance: { theme: "紫色", fontSize: 999, reducedMotion: true },
+				hiddenModels: ["遗留字段"],
+				appearance: { theme: "紫色", uiFontSize: 999, reducedMotion: true },
 				input: { sendKey: "??? " },
 				layout: { sidebarWidth: 10 },
 			}),
@@ -60,13 +60,25 @@ describe("设置读取", () => {
 		);
 		const settings = (await SettingsStore.open({ file })).get();
 		expect(settings.defaultModel).toBeUndefined();
-		expect(settings.hiddenModels).toEqual(["a/b"]);
+		// 模型可见性已经去掉，旧文件里留下的这个字段直接丢掉
+		expect(settings).not.toHaveProperty("hiddenModels");
 		expect(settings.appearance.theme).toBe(DEFAULT_SETTINGS.appearance.theme);
-		expect(settings.appearance.fontSize).toBe(20);
+		expect(settings.appearance.uiFontSize).toBe(20);
 		expect(settings.appearance.reducedMotion).toBe(true);
 		expect(settings.input.sendKey).toBe(DEFAULT_SETTINGS.input.sendKey);
 		expect(settings.layout.sidebarWidth).toBe(200);
 		expect(settings.appearance.codeTheme).toBe(DEFAULT_SETTINGS.appearance.codeTheme);
+	});
+
+	it("老版本写下的正文字体与字号迁移到界面字体与界面字号", async () => {
+		await writeFile(
+			file,
+			JSON.stringify({ version: 1, appearance: { bodyFont: "Noto Sans", fontSize: 15 } }),
+			"utf8",
+		);
+		const settings = (await SettingsStore.open({ file })).get();
+		expect(settings.appearance.uiFont).toBe("Noto Sans");
+		expect(settings.appearance.uiFontSize).toBe(15);
 	});
 
 	it("清单外的主题取值回落到缺省配色", async () => {
@@ -111,12 +123,12 @@ describe("设置读取", () => {
 
 	it("写出的文件带版本号", async () => {
 		const store = await SettingsStore.open({ file: join(root, "nested", "settings.json") });
-		await store.save({ ...store.get(), hiddenModels: ["a/b"] });
+		await store.save({ ...store.get(), defaultThinkingLevel: "high" });
 		const written = JSON.parse(await readFile(join(root, "nested", "settings.json"), "utf8")) as {
 			version: number;
-			hiddenModels: string[];
+			defaultThinkingLevel?: string;
 		};
 		expect(written.version).toBe(1);
-		expect(written.hiddenModels).toEqual(["a/b"]);
+		expect(written.defaultThinkingLevel).toBe("high");
 	});
 });

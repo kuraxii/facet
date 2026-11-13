@@ -160,17 +160,23 @@ function applyAppearance(appearance: FacetSettings["appearance"]): void {
 	const root = document.documentElement;
 	root.dataset.theme = resolveUiTheme(appearance.theme, prefersLight());
 	root.dataset.motion = appearance.reducedMotion ? "reduced" : "full";
-	if (appearance.bodyFont.trim().length > 0) {
-		root.style.setProperty("--font-sans", appearance.bodyFont.trim());
-	} else {
-		root.style.removeProperty("--font-sans");
-	}
-	if (appearance.codeFont.trim().length > 0) {
-		root.style.setProperty("--font-mono", appearance.codeFont.trim());
-	} else {
-		root.style.removeProperty("--font-mono");
-	}
-	root.style.setProperty("--text-size", `${appearance.fontSize}px`);
+	// 空串表示用样式表里的缺省栈：这里把内联值去掉，`:root` 的默认值就生效；
+	// 编辑器与终端的字体在样式表里默认跟着代码字体走
+	const applyFont = (name: string, value: string): void => {
+		const trimmed = value.trim();
+		if (trimmed.length > 0) {
+			root.style.setProperty(name, trimmed);
+			return;
+		}
+		root.style.removeProperty(name);
+	};
+	applyFont("--font-sans", appearance.uiFont);
+	applyFont("--font-mono", appearance.codeFont);
+	applyFont("--font-editor", appearance.editorFont);
+	applyFont("--font-terminal", appearance.terminalFont);
+	root.style.setProperty("--text-size", `${appearance.uiFontSize}px`);
+	root.style.setProperty("--editor-size", `${appearance.editorFontSize}px`);
+	root.style.setProperty("--terminal-size", `${appearance.terminalFontSize}px`);
 	localStorage.setItem(THEME_KEY, appearance.theme);
 }
 
@@ -325,7 +331,7 @@ export function App() {
 			return next;
 		});
 	}, []);
-	const [settingsSection, setSettingsSection] = useState<SettingsSection>("providers");
+	const [settingsSection, setSettingsSection] = useState<SettingsSection>("models");
 	/** 打开、新建、分叉失败时的提示,带重试入口 */
 	const [sessionError, setSessionError] = useState<{ message: string; retry: () => void } | undefined>(
 		undefined,
@@ -496,8 +502,8 @@ export function App() {
 		const styles = getComputedStyle(document.documentElement);
 		const read = (name: string, fallback: string): string => styles.getPropertyValue(name).trim() || fallback;
 		return {
-			fontFamily: read("--font-mono", "ui-monospace, monospace"),
-			fontSize: 12.5,
+			fontFamily: read("--font-terminal", "ui-monospace, monospace"),
+			fontSize: Number.parseFloat(read("--terminal-size", "12.5")),
 			lineHeight: 1.35,
 			cursorBlink: true,
 			scrollback: 5000,
@@ -760,11 +766,6 @@ export function App() {
 		[endpoint, hostList, switchHost, updateHostList],
 	);
 
-	/** 输入区可选的模型：去掉设置里隐藏的那些。 */
-	const visibleModels = useMemo(
-		() => catalog.models.filter((model) => !settings.hiddenModels.includes(`${model.provider}/${model.id}`)),
-		[catalog.models, settings.hiddenModels],
-	);
 	const providerAuth = catalog.auth;
 
 	/** 设置页的数据来源，接到主机上。 */
@@ -805,25 +806,18 @@ export function App() {
 	);
 
 	/**
-	 * 现在不能发送的原因。
+	 * 现在不能发送。
 	 *
-	 * 依次看连接、阶段与凭证：任何一条不满足都不该把消息送出去，说明写在输入区上方，
-	 * 草稿留在输入框里。
+	 * 依次看连接、阶段与凭证：任何一条不满足都不该把消息送出去，草稿留在输入框里。界面上只
+	 * 禁用发送按钮，不写一行说明。
 	 */
-	let blockedReason: string | undefined;
-	if (!isOnline) {
-		blockedReason = "与主机的连接已断开,恢复之后可以继续发送";
-	} else if (host?.role === "viewer") {
-		blockedReason = "这条连接是只读的,不能发送消息";
-	} else if (activity === "compacting") {
-		blockedReason = "正在压缩上下文,完成之后再发送";
-	} else if (activity === "stopping") {
-		blockedReason = "正在停止这一轮,稍后可以继续发送";
-	} else if (session !== undefined && session.state.model === undefined) {
-		blockedReason = "这个会话没有可用模型,到设置里配置提供方与凭证";
-	} else if (session !== undefined && providerAuth[session.state.model?.provider ?? ""] === false) {
-		blockedReason = "当前模型的提供方还没有配置凭证,到设置里补上";
-	}
+	const isBlocked =
+		!isOnline ||
+		host?.role === "viewer" ||
+		activity === "compacting" ||
+		activity === "stopping" ||
+		(session !== undefined && session.state.model === undefined) ||
+		(session !== undefined && providerAuth[session.state.model?.provider ?? ""] === false);
 	const queued = session?.state.queued ?? { steering: [], followUp: [] };
 	const canFork = activity === "idle" && session?.state.maintenance === undefined;
 
@@ -1374,8 +1368,6 @@ export function App() {
 					isSettingsOpen={view === "settings"}
 					onTogglePanel={() => updatePanel({ open: !panel.open })}
 					isPanelOpen={panel.open}
-					onToggleTerminal={toggleTerminal}
-					isTerminalOpen={dock.open}
 					hostStatus={isReconnecting ? "重连中" : host?.role === "viewer" ? "只读" : undefined}
 					isOpen={isSidebarOpen}
 					onNavigate={() => setIsSidebarOpen(false)}
@@ -1432,7 +1424,7 @@ export function App() {
 										retry={retryOf(session.state.maintenance)}
 										onRetryTurn={retryTurn}
 										onOpenSettings={() => {
-											setSettingsSection("providers");
+											setSettingsSection("models");
 											setView("settings");
 										}}
 										onCopyDetails={(text) => {
@@ -1470,12 +1462,12 @@ export function App() {
 										model={session.state.model}
 										thinkingLevel={session.state.thinkingLevel}
 										thinkingLevels={session.state.availableThinkingLevels}
-										models={visibleModels}
+										models={catalog.models}
 										providerAuth={providerAuth}
 										onModelChange={(next) => client.setModel({ provider: next.provider, id: next.id })}
 										onThinkingLevelChange={(level) => client.setThinkingLevel(level)}
 										shiftEnterToSend={settings.input.sendKey === "shiftEnter"}
-										blockedReason={blockedReason}
+										isBlocked={isBlocked}
 										contextUsage={session.state.contextUsage}
 										isCompacting={activity === "compacting"}
 										canCompact={activity === "idle"}
@@ -1600,12 +1592,7 @@ export function App() {
 					<SettingsPage
 						section={settingsSection}
 						onSectionChange={setSettingsSection}
-						onClose={() => {
-							// 预览过但没保存的外观回到已保存的那份
-							applyAppearance(settings.appearance);
-							setTheme(resolveTheme(settings.appearance.theme));
-							setView("chat");
-						}}
+						onClose={() => setView("chat")}
 						data={settingsData}
 						onSettingsApplied={setSettings}
 						onAppearancePreview={(appearance) => {
@@ -1617,6 +1604,8 @@ export function App() {
 							runtime: `Electron ${bridge.platform}`,
 							endpoint,
 						}}
+						// 浏览器入口改不了主机配置，桌面与 SSH 通道可以
+						canEdit={host?.canManage === true}
 					/>
 				) : null}
 

@@ -41,14 +41,26 @@ class Peer {
 		});
 	}
 
-	static async connect(path: string, token: string, role?: "operator" | "viewer"): Promise<Peer> {
+	static async connect(
+		path: string,
+		token: string,
+		role?: "operator" | "viewer",
+		entry?: "desktop" | "web",
+	): Promise<Peer> {
 		const socket = connect({ path });
 		await new Promise<void>((resolve, reject) => {
 			socket.once("connect", () => resolve());
 			socket.once("error", reject);
 		});
 		const peer = new Peer(socket);
-		socket.write(encodeFrame(role === undefined ? { type: "auth", token } : { type: "auth", token, role }));
+		socket.write(
+			encodeFrame({
+				type: "auth",
+				token,
+				...(role === undefined ? {} : { role }),
+				...(entry === undefined ? {} : { entry }),
+			}),
+		);
 		return peer;
 	}
 
@@ -79,8 +91,10 @@ class Peer {
 	}
 
 	/** 拿握手结果里的权限档与能力。 */
-	async hello(): Promise<{ role: string; capabilities: string[] }> {
-		return await this.waitFor<{ role: string; capabilities: string[] }>((item) => item.type === "hello");
+	async hello(): Promise<{ role: string; canManage: boolean; capabilities: string[] }> {
+		return await this.waitFor<{ role: string; canManage: boolean; capabilities: string[] }>(
+			(item) => item.type === "hello",
+		);
 	}
 
 	/** 派发一条动作，返回拒绝原因（被接受时为空）。 */
@@ -174,17 +188,21 @@ afterEach(async () => {
 });
 
 describe("权限档", () => {
-	it("本机连接是管理档，远程只读档拿不到管理操作", async () => {
+	it("本机连接是管理档，只读档拿不到管理操作", async () => {
 		await start({ socketPath: join(dir, "local.sock") });
 		const local = await Peer.connect(join(dir, "local.sock"), "令牌");
-		const remote = await Peer.connect(join(dir, "local.sock"), "令牌", "viewer");
-		peerList.push(local, remote);
-		expect((await local.hello()).role).toBe("admin");
-		expect((await remote.hello()).role).toBe("viewer");
-		expect(await remote.request("getSettings")).toEqual({ ok: true, message: undefined });
-		expect((await remote.request("updateSettings", { settings: {} })).ok).toBe(false);
-		expect((await remote.request("deleteCredential", { providerId: "x" })).message).toBe(
-			"这个操作只允许在本机进行",
+		const readOnly = await Peer.connect(join(dir, "local.sock"), "令牌", "viewer");
+		peerList.push(local, readOnly);
+		const localHello = await local.hello();
+		expect(localHello.role).toBe("admin");
+		expect(localHello.canManage).toBe(true);
+		const readOnlyHello = await readOnly.hello();
+		expect(readOnlyHello.role).toBe("viewer");
+		expect(readOnlyHello.canManage).toBe(false);
+		expect(await readOnly.request("getSettings")).toEqual({ ok: true, message: undefined });
+		expect((await readOnly.request("updateSettings", { settings: {} })).ok).toBe(false);
+		expect((await readOnly.request("deleteCredential", { providerId: "x" })).message).toBe(
+			"这个操作只在桌面端可用",
 		);
 	});
 
@@ -201,16 +219,30 @@ describe("权限档", () => {
 		);
 	});
 
-	it("远程操作档能派发动作，但管理操作仍然拒绝", async () => {
+	it("桌面入口的操作档能改设置，浏览器入口同一档位被拒", async () => {
 		await start({ socketPath: join(dir, "local.sock"), remotePermission: "operate" });
-		// 声明操作档，主机的配置是 operate，所以给操作档
-		const remote = await Peer.connect(join(dir, "local.sock"), "令牌", "operator");
-		peerList.push(remote);
-		expect((await remote.hello()).role).toBe("operator");
-		expect((await remote.request("updateSettings", { settings: {} })).message).toBe(
-			"这个操作只允许在本机进行",
+		// 声明操作档，主机的配置是 operate，所以给操作档；入口决定能不能碰主机配置
+		const ssh = await Peer.connect(join(dir, "local.sock"), "令牌", "operator", "desktop");
+		const browser = await Peer.connect(join(dir, "local.sock"), "令牌", "operator", "web");
+		peerList.push(ssh, browser);
+		const sshHello = await ssh.hello();
+		expect(sshHello.role).toBe("operator");
+		expect(sshHello.canManage).toBe(true);
+		expect((await ssh.request("updateSettings", { settings: {} })).ok).toBe(true);
+		const browserHello = await browser.hello();
+		expect(browserHello.role).toBe("operator");
+		expect(browserHello.canManage).toBe(false);
+		expect((await browser.request("updateSettings", { settings: {} })).message).toBe(
+			"这个操作只在桌面端可用",
 		);
-		expect((await remote.request("diagnostics")).ok).toBe(false);
+		expect((await browser.request("diagnostics")).ok).toBe(false);
+	});
+
+	it("浏览器入口的只读档改不了会话，桌面入口的操作档可以", async () => {
+		await start({ socketPath: join(dir, "local.sock"), remotePermission: "operate" });
+		const browser = await Peer.connect(join(dir, "local.sock"), "令牌", "viewer", "web");
+		peerList.push(browser);
+		expect((await browser.request("createSession", { cwd: dir })).message).toBe("这条连接是只读的");
 	});
 });
 

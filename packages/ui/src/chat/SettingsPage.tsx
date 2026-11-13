@@ -4,19 +4,23 @@
  * 左侧分类、右侧内容；切换分类只加载该分类需要的数据，读取与保存都有明确的进行中与失败状态。
  * 保存失败时保留用户正在编辑的输入，可以直接重试。
  */
-import type { FacetSettings, ModelInfo, ModelRef, ProviderInfo } from "@facet/protocol";
+import type { CustomProviderInfo, FacetSettings, ModelInfo, ModelRef, ProviderInfo } from "@facet/protocol";
 import { X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CODE_THEME_OPTIONS, UI_THEME_OPTIONS } from "../theme.ts";
 import { ProvidersSection } from "./ProvidersSection.tsx";
+import { providerRows } from "./provider-rows.ts";
 import type { SettingsDataSource } from "./settings-data-source.ts";
+import { SettingsGroup, SettingsRow } from "./settings-layout.tsx";
 
 /** 设置分类。 */
-export type SettingsSection = "providers" | "models" | "appearance" | "input" | "about";
+export type SettingsSection = "models" | "appearance" | "input" | "about";
+
+/** 自动保存的延迟：改动停下后等这么久再提交，连续调整只保存最后一次。 */
+const AUTO_SAVE_DELAY_MS = 1000;
 
 /** 分类顺序与标题。 */
 const SECTIONS: ReadonlyArray<{ key: SettingsSection; label: string }> = [
-	{ key: "providers", label: "提供方" },
 	{ key: "models", label: "模型" },
 	{ key: "appearance", label: "外观" },
 	{ key: "input", label: "输入" },
@@ -42,6 +46,13 @@ export interface SettingsPageProps {
 	onAppearancePreview?: (appearance: FacetSettings["appearance"]) => void;
 	/** 应用版本等只读信息 */
 	about: { appVersion: string; runtime: string; endpoint: string };
+	/**
+	 * 这条连接能不能改设置。
+	 *
+	 * 凭证、设置与项目清单由主机限定只在本机操作，远程连接（含 Web 端）能读不能改；
+	 * 关掉之后内容照常显示，控件不可用，也不会有自动保存。
+	 */
+	canEdit?: boolean;
 }
 
 /** 一段加载或保存失败的信息，带重试。 */
@@ -72,13 +83,13 @@ export function SettingsPage({
 	onSettingsApplied,
 	onAppearancePreview,
 	about,
+	canEdit = true,
 }: SettingsPageProps) {
 	/** 已加载的设置；为空表示还没读到 */
 	const [settings, setSettings] = useState<FacetSettings | undefined>(undefined);
 	/** 正在编辑的那份；保存成功前不回写 settings */
 	const [draft, setDraft] = useState<FacetSettings | undefined>(undefined);
 	const [isLoading, setIsLoading] = useState(false);
-	const [isSaving, setIsSaving] = useState(false);
 	const [loadError, setLoadError] = useState<string | undefined>(undefined);
 	const [saveError, setSaveError] = useState<string | undefined>(undefined);
 	const [providers, setProviders] = useState<readonly ProviderInfo[] | undefined>(undefined);
@@ -144,7 +155,7 @@ export function SettingsPage({
 
 	// 模型、外观、输入三个分类共用同一份设置，进入时读一次
 	useEffect(() => {
-		if (section === "providers" || section === "about") {
+		if (section === "about") {
 			return;
 		}
 		if (settings !== undefined) {
@@ -153,8 +164,9 @@ export function SettingsPage({
 		void loadSettings();
 	}, [loadSettings, section, settings]);
 
+	// 提供方现在挂在模型页里
 	useEffect(() => {
-		if (section !== "providers" || providers !== undefined) {
+		if (section !== "models" || providers !== undefined) {
 			return;
 		}
 		void loadProviders();
@@ -166,23 +178,56 @@ export function SettingsPage({
 		setSaveError(undefined);
 	};
 
-	const save = async (next: FacetSettings): Promise<void> => {
-		setIsSaving(true);
-		setSaveError(undefined);
-		try {
-			const saved = await data.saveSettings(next);
-			setSettings(saved);
-			setDraft(saved);
-			onSettingsApplied?.(saved);
-		} catch (error) {
-			setSaveError(error instanceof Error ? error.message : String(error));
-		} finally {
-			setIsSaving(false);
-		}
-	};
+	const save = useCallback(
+		async (next: FacetSettings): Promise<void> => {
+			setSaveError(undefined);
+			try {
+				const saved = await data.saveSettings(next);
+				setSettings(saved);
+				// 提交期间又改过就保留新的草稿，下一次自动保存会把两处改动一起提交
+				setDraft((current) =>
+					current !== undefined && JSON.stringify(current) !== JSON.stringify(next) ? current : saved,
+				);
+				onSettingsApplied?.(saved);
+			} catch (error) {
+				setSaveError(error instanceof Error ? error.message : String(error));
+			}
+		},
+		[data, onSettingsApplied],
+	);
 
 	const isDirty =
 		settings !== undefined && draft !== undefined && JSON.stringify(settings) !== JSON.stringify(draft);
+
+	/** 保存函数每次渲染都是新的，定时器只按草稿与脏标记重置，避免父组件重绘把等待时间一直推后 */
+	const saveRef = useRef(save);
+	saveRef.current = save;
+
+	// 草稿变化后延迟提交，一秒内继续改就重新计时
+	useEffect(() => {
+		if (!isDirty || draft === undefined) {
+			return;
+		}
+		const timer = setTimeout(() => {
+			void saveRef.current(draft);
+		}, AUTO_SAVE_DELAY_MS);
+		return () => {
+			clearTimeout(timer);
+		};
+	}, [draft, isDirty]);
+
+	// 关闭设置时还在等定时器的改动立刻提交，不让最后一秒的编辑丢掉
+	const pendingRef = useRef<FacetSettings | undefined>(undefined);
+	pendingRef.current = isDirty ? draft : undefined;
+	useEffect(
+		() => () => {
+			const pending = pendingRef.current;
+			if (pending !== undefined) {
+				void saveRef.current(pending).catch(() => undefined);
+			}
+		},
+		[],
+	);
 
 	return (
 		<div className="dialog-backdrop" role="presentation" onPointerDown={handleBackdropPointerDown}>
@@ -217,55 +262,42 @@ export function SettingsPage({
 					</nav>
 
 					<div className="set-content">
-						{section === "providers" ? (
-							<ProvidersSection
-								providers={providers}
-								error={providersError}
-								onReload={() => void loadProviders()}
-								data={data}
-							/>
-						) : null}
-
 						{section === "about" ? <AboutSection about={about} data={data} /> : null}
 
 						{section === "models" || section === "appearance" || section === "input" ? (
-							<section className="set-section">
-								{loadError === undefined ? null : (
-									<StatusNote message={`读取设置失败:${loadError}`} onRetry={loadSettings} tone="error" />
-								)}
-								{isLoading ? <p className="set-hint">正在读取设置…</p> : null}
-								{draft === undefined ? null : (
-									<>
-										{section === "models" ? <ModelsSection draft={draft} patch={patch} data={data} /> : null}
-										{section === "appearance" ? (
-											<AppearanceSection draft={draft} patch={patch} onPreview={onAppearancePreview} />
-										) : null}
-										{section === "input" ? <InputSection draft={draft} patch={patch} /> : null}
-										{saveError === undefined ? null : (
-											<StatusNote
-												message={`保存失败:${saveError}`}
-												onRetry={() => void save(draft)}
-												tone="error"
-											/>
-										)}
-										<div className="set-actions">
-											<button
-												type="button"
-												className="set-save"
-												disabled={!isDirty || isSaving}
-												onClick={() => void save(draft)}
-											>
-												{isSaving ? "保存中…" : "保存"}
-											</button>
-											{isDirty ? (
-												<button type="button" className="set-reset" onClick={() => setDraft(settings)}>
-													放弃改动
-												</button>
+							<fieldset className="set-lock" disabled={!canEdit}>
+								<section className="set-section">
+									{loadError === undefined ? null : (
+										<StatusNote message={`读取设置失败:${loadError}`} onRetry={loadSettings} tone="error" />
+									)}
+									{isLoading ? <p className="set-hint">正在读取设置…</p> : null}
+									{draft === undefined ? null : (
+										<>
+											{section === "models" ? (
+												<ModelsSection
+													draft={draft}
+													patch={patch}
+													data={data}
+													providers={providers}
+													providersError={providersError}
+													onReloadProviders={() => void loadProviders()}
+												/>
 											) : null}
-										</div>
-									</>
-								)}
-							</section>
+											{section === "appearance" ? (
+												<AppearanceSection draft={draft} patch={patch} onPreview={onAppearancePreview} />
+											) : null}
+											{section === "input" ? <InputSection draft={draft} patch={patch} /> : null}
+											{saveError === undefined ? null : (
+												<StatusNote
+													message={`保存失败:${saveError}`}
+													onRetry={() => void save(draft)}
+													tone="error"
+												/>
+											)}
+										</>
+									)}
+								</section>
+							</fieldset>
 						) : null}
 					</div>
 				</div>
@@ -282,17 +314,23 @@ function modelKey(model: ModelRef): string {
 /**
  * 模型设置。
  *
- * 默认模型与默认思考档位决定新建会话用什么；档位按所选模型是否支持思考来筛，不支持时
- * 只留「不思考」。可见性决定模型选择器里出现哪些模型，已有会话的模型不受影响。
+ * 一页里放三件事：新建会话采用的默认模型与思考档位、已配置的提供方（含凭证与地址）、可用模型的
+ * 连通性测试。档位按所选模型是否支持思考来筛，不支持时只留「不思考」。
  */
 function ModelsSection({
 	draft,
 	patch,
 	data,
+	providers,
+	providersError,
+	onReloadProviders,
 }: {
 	draft: FacetSettings;
 	patch: (change: (current: FacetSettings) => FacetSettings) => void;
 	data: SettingsDataSource;
+	providers: readonly ProviderInfo[] | undefined;
+	providersError: string | undefined;
+	onReloadProviders: () => void;
 }) {
 	const [models, setModels] = useState<readonly ModelInfo[] | undefined>(undefined);
 	const [error, setError] = useState<string | undefined>(undefined);
@@ -302,6 +340,8 @@ function ModelsSection({
 	>({});
 	/** 正在测试的模型 */
 	const [testing, setTesting] = useState<string | undefined>(undefined);
+	/** 自定义提供方的完整配置，提供方列表与模型筛选用同一份 */
+	const [customs, setCustoms] = useState<readonly CustomProviderInfo[] | undefined>(undefined);
 
 	/** 发一次最小请求，结果留在该模型下面。 */
 	const runTest = async (model: ModelInfo) => {
@@ -340,6 +380,16 @@ function ModelsSection({
 		void load();
 	}, [load, models]);
 
+	useEffect(() => {
+		if (customs !== undefined) {
+			return;
+		}
+		void data
+			.listCustomProviders()
+			.then(setCustoms)
+			.catch(() => setCustoms([]));
+	}, [customs, data]);
+
 	if (error !== undefined) {
 		return (
 			<>
@@ -357,6 +407,19 @@ function ModelsSection({
 		);
 	}
 
+	// 只列已配置提供方的模型：没配置凭证的提供方用不了，列出来只是噪声。两者都读到之前先不筛
+	const usable =
+		providers === undefined || customs === undefined
+			? models
+			: (() => {
+					const configured = new Set(
+						providerRows(providers, customs)
+							.filter(({ provider, custom }) => provider.authenticated || custom !== undefined)
+							.map(({ provider }) => provider.id),
+					);
+					return models.filter((model) => configured.has(model.provider));
+				})();
+
 	const selected = draft.defaultModel;
 	// 选中的模型不支持思考时,只保留「不思考」一档
 	const selectedModel =
@@ -367,64 +430,71 @@ function ModelsSection({
 	return (
 		<>
 			<h2 className="set-section-title">模型</h2>
-			<p className="set-hint">新建会话采用这里的默认模型与思考档位；已有会话保持自己的选择。</p>
-			<label className="set-field">
-				<span className="set-label">默认模型</span>
-				<select
-					className="set-input"
-					value={selected === undefined ? "" : modelKey(selected)}
-					onChange={(event) => {
-						const value = event.target.value;
-						const found = models.find((model) => modelKey(model) === value);
-						patch((current) => ({
-							...current,
-							defaultModel: found === undefined ? undefined : { provider: found.provider, id: found.id },
-						}));
-					}}
-					aria-label="默认模型"
-				>
-					<option value="">由主机决定</option>
-					{models.map((model) => (
-						<option key={modelKey(model)} value={modelKey(model)}>
-							{model.provider} / {model.name}
-						</option>
-					))}
-				</select>
-			</label>
-			<label className="set-field">
-				<span className="set-label">默认思考档位</span>
-				<select
-					className="set-input"
-					value={draft.defaultThinkingLevel ?? ""}
-					onChange={(event) => {
-						const value = event.target.value;
-						patch((current) => ({
-							...current,
-							...(value.length === 0
-								? { defaultThinkingLevel: undefined }
-								: { defaultThinkingLevel: value as ThinkingLevelValue }),
-						}));
-					}}
-					aria-label="默认思考档位"
-				>
-					<option value="">由模型决定</option>
-					{levelOptions.map((level) => (
-						<option key={level} value={level}>
-							{level}
-						</option>
-					))}
-				</select>
-			</label>
-			{selectedModel !== undefined && !selectedModel.reasoning ? (
-				<p className="set-hint">这个模型不支持思考，档位只保留「off」。</p>
-			) : null}
+			<SettingsGroup label="默认设置">
+				<SettingsRow title="默认模型">
+					<select
+						className="set-input"
+						value={selected === undefined ? "" : modelKey(selected)}
+						onChange={(event) => {
+							const value = event.target.value;
+							const found = models.find((model) => modelKey(model) === value);
+							patch((current) => ({
+								...current,
+								defaultModel: found === undefined ? undefined : { provider: found.provider, id: found.id },
+							}));
+						}}
+						aria-label="默认模型"
+					>
+						<option value="">由主机决定</option>
+						{usable.map((model) => (
+							<option key={modelKey(model)} value={modelKey(model)}>
+								{model.provider} / {model.name}
+							</option>
+						))}
+					</select>
+				</SettingsRow>
+				<SettingsRow title="默认思考档位">
+					<select
+						className="set-input"
+						value={draft.defaultThinkingLevel ?? ""}
+						onChange={(event) => {
+							const value = event.target.value;
+							patch((current) => ({
+								...current,
+								...(value.length === 0
+									? { defaultThinkingLevel: undefined }
+									: { defaultThinkingLevel: value as ThinkingLevelValue }),
+							}));
+						}}
+						aria-label="默认思考档位"
+					>
+						<option value="">由模型决定</option>
+						{levelOptions.map((level) => (
+							<option key={level} value={level}>
+								{level}
+							</option>
+						))}
+					</select>
+				</SettingsRow>
+			</SettingsGroup>
 
-			<h3 className="set-section-subtitle">模型可见性</h3>
-			<p className="set-hint">隐藏的模型不出现在模型选择器里，已经用着它的会话不受影响。</p>
+			<ProvidersSection
+				providers={providers}
+				error={providersError}
+				// 凭证变了，可用模型的范围也跟着变
+				onReload={() => {
+					onReloadProviders();
+					void load();
+				}}
+				data={data}
+				customs={customs}
+				onCustomsChange={setCustoms}
+			/>
+
+			<h3 className="set-group-title set-group-title-lg">可用模型</h3>
 			<ul className="set-list set-list-scroll">
-				{models.map((model) => {
+				{usable.map((model) => {
 					const key = modelKey(model);
-					const isHidden = draft.hiddenModels.includes(key);
 					const probe = tests[key];
 					return (
 						<li key={key} className="set-row is-block">
@@ -445,27 +515,12 @@ function ModelsSection({
 								>
 									{testing === key ? "测试中…" : "测试"}
 								</button>
-								<label className="set-toggle">
-									<input
-										type="checkbox"
-										checked={!isHidden}
-										onChange={(event) =>
-											patch((current) => ({
-												...current,
-												hiddenModels: event.target.checked
-													? current.hiddenModels.filter((item) => item !== key)
-													: [...current.hiddenModels, key],
-											}))
-										}
-									/>
-									<span>{isHidden ? "已隐藏" : "显示"}</span>
-								</label>
 							</div>
 							{probe?.message === undefined ? null : <p className="set-row-error">{probe.message}</p>}
 						</li>
 					);
 				})}
-				{models.length === 0 ? <li className="set-row set-row-empty">没有可用的模型</li> : null}
+				{usable.length === 0 ? <li className="set-row set-row-empty">还没有可用的模型</li> : null}
 			</ul>
 		</>
 	);
@@ -487,109 +542,136 @@ function AppearanceSection({
 }) {
 	const appearance = draft.appearance;
 	// 外观改动立刻作用到界面上，关掉设置页而不保存时由宿主恢复
-	const patchAppearance = (next: FacetSettings["appearance"]): void => {
+	const patchAppearance = (change: Partial<FacetSettings["appearance"]>): void => {
+		const next = { ...appearance, ...change };
 		patch((current) => ({ ...current, appearance: next }));
 		onPreview?.(next);
 	};
+	/** 字号输入的公共写法：留空或越界时保持原值。 */
+	const sizeInput = (value: number, name: keyof FacetSettings["appearance"]): React.JSX.Element => (
+		<input
+			className="set-input is-number mono"
+			type="number"
+			min={11}
+			max={20}
+			value={value}
+			onChange={(event) => {
+				const next = Number(event.target.value);
+				if (Number.isFinite(next)) {
+					patchAppearance({ [name]: next } as Partial<FacetSettings["appearance"]>);
+				}
+			}}
+			aria-label={String(name)}
+		/>
+	);
+
 	return (
 		<>
 			<h2 className="set-section-title">外观</h2>
-			<fieldset className="set-field">
-				<legend className="set-label">主题</legend>
-				<div className="set-swatches">
-					{UI_THEME_OPTIONS.map((option) => (
+			<SettingsGroup label="通用">
+				<SettingsRow title="主题" isStacked>
+					<div className="set-swatches">
+						{UI_THEME_OPTIONS.map((option) => (
+							<button
+								key={option.id}
+								type="button"
+								className={appearance.theme === option.id ? "set-swatch is-active" : "set-swatch"}
+								title={option.label}
+								aria-label={option.label}
+								aria-pressed={appearance.theme === option.id}
+								onClick={() => patchAppearance({ theme: option.id })}
+							>
+								<i className="set-swatch-chip" style={{ background: option.swatch }} />
+								<span className="set-swatch-name">{option.label}</span>
+							</button>
+						))}
 						<button
-							key={option.id}
 							type="button"
-							className={appearance.theme === option.id ? "set-swatch is-active" : "set-swatch"}
-							title={option.label}
-							aria-label={option.label}
-							aria-pressed={appearance.theme === option.id}
-							onClick={() => patchAppearance({ ...appearance, theme: option.id })}
+							className={appearance.theme === "system" ? "set-swatch is-active" : "set-swatch"}
+							title="跟随系统"
+							aria-label="跟随系统"
+							aria-pressed={appearance.theme === "system"}
+							onClick={() => patchAppearance({ theme: "system" })}
 						>
-							<i className="set-swatch-chip" style={{ background: option.swatch }} />
-							<span className="set-swatch-name">{option.label}</span>
+							<i className="set-swatch-chip is-system" />
+							<span className="set-swatch-name">跟随系统</span>
 						</button>
-					))}
-					<button
-						type="button"
-						className={appearance.theme === "system" ? "set-swatch is-active" : "set-swatch"}
-						title="跟随系统"
-						aria-label="跟随系统"
-						aria-pressed={appearance.theme === "system"}
-						onClick={() => patchAppearance({ ...appearance, theme: "system" })}
+					</div>
+				</SettingsRow>
+				<SettingsRow title="减少动效">
+					<input
+						type="checkbox"
+						checked={appearance.reducedMotion}
+						onChange={(event) => patchAppearance({ reducedMotion: event.target.checked })}
+						aria-label="减少动效"
+					/>
+				</SettingsRow>
+			</SettingsGroup>
+
+			<SettingsGroup label="字体">
+				<SettingsRow title="界面字体">
+					<input
+						className="set-input"
+						value={appearance.uiFont}
+						onChange={(event) => patchAppearance({ uiFont: event.target.value })}
+						placeholder="Inter"
+						aria-label="界面字体"
+					/>
+				</SettingsRow>
+				<SettingsRow title="界面字号">{sizeInput(appearance.uiFontSize, "uiFontSize")}</SettingsRow>
+				<SettingsRow title="代码字体">
+					<input
+						className="set-input"
+						value={appearance.codeFont}
+						onChange={(event) => patchAppearance({ codeFont: event.target.value })}
+						placeholder="Maple Mono"
+						aria-label="代码字体"
+					/>
+				</SettingsRow>
+				<SettingsRow title="编辑器字体">
+					<input
+						className="set-input"
+						value={appearance.editorFont}
+						onChange={(event) => patchAppearance({ editorFont: event.target.value })}
+						placeholder="跟代码字体"
+						aria-label="编辑器字体"
+					/>
+				</SettingsRow>
+				<SettingsRow title="编辑器字号">{sizeInput(appearance.editorFontSize, "editorFontSize")}</SettingsRow>
+				<SettingsRow title="终端字体">
+					<input
+						className="set-input"
+						value={appearance.terminalFont}
+						onChange={(event) => patchAppearance({ terminalFont: event.target.value })}
+						placeholder="跟代码字体"
+						aria-label="终端字体"
+					/>
+				</SettingsRow>
+				<SettingsRow title="终端字号">
+					{sizeInput(appearance.terminalFontSize, "terminalFontSize")}
+				</SettingsRow>
+			</SettingsGroup>
+
+			<SettingsGroup label="代码配色">
+				<SettingsRow title="代码配色">
+					<select
+						className="set-input"
+						value={appearance.codeTheme}
+						onChange={(event) =>
+							patchAppearance({
+								codeTheme: event.target.value as FacetSettings["appearance"]["codeTheme"],
+							})
+						}
+						aria-label="代码配色"
 					>
-						<i className="set-swatch-chip is-system" />
-						<span className="set-swatch-name">跟随系统</span>
-					</button>
-				</div>
-			</fieldset>
-			<label className="set-field">
-				<span className="set-label">代码配色</span>
-				<select
-					className="set-input"
-					value={appearance.codeTheme}
-					onChange={(event) =>
-						patchAppearance({
-							...appearance,
-							codeTheme: event.target.value as FacetSettings["appearance"]["codeTheme"],
-						})
-					}
-					aria-label="代码配色"
-				>
-					{CODE_THEME_OPTIONS.map((option) => (
-						<option key={option.id} value={option.id}>
-							{option.label}
-						</option>
-					))}
-				</select>
-			</label>
-			<label className="set-field">
-				<span className="set-label">正文字体</span>
-				<input
-					className="set-input"
-					value={appearance.bodyFont}
-					onChange={(event) => patchAppearance({ ...appearance, bodyFont: event.target.value })}
-					placeholder="留空使用 Inter"
-					aria-label="正文字体"
-				/>
-			</label>
-			<label className="set-field">
-				<span className="set-label">代码字体</span>
-				<input
-					className="set-input"
-					value={appearance.codeFont}
-					onChange={(event) => patchAppearance({ ...appearance, codeFont: event.target.value })}
-					placeholder="留空使用 Maple Mono"
-					aria-label="代码字体"
-				/>
-			</label>
-			<label className="set-field">
-				<span className="set-label">正文字号</span>
-				<input
-					className="set-input mono"
-					type="number"
-					min={11}
-					max={20}
-					value={appearance.fontSize}
-					onChange={(event) => {
-						const value = Number(event.target.value);
-						patchAppearance({
-							...appearance,
-							fontSize: Number.isFinite(value) ? value : appearance.fontSize,
-						});
-					}}
-					aria-label="正文字号"
-				/>
-			</label>
-			<label className="set-check">
-				<input
-					type="checkbox"
-					checked={appearance.reducedMotion}
-					onChange={(event) => patchAppearance({ ...appearance, reducedMotion: event.target.checked })}
-				/>
-				<span>减少动效</span>
-			</label>
+						{CODE_THEME_OPTIONS.map((option) => (
+							<option key={option.id} value={option.id}>
+								{option.label}
+							</option>
+						))}
+					</select>
+				</SettingsRow>
+			</SettingsGroup>
 		</>
 	);
 }
@@ -605,39 +687,37 @@ function InputSection({
 	return (
 		<>
 			<h2 className="set-section-title">输入</h2>
-			<label className="set-field">
-				<span className="set-label">发送键位</span>
-				<select
-					className="set-input"
-					value={draft.input.sendKey}
-					onChange={(event) =>
-						patch((current) => ({
-							...current,
-							input: { ...current.input, sendKey: event.target.value as FacetSettings["input"]["sendKey"] },
-						}))
-					}
-					aria-label="发送键位"
-				>
-					<option value="enter">回车发送,Shift+回车换行</option>
-					<option value="shiftEnter">Shift+回车发送,回车换行</option>
-				</select>
-			</label>
+			<SettingsGroup label="发送">
+				<SettingsRow title="发送键位">
+					<select
+						className="set-input"
+						value={draft.input.sendKey}
+						onChange={(event) =>
+							patch((current) => ({
+								...current,
+								input: { ...current.input, sendKey: event.target.value as FacetSettings["input"]["sendKey"] },
+							}))
+						}
+						aria-label="发送键位"
+					>
+						<option value="enter">回车发送</option>
+						<option value="shiftEnter">Shift+回车发送</option>
+					</select>
+				</SettingsRow>
+			</SettingsGroup>
 
-			<h3 className="set-section-subtitle">快捷键</h3>
-			<ul className="set-list">
+			<SettingsGroup label="快捷键">
 				{SHORTCUTS.map((item) => (
-					<li key={item.keys} className="set-row">
-						<span className="set-row-name">{item.action}</span>
-						<span className="set-row-meta mono">{item.keys}</span>
-					</li>
+					<SettingsRow key={item.keys} title={item.action}>
+						<span className="set-item-key mono">{item.keys}</span>
+					</SettingsRow>
 				))}
-				<li className="set-row">
-					<span className="set-row-name">发送消息</span>
-					<span className="set-row-meta mono">
+				<SettingsRow title="发送消息">
+					<span className="set-item-key mono">
 						{draft.input.sendKey === "shiftEnter" ? "Shift+Enter" : "Enter"}
 					</span>
-				</li>
-			</ul>
+				</SettingsRow>
+			</SettingsGroup>
 		</>
 	);
 }
@@ -692,7 +772,6 @@ function AboutSection({ about, data }: { about: SettingsPageProps["about"]; data
 					<span className="set-row-meta mono">{about.endpoint}</span>
 				</li>
 			</ul>
-			<p className="set-hint">诊断包含版本、平台、数据目录与模型状态，凭证与令牌不会写进去。</p>
 			<div className="set-actions">
 				<button
 					type="button"

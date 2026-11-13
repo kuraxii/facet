@@ -17,6 +17,7 @@ import {
 	type ActionFrame,
 	type Capability,
 	type Channel,
+	type ClientEntry,
 	type ClientRole,
 	type CustomProviderInfo,
 	type ErrorCode,
@@ -135,6 +136,8 @@ interface Connection {
 	authenticated: boolean;
 	/** 这条连接能做什么：认证帧里声明的档位，主机会按配置收窄 */
 	role: ClientRole;
+	/** 这条连接从哪来：桌面主进程的通道，或浏览器页面 */
+	entry: ClientEntry;
 	/** 发一帧给对端 */
 	send(frame: ServerFrame): void;
 	/** 关掉连接，参数是给对端看的说明 */
@@ -384,16 +387,26 @@ async function applyAction(context: EndpointContext, channel: Channel, action: A
 }
 
 /**
+ * 这条连接能不能改主机配置：设置、凭证、项目清单与诊断导出。
+ *
+ * 桌面入口放行：本机 socket 与 SSH 隧道都算，SSH 本身已经是一道认证。浏览器入口只有一个
+ * 令牌，不放行。只读档什么时候都不放行。
+ */
+function canManage(connection: Connection): boolean {
+	return connection.entry === "desktop" && connection.role !== "viewer";
+}
+
+/**
  * 按连接的权限档判定能不能做这个请求。
  *
- * 本机连接放行；远程的操作档不能碰主机管理；远程的只读档连会话与文件都改不了。
+ * 桌面入口放行主机管理；浏览器入口不能碰主机管理；只读档连会话与文件都改不了。
  */
 function assertRequestAllowed(connection: Connection, method: string): void {
 	if (connection.role === "admin") {
 		return;
 	}
-	if (ADMIN_ONLY_REQUESTS.has(method)) {
-		throw new RequestError("rejected", "这个操作只允许在本机进行");
+	if (ADMIN_ONLY_REQUESTS.has(method) && !canManage(connection)) {
+		throw new RequestError("rejected", "这个操作只在桌面端可用");
 	}
 	if (connection.role === "viewer" && WRITE_REQUESTS.has(method)) {
 		throw new RequestError("rejected", "这条连接是只读的");
@@ -870,6 +883,7 @@ async function handleFrame(context: EndpointContext, connection: Connection, tex
 		params?: unknown;
 		token?: unknown;
 		role?: unknown;
+		entry?: unknown;
 	};
 	if (!connection.authenticated) {
 		// 首帧必须是令牌；校验不过直接断开，之后才发 hello
@@ -883,6 +897,8 @@ async function handleFrame(context: EndpointContext, connection: Connection, tex
 		}
 		connection.authenticated = true;
 		connection.role = grantedRole(context, frame.role, connection.role);
+		// 只有明确声明 web 才算浏览器入口，缺省按桌面算
+		connection.entry = frame.entry === "web" ? "web" : "desktop";
 		connection.send({
 			type: "hello",
 			protocolVersion: PROTOCOL_VERSION,
@@ -890,6 +906,7 @@ async function handleFrame(context: EndpointContext, connection: Connection, tex
 			hostName: context.config.hostName,
 			clientId: connection.clientId,
 			role: connection.role,
+			canManage: canManage(connection),
 			capabilities: capabilitiesFor(context),
 		} satisfies HelloFrame);
 		return;
@@ -979,8 +996,9 @@ export async function startEndpoint(options: {
 			remoteAddress,
 			subscriptions: new Map(),
 			authenticated: false,
-			// 认证帧里声明档位之后才确定
+			// 认证帧里声明档位与入口之后才确定
 			role: defaultRole,
+			entry: "desktop",
 			send,
 			close: (code, reason) => {
 				close(code, reason);

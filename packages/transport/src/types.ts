@@ -30,6 +30,8 @@ export interface Handshake {
 	clientId: string;
 	/** 这条连接能做什么 */
 	role: ClientRole;
+	/** 这条连接能不能改主机配置 */
+	canManage: boolean;
 	/** 主机已实现的能力 */
 	capabilities: readonly Capability[];
 }

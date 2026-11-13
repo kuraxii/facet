@@ -5,6 +5,7 @@
  * 按行收发的字节流，传输层（StreamTransport）在它上面跑同一套协议。本机与远程的差别只在
  * 目标字符串上，令牌每次都向主进程取最新的——本机重启后旧令牌就失效了。
  */
+import type { ClientEntry } from "@facet/protocol";
 import { StreamTransport } from "@facet/transport";
 
 /** 本机目标的标识，与主进程约定一致。 */
@@ -21,6 +22,8 @@ export interface HostChannelBridge {
 		id: number;
 		token: string | undefined;
 		role: "operator" | "viewer" | undefined;
+		/** 连接从哪来：桌面主进程打开的通道，或浏览器页面 */
+		entry: ClientEntry;
 		write: (text: string) => void;
 		close: () => void;
 	}>;
@@ -50,8 +53,8 @@ export function makeTransport(bridge: HostChannelBridge, readTarget: () => strin
 				onData: (chunk) => dataListener?.(chunk),
 				onClose: (reason) => closeListener?.(reason),
 			});
-			// 令牌与权限档由主进程按目标给出：本机读发现文件并给管理档，远程给操作档
-			transport.setToken(channel.token, channel.role);
+			// 令牌、权限档与入口由桥给出：桌面通道不声明档位即管理档，浏览器页面声明 web
+			transport.setToken(channel.token, channel.role, channel.entry);
 			return {
 				write: (text) => channel.write(text),
 				onData: (listener) => {

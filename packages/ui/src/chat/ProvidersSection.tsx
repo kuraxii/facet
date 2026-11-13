@@ -1,13 +1,13 @@
 /**
- * 提供方清单。
+ * 已配置的提供方。
  *
- * 一份列表放下全部提供方:内置的来自 pi 的目录,用户自己加的来自 models.json 里带模型清单的
- * 条目,后者带「自定义」标记并且多一个编辑入口。凭证、地址、编辑与删除都在同一行里完成,
- * 一个提供方只出现一次。
+ * 列表里只放已经在用的提供方：凭证配好的内置提供方，以及用户自己加的自定义提供方。没配置的
+ * 收在下面的「添加提供商」里，点开是一个可搜索的挑选弹窗。凭证、地址、编辑与删除都在行里完成。
  */
 import type { CustomProviderInfo, ProviderInfo } from "@facet/protocol";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { ProviderForm } from "./ProviderForm.tsx";
+import { ProviderPicker } from "./ProviderPicker.tsx";
 import { providerRows } from "./provider-rows.ts";
 import type { SettingsDataSource } from "./settings-data-source.ts";
 
@@ -21,6 +21,10 @@ export interface ProvidersSectionProps {
 	onReload: () => void;
 	/** 数据来源 */
 	data: SettingsDataSource;
+	/** 自定义提供方的完整配置，由上层读好传进来 */
+	customs: readonly CustomProviderInfo[] | undefined;
+	/** 自定义提供方变化后回写给上层 */
+	onCustomsChange: (customs: readonly CustomProviderInfo[]) => void;
 }
 
 /** 一段带重试的失败提示。 */
@@ -35,9 +39,14 @@ function StatusNote({ message, onRetry }: { message: string; onRetry: () => void
 	);
 }
 
-export function ProvidersSection({ providers, error, onReload, data }: ProvidersSectionProps) {
-	/** 自定义提供方的完整配置，按标识索引 */
-	const [customs, setCustoms] = useState<readonly CustomProviderInfo[] | undefined>(undefined);
+export function ProvidersSection({
+	providers,
+	error,
+	onReload,
+	data,
+	customs,
+	onCustomsChange,
+}: ProvidersSectionProps) {
 	/** 展开凭证输入的提供方 */
 	const [credentialId, setCredentialId] = useState<string | undefined>(undefined);
 	const [key, setKey] = useState("");
@@ -48,26 +57,10 @@ export function ProvidersSection({ providers, error, onReload, data }: Providers
 	const [form, setForm] = useState<{ initial: CustomProviderInfo | undefined } | undefined>(undefined);
 	/** 正在确认删除的自定义提供方 */
 	const [removingId, setRemovingId] = useState<string | undefined>(undefined);
+	/** 添加提供商的挑选弹窗是否打开 */
+	const [isPickerOpen, setIsPickerOpen] = useState(false);
 	const [busyId, setBusyId] = useState<string | undefined>(undefined);
 	const [failure, setFailure] = useState<{ providerId: string; message: string } | undefined>(undefined);
-
-	const loadCustoms = useCallback(async () => {
-		try {
-			setCustoms(await data.listCustomProviders());
-		} catch (loadError) {
-			setFailure({
-				providerId: "",
-				message: loadError instanceof Error ? loadError.message : String(loadError),
-			});
-		}
-	}, [data]);
-
-	useEffect(() => {
-		if (customs !== undefined) {
-			return;
-		}
-		void loadCustoms();
-	}, [customs, loadCustoms]);
 
 	/** 记下某个提供方的失败原因，其余行照常可用。 */
 	const fail = (providerId: string, error_: unknown): void => {
@@ -90,6 +83,12 @@ export function ProvidersSection({ providers, error, onReload, data }: Providers
 		} finally {
 			setBusyId(undefined);
 		}
+	};
+
+	/** 挑选弹窗里存凭证：存完刷新清单，失败让弹窗自己显示。 */
+	const saveCredentialInPicker = async (providerId: string, value: string): Promise<void> => {
+		await data.saveCredential(providerId, value);
+		onReload();
 	};
 
 	const removeCredential = async (providerId: string) => {
@@ -123,7 +122,7 @@ export function ProvidersSection({ providers, error, onReload, data }: Providers
 
 	/** 保存自定义提供方：写回配置并让列表跟着更新。 */
 	const saveProvider = async (provider: CustomProviderInfo) => {
-		setCustoms(await data.saveCustomProvider(provider));
+		onCustomsChange(await data.saveCustomProvider(provider));
 		setForm(undefined);
 		onReload();
 	};
@@ -132,7 +131,7 @@ export function ProvidersSection({ providers, error, onReload, data }: Providers
 		setBusyId(providerId);
 		setFailure(undefined);
 		try {
-			setCustoms(await data.removeCustomProvider(providerId));
+			onCustomsChange(await data.removeCustomProvider(providerId));
 			setRemovingId(undefined);
 			onReload();
 		} catch (removeError) {
@@ -144,30 +143,29 @@ export function ProvidersSection({ providers, error, onReload, data }: Providers
 
 	if (error !== undefined) {
 		return (
-			<section className="set-section">
-				<h2 className="set-section-title">提供方</h2>
+			<>
+				<h3 className="set-group-title set-group-title-lg">已配置的提供方</h3>
 				<StatusNote message={`读取提供方失败:${error}`} onRetry={onReload} />
-			</section>
+			</>
 		);
 	}
 	if (providers === undefined) {
 		return (
-			<section className="set-section">
-				<h2 className="set-section-title">提供方</h2>
+			<>
+				<h3 className="set-group-title set-group-title-lg">已配置的提供方</h3>
 				<p className="set-hint">正在读取提供方…</p>
-			</section>
+			</>
 		);
 	}
 
-	const rows = providerRows(providers, customs ?? []);
+	// 列表只显示在用的：有凭证或本身就是自定义的
+	const rows = providerRows(providers, customs ?? []).filter(
+		({ provider, custom }) => provider.authenticated || custom !== undefined,
+	);
 
 	return (
-		<section className="set-section">
-			<h2 className="set-section-title">提供方</h2>
-			<p className="set-hint">
-				凭证保存在主机上，界面不回显密钥内容，也不进入日志。带「自定义」标记的提供方来自模型配置，
-				可以编辑地址、协议与模型清单。
-			</p>
+		<>
+			<h3 className="set-group-title set-group-title-lg">已配置的提供方</h3>
 
 			<ul className="set-list">
 				{rows.map(({ provider, custom }) => {
@@ -176,30 +174,36 @@ export function ProvidersSection({ providers, error, onReload, data }: Providers
 						<li key={provider.id} className="set-row is-block">
 							<div className="set-row-head">
 								<span className="set-row-name ell">{provider.name}</span>
-								{custom === undefined ? null : <span className="set-badge is-custom">自定义</span>}
-								<span className={provider.authenticated ? "set-badge is-on" : "set-badge"}>
-									{provider.authenticated
-										? provider.subscription
-											? "订阅登录"
-											: "已配置凭证"
-										: "未配置凭证"}
-								</span>
-								{provider.authSource === undefined ? null : (
-									<span className="set-row-meta mono">{provider.authSource}</span>
+								{custom === undefined ? (
+									<>
+										{/* 列表里只有配置好的，所以凭证徽标只表示登录方式，不给「未配置」 */}
+										{provider.authenticated ? (
+											<span className="set-badge is-on">
+												{provider.subscription ? "订阅登录" : "已配置凭证"}
+											</span>
+										) : null}
+										{provider.authSource === undefined ? null : (
+											<span className="set-row-meta mono">{provider.authSource}</span>
+										)}
+									</>
+								) : (
+									// 自定义提供方的密钥写在模型配置里，凭证状态与来源都由「编辑」那支管
+									<span className="set-badge is-custom">自定义</span>
 								)}
-								<span className="set-row-meta mono">{provider.modelCount} 个模型</span>
 
-								<button
-									type="button"
-									className="set-row-action"
-									onClick={() => {
-										setFailure(undefined);
-										setKey("");
-										setCredentialId(credentialId === provider.id ? undefined : provider.id);
-									}}
-								>
-									{provider.authenticated ? "替换凭证" : "添加凭证"}
-								</button>
+								{custom === undefined ? (
+									<button
+										type="button"
+										className="set-row-action"
+										onClick={() => {
+											setFailure(undefined);
+											setKey("");
+											setCredentialId(credentialId === provider.id ? undefined : provider.id);
+										}}
+									>
+										{provider.authenticated ? "替换凭证" : "添加凭证"}
+									</button>
+								) : null}
 								<button
 									type="button"
 									className="set-row-action"
@@ -293,34 +297,28 @@ export function ProvidersSection({ providers, error, onReload, data }: Providers
 							) : null}
 
 							{addressId === provider.id ? (
-								<>
-									<p className="set-hint mono">
-										当前生效:{provider.baseUrl ?? "由提供方决定"}
-										{provider.baseUrlOverride === undefined ? "" : "（已覆写）"}
-									</p>
-									<div className="set-row-edit">
-										<input
-											className="set-input mono"
-											value={address}
-											onChange={(event) => setAddress(event.target.value)}
-											onKeyDown={(event) => {
-												if (event.key === "Enter") {
-													void saveAddress(provider.id);
-												}
-											}}
-											placeholder="接口地址,留空恢复默认"
-											aria-label={`${provider.name} 的接口地址`}
-										/>
-										<button
-											type="button"
-											className="set-save"
-											disabled={isBusy}
-											onClick={() => void saveAddress(provider.id)}
-										>
-											{isBusy ? "保存中…" : "保存"}
-										</button>
-									</div>
-								</>
+								<div className="set-row-edit">
+									<input
+										className="set-input mono"
+										value={address}
+										onChange={(event) => setAddress(event.target.value)}
+										onKeyDown={(event) => {
+											if (event.key === "Enter") {
+												void saveAddress(provider.id);
+											}
+										}}
+										placeholder="接口地址,留空恢复默认"
+										aria-label={`${provider.name} 的接口地址`}
+									/>
+									<button
+										type="button"
+										className="set-save"
+										disabled={isBusy}
+										onClick={() => void saveAddress(provider.id)}
+									>
+										{isBusy ? "保存中…" : "保存"}
+									</button>
+								</div>
 							) : null}
 
 							{failure?.providerId === provider.id ? (
@@ -329,20 +327,30 @@ export function ProvidersSection({ providers, error, onReload, data }: Providers
 						</li>
 					);
 				})}
-				{rows.length === 0 ? <li className="set-row set-row-empty">没有可用的提供方</li> : null}
+				{rows.length === 0 ? <li className="set-row set-row-empty">还没有配置提供方</li> : null}
 			</ul>
 
 			{failure?.providerId === "" ? <p className="set-row-error">{failure.message}</p> : null}
 
-			{form === undefined ? (
-				<div className="set-actions">
-					<button type="button" className="set-reset" onClick={() => setForm({ initial: undefined })}>
-						添加自定义提供方
-					</button>
-				</div>
-			) : (
+			<button type="button" className="set-add-provider" onClick={() => setIsPickerOpen(true)}>
+				添加提供商
+			</button>
+
+			{form === undefined ? null : (
 				<ProviderForm initial={form.initial} onSave={saveProvider} onCancel={() => setForm(undefined)} />
 			)}
-		</section>
+
+			{isPickerOpen ? (
+				<ProviderPicker
+					rows={providerRows(providers, customs ?? [])}
+					onSaveCredential={saveCredentialInPicker}
+					onCreateCustom={() => {
+						setIsPickerOpen(false);
+						setForm({ initial: undefined });
+					}}
+					onClose={() => setIsPickerOpen(false)}
+				/>
+			) : null}
+		</>
 	);
 }

@@ -55,6 +55,7 @@ export function installWebBridge(): void {
 				token,
 				// Web 是远程端：按操作档申请，主机按 FACET_REMOTE_PERMISSION 收窄（缺省只读）
 				role: "operator" as const,
+				entry: "web" as const,
 				write: (text: string) => socket.send(text),
 				close: () => socket.close(),
 			};

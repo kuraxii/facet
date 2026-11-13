@@ -37,6 +37,15 @@ export type Capability = "dispatch" | "tools" | "compaction" | "terminal";
  */
 export type ClientRole = "admin" | "operator" | "viewer";
 
+/**
+ * 连接从哪一端发起。
+ *
+ * desktop 是桌面主进程打开的通道，可能是本机 socket，也可能是 SSH 隧道；web 是浏览器页面里
+ * 直接连的 WebSocket。凭证、设置与项目清单只在 desktop 入口放行：SSH 已经是一道认证，浏览器
+ * 只有一个令牌。
+ */
+export type ClientEntry = "desktop" | "web";
+
 /** 请求失败的分类。端点按 code 决定提示方式,message 仅用于展示与日志。 */
 export type ErrorCode =
 	/** 方法名未知或该版本不支持 */
@@ -82,6 +91,8 @@ export interface HelloFrame {
 	clientId: string;
 	/** 这条连接能做什么 */
 	role: ClientRole;
+	/** 这条连接能不能改设置、凭证与项目清单这类主机配置 */
+	canManage: boolean;
 	capabilities: Capability[];
 }
 
@@ -101,6 +112,12 @@ export interface AuthFrame {
 	 * 收窄。能拿到令牌就等于能用这台主机，所以这里限制的是操作习惯，不是安全边界。
 	 */
 	role?: "operator" | "viewer";
+	/**
+	 * 连接来源，缺省按 desktop 算。
+	 *
+	 * 浏览器里那套界面自己声明 web；桌面主进程与它的 SSH 通道不声明。
+	 */
+	entry?: ClientEntry;
 }
 
 /** 端点发出的请求。id 由端点生成,响应原样带回。 */

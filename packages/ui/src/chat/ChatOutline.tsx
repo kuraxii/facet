@@ -26,21 +26,24 @@ import {
 /** 正文列的最大宽度，决定竖轨两侧各有多少留白可用。 */
 const CONTENT_MAX_WIDTH = 780;
 
-/** 竖轨的间距加轨宽在 100% 缩放下的基准值，实际留白按缩放倍数放大。 */
-const RAIL_FOOTPRINT = 10 + 36;
+/** 竖轨到主区左缘的间距，固定值，不随缩放变。 */
+const RAIL_GAP = 8;
+
+/** 竖轨在 100% 缩放下的宽度，实际轨宽按缩放倍数放大。 */
+const RAIL_WIDTH = 36;
 
 /**
  * 算出竖轨的最小可用宽度。
  *
  * 正文列居中之后左右各留 (宽 - 780) / 2，这段留白要放得下竖轨的间距加轨宽，短条才不会压到
- * 正文上；缩放设成 200% 时留白的需求也翻倍，所以这里跟着 `--outline-scale` 走。
+ * 正文上。间距是固定值，只有轨宽跟着 `--outline-scale` 放大。
  */
 function minHostWidth(): number {
 	const raw = Number.parseFloat(
 		getComputedStyle(document.documentElement).getPropertyValue("--outline-scale"),
 	);
 	const scale = Number.isFinite(raw) && raw > 0 ? raw : 1;
-	return CONTENT_MAX_WIDTH + 2 * RAIL_FOOTPRINT * scale;
+	return CONTENT_MAX_WIDTH + 2 * (RAIL_GAP + RAIL_WIDTH * scale);
 }
 
 /** 跳转后这条消息距视口上沿留多少像素，避免贴着顶部。 */

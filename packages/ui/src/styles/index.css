@@ -36,9 +36,10 @@
 	--outline-scale: 1;
 	/* 对话导航竖轨：离主区左缘的间距、轨宽、轨内边距、短条静止尺寸、当前轮次的加宽倍数
 	   （黄金比例）、指针附近的额外放大，基准值都是 px，实际值再乘缩放 */
-	--outline-inset: calc(10px * var(--outline-scale));
+	/* 竖轨到主区左缘的间距是固定的，不随缩放变 */
+	--outline-inset: 8px;
 	--outline-rail-width: calc(36px * var(--outline-scale));
-	--outline-rail-inset: calc(3px * var(--outline-scale));
+	--outline-rail-inset: 0px;
 	--outline-slot-size: calc(8px * var(--outline-scale));
 	--outline-pill-width: calc(10px * var(--outline-scale));
 	--outline-pill-height: calc(2px * var(--outline-scale));

@@ -45,6 +45,8 @@ export type {
 	SettingsSection,
 } from "./chat/SettingsPage.tsx";
 export { SettingsPage } from "./chat/SettingsPage.tsx";
+export type { SidebarHeaderProps } from "./chat/sidebar-header.tsx";
+export { SidebarHeader } from "./chat/sidebar-header.tsx";
 export type {
 	GroupKey,
 	SessionDot,
@@ -86,8 +88,10 @@ export {
 	readPanelState,
 	writePanelState,
 } from "./panel/panel-state.ts";
+export { PanelTabs } from "./panel/panel-tabs.tsx";
 export type { RightPanelProps } from "./panel/right-panel.tsx";
 export { RightPanel } from "./panel/right-panel.tsx";
+export { PanelToggle, SidebarToggle } from "./panel/top-bar.tsx";
 export type { CodeThemeOption, UiThemeOption } from "./theme.ts";
 export {
 	CODE_THEME_OPTIONS,
@@ -100,7 +104,7 @@ export {
 	uiThemeLabel,
 } from "./theme.ts";
 export type { DiffChunk, DisplayRow, ForkPoint, RowKind } from "./transcript/group.ts";
-export { formatDuration, groupRows, metaSummary } from "./transcript/group.ts";
+export { formatDuration, groupLabel, groupRows, turnDurationText } from "./transcript/group.ts";
 export { ArrowDownIcon } from "./transcript/icons.tsx";
 export type { ChatTranscriptProps } from "./transcript/rows.tsx";
 export { ChatTranscript } from "./transcript/rows.tsx";

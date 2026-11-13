@@ -1,7 +1,7 @@
 /**
  * 工具调用的一句话说明。
  *
- * 卡片头部只放一个短摘要,让同一轮里十几次调用可以整列扫过去。
+ * 一行只放一个短摘要,让同一轮里十几次调用可以整列扫过去。
  * 参数结构由工具决定,这里按常见字段取,取不到就退回空串。
  */
 
@@ -94,4 +94,38 @@ export function foldOutput(
 		return { preview, hiddenLines: output.slice(maxChars).split("\n").length };
 	}
 	return { preview: output, hiddenLines: 0 };
+}
+
+/** 工具的归类,决定行首图标与过程行标题里算进哪一项。 */
+export type ToolCategory = "command" | "read" | "edit" | "search" | "other";
+
+/** 工具的短名与归类。 */
+export interface ToolKind {
+	/** 行里显示的短名,例如 Shell、Read；认不出的工具用原名 */
+	label: string;
+	/** 归类 */
+	category: ToolCategory;
+}
+
+/** 认识的名字对应的短名与归类；没列出的按其他工具处理。 */
+const KINDS: Readonly<Record<string, { label: string; category: ToolCategory }>> = {
+	bash: { label: "Shell", category: "command" },
+	exec: { label: "Shell", category: "command" },
+	read: { label: "Read", category: "read" },
+	write: { label: "Write", category: "edit" },
+	edit: { label: "Edit", category: "edit" },
+	multiedit: { label: "Edit", category: "edit" },
+	grep: { label: "Grep", category: "search" },
+	glob: { label: "Glob", category: "search" },
+	search_context: { label: "Search", category: "search" },
+	web_search: { label: "Search", category: "search" },
+	fetch_content: { label: "Fetch", category: "other" },
+	source_check: { label: "Check", category: "other" },
+	get_search_content: { label: "Search", category: "search" },
+};
+
+/** 取工具的短名与归类；认不出的工具原样显示名字。 */
+export function toolKind(name: string): ToolKind {
+	const known = KINDS[name.toLowerCase()];
+	return known === undefined ? { label: name, category: "other" } : known;
 }

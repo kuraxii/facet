@@ -22,6 +22,8 @@ function render(isOpen: boolean | undefined): string {
 			onCreate: () => {},
 			canCreate: true,
 			onAddProject: () => {},
+			isSearchOpen: false,
+			onSearchOpenChange: () => {},
 			isProjectsStale: false,
 			onRefreshProjects: () => {},
 			onRenameProject: async () => {},
@@ -32,8 +34,6 @@ function render(isOpen: boolean | undefined): string {
 			onToggleTheme: () => {},
 			onOpenSettings: () => {},
 			isSettingsOpen: false,
-			onTogglePanel: () => {},
-			isPanelOpen: false,
 			...(isOpen === undefined ? {} : { isOpen }),
 		}),
 	);

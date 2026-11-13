@@ -83,6 +83,20 @@ const api = {
 			},
 		};
 	},
+	/** 最小化窗口 */
+	minimize: (): void => ipcRenderer.send("facet:window-minimize"),
+	/** 最大化与还原之间切换 */
+	toggleMaximize: (): void => ipcRenderer.send("facet:window-toggle-maximize"),
+	/** 关闭窗口 */
+	close: (): void => ipcRenderer.send("facet:window-close"),
+	/** 订阅最大化状态，界面据此切换按钮图标；返回取消订阅的函数 */
+	onWindowState: (listener: (maximized: boolean) => void): (() => void) => {
+		const handler = (_event: unknown, maximized: boolean): void => listener(maximized);
+		ipcRenderer.on("facet:window-state", handler);
+		return () => {
+			ipcRenderer.off("facet:window-state", handler);
+		};
+	},
 	/** 默认打开的项目目录 */
 	projectDir: readArgument("facet-project"),
 	platform: readArgument("facet-platform") || process.platform,

@@ -81,7 +81,7 @@ describe("用户消息的回退入口", () => {
 });
 
 describe("被中止的一轮", () => {
-	it("没执行到的工具调用标成未执行", () => {
+	it("没执行到的工具调用把短名染成告警色", () => {
 		const aborted: TranscriptItem = {
 			kind: "message",
 			id: "e:a1",
@@ -108,7 +108,6 @@ describe("被中止的一轮", () => {
 		};
 		const html = render([userItem("e:u1", "u1", "看看文件"), aborted], false);
 		expect(html).toContain("is-skipped");
-		expect(html).toContain("未执行");
 		expect(html).toContain("已停止");
 	});
 });
@@ -135,18 +134,17 @@ describe("错误卡片", () => {
 				canRevert: true,
 				onRevert: () => {},
 				onRetryTurn,
-				onOpenSettings: () => {},
 				onCopyDetails: () => {},
 			}),
 		);
 	}
 
-	it("显示错误原文与三个动作", () => {
+	it("显示错误原文与两个动作", () => {
 		const html = renderWithActions(() => {});
 		expect(html).toContain("429 请求过多");
 		expect(html).toContain("重试");
-		expect(html).toContain("打开设置");
 		expect(html).toContain("复制详情");
+		expect(html).not.toContain("打开设置");
 	});
 
 	it("运行中不给重试入口", () => {

@@ -97,7 +97,7 @@ export const DEFAULT_SETTINGS: FacetSettings = {
 		theme: "zinc",
 		codeTheme: "github",
 		uiFont: "",
-		uiFontSize: 13,
+		uiFontSize: 15,
 		codeFont: "",
 		editorFont: "",
 		editorFontSize: 13,

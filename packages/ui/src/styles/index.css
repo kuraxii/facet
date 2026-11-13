@@ -20,6 +20,23 @@
 	--dur-slow: 180ms;
 	/* 代码字号乘数,由设置里的字号档位写入 */
 	--fs-code-scale: 1;
+	/* 顶部那条带的高度与每个窗口按钮的宽度 */
+	--chrome-height: 36px;
+	--window-button-width: 44px;
+	/* 三栏宽度：顶带的格子与下面的正文共用，由界面按当前状态写入 */
+	--sidebar-width: 272px;
+	--panel-width: 0px;
+	/* 滚动条占的宽度，以及其中拇指的宽度；轨道其余部分是透明的 */
+	--scrollbar-width: 8px;
+	--scrollbar-thumb: 4px;
+	/* 过程组的缩进：竖线到行内容的距离，以及竖线本身相对正文列的位置
+	   （后者来自展开箭头字形在图标盒子里的内缩，改箭头图标时跟着调） */
+	--indent-rail-offset: 16px;
+	--indent-rail-inset: 4px;
+	/* 行首图标的边长，以及图标到短名的间距；短名列与输出、思考正文都用两者之和 */
+	--indent-rail-icon: 14px;
+	--indent-rail-gap: 8px;
+	--indent-rail-label: calc(var(--indent-rail-icon) + var(--indent-rail-gap));
 }
 
 /*
@@ -28,8 +45,8 @@
  * 所以这里只走 webkit 伪元素；下面再用 `@supports` 给没有伪元素的引擎一份等效的细条。
  */
 *::-webkit-scrollbar {
-	width: 10px;
-	height: 10px;
+	width: var(--scrollbar-width);
+	height: var(--scrollbar-width);
 	background: transparent;
 }
 
@@ -45,7 +62,7 @@
 }
 
 *::-webkit-scrollbar-thumb {
-	border: 3px solid transparent;
+	border: calc((var(--scrollbar-width) - var(--scrollbar-thumb)) / 2) solid transparent;
 	border-radius: 999px;
 	background: color-mix(in srgb, var(--t3) 40%, transparent);
 	background-clip: content-box;
@@ -128,18 +145,140 @@ svg.fl {
 
 /* 外壳 */
 
-.shell {
+/* 应用外壳：顶带是一行真正的布局行，下面是三栏正文；两处宽度共用变量 */
+.app {
+	position: relative;
 	display: flex;
+	flex-direction: column;
 	height: 100%;
 	overflow: hidden;
 }
+
+/* 拖动区盖住整条顶带，格子里的控件自己标 no-drag */
+.app-drag {
+	position: absolute;
+	top: 0;
+	right: 0;
+	left: 0;
+	z-index: 0;
+	height: var(--chrome-height);
+	-webkit-app-region: drag;
+}
+
+.app-chrome {
+	position: relative;
+	z-index: 2;
+	display: flex;
+	flex: none;
+	align-items: center;
+	height: var(--chrome-height);
+}
+
+.chrome-slot {
+	display: flex;
+	flex: none;
+	align-items: center;
+	height: 100%;
+	min-width: 0;
+}
+
+/* 侧栏那一格：宽度与正文的侧栏一致 */
+.chrome-slot.is-sidebar {
+	width: var(--sidebar-width);
+	overflow: hidden;
+}
+
+/* 主区那一格：占满剩下的宽度，左栏开关贴在它的左边 */
+.chrome-slot.is-main {
+	flex: 1;
+	padding-left: 4px;
+}
+
+/* 右栏那一格：展开时与右栏同宽，窗口按钮压在这一格最右边；收起时收到只剩开关与按钮 */
+.chrome-slot.is-panel {
+	flex: none;
+	gap: 4px;
+	width: var(--panel-width);
+	padding-left: 4px;
+	-webkit-app-region: no-drag;
+}
+
+.chrome-slot.is-panel.is-compact {
+	width: auto;
+	padding-left: 0;
+}
+
+.chrome-spacer {
+	flex: 1;
+}
+
+.chrome-toggle {
+	display: grid;
+	flex: none;
+	place-items: center;
+	width: 28px;
+	height: 28px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--t3);
+	-webkit-app-region: no-drag;
+}
+
+.chrome-toggle[aria-pressed="true"] {
+	color: var(--t2);
+}
+
+.chrome-toggle:hover {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+.window-controls {
+	display: flex;
+	flex: none;
+	-webkit-app-region: no-drag;
+}
+
+.window-controls-group {
+	display: flex;
+}
+
+.window-btn {
+	display: grid;
+	place-items: center;
+	width: var(--window-button-width);
+	height: var(--chrome-height);
+	border: 0;
+	background: transparent;
+	color: var(--t3);
+}
+
+.window-btn:hover {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+.window-btn.is-close:hover {
+	background: var(--errbg);
+	color: var(--err);
+}
+
+.shell {
+	position: relative;
+	display: flex;
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
+}
+
 /* 侧栏 */
 
 .sb {
 	display: flex;
 	flex: none;
 	flex-direction: column;
-	width: 272px;
+	width: var(--sidebar-width);
 	height: 100%;
 	padding: 10px 10px 8px;
 	border-right: 1px solid var(--line);
@@ -149,16 +288,28 @@ svg.fl {
 }
 
 .sb-head {
+	position: relative;
+	z-index: 2;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
 	padding: 2px 0 8px 6px;
+	-webkit-app-region: drag;
+}
+
+.sb-tool {
+	-webkit-app-region: no-drag;
 }
 
 .sb-title {
 	font-size: 14px;
 	font-weight: 600;
 	letter-spacing: 0.2px;
+}
+
+/* 宽屏收起左栏 */
+.shell.is-sb-hidden .sb {
+	display: none;
 }
 
 .sb-tools {
@@ -755,6 +906,7 @@ svg.fl {
 	display: flex;
 	flex: none;
 	flex-direction: column;
+	width: var(--panel-width);
 	min-width: 0;
 	border-left: 1px solid var(--line);
 	background: var(--bg);
@@ -785,29 +937,21 @@ svg.fl {
 	);
 }
 
-.panel-head {
-	display: flex;
-	flex: none;
-	align-items: center;
-	justify-content: space-between;
-	gap: 8px;
-	height: 38px;
-	padding: 0 8px 0 10px;
-}
-
 .panel-tabs {
 	display: flex;
+	flex: none;
 	gap: 2px;
+	-webkit-app-region: no-drag;
 }
 
 .panel-tab {
-	height: 24px;
-	padding: 0 8px;
+	height: 26px;
+	padding: 0 10px;
 	border: 0;
 	border-radius: 6px;
 	background: transparent;
 	color: var(--t3);
-	font-size: 12px;
+	font-size: 12.5px;
 }
 
 .panel-tab:hover {
@@ -823,7 +967,9 @@ svg.fl {
 	flex: 1;
 	min-height: 0;
 	overflow-y: auto;
-	padding: 8px;
+	/* 滚动条出现时不挤占内容：始终留出与滚动条等宽的沟槽，右侧内边距让出这部分 */
+	scrollbar-gutter: stable;
+	padding: 8px 0 8px 8px;
 }
 
 /* 增删行数的颜色，对话里的文件改动与变更页共用 */
@@ -1387,7 +1533,7 @@ svg.fl {
 .column {
 	display: flex;
 	flex-direction: column;
-	gap: 12px;
+	gap: 16px;
 	width: 100%;
 	max-width: 780px;
 	margin: auto auto 0;
@@ -1557,10 +1703,13 @@ svg.fl {
 
 .bub {
 	max-width: 80%;
-	padding: 10px 14px;
-	border: 1px solid var(--line);
-	border-radius: 14px 14px 4px 14px;
-	background: var(--user);
+	padding: 16px;
+	border: 0;
+	border-radius: 16px 4px 16px 16px;
+	background: var(--surface3);
+	color: var(--t1);
+	font-size: var(--text-size);
+	line-height: 1.4;
 	white-space: pre-wrap;
 	word-break: break-word;
 }
@@ -1576,7 +1725,13 @@ svg.fl {
 	margin-top: -6px;
 }
 
-/* 一轮收尾处的动作：复制在左，分叉在右 */
+/* 一轮收尾：复制、分叉，右边是这一轮工作了多久 */
+.turn-foot {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
 .turn-actions {
 	display: flex;
 	align-items: center;
@@ -1678,192 +1833,228 @@ svg.fl {
 	}
 }
 
-/* 过程行 */
+/* 过程行：一行标题，展开后是缩进区；工作本身不再有边框卡片 */
 
-.proc-box {
-	border: 1px dashed var(--line2);
-	border-radius: 10px;
-	background: transparent;
-	overflow: hidden;
-}
-
-.proc {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	width: 100%;
-	padding: 7px 12px;
-	border: 0;
-	border-radius: 0;
-	background: transparent;
-	color: var(--t2);
-	font-size: 12.5px;
-	text-align: left;
-}
-
-.proc:hover {
-	background: var(--card);
-}
-
-.proc .summary {
-	color: var(--t2);
-}
-
-.proc .live {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	margin-left: auto;
-	color: var(--ok);
-	font-size: 12px;
-}
-
-.proc-body {
+.group {
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
-	padding: 2px 12px 12px 28px;
-}
-
-.think {
-	display: flex;
 	align-items: flex-start;
-	gap: 6px;
-	width: 100%;
-	padding: 0;
-	border: 0;
-	background: transparent;
-	color: var(--t2);
-	font-size: 12.5px;
-	text-align: left;
+	gap: 2px;
 }
 
-.think em {
-	color: var(--t3);
-	font-style: normal;
-}
-
-.think .preview {
-	overflow: hidden;
-	color: var(--t3);
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.think-text {
-	margin: 0;
-	padding: 0 0 0 14px;
-	border-left: 2px solid var(--line);
-	color: var(--t3);
-	font-size: 12.5px;
-	line-height: 1.65;
-	white-space: pre-wrap;
-	word-break: break-word;
-}
-
-/* 工具卡 */
-
-.tool {
-	border: 1px solid var(--line);
-	border-radius: 8px;
-	background: var(--card);
-	font-size: 12px;
-	overflow: hidden;
-}
-
-.tool.is-failed {
-	border-color: var(--err);
-}
-
-.tool.is-running {
-	border-color: var(--line2);
-}
-
-.tool.is-skipped {
-	border-style: dashed;
-	border-color: var(--line2);
-}
-
-.tool-head {
+.group-head {
 	display: flex;
 	align-items: center;
-	gap: 8px;
-	width: 100%;
-	padding: 7px 10px;
+	gap: 7px;
+	max-width: 100%;
+	margin-left: -8px;
+	padding: 4px 8px;
 	border: 0;
+	border-radius: 999px;
 	background: transparent;
+	color: var(--t2);
+	font-size: 13px;
+	line-height: 1.4;
 	text-align: left;
 }
 
-.tool.is-failed .tool-head {
-	background: var(--errbg);
-}
-
-.tool-name {
-	font-family: var(--font-mono);
-	font-weight: 600;
+/* 收起时只有文字变亮，不加底色；展开时标题才是药丸底 */
+.group-head:hover {
 	color: var(--t1);
 }
 
-.tool-arg {
+.group-head.is-open {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+.group-icon {
+	display: grid;
+	flex: none;
+	place-items: center;
+	width: 14px;
+	height: 14px;
+}
+
+.group-label {
 	overflow: hidden;
-	color: var(--t2);
-	font-family: var(--font-mono);
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
-.tool-status {
+/* 运行中：标题文字上有一道扫光，结束后停住 */
+.group-label.is-live {
+	background-image: linear-gradient(
+		90deg,
+		var(--t3) 0%,
+		var(--t3) 35%,
+		var(--t1) 50%,
+		var(--t3) 65%,
+		var(--t3) 100%
+	);
+	background-size: 220% 100%;
+	background-clip: text;
+	-webkit-background-clip: text;
+	color: transparent;
+	-webkit-text-fill-color: transparent;
+	animation: group-shimmer 1.9s linear infinite;
+}
+
+@keyframes group-shimmer {
+	from {
+		background-position: 120% 0;
+	}
+	to {
+		background-position: -120% 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.group-label.is-live {
+		animation: none;
+		color: var(--t2);
+		-webkit-text-fill-color: currentColor;
+		background: none;
+	}
+}
+
+/* 过程组里唯一的横向定位：竖线落在展开箭头字形的左缘，行内容距竖线由变量给出 */
+.group-body {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	margin: 2px 0 0 var(--indent-rail-inset);
+	padding-left: calc(var(--indent-rail-offset) - 1px);
+	border-left: 1px solid var(--line);
+}
+
+/* 组里的一行：图标、短名、参数，点开才有输出 */
+
+.tr {
+	min-width: 0;
+}
+
+.tr-head {
 	display: flex;
 	align-items: center;
-	gap: 6px;
-	margin-left: auto;
+	gap: var(--indent-rail-gap);
+	width: 100%;
+	min-width: 0;
+	padding: 5px 0;
+	border: 0;
+	border-radius: 7px;
+	background: transparent;
+	color: var(--t2);
+	font-size: 13px;
+	line-height: 1.45;
+	text-align: left;
+}
+
+/* 工具行同样不加底色：悬停只让短名变亮，展开的也一样 */
+.tr-head:hover {
+	background: transparent;
+	color: var(--t1);
+}
+
+.tr-icon {
+	display: grid;
 	flex: none;
-	color: var(--ok);
-	font-size: 12px;
-}
-
-.tool.is-failed .tool-status {
-	color: var(--err);
-}
-
-.tool.is-skipped .tool-status {
+	place-items: center;
+	width: var(--indent-rail-icon);
+	height: var(--indent-rail-icon);
 	color: var(--t3);
 }
 
-.tool.is-running .tool-status {
+.tr-head:hover .tr-icon {
+	color: var(--t2);
+}
+
+.tr-name {
+	flex: none;
+	color: var(--t2);
+}
+
+.tr-head:hover .tr-name,
+.tr-head[aria-expanded="true"] .tr-name {
+	color: var(--t1);
+}
+
+.tr-arg {
+	overflow: hidden;
+	min-width: 0;
+	color: var(--t3);
+	font-family: var(--font-mono);
+	font-size: 12px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tr-dot {
+	margin-left: auto;
+}
+
+/* 状态只由颜色承担：失败红、被中止而未执行琥珀色，行尾不再附文字 */
+.tr.is-failed .tr-name {
+	color: var(--err);
+}
+
+.tr.is-skipped .tr-name {
 	color: var(--warn);
 }
 
-.tool-out {
+/* 输出：没有边框与底色，直接缩进在行下面 */
+.tr-out {
+	padding: 0 0 4px var(--indent-rail-label);
+}
+
+.tr-out pre {
 	max-height: 260px;
 	overflow: auto;
 	margin: 0;
-	padding: 8px 10px;
-	border-top: 1px solid var(--line);
-	background: var(--card2);
 	color: var(--t2);
 	font-family: var(--font-mono);
 	font-size: 11.5px;
-	line-height: 1.55;
+	line-height: 1.6;
 	white-space: pre-wrap;
 	word-break: break-word;
 }
 
-.tool.is-failed .tool-out {
+.tr.is-failed .tr-out pre {
 	color: var(--err);
 }
 
-.tool-more {
-	display: block;
-	width: 100%;
-	padding: 6px;
+.tr-more {
+	margin-top: 4px;
+	padding: 0;
 	border: 0;
-	border-top: 1px solid var(--line);
 	background: transparent;
 	color: var(--acc);
 	font-size: 11.5px;
-	text-align: center;
+}
+
+.tr-think {
+	max-height: 320px;
+	overflow: auto;
+	margin: 0;
+	padding: 2px 0 6px var(--indent-rail-label);
+	color: var(--t3);
+	font-family: var(--font-sans);
+	font-size: 12.5px;
+	line-height: 1.7;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+/* 直接放在答复正文里的思考行（这一轮没有工具调用）：正文与 Markdown 左对齐，不缩进 */
+.assistant-body > .tr .tr-think {
+	padding-left: 0;
+}
+
+/* 这一轮收尾：时长、复制、分叉 */
+
+.turn-time {
+	color: var(--t3);
+	font-size: 12.5px;
 }
 
 /* 文件改动 */
@@ -1961,30 +2152,54 @@ svg.fl {
 
 /* 错误与提示 */
 
-.error-actions {
-	display: flex;
-	gap: 6px;
-	margin-top: 8px;
-}
-
+/* 错误行：一层浅色底，不描边；正文可以选中，长串（JSON 报错）在任意位置断开 */
 .error-line {
 	display: flex;
-	align-items: center;
-	gap: 10px;
-	padding: 10px 12px 10px 14px;
-	border: 1px solid var(--err);
-	border-radius: 10px;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 10px 12px;
+	border-radius: 6px;
 	background: var(--errbg);
+}
+
+.error-mark {
+	flex: none;
+	margin-top: 1px;
+	color: var(--err);
+}
+
+.error-body {
+	flex: 1;
+	min-width: 0;
+}
+
+.error-text {
+	color: var(--t1);
+	font-size: var(--text-size);
+	line-height: 1.4;
+	overflow-wrap: anywhere;
+	user-select: text;
+}
+
+.error-actions {
+	display: flex;
+	gap: 12px;
+	margin-top: 6px;
+}
+
+.error-btn {
+	height: 20px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--t2);
 	font-size: 13px;
 }
 
-.error-line b {
-	color: var(--err);
-	font-weight: 600;
-}
-
-.error-line span {
-	min-width: 0;
+.error-btn:hover,
+.error-btn:focus-visible {
+	color: var(--t1);
+	text-decoration: underline;
 }
 
 .retry-line {
@@ -2388,11 +2603,12 @@ svg.fl {
 
 .boot {
 	display: flex;
+	flex: 1;
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
 	gap: 8px;
-	height: 100%;
+	min-height: 0;
 }
 
 .boot h1 {
@@ -2566,12 +2782,12 @@ svg.fl {
 
 .md {
 	font-size: var(--text-size);
-	line-height: 1.7;
+	line-height: 1.4;
 	word-break: break-word;
 }
 
 .md p {
-	margin: 0 0 8px;
+	margin: 0 0 16px;
 }
 
 .md p:last-child {
@@ -2581,12 +2797,12 @@ svg.fl {
 .md :not(pre) > code,
 .md .markstream-react .inline-code {
 	padding: 1px 5px;
-	border: 1px solid var(--line);
-	border-radius: 5px;
-	background: var(--markdown-code-bg);
+	border: 0;
+	border-radius: 4px;
+	background: var(--surface2);
 	color: var(--markdown-code-text);
 	font-family: var(--font-mono);
-	font-size: calc(12.5px * var(--fs-code-scale, 1));
+	font-size: 0.8em;
 }
 
 .md a {
@@ -2628,9 +2844,25 @@ svg.fl {
 .md h2,
 .md h3,
 .md h4 {
-	margin: 12px 0 6px;
-	font-size: 15px;
+	margin: 16px 0;
 	font-weight: 600;
+	line-height: 1.3;
+}
+
+.md h1 {
+	font-size: 1.6em;
+}
+
+.md h2 {
+	font-size: 1.4em;
+}
+
+.md h3 {
+	font-size: 1.2em;
+}
+
+.md h4 {
+	font-size: 1.1em;
 }
 
 .md img {
@@ -3708,10 +3940,6 @@ svg.fl {
 	display: none;
 }
 
-.sb-toggle {
-	display: none;
-}
-
 @media (max-width: 880px) {
 	.shell {
 		position: relative;
@@ -3738,23 +3966,6 @@ svg.fl {
 		display: block;
 		border: none;
 		background: rgb(0 0 0 / 45%);
-		cursor: pointer;
-	}
-
-	.sb-toggle {
-		position: absolute;
-		top: 10px;
-		left: 10px;
-		z-index: 20;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 28px;
-		height: 28px;
-		border: 1px solid var(--line);
-		border-radius: 7px;
-		background: var(--surface2);
-		color: var(--t2);
 		cursor: pointer;
 	}
 

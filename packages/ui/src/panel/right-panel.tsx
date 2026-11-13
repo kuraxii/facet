@@ -1,41 +1,42 @@
 /**
  * 右侧栏。
  *
- * 顶部是「文件 / 变更」两个分页，左边一条可以拖动的分隔条，宽度拖一次记一次。内容由宿主
- * 填进来：文件页是目录树与编辑器，变更页是工作树的改动。
+ * 只有正文与左缘那条可以拖动的分隔条，宽度拖一次记一次。分页与收起在窗口顶部那条带里，
+ * 由外壳排布。
  */
-import { PanelRightClose } from "lucide-react";
 import { type ReactNode, type PointerEvent as ReactPointerEvent, useCallback, useRef } from "react";
-import { clampPanelWidth, PANEL_MAX_WIDTH, PANEL_MIN_WIDTH, type RightPanelTab } from "./panel-state.ts";
+import { clampPanelWidth, PANEL_MAX_WIDTH, PANEL_MIN_WIDTH } from "./panel-state.ts";
 
 export interface RightPanelProps {
-	/** 当前分页 */
-	tab: RightPanelTab;
-	onTabChange: (tab: RightPanelTab) => void;
 	/** 宽度，单位 px */
 	width: number;
 	/** 拖动分隔条时给出新宽度 */
 	onWidthChange: (width: number) => void;
-	/** 收起右栏 */
-	onClose: () => void;
 	/** 分页内容 */
 	children: ReactNode;
 }
 
-/** 两个分页的名称。 */
-const TABS: readonly { id: RightPanelTab; label: string }[] = [
-	{ id: "files", label: "文件" },
-	{ id: "changes", label: "变更" },
-];
+export function RightPanel({ width, onWidthChange, children }: RightPanelProps) {
+	const dragging = useRef<{ startX: number; startWidth: number; current: number } | undefined>(undefined);
 
-export function RightPanel({ tab, onTabChange, width, onWidthChange, onClose, children }: RightPanelProps) {
-	const dragging = useRef<{ startX: number; startWidth: number } | undefined>(undefined);
+	/**
+	 * 拖动期间直接改根节点上的宽度变量，不经过 React 渲染。
+	 *
+	 * 每移动一次就 setState 会把整个界面重画一遍，流式输出时尤其卡；这里只写一个 CSS 变量，
+	 * 松手时才把最终宽度提交给宿主保存。
+	 */
+	const applyWidth = (element: HTMLElement, next: number): void => {
+		const app = element.closest(".app");
+		if (app instanceof HTMLElement) {
+			app.style.setProperty("--panel-width", `${next}px`);
+		}
+	};
 
 	/** 按住分隔条开始拖：记住起点，指针捕获到分隔条上，拖出栏外也不会断。 */
 	const handlePointerDown = useCallback(
 		(event: ReactPointerEvent<HTMLHRElement>) => {
 			event.preventDefault();
-			dragging.current = { startX: event.clientX, startWidth: width };
+			dragging.current = { startX: event.clientX, startWidth: width, current: width };
 			event.currentTarget.setPointerCapture(event.pointerId);
 		},
 		[width],
@@ -48,18 +49,28 @@ export function RightPanel({ tab, onTabChange, width, onWidthChange, onClose, ch
 			if (start === undefined) {
 				return;
 			}
-			onWidthChange(clampPanelWidth(start.startWidth - (event.clientX - start.startX)));
+			const next = clampPanelWidth(start.startWidth - (event.clientX - start.startX));
+			start.current = next;
+			applyWidth(event.currentTarget, next);
 		},
 		[onWidthChange],
 	);
 
-	const handlePointerUp = useCallback((event: ReactPointerEvent<HTMLHRElement>) => {
-		dragging.current = undefined;
-		event.currentTarget.releasePointerCapture(event.pointerId);
-	}, []);
+	const handlePointerUp = useCallback(
+		(event: ReactPointerEvent<HTMLHRElement>) => {
+			const start = dragging.current;
+			dragging.current = undefined;
+			event.currentTarget.releasePointerCapture(event.pointerId);
+			// 松手时才提交：宿主保存宽度，并把变量对齐到这一个值
+			if (start !== undefined && start.current !== width) {
+				onWidthChange(start.current);
+			}
+		},
+		[onWidthChange, width],
+	);
 
 	return (
-		<aside className="panel" style={{ width }}>
+		<aside className="panel">
 			<hr
 				className="panel-resizer"
 				aria-orientation="vertical"
@@ -72,25 +83,6 @@ export function RightPanel({ tab, onTabChange, width, onWidthChange, onClose, ch
 				onPointerUp={handlePointerUp}
 				onPointerCancel={handlePointerUp}
 			/>
-			<div className="panel-head">
-				<div className="panel-tabs" role="tablist" aria-label="右侧栏分页">
-					{TABS.map((item) => (
-						<button
-							key={item.id}
-							type="button"
-							role="tab"
-							className={item.id === tab ? "panel-tab is-on" : "panel-tab"}
-							aria-selected={item.id === tab}
-							onClick={() => onTabChange(item.id)}
-						>
-							{item.label}
-						</button>
-					))}
-				</div>
-				<button type="button" className="ib" aria-label="收起右侧栏" title="收起右侧栏" onClick={onClose}>
-					<PanelRightClose size={15} strokeWidth={1.5} />
-				</button>
-			</div>
 			<div className="panel-body" role="tabpanel">
 				{children}
 			</div>

@@ -23,6 +23,9 @@
 	/* 顶部那条带的高度与每个窗口按钮的宽度 */
 	--chrome-height: 36px;
 	--window-button-width: 44px;
+	/* 侧栏里图标按钮的边长，以及按钮到侧栏左右边缘的距离；顶带的开关用同一组数 */
+	--icon-button-size: 28px;
+	--sidebar-edge: 10px;
 	/* 三栏宽度：顶带的格子与下面的正文共用，由界面按当前状态写入 */
 	--sidebar-width: 272px;
 	--panel-width: 0px;
@@ -202,8 +205,13 @@ svg.fl {
 /* 侧栏那一格：宽度与正文的侧栏一致，右边留出与侧栏一致的内边距 */
 .chrome-slot.is-sidebar {
 	width: var(--sidebar-width);
-	padding-right: 10px;
+	padding-right: var(--sidebar-edge);
 	overflow: hidden;
+}
+
+/* 收起时不占位，也不留那段内边距，主区开关才能贴到统一的位置 */
+.chrome-slot.is-sidebar:not(.is-open) {
+	padding-right: 0;
 }
 
 /* 展开时把正文那条分界线与底色续到顶带里，两边在同一个 x 上 */
@@ -215,7 +223,7 @@ svg.fl {
 /* 主区那一格：占满剩下的宽度，左栏开关贴在它的左边 */
 .chrome-slot.is-main {
 	flex: 1;
-	padding-left: 4px;
+	padding-left: var(--sidebar-edge);
 }
 
 /* 右栏那一格：展开时与右栏同宽，窗口按钮压在这一格最右边；收起时收到只剩开关与按钮 */
@@ -245,8 +253,8 @@ svg.fl {
 	display: grid;
 	flex: none;
 	place-items: center;
-	width: 28px;
-	height: 28px;
+	width: var(--icon-button-size);
+	height: var(--icon-button-size);
 	border: 0;
 	border-radius: 6px;
 	background: transparent;
@@ -365,8 +373,8 @@ svg.fl {
 .sb-foot-btn.is-icon {
 	display: grid;
 	place-items: center;
-	width: 24px;
-	height: 24px;
+	width: var(--icon-button-size);
+	height: var(--icon-button-size);
 	padding: 0;
 	border: 0;
 	border-radius: 6px;
@@ -835,10 +843,10 @@ svg.fl {
 
 .sb-row-more {
 	position: absolute;
-	top: 3px;
-	right: 2px;
-	width: 22px;
-	height: 22px;
+	top: 1px;
+	right: 1px;
+	width: var(--icon-button-size);
+	height: var(--icon-button-size);
 	border: 0;
 	border-radius: 5px;
 	background: var(--surface2);
@@ -876,7 +884,7 @@ svg.fl {
 	align-items: center;
 	gap: 6px;
 	margin-top: 6px;
-	padding: 8px 4px 0;
+	padding: 8px 0 0;
 	border-top: 1px solid var(--line);
 	color: var(--t3);
 	font-size: 11px;

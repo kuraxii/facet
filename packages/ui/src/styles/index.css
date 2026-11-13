@@ -350,8 +350,13 @@ svg.fl {
 	justify-content: space-between;
 	width: 100%;
 	/* 上下各留 4px，28px 的图标按钮正好在 36px 的顶带里居中 */
-	padding: 4px 0 4px 6px;
+	padding: 4px 0;
 	-webkit-app-region: drag;
+}
+
+/* 顶带里的那份头部要自己补左内边距，标题才能与下面的新建按钮、会话行对齐 */
+.chrome-slot.is-sidebar .sb-head {
+	padding-left: var(--sidebar-edge);
 }
 
 .sb-title {

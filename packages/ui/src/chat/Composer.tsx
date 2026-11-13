@@ -3,14 +3,16 @@
  *
  * 输入框、发送与停止，以及当前模型与思考档位两个芯片。模型芯片按提供方分组列出可选模型，
  * 思考芯片只列出当前模型支持的档位；两个芯片都能把当前选择存成新建会话的默认值。
+ * 动作行右侧是上下文用量环与发送按钮，用量环点开有具体数值和手动压缩入口。
  * 附件与引用还没有实现，按钮保持可见但不可点。
  */
 import type { ChatActivity } from "@facet/client-core";
-import type { ModelInfo, ThinkingLevel } from "@facet/protocol";
+import type { ContextUsage, ModelInfo, ThinkingLevel } from "@facet/protocol";
 import { Brain, FileUp, ImagePlus, Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronIcon } from "../transcript/chevron.tsx";
 import { SendIcon, StopIcon } from "../transcript/icons.tsx";
+import { ContextRing, usageLabel } from "./ContextRing.tsx";
 
 /** 输入区参数。 */
 export interface ComposerProps {
@@ -42,6 +44,14 @@ export interface ComposerProps {
 	shiftEnterToSend?: boolean;
 	/** 现在不能发送的原因，给出时输入区上方显示说明并禁用发送 */
 	blockedReason?: string | undefined;
+	/** 上下文用量，未估算出来时为空 */
+	contextUsage?: ContextUsage | undefined;
+	/** 是否正在压缩上下文 */
+	isCompacting?: boolean;
+	/** 能否手动压缩，这一轮在跑时不能 */
+	canCompact?: boolean;
+	/** 手动压缩上下文 */
+	onCompact?: () => void;
 }
 
 /** 模型芯片的显示文本。 */
@@ -104,15 +114,20 @@ export function Composer({
 	onThinkingLevelChange,
 	shiftEnterToSend = false,
 	blockedReason,
+	contextUsage,
+	isCompacting = false,
+	canCompact = true,
+	onCompact,
 }: ComposerProps) {
 	// 运行中发送走排队，插入当前轮次；压缩、停止中与连接断开时不接受新输入
 	const canSend =
 		blockedReason === undefined && value.trim().length > 0 && (activity === "idle" || activity === "running");
 	const isQueuing = activity === "running";
-	const [openMenu, setOpenMenu] = useState<"model" | "level" | "attach" | undefined>(undefined);
+	const [openMenu, setOpenMenu] = useState<"model" | "level" | "attach" | "context" | undefined>(undefined);
 	const modelRef = useDismiss(openMenu === "model", () => setOpenMenu(undefined));
 	const attachRef = useDismiss(openMenu === "attach", () => setOpenMenu(undefined));
 	const levelRef = useDismiss(openMenu === "level", () => setOpenMenu(undefined));
+	const contextRef = useDismiss(openMenu === "context", () => setOpenMenu(undefined));
 
 	// 没有给出可选模型时退化成只展示的芯片
 	const canPickModel = models !== undefined && onModelChange !== undefined;
@@ -287,6 +302,43 @@ export function Composer({
 				</div>
 
 				<span className="composer-send">
+					<span className="chip-wrap" ref={contextRef}>
+						<button
+							type="button"
+							className="ctx-chip"
+							onClick={() => setOpenMenu(openMenu === "context" ? undefined : "context")}
+							aria-expanded={openMenu === "context"}
+							aria-label={usageLabel(contextUsage)}
+							title={usageLabel(contextUsage)}
+						>
+							<ContextRing usage={contextUsage} />
+						</button>
+						{openMenu === "context" ? (
+							<div className="chip-pop is-context" role="dialog" aria-label="上下文用量">
+								<p className="ctx-pop-text">{isCompacting ? "正在压缩上下文…" : usageLabel(contextUsage)}</p>
+								{onCompact === undefined ? null : (
+									<button
+										type="button"
+										className="ctx-pop-action"
+										onClick={() => {
+											onCompact();
+											setOpenMenu(undefined);
+										}}
+										disabled={!canCompact || isCompacting}
+										title={
+											isCompacting
+												? "正在压缩"
+												: canCompact
+													? "把较早的历史压成摘要，腾出上下文"
+													: "等这一轮结束再压缩"
+										}
+									>
+										压缩上下文
+									</button>
+								)}
+							</div>
+						) : null}
+					</span>
 					{activity === "idle" ? null : (
 						<button type="button" className="btn" onClick={onStop} disabled={activity === "stopping"}>
 							<StopIcon size={11} />

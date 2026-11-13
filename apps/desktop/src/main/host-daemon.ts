@@ -38,7 +38,10 @@ export type HostDiscovery = DiscoveryRecord;
  * 桌面要靠这个目录找 endpoint.json，两边算法不一致就接不上已经跑着的主机。开发实例与发布
  * 实例分开：目录名带 -dev 后缀，两边的项目清单、设置与主机身份互不覆盖。
  */
-export function resolveDataDir(env: Record<string, string | undefined>, options: { isDev?: boolean } = {}): string {
+export function resolveDataDir(
+	env: Record<string, string | undefined>,
+	options: { isDev?: boolean } = {},
+): string {
 	const explicit = env.FACET_DATA_DIR?.trim();
 	if (explicit !== undefined && explicit.length > 0) {
 		return explicit;

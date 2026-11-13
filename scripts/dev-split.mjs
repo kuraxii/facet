@@ -4,8 +4,9 @@
  * 先把主机单独跑起来（改主机代码只重启它，桌面界面不受影响），等端点可用之后再启动桌面并
  * 指向那个端点。两边输出各加前缀，Ctrl+C 一起结束。
  */
-import { readFile } from "node:fs/promises";
+
 import { spawn } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -30,7 +31,6 @@ function devDataDir(env) {
 	const base = xdg !== undefined && isAbsolute(xdg) ? xdg : join(homedir(), ".local", "share");
 	return join(base, "facet-dev");
 }
-
 
 /** 等主机端点响应，最长等 30 秒 */
 const READY_WAIT_MS = 30_000;
@@ -101,7 +101,10 @@ function shutdown() {
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
-run("host", ["run", "dev", "-w", "@facet/server"], { FACET_PORT: port, FACET_DATA_DIR: devDataDir(process.env) });
+run("host", ["run", "dev", "-w", "@facet/server"], {
+	FACET_PORT: port,
+	FACET_DATA_DIR: devDataDir(process.env),
+});
 console.log(`[split] 等主机就绪 ${endpoint}`);
 if (!(await waitForHost())) {
 	console.log(`[split] 主机 ${READY_WAIT_MS} 毫秒内没响应，仍然启动桌面`);

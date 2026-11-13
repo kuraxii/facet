@@ -21,7 +21,6 @@ import {
 	ChatTranscript,
 	CodeThemeProvider,
 	Composer,
-	ContextUsageBar,
 	CreateProjectDialog,
 	DEFAULT_DARK_THEME,
 	EmptyState,
@@ -1406,12 +1405,6 @@ export function App() {
 								)}
 								<div className="footer-column">
 									{errorBar}
-									<ContextUsageBar
-										usage={session.state.contextUsage}
-										isCompacting={activity === "compacting"}
-										isRunning={activity === "running" || activity === "stopping"}
-										onCompact={() => client.compact()}
-									/>
 									<QueueStrip queued={queued} onClear={takeBackQueue} />
 									<Composer
 										value={draft}
@@ -1428,6 +1421,10 @@ export function App() {
 										onThinkingLevelChange={(level) => client.setThinkingLevel(level)}
 										shiftEnterToSend={settings.input.sendKey === "shiftEnter"}
 										blockedReason={blockedReason}
+										contextUsage={session.state.contextUsage}
+										isCompacting={activity === "compacting"}
+										canCompact={activity === "idle"}
+										onCompact={() => client.compact()}
 									/>
 
 									{chat && chat.notices.length > 0 ? (

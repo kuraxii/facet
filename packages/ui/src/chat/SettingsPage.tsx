@@ -4,23 +4,23 @@
  * 左侧分类、右侧内容；切换分类只加载该分类需要的数据，读取与保存都有明确的进行中与失败状态。
  * 保存失败时保留用户正在编辑的输入，可以直接重试。
  */
-import type { FacetSettings, ModelInfo, ModelRef, ProviderInfo } from "@facet/protocol";
+import type { CustomProviderInfo, FacetSettings, ModelInfo, ModelRef, ProviderInfo } from "@facet/protocol";
 import { X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CODE_THEME_OPTIONS, UI_THEME_OPTIONS } from "../theme.ts";
 import { ProvidersSection } from "./ProvidersSection.tsx";
+import { providerRows } from "./provider-rows.ts";
 import type { SettingsDataSource } from "./settings-data-source.ts";
 import { SettingsGroup, SettingsRow } from "./settings-layout.tsx";
 
 /** 设置分类。 */
-export type SettingsSection = "providers" | "models" | "appearance" | "input" | "about";
+export type SettingsSection = "models" | "appearance" | "input" | "about";
 
 /** 自动保存的延迟：改动停下后等这么久再提交，连续调整只保存最后一次。 */
 const AUTO_SAVE_DELAY_MS = 1000;
 
 /** 分类顺序与标题。 */
 const SECTIONS: ReadonlyArray<{ key: SettingsSection; label: string }> = [
-	{ key: "providers", label: "提供方" },
 	{ key: "models", label: "模型" },
 	{ key: "appearance", label: "外观" },
 	{ key: "input", label: "输入" },
@@ -155,7 +155,7 @@ export function SettingsPage({
 
 	// 模型、外观、输入三个分类共用同一份设置，进入时读一次
 	useEffect(() => {
-		if (section === "providers" || section === "about") {
+		if (section === "about") {
 			return;
 		}
 		if (settings !== undefined) {
@@ -164,8 +164,9 @@ export function SettingsPage({
 		void loadSettings();
 	}, [loadSettings, section, settings]);
 
+	// 提供方现在挂在模型页里
 	useEffect(() => {
-		if (section !== "providers" || providers !== undefined) {
+		if (section !== "models" || providers !== undefined) {
 			return;
 		}
 		void loadProviders();
@@ -264,17 +265,6 @@ export function SettingsPage({
 						{canEdit || section === "about" ? null : (
 							<p className="set-readonly">这条连接只能看，改设置请从桌面端连过来。</p>
 						)}
-						{section === "providers" ? (
-							<fieldset className="set-lock" disabled={!canEdit}>
-								<ProvidersSection
-									providers={providers}
-									error={providersError}
-									onReload={() => void loadProviders()}
-									data={data}
-								/>
-							</fieldset>
-						) : null}
-
 						{section === "about" ? <AboutSection about={about} data={data} /> : null}
 
 						{section === "models" || section === "appearance" || section === "input" ? (
@@ -287,7 +277,14 @@ export function SettingsPage({
 									{draft === undefined ? null : (
 										<>
 											{section === "models" ? (
-												<ModelsSection draft={draft} patch={patch} data={data} />
+												<ModelsSection
+													draft={draft}
+													patch={patch}
+													data={data}
+													providers={providers}
+													providersError={providersError}
+													onReloadProviders={() => void loadProviders()}
+												/>
 											) : null}
 											{section === "appearance" ? (
 												<AppearanceSection draft={draft} patch={patch} onPreview={onAppearancePreview} />
@@ -320,17 +317,23 @@ function modelKey(model: ModelRef): string {
 /**
  * 模型设置。
  *
- * 默认模型与默认思考档位决定新建会话用什么；档位按所选模型是否支持思考来筛，不支持时
- * 只留「不思考」。可见性决定模型选择器里出现哪些模型，已有会话的模型不受影响。
+ * 一页里放三件事：新建会话的默认模型与思考档位、已配置的提供方（含凭证与地址）、可用模型的
+ * 连通性测试。档位按所选模型是否支持思考来筛，不支持时只留「不思考」。
  */
 function ModelsSection({
 	draft,
 	patch,
 	data,
+	providers,
+	providersError,
+	onReloadProviders,
 }: {
 	draft: FacetSettings;
 	patch: (change: (current: FacetSettings) => FacetSettings) => void;
 	data: SettingsDataSource;
+	providers: readonly ProviderInfo[] | undefined;
+	providersError: string | undefined;
+	onReloadProviders: () => void;
 }) {
 	const [models, setModels] = useState<readonly ModelInfo[] | undefined>(undefined);
 	const [error, setError] = useState<string | undefined>(undefined);
@@ -340,6 +343,8 @@ function ModelsSection({
 	>({});
 	/** 正在测试的模型 */
 	const [testing, setTesting] = useState<string | undefined>(undefined);
+	/** 自定义提供方的完整配置，提供方列表与模型筛选用同一份 */
+	const [customs, setCustoms] = useState<readonly CustomProviderInfo[] | undefined>(undefined);
 
 	/** 发一次最小请求，结果留在该模型下面。 */
 	const runTest = async (model: ModelInfo) => {
@@ -378,6 +383,16 @@ function ModelsSection({
 		void load();
 	}, [load, models]);
 
+	useEffect(() => {
+		if (customs !== undefined) {
+			return;
+		}
+		void data
+			.listCustomProviders()
+			.then(setCustoms)
+			.catch(() => setCustoms([]));
+	}, [customs, data]);
+
 	if (error !== undefined) {
 		return (
 			<>
@@ -394,6 +409,19 @@ function ModelsSection({
 			</>
 		);
 	}
+
+	// 只列已配置提供方的模型：没配置凭证的提供方用不了，列出来只是噪声。两者都读到之前先不筛
+	const usable =
+		providers === undefined || customs === undefined
+			? models
+			: (() => {
+					const configured = new Set(
+						providerRows(providers, customs)
+							.filter(({ provider, custom }) => provider.authenticated || custom !== undefined)
+							.map(({ provider }) => provider.id),
+					);
+					return models.filter((model) => configured.has(model.provider));
+				})();
 
 	const selected = draft.defaultModel;
 	// 选中的模型不支持思考时,只保留「不思考」一档
@@ -421,7 +449,7 @@ function ModelsSection({
 						aria-label="默认模型"
 					>
 						<option value="">由主机决定</option>
-						{models.map((model) => (
+						{usable.map((model) => (
 							<option key={modelKey(model)} value={modelKey(model)}>
 								{model.provider} / {model.name}
 							</option>
@@ -456,12 +484,24 @@ function ModelsSection({
 				<p className="set-hint">这个模型不支持思考，档位只保留「off」。</p>
 			) : null}
 
-			<h3 className="set-group-title set-group-title-lg">模型可见性</h3>
-			<p className="set-hint">隐藏的模型不出现在模型选择器里，已经用着它的会话不受影响。</p>
+			<ProvidersSection
+				providers={providers}
+				error={providersError}
+				// 凭证变了，可用模型的范围也跟着变
+				onReload={() => {
+					onReloadProviders();
+					void load();
+				}}
+				data={data}
+				customs={customs}
+				onCustomsChange={setCustoms}
+			/>
+
+			<h3 className="set-group-title set-group-title-lg">可用模型</h3>
+			<p className="set-hint">发一次最小请求，看看这个模型现在能不能用。</p>
 			<ul className="set-list set-list-scroll">
-				{models.map((model) => {
+				{usable.map((model) => {
 					const key = modelKey(model);
-					const isHidden = draft.hiddenModels.includes(key);
 					const probe = tests[key];
 					return (
 						<li key={key} className="set-row is-block">
@@ -482,27 +522,12 @@ function ModelsSection({
 								>
 									{testing === key ? "测试中…" : "测试"}
 								</button>
-								<label className="set-toggle">
-									<input
-										type="checkbox"
-										checked={!isHidden}
-										onChange={(event) =>
-											patch((current) => ({
-												...current,
-												hiddenModels: event.target.checked
-													? current.hiddenModels.filter((item) => item !== key)
-													: [...current.hiddenModels, key],
-											}))
-										}
-									/>
-									<span>{isHidden ? "已隐藏" : "显示"}</span>
-								</label>
 							</div>
 							{probe?.message === undefined ? null : <p className="set-row-error">{probe.message}</p>}
 						</li>
 					);
 				})}
-				{models.length === 0 ? <li className="set-row set-row-empty">没有可用的模型</li> : null}
+				{usable.length === 0 ? <li className="set-row set-row-empty">还没有可用的模型</li> : null}
 			</ul>
 		</>
 	);

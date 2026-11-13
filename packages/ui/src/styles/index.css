@@ -3027,6 +3027,127 @@ svg.fl {
 	background: var(--bg);
 }
 
+/* 添加提供商：列表下面一整条虚线按钮，点开可搜索的挑选弹窗 */
+.set-add-provider {
+	width: 100%;
+	height: 36px;
+	margin-top: 10px;
+	border: 1px dashed var(--line2);
+	border-radius: 9px;
+	background: transparent;
+	color: var(--t2);
+	font-size: 12.5px;
+}
+
+.set-add-provider:hover {
+	border-color: var(--t3);
+	color: var(--t1);
+}
+
+/* 挑选弹窗：搜索框在上，列表可滚动，底部是自定义入口与完成 */
+.dialog.is-picker {
+	display: flex;
+	flex-direction: column;
+	width: 520px;
+	max-height: 76vh;
+	padding-bottom: 16px;
+}
+
+.picker-search {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0 0 12px;
+	padding: 0 10px;
+	height: 34px;
+	border: 1px solid var(--line2);
+	border-radius: 9px;
+	color: var(--t3);
+}
+
+.picker-search:focus-within {
+	border-color: var(--t3);
+}
+
+.picker-search-input {
+	flex: 1;
+	min-width: 0;
+	border: 0;
+	background: transparent;
+	color: var(--t1);
+	font-size: 13px;
+	outline: none;
+}
+
+.picker-list {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 2px;
+	min-height: 120px;
+	margin: 0;
+	padding: 0;
+	overflow-y: auto;
+	list-style: none;
+}
+
+.picker-row {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 8px 10px;
+	border-radius: 9px;
+}
+
+.picker-row:hover {
+	background: var(--surface2);
+}
+
+.picker-row-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+
+.picker-name {
+	flex: 1;
+	min-width: 0;
+	color: var(--t1);
+	font-size: 13px;
+}
+
+.picker-meta {
+	flex: none;
+	color: var(--t3);
+	font-size: 11px;
+}
+
+.picker-key {
+	display: flex;
+	gap: 8px;
+	padding-left: 2px;
+}
+
+.picker-key-input {
+	flex: 1;
+	min-width: 0;
+}
+
+.picker-empty {
+	padding: 18px 10px;
+	color: var(--t3);
+	font-size: 12.5px;
+	text-align: center;
+}
+
+.dialog-actions {
+	display: flex;
+	justify-content: space-between;
+	gap: 8px;
+	margin-top: 14px;
+}
+
 /* 设置分组：组标题在上，下面是卡片；卡片里一行一个设置，左文字右控件 */
 .set-lock {
 	min-width: 0;

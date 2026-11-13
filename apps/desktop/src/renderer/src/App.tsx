@@ -331,7 +331,7 @@ export function App() {
 			return next;
 		});
 	}, []);
-	const [settingsSection, setSettingsSection] = useState<SettingsSection>("providers");
+	const [settingsSection, setSettingsSection] = useState<SettingsSection>("models");
 	/** 打开、新建、分叉失败时的提示,带重试入口 */
 	const [sessionError, setSessionError] = useState<{ message: string; retry: () => void } | undefined>(
 		undefined,
@@ -766,11 +766,6 @@ export function App() {
 		[endpoint, hostList, switchHost, updateHostList],
 	);
 
-	/** 输入区可选的模型：去掉设置里隐藏的那些。 */
-	const visibleModels = useMemo(
-		() => catalog.models.filter((model) => !settings.hiddenModels.includes(`${model.provider}/${model.id}`)),
-		[catalog.models, settings.hiddenModels],
-	);
 	const providerAuth = catalog.auth;
 
 	/** 设置页的数据来源，接到主机上。 */
@@ -1436,7 +1431,7 @@ export function App() {
 										retry={retryOf(session.state.maintenance)}
 										onRetryTurn={retryTurn}
 										onOpenSettings={() => {
-											setSettingsSection("providers");
+											setSettingsSection("models");
 											setView("settings");
 										}}
 										onCopyDetails={(text) => {
@@ -1474,7 +1469,7 @@ export function App() {
 										model={session.state.model}
 										thinkingLevel={session.state.thinkingLevel}
 										thinkingLevels={session.state.availableThinkingLevels}
-										models={visibleModels}
+										models={catalog.models}
 										providerAuth={providerAuth}
 										onModelChange={(next) => client.setModel({ provider: next.provider, id: next.id })}
 										onThinkingLevelChange={(level) => client.setThinkingLevel(level)}

@@ -87,9 +87,6 @@ export function parseSettings(value: unknown): FacetSettings {
 		...(typeof value.defaultThinkingLevel === "string" && THINKING_LEVELS.includes(defaultThinkingLevel)
 			? { defaultThinkingLevel }
 			: {}),
-		hiddenModels: Array.isArray(value.hiddenModels)
-			? value.hiddenModels.filter((item): item is string => typeof item === "string")
-			: [],
 		appearance: {
 			theme: readChoice<ThemeMode>(
 				appearance.theme,

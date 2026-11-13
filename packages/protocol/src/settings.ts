@@ -82,8 +82,6 @@ export interface FacetSettings {
 	defaultModel?: ModelRef;
 	/** 新建会话采用的默认思考档位，缺省时由模型能力决定 */
 	defaultThinkingLevel?: ThinkingLevel;
-	/** 模型选择器里隐藏的模型，键为 `provider/model` */
-	hiddenModels: string[];
 	/** 外观 */
 	appearance: AppearanceSettings;
 	/** 输入 */
@@ -95,7 +93,6 @@ export interface FacetSettings {
 /** 缺省设置。 */
 export const DEFAULT_SETTINGS: FacetSettings = {
 	version: 1,
-	hiddenModels: [],
 	appearance: {
 		theme: "zinc",
 		codeTheme: "github",

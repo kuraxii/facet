@@ -51,7 +51,7 @@ describe("设置读取", () => {
 			JSON.stringify({
 				version: 1,
 				defaultModel: { provider: "p" },
-				hiddenModels: ["a/b", 3],
+				hiddenModels: ["遗留字段"],
 				appearance: { theme: "紫色", uiFontSize: 999, reducedMotion: true },
 				input: { sendKey: "??? " },
 				layout: { sidebarWidth: 10 },
@@ -60,7 +60,8 @@ describe("设置读取", () => {
 		);
 		const settings = (await SettingsStore.open({ file })).get();
 		expect(settings.defaultModel).toBeUndefined();
-		expect(settings.hiddenModels).toEqual(["a/b"]);
+		// 模型可见性已经去掉，旧文件里留下的这个字段直接丢掉
+		expect(settings).not.toHaveProperty("hiddenModels");
 		expect(settings.appearance.theme).toBe(DEFAULT_SETTINGS.appearance.theme);
 		expect(settings.appearance.uiFontSize).toBe(20);
 		expect(settings.appearance.reducedMotion).toBe(true);
@@ -122,12 +123,12 @@ describe("设置读取", () => {
 
 	it("写出的文件带版本号", async () => {
 		const store = await SettingsStore.open({ file: join(root, "nested", "settings.json") });
-		await store.save({ ...store.get(), hiddenModels: ["a/b"] });
+		await store.save({ ...store.get(), defaultThinkingLevel: "high" });
 		const written = JSON.parse(await readFile(join(root, "nested", "settings.json"), "utf8")) as {
 			version: number;
-			hiddenModels: string[];
+			defaultThinkingLevel?: string;
 		};
 		expect(written.version).toBe(1);
-		expect(written.hiddenModels).toEqual(["a/b"]);
+		expect(written.defaultThinkingLevel).toBe("high");
 	});
 });

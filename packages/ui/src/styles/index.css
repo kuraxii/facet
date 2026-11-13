@@ -314,7 +314,8 @@ svg.fl {
 	flex-direction: column;
 	width: var(--sidebar-width);
 	height: 100%;
-	padding: 10px 10px 8px;
+	/* 顶带里那行头部自己带 4px 下边距，这里再留 4px，头部控件到新建按钮正好 8px */
+	padding: 4px 10px 8px;
 	border-right: 1px solid var(--line);
 	background: var(--sb);
 	overflow: hidden;
@@ -4146,8 +4147,14 @@ svg.fl {
 		inset: 0 auto 0 0;
 		z-index: 40;
 		width: min(300px, 84vw);
+		padding-top: 10px;
 		transform: translateX(-100%);
 		transition: transform var(--dur-fast) var(--ease);
+	}
+
+	/* 抽屉里的头部在侧栏内，控件到新建按钮的 8px 由头部自己的下边距给 */
+	.sb .sb-head {
+		padding-bottom: 8px;
 	}
 
 	.sb.is-open {

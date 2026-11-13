@@ -17,7 +17,7 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { ChevronIcon } from "../transcript/chevron.tsx";
+import { TreeChevron } from "../transcript/chevron.tsx";
 
 export interface FilesPaneProps {
 	/** 项目根下某一层的目录内容；path 为空串表示项目根 */
@@ -278,7 +278,7 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath }: FilesPane
 									}
 								}}
 							>
-								{isDirectory ? <ChevronIcon isOpen={isOpen} size={11} /> : <span className="tree-spacer" />}
+								{isDirectory ? <TreeChevron isOpen={isOpen} size={11} /> : <span className="tree-spacer" />}
 								{isDirectory ? (
 									<Folder size={13} strokeWidth={1.5} className="tree-icon" />
 								) : (

@@ -52,7 +52,13 @@ describe("设置读取", () => {
 				version: 1,
 				defaultModel: { provider: "p" },
 				hiddenModels: ["遗留字段"],
-				appearance: { theme: "紫色", uiFontSize: 999, reducedMotion: true },
+				appearance: {
+					theme: "紫色",
+					uiFontSize: 999,
+					reducedMotion: true,
+					liveMotion: "旋转",
+					outlineScale: 1000,
+				},
 				input: { sendKey: "??? " },
 				layout: { sidebarWidth: 10 },
 			}),
@@ -68,6 +74,8 @@ describe("设置读取", () => {
 		expect(settings.input.sendKey).toBe(DEFAULT_SETTINGS.input.sendKey);
 		expect(settings.layout.sidebarWidth).toBe(200);
 		expect(settings.appearance.codeTheme).toBe(DEFAULT_SETTINGS.appearance.codeTheme);
+		expect(settings.appearance.liveMotion).toBe("pulse");
+		expect(settings.appearance.outlineScale).toBe(200);
 	});
 
 	it("老版本写下的正文字体与字号迁移到界面字体与界面字号", async () => {

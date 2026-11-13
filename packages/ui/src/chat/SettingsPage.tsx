@@ -4,7 +4,14 @@
  * 左侧分类、右侧内容；切换分类只加载该分类需要的数据，读取与保存都有明确的进行中与失败状态。
  * 保存失败时保留用户正在编辑的输入，可以直接重试。
  */
-import type { CustomProviderInfo, FacetSettings, ModelInfo, ModelRef, ProviderInfo } from "@facet/protocol";
+import type {
+	CustomProviderInfo,
+	FacetSettings,
+	LiveMotion,
+	ModelInfo,
+	ModelRef,
+	ProviderInfo,
+} from "@facet/protocol";
 import { X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CODE_THEME_OPTIONS, UI_THEME_OPTIONS } from "../theme.ts";
@@ -530,6 +537,12 @@ function ModelsSection({
 const THINKING_LEVEL_OPTIONS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 type ThinkingLevelValue = (typeof THINKING_LEVEL_OPTIONS)[number];
 
+/** 运行中动效的选项，顺序与设置页列出的顺序一致。 */
+const LIVE_MOTION_OPTIONS: ReadonlyArray<{ id: LiveMotion; label: string }> = [
+	{ id: "pulse", label: "呼吸" },
+	{ id: "shimmer", label: "扫光" },
+];
+
 /** 外观设置。 */
 function AppearanceSection({
 	draft,
@@ -598,12 +611,43 @@ function AppearanceSection({
 						</button>
 					</div>
 				</SettingsRow>
+				<SettingsRow title="运行中的动效">
+					<select
+						className="set-input"
+						value={appearance.liveMotion}
+						onChange={(event) => patchAppearance({ liveMotion: event.target.value as LiveMotion })}
+						aria-label="运行中的动效"
+					>
+						{LIVE_MOTION_OPTIONS.map((option) => (
+							<option key={option.id} value={option.id}>
+								{option.label}
+							</option>
+						))}
+					</select>
+				</SettingsRow>
 				<SettingsRow title="减少动效">
 					<input
 						type="checkbox"
 						checked={appearance.reducedMotion}
 						onChange={(event) => patchAppearance({ reducedMotion: event.target.checked })}
 						aria-label="减少动效"
+					/>
+				</SettingsRow>
+				<SettingsRow title="对话导航缩放">
+					<input
+						className="set-input is-number mono"
+						type="number"
+						min={50}
+						max={200}
+						step={5}
+						value={appearance.outlineScale}
+						onChange={(event) => {
+							const next = Number(event.target.value);
+							if (Number.isFinite(next)) {
+								patchAppearance({ outlineScale: next });
+							}
+						}}
+						aria-label="对话导航缩放"
 					/>
 				</SettingsRow>
 			</SettingsGroup>

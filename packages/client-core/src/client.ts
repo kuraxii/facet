@@ -40,6 +40,47 @@ import type { ChatView, SessionView } from "./state.ts";
 import type { ChannelGap } from "./store.ts";
 import { SessionStore } from "./store.ts";
 
+/** 日志里条目 id 列表的折行宽度，够宽到一行放得下十来个短 id。 */
+const COMMIT_LOG_WIDTH = 120;
+
+/**
+ * 把一次提交的结果排版成多行日志。
+ *
+ * 条目数量随会话增长，默认的 JSON 输出会变成一长串读不出结构的字符串，所以这里先给一行摘要，
+ * 再把「实时消息 id → 条目 id」按行宽折开：条目多时也能一眼扫到前几个、确认提升从哪开始。
+ */
+export function formatCommitLog(
+	title: string,
+	promotedCount: number,
+	leafId: string | null | undefined,
+	boundary: string | null | undefined,
+	items: readonly ChatView["items"][number][],
+): string {
+	const ids = items.map((item) => `${item.id}${item.entry === undefined ? "" : `→${item.entry.id}`}`);
+	const lines: string[] = [];
+	let line = "";
+	for (const id of ids) {
+		if (line.length > 0 && line.length + id.length + 1 > COMMIT_LOG_WIDTH) {
+			lines.push(`  ${line}`);
+			line = id;
+			continue;
+		}
+		line = line.length === 0 ? id : `${line} ${id}`;
+	}
+	if (line.length > 0) {
+		lines.push(`  ${line}`);
+	}
+	const raised = items.filter((item) => item.entry !== undefined).length;
+	const head = [
+		title,
+		`本轮 ${promotedCount} 条`,
+		`叶子 ${leafId ?? "无"}`,
+		`边界 ${boundary ?? "无"}`,
+		`视图 ${items.length} 条，其中已提升 ${raised} 条`,
+	].join(" · ");
+	return lines.length === 0 ? head : `${head}\n${lines.join("\n")}`;
+}
+
 /** 握手结果,与 hello 帧去掉判别字段后的形状一致。 */
 export interface HostHandshake {
 	readonly protocolVersion: number;
@@ -960,14 +1001,16 @@ export class SessionClient {
 			if (result.leafId !== null) {
 				this.lastEntryId = result.leafId;
 			}
-			debugLog("commit", promoted ? "提升成功" : "提升被拒：条目数与实时消息不符", {
-				count: result.entries.length,
-				leafId: result.leafId,
-				boundary: this.lastEntryId,
-				messageIds: this.state
-					.chatView(opened.chatChannel)
-					?.items.map((item) => `${item.id}${item.entry === undefined ? "" : `→${item.entry.id}`}`),
-			});
+			debugLog(
+				"commit",
+				formatCommitLog(
+					promoted ? "提升成功" : "提升被拒：条目数与实时消息不符",
+					result.entries.length,
+					result.leafId,
+					this.lastEntryId,
+					this.state.chatView(opened.chatChannel)?.items ?? [],
+				),
+			);
 			if (!promoted) {
 				debugLog("commit", "条目数与实时消息不符，重新装载历史");
 				await this.reloadHistory(opened.chatChannel, opened.sessionId);

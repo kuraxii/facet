@@ -166,6 +166,7 @@ function ToolRow({ part }: { part: ToolCallPart }) {
 	const shown = isLong && !isExpanded ? folded.preview : output;
 	const target = toolTarget(part.input);
 	const kind = toolKind(part.name);
+	const isRunning = part.status === "running";
 
 	return (
 		<div className={`tr is-${part.status}`}>
@@ -177,9 +178,9 @@ function ToolRow({ part }: { part: ToolCallPart }) {
 				title={part.name}
 			>
 				<span className="tr-icon">{categoryIcon(kind.category)}</span>
-				<span className="tr-name">{kind.label}</span>
-				{target.length > 0 ? <span className="tr-arg">{target}</span> : null}
-				{part.status === "running" ? <i className="dot is-warn pulse tr-dot" /> : null}
+				{/* 运行中由短名与参数上的扫光表示，行尾不加状态标记 */}
+				<span className={`tr-name${isRunning ? " is-live" : ""}`}>{kind.label}</span>
+				{target.length > 0 ? <span className={`tr-arg${isRunning ? " is-live" : ""}`}>{target}</span> : null}
 			</button>
 			{isOpen && output.length > 0 ? (
 				<div className="tr-out">

@@ -38,7 +38,7 @@ PoC 不做,记在这里,按「影响基本使用」到「结构」排序。
 | # | 项 | 需求 | 说明 |
 |---|---|---|---|
 | 8 | 依赖边界检查 | — | 遍历 import 与 `package.json` 校验方向,挂进 `npm run lint`;现在只靠人守 |
-| 9 | mermaid 与公式 | FR-CHAT-05 | mermaid 只在 `package.json` 里,代码没有引用;KaTeX 样式已随正文引入,两者都缺容器规格与失败降级 |
+| 9 | mermaid 与公式 | FR-CHAT-05 | 已实现:公式沿用库的块容器但去掉卡片底色,流程图换成自绘卡片与自管渲染 |
 | 10 | Web 端与远端接入 | FR-XDEV | `apps/web` 复用 `packages/ui`;鉴权与 SSH 隧道 |
 
 ## 三、已知取舍

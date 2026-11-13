@@ -37,6 +37,8 @@ export type { ProviderFormProps } from "./chat/ProviderForm.tsx";
 export { ProviderForm } from "./chat/ProviderForm.tsx";
 export type { QueueStripProps } from "./chat/QueueStrip.tsx";
 export { QueueStrip } from "./chat/QueueStrip.tsx";
+export type { SessionSearchProps } from "./chat/SessionSearch.tsx";
+export { SessionSearch } from "./chat/SessionSearch.tsx";
 export type { SessionSidebarProps, ThemeName } from "./chat/SessionSidebar.tsx";
 export { SessionSidebar } from "./chat/SessionSidebar.tsx";
 export type {
@@ -45,6 +47,8 @@ export type {
 	SettingsSection,
 } from "./chat/SettingsPage.tsx";
 export { SettingsPage } from "./chat/SettingsPage.tsx";
+export type { SshPasswordDialogProps } from "./chat/SshPasswordDialog.tsx";
+export { SshPasswordDialog } from "./chat/SshPasswordDialog.tsx";
 export type { SidebarHeaderProps } from "./chat/sidebar-header.tsx";
 export { SidebarHeader } from "./chat/sidebar-header.tsx";
 export type {
@@ -63,6 +67,15 @@ export {
 	sessionTitle,
 	shortTime,
 } from "./chat/sidebar-model.ts";
+export {
+	clampSidebarWidth,
+	readSidebarWidth,
+	SIDEBAR_DEFAULT_WIDTH,
+	SIDEBAR_MAX_WIDTH,
+	SIDEBAR_MIN_WIDTH,
+	type SidebarStorage,
+	writeSidebarWidth,
+} from "./chat/sidebar-state.ts";
 export type { TrustDialogProps } from "./chat/TrustDialog.tsx";
 export { TrustDialog } from "./chat/TrustDialog.tsx";
 export type { StickToBottom } from "./chat/use-stick-to-bottom.ts";
@@ -78,6 +91,8 @@ export type { ChangesPaneProps } from "./panel/changes-pane.tsx";
 export { ChangesPane } from "./panel/changes-pane.tsx";
 export type { FilesPaneProps } from "./panel/files-pane.tsx";
 export { FilesPane } from "./panel/files-pane.tsx";
+export type { PaneResizerProps } from "./panel/pane-resizer.tsx";
+export { clampWidth, PaneResizer } from "./panel/pane-resizer.tsx";
 export type { PanelStorage, RightPanelState, RightPanelTab } from "./panel/panel-state.ts";
 export {
 	clampPanelWidth,

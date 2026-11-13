@@ -23,7 +23,7 @@ function render(isOpen: boolean | undefined): string {
 			canCreate: true,
 			onAddProject: () => {},
 			isSearchOpen: false,
-			onSearchOpenChange: () => {},
+			onOpenSearch: () => {},
 			isProjectsStale: false,
 			onRefreshProjects: () => {},
 			onRenameProject: async () => {},

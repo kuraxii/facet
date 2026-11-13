@@ -15,7 +15,7 @@ export function SidebarToggle({ isOpen, onToggle }: { isOpen: boolean; onToggle:
 			className="chrome-toggle is-sidebar"
 			aria-label={isOpen ? "收起左侧栏" : "展开左侧栏"}
 			title={isOpen ? "收起左侧栏" : "展开左侧栏"}
-			aria-pressed={isOpen}
+			aria-expanded={isOpen}
 			onClick={onToggle}
 		>
 			<PanelLeft size={15} strokeWidth={1.5} />
@@ -31,7 +31,7 @@ export function PanelToggle({ isOpen, onToggle }: { isOpen: boolean; onToggle: (
 			className="chrome-toggle is-panel"
 			aria-label={isOpen ? "收起右侧栏" : "展开右侧栏"}
 			title={isOpen ? "收起右侧栏" : "展开右侧栏"}
-			aria-pressed={isOpen}
+			aria-expanded={isOpen}
 			onClick={onToggle}
 		>
 			<PanelRight size={15} strokeWidth={1.5} />

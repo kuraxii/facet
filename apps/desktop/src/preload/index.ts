@@ -14,6 +14,19 @@ function cleanIpcError(error: unknown): Error {
 	return new Error(text.replace(/^Error invoking remote method '[^']*': (?:\w*Error: )?/, ""));
 }
 
+/** 开通道的结果：成功给通道本身，失败给分类码与说明。 */
+export type HostChannelResult =
+	| {
+			ok: true;
+			id: number;
+			token: string | undefined;
+			role: "operator" | "viewer" | undefined;
+			entry: ClientEntry;
+			write: (text: string) => void;
+			close: () => void;
+	  }
+	| { ok: false; code: string; message: string };
+
 const api = {
 	/** 主机是本机管的（local），还是外面跑着、这里只当客户端（external） */
 	hostMode: readArgument("facet-host-mode") || "local",
@@ -41,17 +54,16 @@ const api = {
 	openHostChannel: async (
 		target: string,
 		handlers: { onData: (chunk: string) => void; onClose: (reason: string) => void },
-	): Promise<{
-		id: number;
-		token: string | undefined;
-		role: "operator" | "viewer" | undefined;
-		entry: ClientEntry;
-		write: (text: string) => void;
-		close: () => void;
-	}> => {
-		const opened = (await ipcRenderer.invoke("facet:host-open", target).catch((error: unknown) => {
+		/** SSH 登录密码；主进程会留着供重连使用 */
+		password?: string,
+	): Promise<HostChannelResult> => {
+		const opened = (await ipcRenderer.invoke("facet:host-open", target, password).catch((error: unknown) => {
 			throw cleanIpcError(error);
-		})) as { id: number; token: string | undefined; role: "operator" | "viewer" | undefined };
+		})) as HostChannelResult;
+		// 失败原因按值交回界面：跨 contextBridge 抛错误会把自定义的分类码丢掉
+		if (!opened.ok) {
+			return opened;
+		}
 		const id = opened.id;
 		const onData = (_event: unknown, channel: number, chunk: string): void => {
 			if (channel === id) {
@@ -71,6 +83,7 @@ const api = {
 		ipcRenderer.on("facet:host-data", onData);
 		ipcRenderer.on("facet:host-close", onClose);
 		return {
+			ok: true,
 			id,
 			token: opened.token,
 			role: opened.role,

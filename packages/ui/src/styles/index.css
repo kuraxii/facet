@@ -23,12 +23,32 @@
 	/* 顶部那条带的高度与每个窗口按钮的宽度 */
 	--chrome-height: 36px;
 	--window-button-width: 44px;
+	/* 侧栏里图标按钮的边长，以及按钮到侧栏左右边缘的距离；顶带的开关用同一组数 */
+	--icon-button-size: 28px;
+	--sidebar-edge: 10px;
 	/* 三栏宽度：顶带的格子与下面的正文共用，由界面按当前状态写入 */
 	--sidebar-width: 272px;
 	--panel-width: 0px;
 	/* 滚动条占的宽度，以及其中拇指的宽度；轨道其余部分是透明的 */
 	--scrollbar-width: 8px;
 	--scrollbar-thumb: 4px;
+	/* 两个面板分隔条的命中区宽度，以及悬停时那条高亮的颜色 */
+	--divider-hit-width: 6px;
+	--divider-highlight: color-mix(in srgb, var(--acc) 55%, transparent);
+	/* 对话导航的缩放倍数，由设置里的百分比写入；下面每个尺寸都是它的倍数 */
+	--outline-scale: 1;
+	/* 对话导航竖轨：离主区左缘的间距、轨宽、轨内边距、短条静止尺寸、当前轮次的加宽倍数
+	   （黄金比例）、指针附近的额外放大，基准值都是 px，实际值再乘缩放 */
+	/* 竖轨到主区左缘的间距是固定的，不随缩放变 */
+	--outline-inset: 8px;
+	--outline-rail-width: calc(36px * var(--outline-scale));
+	--outline-rail-inset: 0px;
+	--outline-slot-size: calc(8px * var(--outline-scale));
+	--outline-pill-width: calc(10px * var(--outline-scale));
+	--outline-pill-height: calc(2px * var(--outline-scale));
+	--outline-pill-active-scale: 1.618;
+	--outline-pill-grow-width: calc(12px * var(--outline-scale));
+	--outline-pill-grow-height: calc(2px * var(--outline-scale));
 	/* 过程组的缩进：竖线到行内容的距离，以及竖线本身相对正文列的位置
 	   （后者来自展开箭头字形在图标盒子里的内缩，改箭头图标时跟着调） */
 	--indent-rail-offset: 16px;
@@ -182,16 +202,28 @@ svg.fl {
 	min-width: 0;
 }
 
-/* 侧栏那一格：宽度与正文的侧栏一致 */
+/* 侧栏那一格：宽度与正文的侧栏一致，右边留出与侧栏一致的内边距 */
 .chrome-slot.is-sidebar {
 	width: var(--sidebar-width);
+	padding-right: var(--sidebar-edge);
 	overflow: hidden;
+}
+
+/* 收起时不占位，也不留那段内边距，主区开关才能贴到统一的位置 */
+.chrome-slot.is-sidebar:not(.is-open) {
+	padding-right: 0;
+}
+
+/* 展开时把正文那条分界线与底色续到顶带里，两边在同一个 x 上 */
+.chrome-slot.is-sidebar.is-open {
+	border-right: 1px solid var(--line);
+	background: var(--sb);
 }
 
 /* 主区那一格：占满剩下的宽度，左栏开关贴在它的左边 */
 .chrome-slot.is-main {
 	flex: 1;
-	padding-left: 4px;
+	padding-left: var(--sidebar-edge);
 }
 
 /* 右栏那一格：展开时与右栏同宽，窗口按钮压在这一格最右边；收起时收到只剩开关与按钮 */
@@ -203,6 +235,10 @@ svg.fl {
 	-webkit-app-region: no-drag;
 }
 
+.chrome-slot.is-panel.is-open {
+	border-left: 1px solid var(--line);
+}
+
 .chrome-slot.is-panel.is-compact {
 	width: auto;
 	padding-left: 0;
@@ -212,21 +248,18 @@ svg.fl {
 	flex: 1;
 }
 
+/* 顶带里的图标按钮：开与关同一个亮度，展开与否由面板本身看得出来 */
 .chrome-toggle {
 	display: grid;
 	flex: none;
 	place-items: center;
-	width: 28px;
-	height: 28px;
+	width: var(--icon-button-size);
+	height: var(--icon-button-size);
 	border: 0;
 	border-radius: 6px;
 	background: transparent;
-	color: var(--t3);
-	-webkit-app-region: no-drag;
-}
-
-.chrome-toggle[aria-pressed="true"] {
 	color: var(--t2);
+	-webkit-app-region: no-drag;
 }
 
 .chrome-toggle:hover {
@@ -275,16 +308,44 @@ svg.fl {
 /* 侧栏 */
 
 .sb {
+	position: relative;
 	display: flex;
 	flex: none;
 	flex-direction: column;
 	width: var(--sidebar-width);
 	height: 100%;
-	padding: 10px 10px 8px;
+	/* 顶带里那行头部自己带 4px 下边距，这里再留 4px，头部控件到新建按钮正好 8px */
+	padding: 4px 10px 8px;
 	border-right: 1px solid var(--line);
 	background: var(--sb);
 	overflow: hidden;
 	transition: background-color var(--dur-fast) var(--ease);
+}
+
+/* 宽屏收起左栏 */
+.shell.is-sb-hidden .sb {
+	display: none;
+}
+
+/* 拖宽用的命中区，和右栏那条对称 */
+.sb-resizer {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	right: 0;
+	z-index: 3;
+	width: var(--divider-hit-width);
+	margin: 0;
+	border: 0;
+	cursor: col-resize;
+	background: transparent;
+}
+
+.app:has(.sb-resizer:hover) .sb,
+.app:has(.sb-resizer:active) .sb,
+.app:has(.sb-resizer:hover) .chrome-slot.is-sidebar,
+.app:has(.sb-resizer:active) .chrome-slot.is-sidebar {
+	border-right-color: var(--divider-highlight);
 }
 
 .sb-head {
@@ -293,12 +354,15 @@ svg.fl {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	padding: 2px 0 8px 6px;
+	width: 100%;
+	/* 上下各留 4px，28px 的图标按钮正好在 36px 的顶带里居中 */
+	padding: 4px 0;
 	-webkit-app-region: drag;
 }
 
-.sb-tool {
-	-webkit-app-region: no-drag;
+/* 顶带里的那份头部要自己补左内边距，标题才能与下面的新建按钮、会话行对齐 */
+.chrome-slot.is-sidebar .sb-head {
+	padding-left: var(--sidebar-edge);
 }
 
 .sb-title {
@@ -307,23 +371,17 @@ svg.fl {
 	letter-spacing: 0.2px;
 }
 
-/* 宽屏收起左栏 */
-.shell.is-sb-hidden .sb {
-	display: none;
-}
-
 .sb-tools {
 	display: flex;
 	align-items: center;
 	gap: 2px;
 }
 
-.sb-tool,
 .sb-foot-btn.is-icon {
 	display: grid;
 	place-items: center;
-	width: 24px;
-	height: 24px;
+	width: var(--icon-button-size);
+	height: var(--icon-button-size);
 	padding: 0;
 	border: 0;
 	border-radius: 6px;
@@ -334,14 +392,8 @@ svg.fl {
 		color var(--dur-fast) var(--ease);
 }
 
-.sb-tool:hover,
 .sb-foot-btn.is-icon:hover {
 	background: var(--surface2);
-	color: var(--t1);
-}
-
-.sb-tool[aria-pressed="true"] {
-	background: var(--surface3);
 	color: var(--t1);
 }
 
@@ -467,11 +519,6 @@ svg.fl {
 
 .sb-search input::placeholder {
 	color: var(--t3);
-}
-
-.sb-search.is-inline {
-	flex: none;
-	margin-bottom: 6px;
 }
 
 .sb-opts {
@@ -803,10 +850,10 @@ svg.fl {
 
 .sb-row-more {
 	position: absolute;
-	top: 3px;
-	right: 2px;
-	width: 22px;
-	height: 22px;
+	top: 1px;
+	right: 1px;
+	width: var(--icon-button-size);
+	height: var(--icon-button-size);
 	border: 0;
 	border-radius: 5px;
 	background: var(--surface2);
@@ -844,7 +891,7 @@ svg.fl {
 	align-items: center;
 	gap: 6px;
 	margin-top: 6px;
-	padding: 8px 4px 0;
+	padding: 8px 0 0;
 	border-top: 1px solid var(--line);
 	color: var(--t3);
 	font-size: 11px;
@@ -917,24 +964,25 @@ svg.fl {
 	position: absolute;
 	top: 0;
 	bottom: 0;
-	left: -3px;
+	left: calc(-1 * var(--divider-hit-width) / 2);
 	z-index: 2;
-	width: 6px;
+	width: var(--divider-hit-width);
 	margin: 0;
 	border: 0;
 	cursor: col-resize;
 	background: transparent;
 }
 
-/* 悬停与拖动时在分界上叠一条 2px 的强调线：命中区本身始终透明，也不改边框宽度免得内容跳 */
-.panel-resizer:hover,
-.panel-resizer:active {
-	background: linear-gradient(
-		to right,
-		transparent 0 3px,
-		color-mix(in srgb, var(--acc) 40%, transparent) 3px 5px,
-		transparent 5px 100%
-	);
+/*
+ * 悬停与拖动时把面板自己那条边染成强调色。
+ *
+ * 高亮就是分界线本身，不额外叠线：命中区始终透明，边框宽度也不变，内容不会跳。
+ */
+.app:has(.panel-resizer:hover) .panel,
+.app:has(.panel-resizer:active) .panel,
+.app:has(.panel-resizer:hover) .chrome-slot.is-panel,
+.app:has(.panel-resizer:active) .chrome-slot.is-panel {
+	border-left-color: var(--divider-highlight);
 }
 
 .panel-tabs {
@@ -1436,11 +1484,11 @@ svg.fl {
 	position: absolute;
 	top: 10%;
 	bottom: 10%;
-	left: 0;
+	left: var(--outline-inset);
 	z-index: 3;
 	display: flex;
-	/* 宽度不超过正文容器的左内边距，短条放大也不会压到字上 */
-	width: 24px;
+	/* 竖轨宽度由变量给出，组件只在容器留得下这么宽时才渲染 */
+	width: var(--outline-rail-width);
 	align-items: center;
 }
 
@@ -1457,7 +1505,7 @@ svg.fl {
 .outline-slot {
 	position: relative;
 	display: flex;
-	flex-basis: 8px;
+	flex-basis: var(--outline-slot-size);
 	flex-shrink: 1;
 	width: 100%;
 	min-height: 0;
@@ -1471,15 +1519,27 @@ svg.fl {
 	height: 100%;
 	align-items: center;
 	justify-content: flex-start;
-	padding: 0 0 0 3px;
+	padding: 0 0 0 var(--outline-rail-inset);
 	border: 0;
-	border-radius: 4px;
+	border-radius: calc(4px * var(--outline-scale));
 	background: transparent;
 }
 
-/* 短条共用一条左缘向右长，放大看起来是一团鼓起跟着指针走 */
+/*
+ * 短条共用一条左缘向右长，放大看起来是一团鼓起跟着指针走。
+ *
+ * 宽度 = 基准 + 指针附近的放大，基准默认是静止宽度，当前轮次换成加宽后的那一档；
+ * 上限收到竖轨内宽，加宽与放大叠加时不会溢出到正文上。
+ */
 .outline-pill {
+	--outline-grow: 0;
+	--outline-pill-base: var(--outline-pill-width);
 	flex: none;
+	width: min(
+		calc(var(--outline-pill-base) + var(--outline-grow) * var(--outline-pill-grow-width)),
+		calc(var(--outline-rail-width) - 2 * var(--outline-rail-inset))
+	);
+	height: calc(var(--outline-pill-height) + var(--outline-grow) * var(--outline-pill-grow-height));
 	border-radius: 9999px;
 	background: var(--line2);
 	transition:
@@ -1489,6 +1549,7 @@ svg.fl {
 }
 
 .outline-pill.is-active {
+	--outline-pill-base: calc(var(--outline-pill-width) * var(--outline-pill-active-scale));
 	background: var(--t3);
 }
 
@@ -1499,7 +1560,7 @@ svg.fl {
 .outline-preview {
 	position: absolute;
 	top: 50%;
-	left: 26px;
+	left: calc(var(--outline-rail-width) + 2px * var(--outline-scale));
 	display: flex;
 	width: 260px;
 	min-height: 48px;
@@ -1882,15 +1943,37 @@ svg.fl {
 	white-space: nowrap;
 }
 
-/* 运行中：标题文字上有一道扫光，结束后停住 */
+/*
+ * 运行中：默认让文字在两个不透明度之间呼吸，只改 opacity，由合成器执行，文字不参与重绘。
+ * 设置里选「扫光」时改成文字填充上一道渐变带扫过，逐帧重绘，更费电。
+ */
+.tr-name.is-live,
+.tr-arg.is-live,
 .group-label.is-live {
+	color: var(--t1);
+	animation: live-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+	0%,
+	100% {
+		opacity: 0.45;
+	}
+	50% {
+		opacity: 1;
+	}
+}
+
+[data-live-motion="shimmer"] .tr-name.is-live,
+[data-live-motion="shimmer"] .tr-arg.is-live,
+[data-live-motion="shimmer"] .group-label.is-live {
 	background-image: linear-gradient(
 		90deg,
-		var(--t3) 0%,
-		var(--t3) 35%,
+		var(--t2) 0%,
+		var(--t2) 35%,
 		var(--t1) 50%,
-		var(--t3) 65%,
-		var(--t3) 100%
+		var(--t2) 65%,
+		var(--t2) 100%
 	);
 	background-size: 220% 100%;
 	background-clip: text;
@@ -1910,9 +1993,17 @@ svg.fl {
 }
 
 @media (prefers-reduced-motion: reduce) {
+	.tr-name.is-live,
+	.tr-arg.is-live,
 	.group-label.is-live {
 		animation: none;
-		color: var(--t2);
+		opacity: 1;
+	}
+
+	[data-live-motion="shimmer"] .tr-name.is-live,
+	[data-live-motion="shimmer"] .tr-arg.is-live,
+	[data-live-motion="shimmer"] .group-label.is-live {
+		color: var(--t1);
 		-webkit-text-fill-color: currentColor;
 		background: none;
 	}
@@ -1987,10 +2078,6 @@ svg.fl {
 	font-size: 12px;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-}
-
-.tr-dot {
-	margin-left: auto;
 }
 
 /* 状态只由颜色承担：失败红、被中止而未执行琥珀色，行尾不再附文字 */
@@ -2148,6 +2235,116 @@ svg.fl {
 .chg-diff .diff-line {
 	width: max-content;
 	min-width: 100%;
+}
+
+/* 会话搜索：居中偏上的一层，遮住正文但让出窗口顶带 */
+
+/* 固定在视口上，顶带一起变暗；窗口按钮单独提到遮罩之上，遮罩期间仍然可点 */
+.search-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 60;
+	display: flex;
+	justify-content: center;
+	align-items: flex-start;
+	padding-top: 12vh;
+	background: rgb(0 0 0 / 45%);
+}
+
+.search-panel {
+	display: flex;
+	flex-direction: column;
+	width: min(560px, calc(100vw - 32px));
+	max-height: min(60vh, 460px);
+	border: 1px solid var(--line2);
+	border-radius: 12px;
+	background: var(--card);
+	box-shadow: 0 24px 64px rgb(0 0 0 / 45%);
+	overflow: hidden;
+}
+
+.search-field {
+	display: flex;
+	flex: none;
+	align-items: center;
+	gap: 8px;
+	padding: 12px 14px;
+	border-bottom: 1px solid var(--line);
+	color: var(--t3);
+}
+
+.search-field input {
+	flex: 1;
+	min-width: 0;
+	border: 0;
+	outline: 0;
+	background: transparent;
+	color: var(--t1);
+	font: inherit;
+	font-size: 15px;
+}
+
+.search-field input::placeholder {
+	color: var(--t3);
+}
+
+.search-results {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	overflow-y: auto;
+	padding: 6px;
+	scrollbar-gutter: stable;
+}
+
+.search-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	padding: 7px 8px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--t2);
+	font: inherit;
+	font-size: 13px;
+	text-align: left;
+}
+
+.search-row.is-selected {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+.search-row-title {
+	flex: none;
+	max-width: 45%;
+}
+
+.search-row-proj {
+	flex: 1;
+	min-width: 0;
+	color: var(--t3);
+	font-size: 12px;
+}
+
+.search-row-time {
+	flex: none;
+	color: var(--t3);
+	font-size: 12px;
+}
+
+.search-row-time.is-active {
+	color: var(--acc);
+}
+
+.search-empty {
+	margin: 0;
+	padding: 16px 10px;
+	color: var(--t3);
+	font-size: 13px;
+	text-align: center;
 }
 
 /* 错误与提示 */
@@ -2683,6 +2880,7 @@ svg.fl {
 	left: 0;
 	z-index: 2;
 	display: flex;
+	gap: 2px;
 	justify-content: flex-end;
 	padding: 6px 8px;
 	opacity: 0;
@@ -2705,19 +2903,22 @@ svg.fl {
 	white-space: nowrap;
 }
 
+/* 复制代码：与消息上的复制同一套，只是一枚图标，没有底色与描边 */
 .code-copy {
-	padding: 3px 8px;
-	border: 1px solid var(--line);
+	display: grid;
+	place-items: center;
+	width: 22px;
+	height: 22px;
+	padding: 0;
+	border: 0;
 	border-radius: 6px;
-	background: color-mix(in srgb, var(--code-surface) 78%, transparent);
-	backdrop-filter: blur(8px);
-	color: var(--t2);
-	font-size: 11.5px;
+	background: transparent;
+	color: var(--t3);
+	transition: color var(--dur-fast) var(--ease);
 	pointer-events: auto;
 }
 
 .code-copy:hover {
-	border-color: var(--line2);
 	color: var(--t1);
 }
 
@@ -2750,28 +2951,69 @@ svg.fl {
 	background: color-mix(in srgb, var(--delbg) 72%, transparent);
 }
 
-.md .markstream-react .mermaid-block,
-.md .markstream-react .math-block {
-	border: 1px solid var(--line);
-	border-radius: 10px;
-	background: var(--card);
+/*
+ * 流程图：卡片外观沿用代码块。图是放进去自己缩放、拖动的，不再用滚动条：
+ * 1 倍时铺满宽度，放大后按住拖动看其余部分，双击回到 1 倍。
+ */
+.mermaid-viewport {
+	max-height: 460px;
+	overflow: hidden;
+	padding: 12px 14px;
+	/* 拖动是平移图表，不能顺手把标签文字选上 */
+	user-select: none;
+	touch-action: none;
 }
 
-/* 图表宽度跟着对话列走，宽了在块内横向滚动，不撑破布局 */
-.md .markstream-react .mermaid-block svg {
+.mermaid-viewport.is-zoomed {
+	cursor: grab;
+}
+
+.mermaid-viewport.is-panning {
+	cursor: grabbing;
+}
+
+.mermaid-diagram {
+	transform-origin: 0 0;
+	transition: transform var(--dur-fast) var(--ease);
+}
+
+.mermaid-viewport.is-panning .mermaid-diagram {
+	transition: none;
+}
+
+.mermaid-diagram svg {
+	display: block;
 	max-width: 100%;
 	height: auto;
+	margin: 0 auto;
 }
 
-/* 渲染失败时块内留一行说明，配着标题栏的「源码」切换看原始定义 */
-.md .markstream-react .mermaid-error {
+/* 源码态与流式未完成时显示原始定义，与代码块正文同一套排版 */
+.mermaid-source {
+	max-height: 360px;
+	margin: 0;
+	overflow: auto;
+	padding: 12px 14px;
+	color: var(--t2);
+	font-family: var(--font-mono);
+	font-size: calc(12.5px * var(--fs-code-scale, 1));
+	line-height: 1.6;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+/* 渲染失败时在源码下面补一句原因，正文照常可用 */
+.mermaid-note {
+	margin: 0;
+	padding: 0 14px 12px;
 	color: var(--err);
-	background: var(--errbg);
-	border-top-color: color-mix(in srgb, var(--err) 30%, transparent);
+	font-size: 12px;
 }
 
 .md .markstream-react .math-block {
 	overflow-x: auto;
+	border: 0;
+	background: transparent;
 }
 
 /* 公式跟随正文颜色，长公式在块内滚动 */
@@ -3883,6 +4125,21 @@ svg.fl {
 	margin-top: 22px;
 }
 
+/* 只问一项的对话框：收窄到输入框合适的宽度 */
+.dialog.is-narrow {
+	width: 380px;
+}
+
+.ssh-password-input {
+	width: 100%;
+}
+
+.ssh-password-error {
+	margin: 8px 0 0;
+	color: var(--err);
+	font-size: 13px;
+}
+
 .dialog-cancel {
 	height: 34px;
 	padding: 0 12px;
@@ -3950,8 +4207,14 @@ svg.fl {
 		inset: 0 auto 0 0;
 		z-index: 40;
 		width: min(300px, 84vw);
+		padding-top: 10px;
 		transform: translateX(-100%);
 		transition: transform var(--dur-fast) var(--ease);
+	}
+
+	/* 抽屉里的头部在侧栏内，控件到新建按钮的 8px 由头部自己的下边距给 */
+	.sb .sb-head {
+		padding-bottom: 8px;
 	}
 
 	.sb.is-open {

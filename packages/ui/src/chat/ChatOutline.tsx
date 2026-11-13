@@ -6,6 +6,7 @@
  */
 
 import type { TranscriptItem } from "@facet/client-core";
+import type { CSSProperties } from "react";
 import {
 	type PointerEvent as ReactPointerEvent,
 	useCallback,
@@ -22,8 +23,28 @@ import {
 	outlineTickMagnification,
 } from "./chat-outline.ts";
 
-/** 竖轨的最小可用宽度，主区域比这窄时留白不够，直接不显示。 */
-const MIN_HOST_WIDTH = 720;
+/** 正文列的最大宽度，决定竖轨两侧各有多少留白可用。 */
+const CONTENT_MAX_WIDTH = 780;
+
+/** 竖轨到主区左缘的间距，固定值，不随缩放变。 */
+const RAIL_GAP = 8;
+
+/** 竖轨在 100% 缩放下的宽度，实际轨宽按缩放倍数放大。 */
+const RAIL_WIDTH = 36;
+
+/**
+ * 算出竖轨的最小可用宽度。
+ *
+ * 正文列居中之后左右各留 (宽 - 780) / 2，这段留白要放得下竖轨的间距加轨宽，短条才不会压到
+ * 正文上。间距是固定值，只有轨宽跟着 `--outline-scale` 放大。
+ */
+function minHostWidth(): number {
+	const raw = Number.parseFloat(
+		getComputedStyle(document.documentElement).getPropertyValue("--outline-scale"),
+	);
+	const scale = Number.isFinite(raw) && raw > 0 ? raw : 1;
+	return CONTENT_MAX_WIDTH + 2 * (RAIL_GAP + RAIL_WIDTH * scale);
+}
 
 /** 跳转后这条消息距视口上沿留多少像素，避免贴着顶部。 */
 const JUMP_OFFSET = 12;
@@ -108,9 +129,10 @@ export function ChatOutline({ items, container }: ChatOutlineProps) {
 		if (host === null || host === undefined) {
 			return;
 		}
-		const observer = new ResizeObserver(() => setIsNarrow(host.clientWidth < MIN_HOST_WIDTH));
+		const measure = (): void => setIsNarrow(host.clientWidth < minHostWidth());
+		const observer = new ResizeObserver(measure);
 		observer.observe(host);
-		setIsNarrow(host.clientWidth < MIN_HOST_WIDTH);
+		measure();
 		return () => observer.disconnect();
 	}, []);
 
@@ -197,11 +219,11 @@ export function ChatOutline({ items, container }: ChatOutlineProps) {
 												? "outline-pill is-active"
 												: "outline-pill"
 									}
-									style={{
-										// 放大只改短条的宽高，槽位尺寸不动，指针不会把目标推走
-										width: `${8 + magnification * 12}px`,
-										height: `${2 + magnification * 2}px`,
-									}}
+									style={
+										// 放大只改短条的宽高，槽位尺寸不动，指针不会把目标推走；
+										// 基准宽度、加宽倍数与放大步长都在样式表的变量里
+										{ "--outline-grow": magnification.toFixed(3) } as CSSProperties
+									}
 								/>
 							</button>
 							{hasAttention ? (

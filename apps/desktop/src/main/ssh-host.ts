@@ -268,7 +268,8 @@ export class SshHostError extends Error {
 	readonly code:
 		| "no_target"
 		| "no_known_host"
-		| "no_auth"
+		/** 缺登录凭据或凭据被拒，界面据此问密码 */
+		| "need_password"
 		| "no_discovery"
 		| "connect_failed"
 		| "forward_failed";
@@ -293,11 +294,19 @@ export class SshHosts {
 		this.options = options;
 	}
 
-	/** 连到远程主机，返回字节流与连接令牌。 */
-	async open(targetText: string): Promise<{
+	/**
+	 * 连到远程主机，返回字节流与连接令牌。
+	 *
+	 * 给了 `password` 就按密码登录，否则用 ssh-agent 或 ~/.ssh 下的私钥；两者都没有、或
+	 * 被服务器拒绝时抛 `need_password`，由界面问一次密码。密码只在调用方内存里留存在
+	 * 本机，不写进任何清单。
+	 */
+	async open(
+		targetText: string,
+		password?: string,
+	): Promise<{
 		stream: StreamLike;
 		token: string | undefined;
-		role: "operator" | "viewer";
 		address: string;
 	}> {
 		const target = parseSshTarget(targetText);
@@ -323,20 +332,32 @@ export class SshHosts {
 		];
 
 		const build = async (): Promise<ConnectConfig> => {
-			const privateKey = await firstReadable(identityFiles, readLocal);
-			const agent = env.SSH_AUTH_SOCK;
-			if (privateKey === undefined && agent === undefined) {
-				throw new SshHostError("no_auth", "没有可用的 SSH 身份：需要 ssh-agent 或 ~/.ssh 下的私钥");
+			const login: ConnectConfig = {};
+			if (password !== undefined && password.length > 0) {
+				login.password = password;
+				// 有的服务器只开 keyboard-interactive，ssh2 在 tryKeyboard 下会自动用这个密码回
+				login.tryKeyboard = true;
+			} else {
+				const privateKey = await firstReadable(identityFiles, readLocal);
+				const agent = env.SSH_AUTH_SOCK;
+				if (privateKey === undefined && agent === undefined) {
+					throw new SshHostError("need_password", `需要 ${sshTargetLabel(target)} 的登录密码`);
+				}
+				if (privateKey !== undefined) {
+					login.privateKey = privateKey;
+				}
+				if (agent !== undefined) {
+					login.agent = agent;
+				}
 			}
 			return {
 				host,
 				port,
 				...(user === undefined ? {} : { username: user }),
-				...(privateKey === undefined ? {} : { privateKey }),
-				...(agent === undefined ? {} : { agent }),
+				...login,
 				readyTimeout: this.options.connectTimeoutMs ?? 10_000,
 				hostVerifier: (key: Buffer): boolean => {
-					const parsed = splitPublicKey(key);
+					const parsed = parseHostKeyBlob(key);
 					if (parsed === undefined) {
 						return false;
 					}
@@ -350,6 +371,19 @@ export class SshHosts {
 		try {
 			client = await connector(await build());
 		} catch (error) {
+			// 建连接之前就判定缺凭据的情况，理由已经写好了，别再包一层
+			if (error instanceof SshHostError) {
+				throw error;
+			}
+			if (isAuthFailure(error)) {
+				// 密码给过还被拒，就是密码不对；没给过就去问一次
+				throw new SshHostError(
+					"need_password",
+					password === undefined || password.length === 0
+						? `需要 ${sshTargetLabel(target)} 的登录密码`
+						: `${sshTargetLabel(target)} 的密码不对`,
+				);
+			}
 			throw new SshHostError("connect_failed", `连不上 ${sshTargetLabel(target)}:${messageOf(error)}`);
 		}
 
@@ -369,8 +403,6 @@ export class SshHosts {
 			return {
 				stream,
 				token: discovery.token,
-				// SSH 本身已经是信任边界，权限档按操作档申请，主机可以按自己的配置收窄成只读
-				role: "operator" as const,
 				address: discovery.endpoint.transport === "unix" ? discovery.endpoint.path : discovery.endpoint.url,
 			};
 		} catch (error) {
@@ -384,14 +416,39 @@ export class SshHosts {
 }
 
 /** 把 ssh2 给的公钥拆成类型与 base64。 */
-function splitPublicKey(key: Buffer): { keyType: string; key: string } | undefined {
-	const text = key.toString("utf8").trim();
-	const [keyType, keyPart] = text.split(/\s+/);
-	if (keyType === undefined || keyPart === undefined) {
+/** ssh2 在认证阶段失败时把 level 标成 client-authentication。 */
+function isAuthFailure(error: unknown): boolean {
+	return (
+		typeof error === "object" &&
+		error !== null &&
+		(error as { level?: unknown }).level === "client-authentication"
+	);
+}
+
+/**
+ * 解析 SSH 握手给出的主机公钥。
+ *
+ * ssh2 交给 hostVerifier 的是 SSH 线上的公钥 blob：4 字节大端长度加算法名，后面跟着
+ * 密钥数据，整段不是可读文本。known_hosts 那一列存的是同一个 blob 的 base64，所以这里
+ * 解出算法名，再把整段按 base64 还原成可比对的形式。
+ */
+export function parseHostKeyBlob(blob: Buffer): { keyType: string; key: string } | undefined {
+	if (blob.length < 4) {
 		return undefined;
 	}
-	return { keyType, key: keyPart };
+	const nameLength = blob.readUInt32BE(0);
+	if (nameLength === 0 || nameLength > blob.length - 4) {
+		return undefined;
+	}
+	const keyType = blob.subarray(4, 4 + nameLength).toString("utf8");
+	if (!KEY_TYPE_PATTERN.test(keyType)) {
+		return undefined;
+	}
+	return { keyType, key: blob.toString("base64") };
 }
+
+/** 算法名只可能是 ssh- / ecdsa- / sk- 开头的可见字符。 */
+const KEY_TYPE_PATTERN = /^(ssh-|ecdsa-|sk-)[A-Za-z0-9@.-]+$/;
 
 /** 默认的 SSH 连接：用 ssh2 连上并包成 SshClientLike。 */
 const defaultConnector: SshConnector = async (config) => {

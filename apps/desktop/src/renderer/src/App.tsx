@@ -29,6 +29,7 @@ import {
 	CodeThemeProvider,
 	Composer,
 	CreateProjectDialog,
+	clampSidebarWidth,
 	DEFAULT_DARK_THEME,
 	EmptyState,
 	endpointLabel,
@@ -45,14 +46,17 @@ import {
 	type RightPanelState,
 	readHostList,
 	readPanelState,
+	readSidebarWidth,
 	resolveUiTheme,
 	type SavedHost,
+	SessionSearch,
 	SessionSidebar,
 	type SettingsDataSource,
 	SettingsPage,
 	type SettingsSection,
 	SidebarHeader,
 	SidebarToggle,
+	SshPasswordDialog,
 	samePath,
 	THEME_MODES,
 	type ThemeName,
@@ -60,6 +64,7 @@ import {
 	useStickToBottom,
 	writeHostList,
 	writePanelState,
+	writeSidebarWidth,
 } from "@facet/ui";
 import { FileView } from "@facet/ui-editor";
 import {
@@ -211,7 +216,19 @@ function AppFrame({
  */
 let hostTarget = LOCAL_TARGET;
 
-const transport = makeTransport(bridge, () => hostTarget);
+/**
+ * 本次连接要用的 SSH 密码。
+ *
+ * 由密码弹窗填进来，主进程收到后会自己留着供重连使用；这里只是把「这一次握手用哪个密码」
+ * 交给通道，不落本地存储。
+ */
+let sshPassword: string | undefined;
+
+const transport = makeTransport(
+	bridge,
+	() => hostTarget,
+	() => sshPassword,
+);
 const client = new SessionClient({ transport, pageSize: 200 });
 const terminalClient = new TerminalClient({ transport });
 
@@ -271,6 +288,9 @@ function applyAppearance(appearance: FacetSettings["appearance"]): void {
 	const root = document.documentElement;
 	root.dataset.theme = resolveUiTheme(appearance.theme, prefersLight());
 	root.dataset.motion = appearance.reducedMotion ? "reduced" : "full";
+	root.dataset.liveMotion = appearance.liveMotion;
+	// 对话导航的所有尺寸都是 `--outline-scale` 的倍数，百分比在这里换算成倍数
+	root.style.setProperty("--outline-scale", String(appearance.outlineScale / 100));
 	// 空串表示用样式表里的缺省栈：这里把内联值去掉，`:root` 的默认值就生效；
 	// 编辑器与终端的字体在样式表里默认跟着代码字体走
 	const applyFont = (name: string, value: string): void => {
@@ -357,7 +377,25 @@ export function App() {
 	/** 窄屏时侧栏是抽屉，这个开关控制它展开；宽屏时侧栏常驻，另行记收起的意图 */
 	const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 	/** 侧栏头部那个会话搜索框是否展开；头部在顶带里，状态放在这里 */
-	const [isSidebarSearchOpen, setIsSidebarSearchOpen] = useState(false);
+	const [isSearchOpen, setIsSearchOpen] = useState(false);
+	const [sidebarWidth, setSidebarWidth] = useState(() => readSidebarWidth(window.localStorage));
+	// ⌘K 打开会话搜索，与页脚提示的快捷键一致
+	useEffect(() => {
+		const onKeyDown = (event: KeyboardEvent) => {
+			if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+				event.preventDefault();
+				setIsSearchOpen(true);
+			}
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, []);
+
+	const updateSidebarWidth = useCallback((next: number) => {
+		const width = clampSidebarWidth(next);
+		setSidebarWidth(width);
+		writeSidebarWidth(window.localStorage, width);
+	}, []);
 	const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 	/** 880px 以下走抽屉；侧栏开关在两套行为之间切换 */
 	const isNarrow = useSyncExternalStore(subscribeResize, readIsNarrow);
@@ -373,6 +411,11 @@ export function App() {
 	}, [isNarrow]);
 	/** 主区域显示对话还是设置 */
 	const [view, setView] = useState<"chat" | "settings">("chat");
+	/** 要问 SSH 密码的那台主机；undefined 表示没有弹窗 */
+	const [passwordPrompt, setPasswordPrompt] = useState<
+		{ target: string; host: string; isRetry: boolean } | undefined
+	>(undefined);
+
 	/** 主机清单：本机之外用户添加的远程主机，以及当前连着的端点 */
 	const [hostList, setHostList] = useState(() => {
 		const saved = readHostList(localStorage, LOCAL_TARGET);
@@ -545,6 +588,18 @@ export function App() {
 	 * 断线之后按退避间隔一直试，连上就续订已打开的会话、重取会话状态与会话列表；同一个
 	 * 时刻只跑一次，手动重试与自动重连共用这条路。
 	 */
+	/** 连接失败：缺密码就把密码框摆出来，其余情况回到「连不上主机」。 */
+	const handleConnectError = useCallback((error: unknown, target: string, hadPassword: boolean): void => {
+		const code = (error as { code?: unknown } | undefined)?.code;
+		if (code === "need_password") {
+			setPasswordPrompt({ target, host: endpointLabel(target), isRetry: hadPassword });
+			setPhase("connecting");
+			return;
+		}
+		setFailure(error instanceof Error ? error.message : String(error));
+		setPhase("failed");
+	}, []);
+
 	const reconnect = useCallback(async (): Promise<void> => {
 		setIsReconnecting(true);
 		reconnecting.current ??= (async () => {
@@ -567,6 +622,11 @@ export function App() {
 					await refreshProjects();
 					return;
 				} catch (error) {
+					// 缺密码时重试没有意义，停下来问一次
+					if ((error as { code?: unknown } | undefined)?.code === "need_password") {
+						handleConnectError(error, hostTarget, sshPassword !== undefined);
+						return;
+					}
 					// 重连失败的原因留在控制台，便于排查连不上的问题
 					console.log("[reconnect] 重连失败", error instanceof Error ? error.message : String(error));
 					await new Promise((done) => setTimeout(done, delay));
@@ -580,7 +640,7 @@ export function App() {
 				setIsReconnecting(false);
 			});
 		await reconnecting.current;
-	}, [refreshProjects, refreshSessions, attachHost]);
+	}, [refreshProjects, refreshSessions, attachHost, handleConnectError]);
 
 	// 断线之后自动重连，期间输入区提示连接已断开
 	useEffect(() => {
@@ -811,10 +871,13 @@ export function App() {
 	 * 换过去之后整份重新取。连不上时交给重连逻辑退避重试，界面显示连不上主机那一屏。
 	 */
 	const switchHost = useCallback(
-		async (nextEndpoint: string): Promise<void> => {
-			if (nextEndpoint === endpoint) {
+		async (nextEndpoint: string, password?: string): Promise<void> => {
+			// 同一台主机带密码重来是「密码填错了再试一次」，不能挡
+			if (nextEndpoint === endpoint && password === undefined) {
+				setPasswordPrompt(undefined);
 				return;
 			}
+			sshPassword = password;
 			updateHostList({ ...hostList, activeEndpoint: nextEndpoint });
 			setEndpoint(nextEndpoint);
 			hostTarget = nextEndpoint;
@@ -837,11 +900,19 @@ export function App() {
 				await refreshCatalog();
 				setPhase("ready");
 			} catch (error) {
-				setFailure(error instanceof Error ? error.message : String(error));
-				setPhase("failed");
+				handleConnectError(error, nextEndpoint, password !== undefined);
 			}
 		},
-		[endpoint, hostList, refreshCatalog, refreshProjects, refreshSessions, updateHostList, attachHost],
+		[
+			endpoint,
+			hostList,
+			refreshCatalog,
+			refreshProjects,
+			refreshSessions,
+			updateHostList,
+			attachHost,
+			handleConnectError,
+		],
 	);
 
 	/** 添加一台主机：地址收成端点，重复的直接回原因。 */
@@ -1398,6 +1469,24 @@ export function App() {
 		[settings.appearance.codeTheme, settings.appearance.theme],
 	);
 
+	const passwordDialog =
+		passwordPrompt === undefined ? null : (
+			<SshPasswordDialog
+				host={passwordPrompt.host}
+				isRetry={passwordPrompt.isRetry}
+				onSubmit={(password) => {
+					const target = passwordPrompt.target;
+					setPasswordPrompt(undefined);
+					void switchHost(target, password);
+				}}
+				onCancel={() => {
+					setPasswordPrompt(undefined);
+					setFailure("需要登录密码");
+					setPhase("failed");
+				}}
+			/>
+		);
+
 	if (phase === "failed") {
 		return (
 			<AppFrame>
@@ -1433,16 +1522,14 @@ export function App() {
 							setPhase("connecting");
 							void reconnect().then(
 								() => setPhase("ready"),
-								(error: unknown) => {
-									setFailure(error instanceof Error ? error.message : String(error));
-									setPhase("failed");
-								},
+								(error: unknown) => handleConnectError(error, endpoint, sshPassword !== undefined),
 							);
 						}}
 					>
 						重试
 					</button>
 				</main>
+				{passwordDialog}
 			</AppFrame>
 		);
 	}
@@ -1454,6 +1541,7 @@ export function App() {
 					<h1>正在连接主机</h1>
 					<p>{endpoint}</p>
 				</main>
+				{passwordDialog}
 			</AppFrame>
 		);
 	}
@@ -1461,25 +1549,35 @@ export function App() {
 	return (
 		<CodeThemeProvider value={codeThemeValue}>
 			<AppFrame
-				sidebarWidth={isSidebarOpen && !isNarrow ? "272px" : "0px"}
+				sidebarWidth={isSidebarOpen && !isNarrow ? `${sidebarWidth}px` : "0px"}
 				panelWidth={panel.open ? `${panel.width}px` : "0px"}
 				chrome={
 					<>
-						<div className="chrome-slot is-sidebar">
-							{isNarrow ? null : (
+						<div
+							className={
+								isNarrow || !isSidebarOpen ? "chrome-slot is-sidebar" : "chrome-slot is-sidebar is-open"
+							}
+						>
+							{isNarrow || !isSidebarOpen ? null : (
 								<SidebarHeader
-									isSearchOpen={isSidebarSearchOpen}
-									onToggleSearch={() => {
-										setIsSidebarSearchOpen((open) => !open);
-									}}
+									isSearchOpen={isSearchOpen}
+									onToggleSearch={() => setIsSearchOpen((open) => !open)}
 									onAddProject={() => setIsProjectDialogOpen(true)}
+									onCollapse={toggleSidebar}
 								/>
 							)}
 						</div>
 						<div className="chrome-slot is-main">
-							<SidebarToggle isOpen={isSidebarOpen} onToggle={toggleSidebar} />
+							{/* 侧栏展开时开关在它自己的头部里，收起之后才回到主区左上角 */}
+							{isNarrow ? (
+								isDrawerOpen ? null : (
+									<SidebarToggle isOpen={false} onToggle={toggleSidebar} />
+								)
+							) : isSidebarOpen ? null : (
+								<SidebarToggle isOpen={false} onToggle={toggleSidebar} />
+							)}
 						</div>
-						<div className={panel.open ? "chrome-slot is-panel" : "chrome-slot is-panel is-compact"}>
+						<div className={panel.open ? "chrome-slot is-panel is-open" : "chrome-slot is-panel is-compact"}>
 							<PanelToggle isOpen={panel.open} onToggle={() => updatePanel({ open: !panel.open })} />
 							{panel.open ? <PanelTabs tab={panel.tab} onTabChange={(tab) => updatePanel({ tab })} /> : null}
 							<span className="chrome-spacer" />
@@ -1512,9 +1610,15 @@ export function App() {
 						}}
 						canCreate={phase === "ready"}
 						onAddProject={() => setIsProjectDialogOpen(true)}
-						isSearchOpen={isSidebarSearchOpen}
-						onSearchOpenChange={setIsSidebarSearchOpen}
+						isSearchOpen={isSearchOpen}
+						onOpenSearch={() => {
+							setIsDrawerOpen(false);
+							setIsSearchOpen(true);
+						}}
 						showHeader={isNarrow}
+						width={isNarrow ? undefined : sidebarWidth}
+						onWidthChange={isNarrow ? undefined : updateSidebarWidth}
+						onCollapse={() => setIsDrawerOpen(false)}
 						isProjectsStale={isProjectsStale}
 						onRefreshProjects={() => void refreshProjects()}
 						onRenameProject={renameProject}
@@ -1728,6 +1832,15 @@ export function App() {
 							)}
 						</RightPanel>
 					) : null}
+
+					<SessionSearch
+						isOpen={isSearchOpen}
+						sessions={sessions}
+						activeFile={activeFile}
+						runningFile={activity === "idle" ? undefined : activeFile}
+						onClose={() => setIsSearchOpen(false)}
+						onSelect={(path) => void openSession(path)}
+					/>
 
 					{view === "settings" ? (
 						<SettingsPage

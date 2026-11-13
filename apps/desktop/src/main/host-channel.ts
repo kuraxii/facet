@@ -57,11 +57,12 @@ export class HostChannels {
 	async open(
 		webContents: WebContents,
 		target: string,
+		password?: string,
 	): Promise<{ id: number; token: string | undefined; role: "operator" | "viewer" | undefined }> {
 		if (isSshTarget(target)) {
-			const opened = await this.ssh.open(target);
-			// SSH 通道已经是流，直接按行搬运
-			return this.attach(webContents, { stream: opened.stream }, opened.token, opened.role);
+			const opened = await this.ssh.open(target, password);
+			// SSH 通道已经是流，直接按行搬运；能登上那台机器就等于本机使用者，不声明权限档
+			return this.attach(webContents, { stream: opened.stream }, opened.token, undefined);
 		}
 		const resolved = await this.resolve(target);
 		if (resolved === undefined) {

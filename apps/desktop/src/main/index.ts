@@ -18,6 +18,7 @@ import {
 	type WindowBounds,
 	writeLocalSettings,
 } from "./local-settings.ts";
+import { SshHostError } from "./ssh-host.ts";
 
 // 用户配置目录按应用名落到 facet 下；桌面包名带作用域，不改名会建出 @facet 这样的目录
 app.setName("facet");
@@ -350,12 +351,32 @@ ipcMain.handle("facet:local-host", () => {
 	};
 });
 
-ipcMain.handle("facet:host-open", async (event, target: string) => {
+/**
+ * 这一轮运行里问过的 SSH 密码。
+ *
+ * 只放在主进程内存里，退出即丢：认证过一次之后重连不必再问，也不把密码写进任何清单。
+ */
+const sshPasswords = new Map<string, string>();
+
+ipcMain.handle("facet:host-open", async (event, target: string, password?: string) => {
 	const channels = hostChannels;
 	if (channels === undefined) {
-		throw new Error("主机通道还没准备好");
+		return { ok: false, code: "not_ready", message: "主机通道还没准备好" };
 	}
-	return await channels.open(event.sender, target);
+	const secret = password ?? sshPasswords.get(target);
+	try {
+		const opened = await channels.open(event.sender, target, secret);
+		if (password !== undefined && password.length > 0) {
+			sshPasswords.set(target, password);
+		}
+		return { ok: true, ...opened };
+	} catch (error) {
+		return {
+			ok: false,
+			code: error instanceof SshHostError ? error.code : "connect_failed",
+			message: error instanceof Error ? error.message : String(error),
+		};
+	}
 });
 
 ipcMain.on("facet:host-write", (_event, id: number, text: string) => {

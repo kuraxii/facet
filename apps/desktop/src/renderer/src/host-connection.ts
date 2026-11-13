@@ -18,15 +18,20 @@ export interface HostChannelBridge {
 	openHostChannel: (
 		target: string,
 		handlers: { onData: (chunk: string) => void; onClose: (reason: string) => void },
-	) => Promise<{
-		id: number;
-		token: string | undefined;
-		role: "operator" | "viewer" | undefined;
-		/** 连接从哪来：桌面主进程打开的通道，或浏览器页面 */
-		entry: ClientEntry;
-		write: (text: string) => void;
-		close: () => void;
-	}>;
+		password?: string,
+	) => Promise<
+		| {
+				ok: true;
+				id: number;
+				token: string | undefined;
+				role: "operator" | "viewer" | undefined;
+				/** 连接从哪来：桌面主进程打开的通道，或浏览器页面 */
+				entry: ClientEntry;
+				write: (text: string) => void;
+				close: () => void;
+		  }
+		| { ok: false; code: string; message: string }
+	>;
 }
 
 /**
@@ -38,21 +43,36 @@ export interface HostChannelBridge {
 export function cleanHostError(error: unknown): Error {
 	const text = error instanceof Error ? error.message : String(error);
 	const stripped = text.replace(/^Error invoking remote method '[^']*': (?:\w*Error: )?/, "");
-	return new Error(stripped);
+	const code = (error as { code?: unknown } | undefined)?.code;
+	// 分类码要跟着走：界面靠它分辨「要密码」与「连不上」
+	return Object.assign(new Error(stripped), typeof code === "string" ? { code } : {});
 }
 
 /** 建一个走主进程通道的传输。readTarget 每次重连都会重新读，切换主机后立即生效。 */
-export function makeTransport(bridge: HostChannelBridge, readTarget: () => string): StreamTransport {
+export function makeTransport(
+	bridge: HostChannelBridge,
+	readTarget: () => string,
+	/** 本次连接要用的 SSH 密码，用户刚在弹窗里填过才有 */
+	readPassword: () => string | undefined = () => undefined,
+): StreamTransport {
 	let dataListener: ((chunk: string) => void) | undefined;
 	let closeListener: ((reason: string) => void) | undefined;
 
 	const transport = new StreamTransport({
 		createStream: async () => {
 			const target = readTarget();
-			const channel = await bridge.openHostChannel(target, {
-				onData: (chunk) => dataListener?.(chunk),
-				onClose: (reason) => closeListener?.(reason),
-			});
+			const channel = await bridge.openHostChannel(
+				target,
+				{
+					onData: (chunk) => dataListener?.(chunk),
+					onClose: (reason) => closeListener?.(reason),
+				},
+				readPassword(),
+			);
+			if (!channel.ok) {
+				// 分类码在界面这一侧是普通字段，弹密码框靠它判断
+				throw Object.assign(new Error(channel.message), { code: channel.code });
+			}
 			// 令牌、权限档与入口由桥给出：桌面通道不声明档位即管理档，浏览器页面声明 web
 			transport.setToken(channel.token, channel.role, channel.entry);
 			return {

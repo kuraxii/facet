@@ -5,6 +5,7 @@
  * 用假连接跑一遍「读远端发现文件 → 打开 socket 通道」的流程。
  */
 import { createHmac } from "node:crypto";
+import type { ConnectConfig } from "ssh2";
 import { describe, expect, it } from "vitest";
 import {
 	isSshTarget,
@@ -15,7 +16,6 @@ import {
 	parseSshTarget,
 	remoteDiscoveryCommand,
 	type SshClientLike,
-	SshHostError,
 	SshHosts,
 	sshTargetLabel,
 	verifyHostKey,
@@ -139,20 +139,30 @@ Host *
 
 describe("SshHosts", () => {
 	/** 一条假的 SSH 连接：exec 返回给定文本，打开通道时记下参数。 */
-	function fakeClient(discovery: string, opened: { path?: string; tcp?: string }) {
-		return async (): Promise<SshClientLike> => ({
-			exec: async () => discovery,
-			openStreamLocal: async (path) => {
-				opened.path = path;
-				return emptyStream();
-			},
-			openTcp: async (host, port) => {
-				opened.tcp = `${host}:${port}`;
-				return emptyStream();
-			},
-			close: () => {},
-		});
+	function fakeClient(discovery: string, opened: { path?: string; tcp?: string; config?: ConnectConfig }) {
+		return async (config: ConnectConfig): Promise<SshClientLike> => {
+			opened.config = config;
+			return {
+				exec: async () => discovery,
+				openStreamLocal: async (path) => {
+					opened.path = path;
+					return emptyStream();
+				},
+				openTcp: async (host, port) => {
+					opened.tcp = `${host}:${port}`;
+					return emptyStream();
+				},
+				close: () => {},
+			};
+		};
 	}
+
+	const discovery = JSON.stringify({
+		schemaVersion: 2,
+		endpoint: { transport: "unix", path: "/home/u/.local/share/facet/host.sock" },
+		token: "远端令牌",
+		pid: 1,
+	});
 
 	const read = async (path: string): Promise<string | undefined> => {
 		if (path.endsWith(".ssh/config")) {
@@ -183,7 +193,6 @@ describe("SshHosts", () => {
 		const result = await hosts.open("ssh://dev@laptop");
 		expect(opened.path).toBe("/home/u/.local/share/facet/host.sock");
 		expect(result.token).toBe("远端令牌");
-		expect(result.role).toBe("operator");
 	});
 
 	it("远端只监听 TCP 时退回 direct-tcpip", async () => {
@@ -206,14 +215,60 @@ describe("SshHosts", () => {
 		expect(opened.tcp).toBe("127.0.0.1:4319");
 	});
 
-	it("没有 ssh-agent 也没有私钥时说明原因", async () => {
+	it("没有 ssh-agent 也没有私钥时要求输密码", async () => {
 		const hosts = new SshHosts({
 			home: "/home/u",
 			env: {},
 			readLocalFile: async (path) => (path.endsWith("config") ? undefined : undefined),
 			connect: fakeClient("{}", {}),
 		});
-		await expect(hosts.open("ssh://dev@laptop")).rejects.toBeInstanceOf(SshHostError);
+		await expect(hosts.open("ssh://dev@laptop")).rejects.toMatchObject({ code: "need_password" });
+	});
+
+	it("给了密码就按密码登录，不再读私钥", async () => {
+		const opened: { config?: ConnectConfig } = {};
+		const hosts = new SshHosts({
+			home: "/home/u",
+			env: {},
+			readLocalFile: async (path) => (path.endsWith("config") ? undefined : undefined),
+			connect: fakeClient(discovery, opened),
+		});
+		await hosts.open("ssh://root@10.1.10.152", "root");
+		expect(opened.config?.password).toBe("root");
+		// 有的服务器只开 keyboard-interactive，密码要能自动回上去
+		expect(opened.config?.tryKeyboard).toBe(true);
+		expect(opened.config?.privateKey).toBeUndefined();
+	});
+
+	it("密码被拒时还要求密码，并说明是密码不对", async () => {
+		const hosts = new SshHosts({
+			home: "/home/u",
+			env: {},
+			readLocalFile: async (path) => (path.endsWith("config") ? undefined : undefined),
+			connect: async () => {
+				throw Object.assign(new Error("All configured authentication methods failed"), {
+					level: "client-authentication",
+				});
+			},
+		});
+		await expect(hosts.open("ssh://root@10.1.10.152", "错的")).rejects.toMatchObject({
+			code: "need_password",
+			message: expect.stringContaining("密码不对"),
+		});
+	});
+
+	it("私钥被拒时也转成要密码", async () => {
+		const hosts = new SshHosts({
+			home: "/home/u",
+			env: { SSH_AUTH_SOCK: "/tmp/agent.sock" },
+			readLocalFile: read,
+			connect: async () => {
+				throw Object.assign(new Error("All configured authentication methods failed"), {
+					level: "client-authentication",
+				});
+			},
+		});
+		await expect(hosts.open("ssh://dev@laptop")).rejects.toMatchObject({ code: "need_password" });
 	});
 
 	it("读远端发现文件的命令按主机相同的规则取数据目录", () => {

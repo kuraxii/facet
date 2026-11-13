@@ -51,6 +51,7 @@ export function installWebBridge(): void {
 			};
 			socket.onclose = () => handlers.onClose("closed");
 			return {
+				ok: true as const,
 				id: 1,
 				token,
 				// Web 是远程端：按操作档申请，主机按 FACET_REMOTE_PERMISSION 收窄（缺省只读）

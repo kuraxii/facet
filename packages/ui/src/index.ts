@@ -47,6 +47,8 @@ export type {
 	SettingsSection,
 } from "./chat/SettingsPage.tsx";
 export { SettingsPage } from "./chat/SettingsPage.tsx";
+export type { SshPasswordDialogProps } from "./chat/SshPasswordDialog.tsx";
+export { SshPasswordDialog } from "./chat/SshPasswordDialog.tsx";
 export type { SidebarHeaderProps } from "./chat/sidebar-header.tsx";
 export { SidebarHeader } from "./chat/sidebar-header.tsx";
 export type {

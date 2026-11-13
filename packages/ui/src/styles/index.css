@@ -4125,6 +4125,21 @@ svg.fl {
 	margin-top: 22px;
 }
 
+/* 只问一项的对话框：收窄到输入框合适的宽度 */
+.dialog.is-narrow {
+	width: 380px;
+}
+
+.ssh-password-input {
+	width: 100%;
+}
+
+.ssh-password-error {
+	margin: 8px 0 0;
+	color: var(--err);
+	font-size: 13px;
+}
+
 .dialog-cancel {
 	height: 34px;
 	padding: 0 12px;

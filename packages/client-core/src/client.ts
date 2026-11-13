@@ -48,6 +48,8 @@ export interface HostHandshake {
 	readonly clientId: string;
 	/** 这条连接能做什么：本机管理档、远程操作档或远程只读档 */
 	readonly role: ClientRole;
+	/** 这条连接能不能改设置、凭证与项目清单 */
+	readonly canManage: boolean;
 	readonly capabilities: readonly Capability[];
 }
 

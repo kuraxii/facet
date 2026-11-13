@@ -1616,8 +1616,8 @@ export function App() {
 							runtime: `Electron ${bridge.platform}`,
 							endpoint,
 						}}
-						// 凭证、设置与项目清单由主机限定本机操作，非管理档连接只能看
-						canEdit={host?.role === "admin"}
+						// 浏览器入口改不了主机配置，桌面与 SSH 通道可以
+						canEdit={host?.canManage === true}
 					/>
 				) : null}
 

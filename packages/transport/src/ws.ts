@@ -9,6 +9,7 @@ import type {
 	Action,
 	ActionFrame,
 	Channel,
+	ClientEntry,
 	RequestMethod,
 	RequestParams,
 	RequestResults,
@@ -27,6 +28,8 @@ export interface WsTransportOptions {
 	token?: string;
 	/** 请求的权限档：远程端声明自己要用只读或操作档 */
 	role?: "operator" | "viewer";
+	/** 连接来源，缺省按 desktop 算 */
+	entry?: ClientEntry;
 	/** 自定义 socket 工厂，缺省用运行时自带的 WebSocket */
 	createSocket?: SocketFactory;
 	/** 握手超时，毫秒，缺省 10 秒 */
@@ -96,7 +99,7 @@ export class WsTransport implements Transport {
 			}, this.options.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS);
 
 			socket.onopen = () => {
-				this.core.markOpen(this.sendAsMessage, this.options.token, this.options.role);
+				this.core.markOpen(this.sendAsMessage, this.options.token, this.options.role, this.options.entry);
 			};
 			socket.onerror = () => {
 				if (!settled) {

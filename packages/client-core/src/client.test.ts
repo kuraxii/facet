@@ -236,6 +236,7 @@ const handshake: HostHandshake = {
 	hostName: "主机",
 	clientId: "c",
 	role: "admin",
+	canManage: true,
 	capabilities: ["dispatch"],
 };
 

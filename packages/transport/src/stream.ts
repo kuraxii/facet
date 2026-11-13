@@ -9,6 +9,7 @@ import type {
 	Action,
 	ActionFrame,
 	Channel,
+	ClientEntry,
 	RequestMethod,
 	RequestParams,
 	RequestResults,
@@ -26,6 +27,8 @@ export interface StreamTransportOptions {
 	token?: string;
 	/** 请求的权限档：远程端声明自己要用只读或操作档 */
 	role?: "operator" | "viewer";
+	/** 连接来源，缺省按 desktop 算 */
+	entry?: ClientEntry;
 	/** 握手超时，毫秒，缺省 10 秒 */
 	handshakeTimeoutMs?: number;
 }
@@ -51,10 +54,11 @@ export class StreamTransport implements Transport {
 		return this.core.handshake;
 	}
 
-	/** 换连接令牌与权限档，下一次 connect 生效。 */
-	setToken(token: string | undefined, role?: "operator" | "viewer"): void {
+	/** 换连接令牌、权限档与入口，下一次 connect 生效。 */
+	setToken(token: string | undefined, role?: "operator" | "viewer", entry?: ClientEntry): void {
 		this.options.token = token;
 		this.options.role = role;
+		this.options.entry = entry;
 	}
 
 	/** 建立连接并等待 hello。重复调用会先关掉上一条连接。 */
@@ -115,7 +119,12 @@ export class StreamTransport implements Transport {
 					}
 				}),
 			);
-			this.core.markOpen((text) => stream.write(text), this.options.token, this.options.role);
+			this.core.markOpen(
+				(text) => stream.write(text),
+				this.options.token,
+				this.options.role,
+				this.options.entry,
+			);
 		});
 	}
 

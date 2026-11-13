@@ -262,7 +262,7 @@ export function SettingsPage({
 
 					<div className="set-content">
 						{canEdit || section === "about" ? null : (
-							<p className="set-readonly">这条连接只能看，设置的修改要在主机本机进行。</p>
+							<p className="set-readonly">这条连接只能看，改设置请从桌面端连过来。</p>
 						)}
 						{section === "providers" ? (
 							<fieldset className="set-lock" disabled={!canEdit}>

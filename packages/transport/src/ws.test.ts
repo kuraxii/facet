@@ -27,6 +27,8 @@ async function startHarness(): Promise<Harness> {
 				hostId: "host-1",
 				hostName: "测试主机",
 				clientId: "client-1",
+				role: "admin",
+				canManage: true,
 				capabilities: ["dispatch", "approval"],
 			}),
 		);
@@ -104,6 +106,8 @@ describe("WsTransport", () => {
 			hostId: "host-1",
 			hostName: "测试主机",
 			clientId: "client-1",
+			role: "admin",
+			canManage: true,
 			capabilities: ["dispatch", "approval"],
 		});
 		expect(connection.state).toBe("ready");

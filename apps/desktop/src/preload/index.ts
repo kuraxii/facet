@@ -1,3 +1,4 @@
+import type { ClientEntry } from "@facet/protocol";
 import { contextBridge, ipcRenderer } from "electron";
 
 /** 从主进程传进来的启动参数,预加载脚本读命令行拿到后再交给界面 */
@@ -44,6 +45,7 @@ const api = {
 		id: number;
 		token: string | undefined;
 		role: "operator" | "viewer" | undefined;
+		entry: ClientEntry;
 		write: (text: string) => void;
 		close: () => void;
 	}> => {
@@ -72,6 +74,8 @@ const api = {
 			id,
 			token: opened.token,
 			role: opened.role,
+			// 桌面主进程开的通道，本机 socket 与 SSH 隧道都是这个入口
+			entry: "desktop",
 			write: (text: string) => ipcRenderer.send("facet:host-write", id, text),
 			close: () => {
 				ipcRenderer.send("facet:host-close", id);

@@ -1882,15 +1882,17 @@ svg.fl {
 	white-space: nowrap;
 }
 
-/* 运行中：标题文字上有一道扫光，结束后停住 */
+/* 运行中：文字上有一道扫光，结束后停住。过程组标题与工具行的短名、参数共用这一套 */
+.tr-name.is-live,
+.tr-arg.is-live,
 .group-label.is-live {
 	background-image: linear-gradient(
 		90deg,
-		var(--t3) 0%,
-		var(--t3) 35%,
+		var(--t2) 0%,
+		var(--t2) 35%,
 		var(--t1) 50%,
-		var(--t3) 65%,
-		var(--t3) 100%
+		var(--t2) 65%,
+		var(--t2) 100%
 	);
 	background-size: 220% 100%;
 	background-clip: text;
@@ -1910,6 +1912,8 @@ svg.fl {
 }
 
 @media (prefers-reduced-motion: reduce) {
+	.tr-name.is-live,
+	.tr-arg.is-live,
 	.group-label.is-live {
 		animation: none;
 		color: var(--t2);
@@ -1987,10 +1991,6 @@ svg.fl {
 	font-size: 12px;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-}
-
-.tr-dot {
-	margin-left: auto;
 }
 
 /* 状态只由颜色承担：失败红、被中止而未执行琥珀色，行尾不再附文字 */

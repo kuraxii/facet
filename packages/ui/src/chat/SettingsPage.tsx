@@ -317,7 +317,7 @@ function modelKey(model: ModelRef): string {
 /**
  * 模型设置。
  *
- * 一页里放三件事：新建会话的默认模型与思考档位、已配置的提供方（含凭证与地址）、可用模型的
+ * 一页里放三件事：新建会话采用的默认模型与思考档位、已配置的提供方（含凭证与地址）、可用模型的
  * 连通性测试。档位按所选模型是否支持思考来筛，不支持时只留「不思考」。
  */
 function ModelsSection({
@@ -433,7 +433,7 @@ function ModelsSection({
 	return (
 		<>
 			<h2 className="set-section-title">模型</h2>
-			<SettingsGroup label="新建会话的默认">
+			<SettingsGroup label="默认设置">
 				<SettingsRow title="默认模型" description="已有会话保持自己的选择">
 					<select
 						className="set-input"
@@ -498,7 +498,6 @@ function ModelsSection({
 			/>
 
 			<h3 className="set-group-title set-group-title-lg">可用模型</h3>
-			<p className="set-hint">发一次最小请求，看看这个模型现在能不能用。</p>
 			<ul className="set-list set-list-scroll">
 				{usable.map((model) => {
 					const key = modelKey(model);

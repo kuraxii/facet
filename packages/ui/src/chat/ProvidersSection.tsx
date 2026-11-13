@@ -166,10 +166,6 @@ export function ProvidersSection({
 	return (
 		<>
 			<h3 className="set-group-title set-group-title-lg">已配置的提供方</h3>
-			<p className="set-hint">
-				凭证保存在主机上，界面不回显密钥内容，也不进入日志。带「自定义」标记的提供方来自模型配置，
-				可以编辑地址、协议与模型清单。
-			</p>
 
 			<ul className="set-list">
 				{rows.map(({ provider, custom }) => {

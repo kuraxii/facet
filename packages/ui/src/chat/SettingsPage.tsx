@@ -15,6 +15,9 @@ import { SettingsGroup, SettingsRow } from "./settings-layout.tsx";
 /** 设置分类。 */
 export type SettingsSection = "providers" | "models" | "appearance" | "input" | "about";
 
+/** 自动保存的延迟：改动停下后等这么久再提交，连续调整只保存最后一次。 */
+const AUTO_SAVE_DELAY_MS = 1000;
+
 /** 分类顺序与标题。 */
 const SECTIONS: ReadonlyArray<{ key: SettingsSection; label: string }> = [
 	{ key: "providers", label: "提供方" },
@@ -167,23 +170,59 @@ export function SettingsPage({
 		setSaveError(undefined);
 	};
 
-	const save = async (next: FacetSettings): Promise<void> => {
-		setIsSaving(true);
-		setSaveError(undefined);
-		try {
-			const saved = await data.saveSettings(next);
-			setSettings(saved);
-			setDraft(saved);
-			onSettingsApplied?.(saved);
-		} catch (error) {
-			setSaveError(error instanceof Error ? error.message : String(error));
-		} finally {
-			setIsSaving(false);
-		}
-	};
+	const save = useCallback(
+		async (next: FacetSettings): Promise<void> => {
+			setIsSaving(true);
+			setSaveError(undefined);
+			try {
+				const saved = await data.saveSettings(next);
+				setSettings(saved);
+				// 提交期间又改过就保留新的草稿，下一次自动保存会把两处改动一起提交
+				setDraft((current) =>
+					current !== undefined && JSON.stringify(current) !== JSON.stringify(next) ? current : saved,
+				);
+				onSettingsApplied?.(saved);
+			} catch (error) {
+				setSaveError(error instanceof Error ? error.message : String(error));
+			} finally {
+				setIsSaving(false);
+			}
+		},
+		[data, onSettingsApplied],
+	);
 
 	const isDirty =
 		settings !== undefined && draft !== undefined && JSON.stringify(settings) !== JSON.stringify(draft);
+
+	/** 保存函数每次渲染都是新的，定时器只按草稿与脏标记重置，避免父组件重绘把等待时间一直推后 */
+	const saveRef = useRef(save);
+	saveRef.current = save;
+
+	// 草稿变化后延迟提交，一秒内继续改就重新计时
+	useEffect(() => {
+		if (!isDirty || draft === undefined) {
+			return;
+		}
+		const timer = setTimeout(() => {
+			void saveRef.current(draft);
+		}, AUTO_SAVE_DELAY_MS);
+		return () => {
+			clearTimeout(timer);
+		};
+	}, [draft, isDirty]);
+
+	// 关闭设置时还在等定时器的改动立刻提交，不让最后一秒的编辑丢掉
+	const pendingRef = useRef<FacetSettings | undefined>(undefined);
+	pendingRef.current = isDirty ? draft : undefined;
+	useEffect(
+		() => () => {
+			const pending = pendingRef.current;
+			if (pending !== undefined) {
+				void saveRef.current(pending).catch(() => undefined);
+			}
+		},
+		[],
+	);
 
 	return (
 		<div className="dialog-backdrop" role="presentation" onPointerDown={handleBackdropPointerDown}>
@@ -249,20 +288,8 @@ export function SettingsPage({
 												tone="error"
 											/>
 										)}
-										<div className="set-actions">
-											<button
-												type="button"
-												className="set-save"
-												disabled={!isDirty || isSaving}
-												onClick={() => void save(draft)}
-											>
-												{isSaving ? "保存中…" : "保存"}
-											</button>
-											{isDirty ? (
-												<button type="button" className="set-reset" onClick={() => setDraft(settings)}>
-													放弃改动
-												</button>
-											) : null}
+										<div className="set-auto" aria-live="polite">
+											{isSaving ? "保存中…" : isDirty ? "改动将在 1 秒后自动保存" : "已自动保存"}
 										</div>
 									</>
 								)}

@@ -1604,12 +1604,7 @@ export function App() {
 					<SettingsPage
 						section={settingsSection}
 						onSectionChange={setSettingsSection}
-						onClose={() => {
-							// 预览过但没保存的外观回到已保存的那份
-							applyAppearance(settings.appearance);
-							setTheme(resolveTheme(settings.appearance.theme));
-							setView("chat");
-						}}
+						onClose={() => setView("chat")}
 						data={settingsData}
 						onSettingsApplied={setSettings}
 						onAppearancePreview={(appearance) => {

@@ -20,9 +20,9 @@
 	--dur-slow: 180ms;
 	/* 代码字号乘数,由设置里的字号档位写入 */
 	--fs-code-scale: 1;
-	/* 自绘标题栏的高度与每个窗口按钮的宽度 */
-	--titlebar-height: 36px;
-	--titlebar-button-width: 46px;
+	/* 顶部拖动区的高度与每个窗口按钮的宽度 */
+	--chrome-height: 36px;
+	--window-button-width: 44px;
 	/* 过程组的缩进：竖线到行内容的距离，以及竖线本身相对正文列的位置
 	   （后者来自展开箭头字形在图标盒子里的内缩，改箭头图标时跟着调） */
 	--indent-rail-offset: 16px;
@@ -139,70 +139,59 @@ svg.fl {
 
 /* 外壳 */
 
-/* 应用外壳：自绘标题栏在上，内容区占满剩下的高度 */
+/* 应用外壳：没有标题栏，顶部一条透明拖动区，窗口按钮浮在右上角 */
 .app {
-	display: flex;
-	flex-direction: column;
+	position: relative;
 	height: 100%;
 	overflow: hidden;
 }
 
-/* 标题栏：整条是拖动区，按钮自己标 no-drag；双击空白处由 Chromium 处理成最大化切换 */
-.titlebar {
-	position: relative;
-	display: flex;
-	flex: none;
-	align-items: stretch;
-	height: var(--titlebar-height);
-	background: var(--sb);
-	-webkit-app-region: drag;
-}
-
-.titlebar-drag {
-	position: absolute;
-	inset: 0;
-}
-
-/* 顶上留 4px 不是拖动区：无边框窗口靠这一条交给窗口管理器做上边缘缩放 */
-.titlebar::before {
+.app-drag {
 	position: absolute;
 	top: 0;
 	right: 0;
 	left: 0;
-	height: 4px;
-	content: "";
+	z-index: 0;
+	height: var(--chrome-height);
+	-webkit-app-region: drag;
+}
+
+/* 窗口按钮：浮在拖动区之上，自己标 no-drag */
+.window-controls {
+	position: absolute;
+	top: 0;
+	right: 0;
+	z-index: 3;
 	-webkit-app-region: no-drag;
 }
 
-.titlebar-actions {
+.window-controls-group {
 	display: flex;
-	margin-left: auto;
-	-webkit-app-region: no-drag;
 }
 
-.titlebar-btn {
+.window-btn {
 	display: grid;
 	place-items: center;
-	width: var(--titlebar-button-width);
+	width: var(--window-button-width);
+	height: var(--chrome-height);
 	border: 0;
 	background: transparent;
 	color: var(--t3);
 }
 
-.titlebar-btn:hover {
+.window-btn:hover {
 	background: var(--surface2);
 	color: var(--t1);
 }
 
-.titlebar-btn.is-close:hover {
+.window-btn.is-close:hover {
 	background: var(--errbg);
 	color: var(--err);
 }
 
 .shell {
 	display: flex;
-	flex: 1;
-	min-height: 0;
+	height: 100%;
 	overflow: hidden;
 }
 /* 侧栏 */
@@ -221,10 +210,17 @@ svg.fl {
 }
 
 .sb-head {
+	position: relative;
+	z-index: 2;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
 	padding: 2px 0 8px 6px;
+	-webkit-app-region: drag;
+}
+
+.sb-tool {
+	-webkit-app-region: no-drag;
 }
 
 .sb-title {
@@ -819,6 +815,7 @@ svg.fl {
 	flex-direction: column;
 	min-width: 0;
 	min-height: 0;
+	padding-top: var(--chrome-height);
 }
 
 /* 右栏：文件与变更。左缘一条分隔条，拖动改宽度 */
@@ -828,6 +825,7 @@ svg.fl {
 	flex: none;
 	flex-direction: column;
 	min-width: 0;
+	padding-top: var(--chrome-height);
 	border-left: 1px solid var(--line);
 	background: var(--bg);
 }
@@ -858,9 +856,12 @@ svg.fl {
 }
 
 .panel-head {
+	position: relative;
+	z-index: 2;
 	display: flex;
 	flex: none;
 	align-items: center;
+	-webkit-app-region: no-drag;
 	justify-content: space-between;
 	gap: 8px;
 	height: 38px;
@@ -2517,6 +2518,7 @@ svg.fl {
 	justify-content: center;
 	gap: 8px;
 	min-height: 0;
+	padding-top: var(--chrome-height);
 }
 
 .boot h1 {

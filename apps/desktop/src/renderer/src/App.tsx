@@ -77,7 +77,7 @@ import {
 	useSyncExternalStore,
 } from "react";
 import { type HostChannelBridge, LOCAL_TARGET, makeTransport } from "./host-connection.ts";
-import { readWindowControls, TitleBar } from "./TitleBar.tsx";
+import { readWindowControls, WindowControls } from "./WindowControls.tsx";
 
 /** 预加载脚本注入的启动参数 */
 interface FacetBridge extends HostChannelBridge {
@@ -110,16 +110,21 @@ declare global {
 const bridge = window.facet;
 
 /**
- * 应用外壳：自绘标题栏加内容区。
+ * 应用外壳。
  *
- * 连接中与连不上的界面也要套上，否则无边框窗口连关闭按钮都没有。浏览器里没有窗口动作，
- * 整条栏不渲染。
+ * 没有专门的标题栏：顶部一条透明的拖动区，三个窗口按钮浮在右上角。连接中与连不上的界面也
+ * 套这一层，否则无边框窗口连关闭按钮都没有。浏览器里没有窗口动作，拖动区与按钮都不渲染。
  */
 function AppFrame({ children }: { children: ReactNode }): ReactNode {
 	const controls = readWindowControls(bridge);
 	return (
 		<div className="app">
-			{controls === undefined ? null : <TitleBar controls={controls} />}
+			{controls === undefined ? null : (
+				<>
+					<div className="app-drag" />
+					<WindowControls controls={controls} />
+				</>
+			)}
 			{children}
 		</div>
 	);

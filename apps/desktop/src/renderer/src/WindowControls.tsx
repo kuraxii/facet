@@ -1,9 +1,9 @@
 /**
- * 自绘标题栏。
+ * 窗口按钮。
  *
- * 系统标题栏已经去掉，窗口的最小化、最大化、关闭由这里发 IPC 给主进程。整条栏是拖动区，
- * 按钮自己标 `no-drag`；双击栏空白处由 Chromium 处理成最大化切换。浏览器里跑同一份界面时
- * 桥上没有这些方法，整条栏不渲染。
+ * 系统标题栏已经去掉，但不再另做一条标题栏：三个按钮浮在窗口右上角，拖动区由页面顶部那条
+ * 透明的 `.app-drag` 与侧栏头部承担。双击拖动区切换最大化由 Chromium 处理。浏览器里跑同一份
+ * 界面时桥上没有这些方法，这组按钮不渲染。
  */
 import { Copy, Minus, Square, X } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -35,19 +35,17 @@ export function readWindowControls(bridge: {
 	return { minimize, toggleMaximize, close, onWindowState };
 }
 
-export function TitleBar({ controls }: { controls: WindowControls }) {
+export function WindowControls({ controls }: { controls: WindowControls }) {
 	const [isMaximized, setIsMaximized] = useState(false);
 
 	useEffect(() => controls.onWindowState(setIsMaximized), [controls]);
 
 	return (
-		<header className="titlebar">
-			{/* 拖动区盖住整条栏，按钮压在它上面自己标 no-drag */}
-			<div className="titlebar-drag" />
-			<div className="titlebar-actions">
+		<header className="window-controls">
+			<div className="window-controls-group">
 				<button
 					type="button"
-					className="titlebar-btn"
+					className="window-btn"
 					aria-label="最小化"
 					title="最小化"
 					onClick={() => controls.minimize()}
@@ -56,7 +54,7 @@ export function TitleBar({ controls }: { controls: WindowControls }) {
 				</button>
 				<button
 					type="button"
-					className="titlebar-btn"
+					className="window-btn"
 					aria-label={isMaximized ? "还原" : "最大化"}
 					title={isMaximized ? "还原" : "最大化"}
 					onClick={() => controls.toggleMaximize()}
@@ -65,7 +63,7 @@ export function TitleBar({ controls }: { controls: WindowControls }) {
 				</button>
 				<button
 					type="button"
-					className="titlebar-btn is-close"
+					className="window-btn is-close"
 					aria-label="关闭"
 					title="关闭"
 					onClick={() => controls.close()}

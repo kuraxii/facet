@@ -1475,7 +1475,11 @@ export function App() {
 				panelWidth={panel.open ? `${panel.width}px` : "0px"}
 				chrome={
 					<>
-						<div className="chrome-slot is-sidebar">
+						<div
+							className={
+								isNarrow || !isSidebarOpen ? "chrome-slot is-sidebar" : "chrome-slot is-sidebar is-open"
+							}
+						>
 							{isNarrow || !isSidebarOpen ? null : (
 								<SidebarHeader
 									isSearchOpen={isSidebarSearchOpen}
@@ -1497,7 +1501,7 @@ export function App() {
 								<SidebarToggle isOpen={false} onToggle={toggleSidebar} />
 							)}
 						</div>
-						<div className={panel.open ? "chrome-slot is-panel" : "chrome-slot is-panel is-compact"}>
+						<div className={panel.open ? "chrome-slot is-panel is-open" : "chrome-slot is-panel is-compact"}>
 							<PanelToggle isOpen={panel.open} onToggle={() => updatePanel({ open: !panel.open })} />
 							{panel.open ? <PanelTabs tab={panel.tab} onTabChange={(tab) => updatePanel({ tab })} /> : null}
 							<span className="chrome-spacer" />

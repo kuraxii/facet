@@ -192,6 +192,12 @@ svg.fl {
 	overflow: hidden;
 }
 
+/* 展开时把正文那条分界线与底色续到顶带里，两边在同一个 x 上 */
+.chrome-slot.is-sidebar.is-open {
+	border-right: 1px solid var(--line);
+	background: var(--sb);
+}
+
 /* 主区那一格：占满剩下的宽度，左栏开关贴在它的左边 */
 .chrome-slot.is-main {
 	flex: 1;
@@ -205,6 +211,10 @@ svg.fl {
 	width: var(--panel-width);
 	padding-left: 4px;
 	-webkit-app-region: no-drag;
+}
+
+.chrome-slot.is-panel.is-open {
+	border-left: 1px solid var(--line);
 }
 
 .chrome-slot.is-panel.is-compact {

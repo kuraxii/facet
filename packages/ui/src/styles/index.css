@@ -9,6 +9,9 @@
 	/* 界面字体与代码字体，两者都随构建产物一起打进应用 */
 	--font-sans: Inter, "Noto Sans SC Variable", "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
 	--font-mono: "Maple Mono", "Maple Mono CN", ui-monospace, SFMono-Regular, Menlo, monospace;
+	/* 编辑器与终端的字体默认跟代码字体，各自可以在设置里单列 */
+	--font-editor: var(--font-mono);
+	--font-terminal: var(--font-mono);
 	/* 正文字号，由设置里的字号写入 */
 	--text-size: 13px;
 	/* 交互动效：极快反馈 120ms，展开折叠 180ms */
@@ -3011,6 +3014,84 @@ svg.fl {
 	padding: 12px 10px;
 	border-right: 1px solid var(--line);
 	background: var(--bg);
+}
+
+/* 设置分组：组标题在上，下面是卡片；卡片里一行一个设置，左文字右控件 */
+.set-group {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin: 0 0 22px;
+}
+
+.set-group-title {
+	margin: 0;
+	padding: 0 2px;
+	color: var(--t3);
+	font-size: 11.5px;
+	font-weight: 400;
+}
+
+.set-group-title-lg {
+	margin-top: 18px;
+}
+
+.set-card {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	padding: 14px 14px;
+	border: 1px solid var(--line2);
+	border-radius: 12px;
+	background: var(--card);
+}
+
+.set-item {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+}
+
+.set-item.is-stacked {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 10px;
+}
+
+.set-item-text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.set-item-title {
+	color: var(--t1);
+	font-size: 13px;
+}
+
+.set-item-desc {
+	color: var(--t3);
+	font-size: 11.5px;
+	line-height: 1.5;
+}
+
+.set-item-control {
+	display: flex;
+	flex: none;
+	align-items: center;
+	gap: 8px;
+}
+
+.set-item.is-stacked .set-item-control {
+	flex: 1;
+}
+
+.set-item-key {
+	color: var(--t2);
+	font-size: 12px;
+	white-space: nowrap;
 }
 
 .set-nav-item {

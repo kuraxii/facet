@@ -28,13 +28,13 @@ describe("设置读取", () => {
 		const saved = await store.save({
 			...store.get(),
 			defaultModel: { provider: "new api", id: "deepseek-v4-flash" },
-			appearance: { ...store.get().appearance, theme: "light", fontSize: 15 },
+			appearance: { ...store.get().appearance, theme: "light", uiFontSize: 15 },
 		});
 		expect(saved.appearance.theme).toBe("light");
 
 		const reopened = await SettingsStore.open({ file });
 		expect(reopened.get().defaultModel).toEqual({ provider: "new api", id: "deepseek-v4-flash" });
-		expect(reopened.get().appearance.fontSize).toBe(15);
+		expect(reopened.get().appearance.uiFontSize).toBe(15);
 	});
 
 	it("内容读不懂时留档并回到缺省值", async () => {
@@ -52,7 +52,7 @@ describe("设置读取", () => {
 				version: 1,
 				defaultModel: { provider: "p" },
 				hiddenModels: ["a/b", 3],
-				appearance: { theme: "紫色", fontSize: 999, reducedMotion: true },
+				appearance: { theme: "紫色", uiFontSize: 999, reducedMotion: true },
 				input: { sendKey: "??? " },
 				layout: { sidebarWidth: 10 },
 			}),
@@ -62,11 +62,22 @@ describe("设置读取", () => {
 		expect(settings.defaultModel).toBeUndefined();
 		expect(settings.hiddenModels).toEqual(["a/b"]);
 		expect(settings.appearance.theme).toBe(DEFAULT_SETTINGS.appearance.theme);
-		expect(settings.appearance.fontSize).toBe(20);
+		expect(settings.appearance.uiFontSize).toBe(20);
 		expect(settings.appearance.reducedMotion).toBe(true);
 		expect(settings.input.sendKey).toBe(DEFAULT_SETTINGS.input.sendKey);
 		expect(settings.layout.sidebarWidth).toBe(200);
 		expect(settings.appearance.codeTheme).toBe(DEFAULT_SETTINGS.appearance.codeTheme);
+	});
+
+	it("老版本写下的正文字体与字号迁移到界面字体与界面字号", async () => {
+		await writeFile(
+			file,
+			JSON.stringify({ version: 1, appearance: { bodyFont: "Noto Sans", fontSize: 15 } }),
+			"utf8",
+		);
+		const settings = (await SettingsStore.open({ file })).get();
+		expect(settings.appearance.uiFont).toBe("Noto Sans");
+		expect(settings.appearance.uiFontSize).toBe(15);
 	});
 
 	it("清单外的主题取值回落到缺省配色", async () => {

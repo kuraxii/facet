@@ -160,17 +160,23 @@ function applyAppearance(appearance: FacetSettings["appearance"]): void {
 	const root = document.documentElement;
 	root.dataset.theme = resolveUiTheme(appearance.theme, prefersLight());
 	root.dataset.motion = appearance.reducedMotion ? "reduced" : "full";
-	if (appearance.bodyFont.trim().length > 0) {
-		root.style.setProperty("--font-sans", appearance.bodyFont.trim());
-	} else {
-		root.style.removeProperty("--font-sans");
-	}
-	if (appearance.codeFont.trim().length > 0) {
-		root.style.setProperty("--font-mono", appearance.codeFont.trim());
-	} else {
-		root.style.removeProperty("--font-mono");
-	}
-	root.style.setProperty("--text-size", `${appearance.fontSize}px`);
+	// 空串表示用样式表里的缺省栈：这里把内联值去掉，`:root` 的默认值就生效；
+	// 编辑器与终端的字体在样式表里默认跟着代码字体走
+	const applyFont = (name: string, value: string): void => {
+		const trimmed = value.trim();
+		if (trimmed.length > 0) {
+			root.style.setProperty(name, trimmed);
+			return;
+		}
+		root.style.removeProperty(name);
+	};
+	applyFont("--font-sans", appearance.uiFont);
+	applyFont("--font-mono", appearance.codeFont);
+	applyFont("--font-editor", appearance.editorFont);
+	applyFont("--font-terminal", appearance.terminalFont);
+	root.style.setProperty("--text-size", `${appearance.uiFontSize}px`);
+	root.style.setProperty("--editor-size", `${appearance.editorFontSize}px`);
+	root.style.setProperty("--terminal-size", `${appearance.terminalFontSize}px`);
 	localStorage.setItem(THEME_KEY, appearance.theme);
 }
 
@@ -496,8 +502,8 @@ export function App() {
 		const styles = getComputedStyle(document.documentElement);
 		const read = (name: string, fallback: string): string => styles.getPropertyValue(name).trim() || fallback;
 		return {
-			fontFamily: read("--font-mono", "ui-monospace, monospace"),
-			fontSize: 12.5,
+			fontFamily: read("--font-terminal", "ui-monospace, monospace"),
+			fontSize: Number.parseFloat(read("--terminal-size", "12.5")),
 			lineHeight: 1.35,
 			cursorBlink: true,
 			scrollback: 5000,

@@ -101,11 +101,26 @@ export function parseSettings(value: unknown): FacetSettings {
 				CODE_THEMES,
 				DEFAULT_SETTINGS.appearance.codeTheme,
 			),
-			bodyFont: readString(appearance.bodyFont, DEFAULT_SETTINGS.appearance.bodyFont),
+			// 老版本把界面字体叫 bodyFont、界面字号叫 fontSize，读的时候兼容过来
+			uiFont: readString(appearance.uiFont ?? appearance.bodyFont, DEFAULT_SETTINGS.appearance.uiFont),
+			uiFontSize: readNumber(
+				appearance.uiFontSize ?? appearance.fontSize,
+				DEFAULT_SETTINGS.appearance.uiFontSize,
+				MIN_FONT_SIZE,
+				MAX_FONT_SIZE,
+			),
 			codeFont: readString(appearance.codeFont, DEFAULT_SETTINGS.appearance.codeFont),
-			fontSize: readNumber(
-				appearance.fontSize,
-				DEFAULT_SETTINGS.appearance.fontSize,
+			editorFont: readString(appearance.editorFont, DEFAULT_SETTINGS.appearance.editorFont),
+			editorFontSize: readNumber(
+				appearance.editorFontSize,
+				DEFAULT_SETTINGS.appearance.editorFontSize,
+				MIN_FONT_SIZE,
+				MAX_FONT_SIZE,
+			),
+			terminalFont: readString(appearance.terminalFont, DEFAULT_SETTINGS.appearance.terminalFont),
+			terminalFontSize: readNumber(
+				appearance.terminalFontSize,
+				DEFAULT_SETTINGS.appearance.terminalFontSize,
 				MIN_FONT_SIZE,
 				MAX_FONT_SIZE,
 			),

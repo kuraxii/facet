@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { CODE_THEME_OPTIONS, UI_THEME_OPTIONS } from "../theme.ts";
 import { ProvidersSection } from "./ProvidersSection.tsx";
 import type { SettingsDataSource } from "./settings-data-source.ts";
+import { SettingsGroup, SettingsRow } from "./settings-layout.tsx";
 
 /** 设置分类。 */
 export type SettingsSection = "providers" | "models" | "appearance" | "input" | "about";
@@ -367,59 +368,58 @@ function ModelsSection({
 	return (
 		<>
 			<h2 className="set-section-title">模型</h2>
-			<p className="set-hint">新建会话采用这里的默认模型与思考档位；已有会话保持自己的选择。</p>
-			<label className="set-field">
-				<span className="set-label">默认模型</span>
-				<select
-					className="set-input"
-					value={selected === undefined ? "" : modelKey(selected)}
-					onChange={(event) => {
-						const value = event.target.value;
-						const found = models.find((model) => modelKey(model) === value);
-						patch((current) => ({
-							...current,
-							defaultModel: found === undefined ? undefined : { provider: found.provider, id: found.id },
-						}));
-					}}
-					aria-label="默认模型"
-				>
-					<option value="">由主机决定</option>
-					{models.map((model) => (
-						<option key={modelKey(model)} value={modelKey(model)}>
-							{model.provider} / {model.name}
-						</option>
-					))}
-				</select>
-			</label>
-			<label className="set-field">
-				<span className="set-label">默认思考档位</span>
-				<select
-					className="set-input"
-					value={draft.defaultThinkingLevel ?? ""}
-					onChange={(event) => {
-						const value = event.target.value;
-						patch((current) => ({
-							...current,
-							...(value.length === 0
-								? { defaultThinkingLevel: undefined }
-								: { defaultThinkingLevel: value as ThinkingLevelValue }),
-						}));
-					}}
-					aria-label="默认思考档位"
-				>
-					<option value="">由模型决定</option>
-					{levelOptions.map((level) => (
-						<option key={level} value={level}>
-							{level}
-						</option>
-					))}
-				</select>
-			</label>
+			<SettingsGroup label="新建会话的默认">
+				<SettingsRow title="默认模型" description="已有会话保持自己的选择">
+					<select
+						className="set-input"
+						value={selected === undefined ? "" : modelKey(selected)}
+						onChange={(event) => {
+							const value = event.target.value;
+							const found = models.find((model) => modelKey(model) === value);
+							patch((current) => ({
+								...current,
+								defaultModel: found === undefined ? undefined : { provider: found.provider, id: found.id },
+							}));
+						}}
+						aria-label="默认模型"
+					>
+						<option value="">由主机决定</option>
+						{models.map((model) => (
+							<option key={modelKey(model)} value={modelKey(model)}>
+								{model.provider} / {model.name}
+							</option>
+						))}
+					</select>
+				</SettingsRow>
+				<SettingsRow title="默认思考档位" description="由模型决定时按模型支持的范围收边">
+					<select
+						className="set-input"
+						value={draft.defaultThinkingLevel ?? ""}
+						onChange={(event) => {
+							const value = event.target.value;
+							patch((current) => ({
+								...current,
+								...(value.length === 0
+									? { defaultThinkingLevel: undefined }
+									: { defaultThinkingLevel: value as ThinkingLevelValue }),
+							}));
+						}}
+						aria-label="默认思考档位"
+					>
+						<option value="">由模型决定</option>
+						{levelOptions.map((level) => (
+							<option key={level} value={level}>
+								{level}
+							</option>
+						))}
+					</select>
+				</SettingsRow>
+			</SettingsGroup>
 			{selectedModel !== undefined && !selectedModel.reasoning ? (
 				<p className="set-hint">这个模型不支持思考，档位只保留「off」。</p>
 			) : null}
 
-			<h3 className="set-section-subtitle">模型可见性</h3>
+			<h3 className="set-group-title set-group-title-lg">模型可见性</h3>
 			<p className="set-hint">隐藏的模型不出现在模型选择器里，已经用着它的会话不受影响。</p>
 			<ul className="set-list set-list-scroll">
 				{models.map((model) => {
@@ -487,109 +487,140 @@ function AppearanceSection({
 }) {
 	const appearance = draft.appearance;
 	// 外观改动立刻作用到界面上，关掉设置页而不保存时由宿主恢复
-	const patchAppearance = (next: FacetSettings["appearance"]): void => {
+	const patchAppearance = (change: Partial<FacetSettings["appearance"]>): void => {
+		const next = { ...appearance, ...change };
 		patch((current) => ({ ...current, appearance: next }));
 		onPreview?.(next);
 	};
+	/** 字号输入的公共写法：留空或越界时保持原值。 */
+	const sizeInput = (value: number, name: keyof FacetSettings["appearance"]): React.JSX.Element => (
+		<input
+			className="set-input is-number mono"
+			type="number"
+			min={11}
+			max={20}
+			value={value}
+			onChange={(event) => {
+				const next = Number(event.target.value);
+				if (Number.isFinite(next)) {
+					patchAppearance({ [name]: next } as Partial<FacetSettings["appearance"]>);
+				}
+			}}
+			aria-label={String(name)}
+		/>
+	);
+
 	return (
 		<>
 			<h2 className="set-section-title">外观</h2>
-			<fieldset className="set-field">
-				<legend className="set-label">主题</legend>
-				<div className="set-swatches">
-					{UI_THEME_OPTIONS.map((option) => (
+			<SettingsGroup label="通用">
+				<SettingsRow title="主题" description="六套深色与一套浅色，也可以跟随系统" isStacked>
+					<div className="set-swatches">
+						{UI_THEME_OPTIONS.map((option) => (
+							<button
+								key={option.id}
+								type="button"
+								className={appearance.theme === option.id ? "set-swatch is-active" : "set-swatch"}
+								title={option.label}
+								aria-label={option.label}
+								aria-pressed={appearance.theme === option.id}
+								onClick={() => patchAppearance({ theme: option.id })}
+							>
+								<i className="set-swatch-chip" style={{ background: option.swatch }} />
+								<span className="set-swatch-name">{option.label}</span>
+							</button>
+						))}
 						<button
-							key={option.id}
 							type="button"
-							className={appearance.theme === option.id ? "set-swatch is-active" : "set-swatch"}
-							title={option.label}
-							aria-label={option.label}
-							aria-pressed={appearance.theme === option.id}
-							onClick={() => patchAppearance({ ...appearance, theme: option.id })}
+							className={appearance.theme === "system" ? "set-swatch is-active" : "set-swatch"}
+							title="跟随系统"
+							aria-label="跟随系统"
+							aria-pressed={appearance.theme === "system"}
+							onClick={() => patchAppearance({ theme: "system" })}
 						>
-							<i className="set-swatch-chip" style={{ background: option.swatch }} />
-							<span className="set-swatch-name">{option.label}</span>
+							<i className="set-swatch-chip is-system" />
+							<span className="set-swatch-name">跟随系统</span>
 						</button>
-					))}
-					<button
-						type="button"
-						className={appearance.theme === "system" ? "set-swatch is-active" : "set-swatch"}
-						title="跟随系统"
-						aria-label="跟随系统"
-						aria-pressed={appearance.theme === "system"}
-						onClick={() => patchAppearance({ ...appearance, theme: "system" })}
+					</div>
+				</SettingsRow>
+				<SettingsRow title="减少动效" description="关掉过渡与动画">
+					<input
+						type="checkbox"
+						checked={appearance.reducedMotion}
+						onChange={(event) => patchAppearance({ reducedMotion: event.target.checked })}
+						aria-label="减少动效"
+					/>
+				</SettingsRow>
+			</SettingsGroup>
+
+			<SettingsGroup label="字体">
+				<SettingsRow title="界面字体" description="侧栏、弹窗、控件与聊天正文，留空用 Inter">
+					<input
+						className="set-input"
+						value={appearance.uiFont}
+						onChange={(event) => patchAppearance({ uiFont: event.target.value })}
+						placeholder="Inter"
+						aria-label="界面字体"
+					/>
+				</SettingsRow>
+				<SettingsRow title="界面字号" description="聊天正文的字号，单位 px">
+					{sizeInput(appearance.uiFontSize, "uiFontSize")}
+				</SettingsRow>
+				<SettingsRow title="代码字体" description="聊天里的代码块与补丁，留空用 Maple Mono">
+					<input
+						className="set-input"
+						value={appearance.codeFont}
+						onChange={(event) => patchAppearance({ codeFont: event.target.value })}
+						placeholder="Maple Mono"
+						aria-label="代码字体"
+					/>
+				</SettingsRow>
+				<SettingsRow title="编辑器字体" description="右栏打开文件时用，留空跟代码字体">
+					<input
+						className="set-input"
+						value={appearance.editorFont}
+						onChange={(event) => patchAppearance({ editorFont: event.target.value })}
+						placeholder="跟代码字体"
+						aria-label="编辑器字体"
+					/>
+				</SettingsRow>
+				<SettingsRow title="编辑器字号" description="单位 px，重新打开文件后生效">
+					{sizeInput(appearance.editorFontSize, "editorFontSize")}
+				</SettingsRow>
+				<SettingsRow title="终端字体" description="底部终端用，留空跟代码字体">
+					<input
+						className="set-input"
+						value={appearance.terminalFont}
+						onChange={(event) => patchAppearance({ terminalFont: event.target.value })}
+						placeholder="跟代码字体"
+						aria-label="终端字体"
+					/>
+				</SettingsRow>
+				<SettingsRow title="终端字号" description="单位 px，新开的终端生效">
+					{sizeInput(appearance.terminalFontSize, "terminalFontSize")}
+				</SettingsRow>
+			</SettingsGroup>
+
+			<SettingsGroup label="代码配色">
+				<SettingsRow title="代码配色" description="代码块、补丁与编辑器的高亮">
+					<select
+						className="set-input"
+						value={appearance.codeTheme}
+						onChange={(event) =>
+							patchAppearance({
+								codeTheme: event.target.value as FacetSettings["appearance"]["codeTheme"],
+							})
+						}
+						aria-label="代码配色"
 					>
-						<i className="set-swatch-chip is-system" />
-						<span className="set-swatch-name">跟随系统</span>
-					</button>
-				</div>
-			</fieldset>
-			<label className="set-field">
-				<span className="set-label">代码配色</span>
-				<select
-					className="set-input"
-					value={appearance.codeTheme}
-					onChange={(event) =>
-						patchAppearance({
-							...appearance,
-							codeTheme: event.target.value as FacetSettings["appearance"]["codeTheme"],
-						})
-					}
-					aria-label="代码配色"
-				>
-					{CODE_THEME_OPTIONS.map((option) => (
-						<option key={option.id} value={option.id}>
-							{option.label}
-						</option>
-					))}
-				</select>
-			</label>
-			<label className="set-field">
-				<span className="set-label">正文字体</span>
-				<input
-					className="set-input"
-					value={appearance.bodyFont}
-					onChange={(event) => patchAppearance({ ...appearance, bodyFont: event.target.value })}
-					placeholder="留空使用 Inter"
-					aria-label="正文字体"
-				/>
-			</label>
-			<label className="set-field">
-				<span className="set-label">代码字体</span>
-				<input
-					className="set-input"
-					value={appearance.codeFont}
-					onChange={(event) => patchAppearance({ ...appearance, codeFont: event.target.value })}
-					placeholder="留空使用 Maple Mono"
-					aria-label="代码字体"
-				/>
-			</label>
-			<label className="set-field">
-				<span className="set-label">正文字号</span>
-				<input
-					className="set-input mono"
-					type="number"
-					min={11}
-					max={20}
-					value={appearance.fontSize}
-					onChange={(event) => {
-						const value = Number(event.target.value);
-						patchAppearance({
-							...appearance,
-							fontSize: Number.isFinite(value) ? value : appearance.fontSize,
-						});
-					}}
-					aria-label="正文字号"
-				/>
-			</label>
-			<label className="set-check">
-				<input
-					type="checkbox"
-					checked={appearance.reducedMotion}
-					onChange={(event) => patchAppearance({ ...appearance, reducedMotion: event.target.checked })}
-				/>
-				<span>减少动效</span>
-			</label>
+						{CODE_THEME_OPTIONS.map((option) => (
+							<option key={option.id} value={option.id}>
+								{option.label}
+							</option>
+						))}
+					</select>
+				</SettingsRow>
+			</SettingsGroup>
 		</>
 	);
 }
@@ -605,39 +636,37 @@ function InputSection({
 	return (
 		<>
 			<h2 className="set-section-title">输入</h2>
-			<label className="set-field">
-				<span className="set-label">发送键位</span>
-				<select
-					className="set-input"
-					value={draft.input.sendKey}
-					onChange={(event) =>
-						patch((current) => ({
-							...current,
-							input: { ...current.input, sendKey: event.target.value as FacetSettings["input"]["sendKey"] },
-						}))
-					}
-					aria-label="发送键位"
-				>
-					<option value="enter">回车发送,Shift+回车换行</option>
-					<option value="shiftEnter">Shift+回车发送,回车换行</option>
-				</select>
-			</label>
+			<SettingsGroup label="发送">
+				<SettingsRow title="发送键位" description="回车与 Shift+回车各管一件事">
+					<select
+						className="set-input"
+						value={draft.input.sendKey}
+						onChange={(event) =>
+							patch((current) => ({
+								...current,
+								input: { ...current.input, sendKey: event.target.value as FacetSettings["input"]["sendKey"] },
+							}))
+						}
+						aria-label="发送键位"
+					>
+						<option value="enter">回车发送</option>
+						<option value="shiftEnter">Shift+回车发送</option>
+					</select>
+				</SettingsRow>
+			</SettingsGroup>
 
-			<h3 className="set-section-subtitle">快捷键</h3>
-			<ul className="set-list">
+			<SettingsGroup label="快捷键">
 				{SHORTCUTS.map((item) => (
-					<li key={item.keys} className="set-row">
-						<span className="set-row-name">{item.action}</span>
-						<span className="set-row-meta mono">{item.keys}</span>
-					</li>
+					<SettingsRow key={item.keys} title={item.action}>
+						<span className="set-item-key mono">{item.keys}</span>
+					</SettingsRow>
 				))}
-				<li className="set-row">
-					<span className="set-row-name">发送消息</span>
-					<span className="set-row-meta mono">
+				<SettingsRow title="发送消息">
+					<span className="set-item-key mono">
 						{draft.input.sendKey === "shiftEnter" ? "Shift+Enter" : "Enter"}
 					</span>
-				</li>
-			</ul>
+				</SettingsRow>
+			</SettingsGroup>
 		</>
 	);
 }

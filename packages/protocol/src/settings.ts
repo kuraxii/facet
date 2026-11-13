@@ -44,12 +44,20 @@ export interface AppearanceSettings {
 	theme: ThemeMode;
 	/** 代码块与差异视图的高亮配色 */
 	codeTheme: CodeTheme;
-	/** 正文字体，空串表示用界面默认字体 */
-	bodyFont: string;
-	/** 代码字体，空串表示用界面默认等宽字体 */
+	/** 界面字体：侧栏、弹窗、控件与聊天正文，空串表示用内置的 Inter 栈 */
+	uiFont: string;
+	/** 界面字号，单位 px */
+	uiFontSize: number;
+	/** 聊天里代码块与补丁用的等宽字体，空串表示用内置的 Maple Mono */
 	codeFont: string;
-	/** 正文字号，单位 px */
-	fontSize: number;
+	/** 编辑器字体，空串表示跟代码字体 */
+	editorFont: string;
+	/** 编辑器字号，单位 px */
+	editorFontSize: number;
+	/** 终端字体，空串表示跟代码字体 */
+	terminalFont: string;
+	/** 终端字号，单位 px */
+	terminalFontSize: number;
 	/** 是否减少动效，开启后界面不做过渡与动画 */
 	reducedMotion: boolean;
 }
@@ -91,9 +99,13 @@ export const DEFAULT_SETTINGS: FacetSettings = {
 	appearance: {
 		theme: "zinc",
 		codeTheme: "github",
-		bodyFont: "",
+		uiFont: "",
+		uiFontSize: 13,
 		codeFont: "",
-		fontSize: 13,
+		editorFont: "",
+		editorFontSize: 13,
+		terminalFont: "",
+		terminalFontSize: 12.5,
 		reducedMotion: false,
 	},
 	input: { sendKey: "enter" },

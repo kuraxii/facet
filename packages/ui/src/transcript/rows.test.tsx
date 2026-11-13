@@ -81,7 +81,7 @@ describe("用户消息的回退入口", () => {
 });
 
 describe("被中止的一轮", () => {
-	it("没执行到的工具调用标成未执行", () => {
+	it("没执行到的工具调用把短名染成告警色", () => {
 		const aborted: TranscriptItem = {
 			kind: "message",
 			id: "e:a1",
@@ -108,7 +108,6 @@ describe("被中止的一轮", () => {
 		};
 		const html = render([userItem("e:u1", "u1", "看看文件"), aborted], false);
 		expect(html).toContain("is-skipped");
-		expect(html).toContain("未执行");
 		expect(html).toContain("已停止");
 	});
 });

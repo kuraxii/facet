@@ -1989,19 +1989,17 @@ svg.fl {
 	white-space: nowrap;
 }
 
-.tr-status {
-	flex: none;
-	margin-left: auto;
-	color: var(--t3);
-	font-size: 11.5px;
-}
-
 .tr-dot {
 	margin-left: auto;
 }
 
+/* 状态只由颜色承担：失败红、被中止而未执行琥珀色，行尾不再附文字 */
 .tr.is-failed .tr-name {
 	color: var(--err);
+}
+
+.tr.is-skipped .tr-name {
+	color: var(--warn);
 }
 
 /* 输出：没有边框与底色，直接缩进在行下面 */

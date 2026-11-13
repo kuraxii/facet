@@ -179,7 +179,6 @@ function ToolRow({ part }: { part: ToolCallPart }) {
 				<span className="tr-icon">{categoryIcon(kind.category)}</span>
 				<span className="tr-name">{kind.label}</span>
 				{target.length > 0 ? <span className="tr-arg">{target}</span> : null}
-				{part.status === "skipped" ? <span className="tr-status">未执行</span> : null}
 				{part.status === "running" ? <i className="dot is-warn pulse tr-dot" /> : null}
 			</button>
 			{isOpen && output.length > 0 ? (

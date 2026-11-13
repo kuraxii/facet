@@ -74,7 +74,7 @@ describe("分行", () => {
 		]);
 		// 过程行、答复行、收尾行：时长落在收尾行上
 		expect(rows.at(-1)?.durationMs).toBe(800);
-		expect(turnDurationText(rows.at(-1) as (typeof rows)[number])).toBe("800 毫秒");
+		expect(turnDurationText(rows.at(-1) as (typeof rows)[number])).toBe("工作了 0s");
 	});
 
 	it("没有答复时按已见到的最后时间算", () => {
@@ -292,7 +292,7 @@ describe("工作时长", () => {
 		]);
 		const meta = rows.at(-1) as (typeof rows)[number];
 		expect(meta.startedAt).toBe(1_000);
-		expect(turnDurationText(meta, 4_500)).toBe("3.5 秒");
+		expect(turnDurationText(meta, 4_500)).toBe("工作了 3s");
 	});
 
 	it("结束后用主机记录的起止时间,不再随时间走", () => {
@@ -303,6 +303,6 @@ describe("工作时长", () => {
 		]);
 		const meta = rows.at(-1) as (typeof rows)[number];
 		expect(meta.durationMs).toBe(3_000);
-		expect(turnDurationText(meta, 99_000)).toBe("3.0 秒");
+		expect(turnDurationText(meta, 99_000)).toBe("工作了 3s");
 	});
 });

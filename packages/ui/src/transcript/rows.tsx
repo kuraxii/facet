@@ -430,26 +430,28 @@ export function ChatTranscript({
 					if (fork === undefined) {
 						return null;
 					}
-					// 复制在分叉左边：两者一起收在这一轮的收尾处，悬停这一行时显形
+					// 收在这一轮的末尾：复制、分叉，右边是这一轮工作了多久；悬停才显形
 					return (
 						<Shell key={row.id} className="is-fork">
-							<div className="turn-actions">
+							<div className="turn-foot">
+								<div className="turn-actions">
+									{onCopyText === undefined || lastAnswerText.length === 0 || row.isStreaming ? null : (
+										<CopyButton text={lastAnswerText} onCopy={onCopyText} />
+									)}
+									<button
+										type="button"
+										className="fork-btn"
+										aria-label="从这一轮往后继续"
+										title="从这一轮往后继续"
+										disabled={fork.needsSettle && !canFork}
+										onClick={() => onFork(fork.beforeEntryId)}
+									>
+										<Split size={14} strokeWidth={1.5} />
+									</button>
+								</div>
 								{turnDurationText(row, now).length === 0 ? null : (
 									<span className="turn-time">{turnDurationText(row, now)}</span>
 								)}
-								{onCopyText === undefined || lastAnswerText.length === 0 || row.isStreaming ? null : (
-									<CopyButton text={lastAnswerText} onCopy={onCopyText} />
-								)}
-								<button
-									type="button"
-									className="fork-btn"
-									aria-label="从这一轮往后继续"
-									title="从这一轮往后继续"
-									disabled={fork.needsSettle && !canFork}
-									onClick={() => onFork(fork.beforeEntryId)}
-								>
-									<Split size={14} strokeWidth={1.5} />
-								</button>
 							</div>
 						</Shell>
 					);

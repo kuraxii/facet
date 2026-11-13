@@ -1576,7 +1576,13 @@ svg.fl {
 	margin-top: -6px;
 }
 
-/* 一轮收尾处的动作：复制在左，分叉在右 */
+/* 一轮收尾：复制、分叉，右边是这一轮工作了多久 */
+.turn-foot {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
 .turn-actions {
 	display: flex;
 	align-items: center;
@@ -1893,7 +1899,7 @@ svg.fl {
 
 .turn-time {
 	color: var(--t3);
-	font-size: 12px;
+	font-size: 12.5px;
 }
 
 /* 文件改动 */

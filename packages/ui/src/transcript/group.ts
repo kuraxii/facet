@@ -469,29 +469,35 @@ export function groupLabel(row: DisplayRow): string {
 }
 
 /**
- * 这一轮用了多久。
+ * 这一轮的工作时长，例如「工作了 3m 16s」。
  *
  * 回合结束后用主机记录的起止时间；还在跑的时候由界面自己计时，调用方每秒传一次当前时间。
  */
 export function turnDurationText(row: DisplayRow, now?: number): string {
-	if (row.durationMs !== undefined) {
-		return formatDuration(row.durationMs);
-	}
-	if (row.startedAt === undefined || now === undefined) {
-		return "";
-	}
-	return formatDuration(Math.max(0, now - row.startedAt));
+	const text =
+		row.durationMs !== undefined
+			? formatDuration(row.durationMs)
+			: row.startedAt === undefined || now === undefined
+				? ""
+				: formatDuration(Math.max(0, now - row.startedAt));
+	return text.length === 0 ? "" : `工作了 ${text}`;
 }
 
-/** 毫秒转成便于阅读的时长。 */
+/** 毫秒转成 paseo 那种短写法：7s、3m 16s、1h 5m。 */
 export function formatDuration(ms: number): string {
-	if (ms < 1000) {
-		return `${Math.round(ms)} 毫秒`;
+	if (!Number.isFinite(ms) || ms < 0) {
+		return "0s";
 	}
-	if (ms < 60_000) {
-		return `${(ms / 1000).toFixed(1)} 秒`;
+	const totalSeconds = ms / 1000;
+	if (totalSeconds < 60) {
+		return `${Math.floor(totalSeconds)}s`;
 	}
-	const minutes = Math.floor(ms / 60_000);
-	const seconds = Math.round((ms % 60_000) / 1000);
-	return seconds === 0 ? `${minutes} 分` : `${minutes} 分 ${seconds} 秒`;
+	const totalMinutes = Math.floor(totalSeconds / 60);
+	if (totalMinutes < 60) {
+		const seconds = Math.floor(totalSeconds) % 60;
+		return seconds === 0 ? `${totalMinutes}m` : `${totalMinutes}m ${seconds}s`;
+	}
+	const hours = Math.floor(totalMinutes / 60);
+	const restMinutes = totalMinutes % 60;
+	return restMinutes === 0 ? `${hours}h` : `${hours}h ${restMinutes}m`;
 }

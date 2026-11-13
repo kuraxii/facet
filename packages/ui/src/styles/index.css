@@ -253,7 +253,7 @@ svg.fl {
 	-webkit-app-region: no-drag;
 }
 
-.chrome-toggle[aria-pressed="true"] {
+.chrome-toggle[aria-expanded="true"] {
 	color: var(--t2);
 }
 
@@ -348,10 +348,6 @@ svg.fl {
 	-webkit-app-region: drag;
 }
 
-.sb-tool {
-	-webkit-app-region: no-drag;
-}
-
 .sb-title {
 	font-size: 14px;
 	font-weight: 600;
@@ -369,7 +365,6 @@ svg.fl {
 	gap: 2px;
 }
 
-.sb-tool,
 .sb-foot-btn.is-icon {
 	display: grid;
 	place-items: center;
@@ -385,14 +380,8 @@ svg.fl {
 		color var(--dur-fast) var(--ease);
 }
 
-.sb-tool:hover,
 .sb-foot-btn.is-icon:hover {
 	background: var(--surface2);
-	color: var(--t1);
-}
-
-.sb-tool[aria-pressed="true"] {
-	background: var(--surface3);
 	color: var(--t1);
 }
 

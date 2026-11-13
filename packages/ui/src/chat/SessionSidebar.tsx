@@ -52,7 +52,7 @@ export interface SessionSidebarProps {
 	onAddProject: () => void;
 	/** 头部是否画在自己身上；窄屏抽屉里要自己带一份，宽屏时头部在外壳顶带里 */
 	showHeader?: boolean;
-	/** 会话搜索浮窗是否展开，头部按它标 aria-pressed */
+	/** 会话搜索浮窗是否展开，头部按它标 aria-expanded */
 	isSearchOpen?: boolean;
 	/** 打开会话搜索浮窗；窄屏抽屉里点搜索会顺手收起抽屉 */
 	onOpenSearch?: (() => void) | undefined;

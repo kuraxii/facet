@@ -29,18 +29,25 @@ export function SidebarHeader({
 			<span className="sb-tools">
 				<button
 					type="button"
-					className="sb-tool"
+					className="chrome-toggle"
 					aria-label="搜索会话"
-					aria-pressed={isSearchOpen}
+					aria-expanded={isSearchOpen}
 					onClick={onToggleSearch}
 				>
 					<Search size={15} strokeWidth={1.5} />
 				</button>
-				<button type="button" className="sb-tool" aria-label="添加项目" onClick={onAddProject}>
+				<button type="button" className="chrome-toggle" aria-label="添加项目" onClick={onAddProject}>
 					<FolderPlus size={15} strokeWidth={1.5} />
 				</button>
 				{onCollapse === undefined ? null : (
-					<button type="button" className="sb-tool" aria-label="收起侧栏" onClick={onCollapse}>
+					<button
+						type="button"
+						className="chrome-toggle"
+						aria-label="收起左侧栏"
+						title="收起左侧栏"
+						aria-expanded={true}
+						onClick={onCollapse}
+					>
 						<PanelLeft size={15} strokeWidth={1.5} />
 					</button>
 				)}

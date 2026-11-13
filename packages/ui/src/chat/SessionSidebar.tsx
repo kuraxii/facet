@@ -77,8 +77,6 @@ export interface SessionSidebarProps {
 	isPanelOpen?: boolean;
 	/** 页脚的主机切换入口，由宿主给出 */
 	hostSwitcher?: ReactNode;
-	/** 当前主机名，显示在页脚右侧 */
-	hostName?: string;
 	/** 连接状态提示，例如「重连中」或「只读」 */
 	hostStatus?: string;
 	/** 窄屏时侧栏是抽屉，展开状态由这个开关控制 */
@@ -140,7 +138,6 @@ export function SessionSidebar({
 	onToggleTerminal,
 	isPanelOpen = false,
 	hostSwitcher,
-	hostName,
 	hostStatus,
 	isOpen = true,
 	onNavigate,
@@ -818,6 +815,16 @@ export function SessionSidebar({
 				{hostSwitcher}
 				<button
 					type="button"
+					className="sb-foot-btn is-icon"
+					aria-label={theme === "dark" ? "切换到浅色主题" : "切换到深色主题"}
+					title={theme === "dark" ? "切换到浅色主题" : "切换到深色主题"}
+					onClick={onToggleTheme}
+				>
+					{theme === "dark" ? <SunIcon size={14} /> : <MoonIcon size={14} />}
+				</button>
+				{hostStatus === undefined ? null : <span className="sb-foot-status">{hostStatus}</span>}
+				<button
+					type="button"
 					className={isSettingsOpen ? "sb-foot-btn is-icon is-on" : "sb-foot-btn is-icon"}
 					aria-label="设置"
 					title="设置"
@@ -826,19 +833,6 @@ export function SessionSidebar({
 				>
 					<Settings size={14} strokeWidth={1.5} />
 				</button>
-				<button
-					type="button"
-					className="sb-foot-btn is-icon"
-					aria-label={theme === "dark" ? "切换到浅色主题" : "切换到深色主题"}
-					title={theme === "dark" ? "切换到浅色主题" : "切换到深色主题"}
-					onClick={onToggleTheme}
-				>
-					{theme === "dark" ? <SunIcon size={14} /> : <MoonIcon size={14} />}
-				</button>
-				<span className="sb-foot-hint">
-					{hostName ?? "本机"}
-					{hostStatus === undefined ? null : <span className="sb-foot-status">{hostStatus}</span>}
-				</span>
 			</footer>
 		</aside>
 	);

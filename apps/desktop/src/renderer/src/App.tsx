@@ -1276,7 +1276,6 @@ export function App() {
 					isPanelOpen={panel.open}
 					onToggleTerminal={toggleTerminal}
 					isTerminalOpen={dock.open}
-					hostName={host?.hostName}
 					hostStatus={isReconnecting ? "重连中" : host?.role === "viewer" ? "只读" : undefined}
 					isOpen={isSidebarOpen}
 					onNavigate={() => setIsSidebarOpen(false)}

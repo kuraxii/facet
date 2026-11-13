@@ -674,15 +674,15 @@ svg.fl {
 	cursor: default;
 }
 
+/* 页脚右端：连接状态提示贴着设置按钮，靠一个占位把这一组推到右边 */
 .sb-foot-status {
-	margin-left: 6px;
+	margin-left: auto;
 	color: var(--t3);
 	font-size: 10.5px;
 }
 
-.sb-foot-hint {
+.sb-foot > .sb-foot-btn.is-icon:last-child {
 	margin-left: auto;
-	font-variant-numeric: tabular-nums;
 }
 
 .kbd {

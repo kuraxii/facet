@@ -322,6 +322,11 @@ svg.fl {
 	transition: background-color var(--dur-fast) var(--ease);
 }
 
+/* 宽屏收起左栏 */
+.shell.is-sb-hidden .sb {
+	display: none;
+}
+
 /* 拖宽用的命中区，和右栏那条对称 */
 .sb-resizer {
 	position: absolute;
@@ -364,11 +369,6 @@ svg.fl {
 	font-size: 14px;
 	font-weight: 600;
 	letter-spacing: 0.2px;
-}
-
-/* 宽屏收起左栏 */
-.shell.is-sb-hidden .sb {
-	display: none;
 }
 
 .sb-tools {
@@ -2880,6 +2880,7 @@ svg.fl {
 	left: 0;
 	z-index: 2;
 	display: flex;
+	gap: 2px;
 	justify-content: flex-end;
 	padding: 6px 8px;
 	opacity: 0;
@@ -2950,24 +2951,46 @@ svg.fl {
 	background: color-mix(in srgb, var(--delbg) 72%, transparent);
 }
 
-/* 图形块套一层卡片；公式块只留公式本身，不加底色与描边 */
-.md .markstream-react .mermaid-block {
-	border: 1px solid var(--line);
-	border-radius: 10px;
-	background: var(--card);
+/* 流程图：卡片外观沿用代码块，图表居中，宽了在块内横向滚动 */
+.mermaid-body {
+	display: flex;
+	justify-content: center;
+	max-height: 420px;
+	overflow: auto;
+	padding: 12px 14px;
 }
 
-/* 图表宽度跟着对话列走，宽了在块内横向滚动，不撑破布局 */
-.md .markstream-react .mermaid-block svg {
+.mermaid-diagram {
+	width: 100%;
+}
+
+.mermaid-diagram svg {
+	display: block;
 	max-width: 100%;
 	height: auto;
+	margin: 0 auto;
 }
 
-/* 渲染失败时块内留一行说明，配着标题栏的「源码」切换看原始定义 */
-.md .markstream-react .mermaid-error {
+/* 源码态与流式未完成时显示原始定义，与代码块正文同一套排版 */
+.mermaid-source {
+	max-height: 360px;
+	margin: 0;
+	overflow: auto;
+	padding: 12px 14px;
+	color: var(--t2);
+	font-family: var(--font-mono);
+	font-size: calc(12.5px * var(--fs-code-scale, 1));
+	line-height: 1.6;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+/* 渲染失败时在源码下面补一句原因，正文照常可用 */
+.mermaid-note {
+	margin: 0;
+	padding: 0 14px 12px;
 	color: var(--err);
-	background: var(--errbg);
-	border-top-color: color-mix(in srgb, var(--err) 30%, transparent);
+	font-size: 12px;
 }
 
 .md .markstream-react .math-block {

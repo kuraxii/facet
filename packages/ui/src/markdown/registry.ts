@@ -6,10 +6,12 @@
  */
 import { setCustomComponents } from "markstream-react";
 import { CodeBlockStatic } from "./CodeBlockStatic.tsx";
+import { MermaidBlock } from "./MermaidBlock.tsx";
 
 /** 聊天正文的组件表作用域名。 */
 export const MARKDOWN_SCOPE = "facet-chat";
 
 setCustomComponents(MARKDOWN_SCOPE, {
 	code_block: CodeBlockStatic,
+	mermaid: MermaidBlock,
 });

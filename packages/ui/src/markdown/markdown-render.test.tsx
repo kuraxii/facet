@@ -22,14 +22,16 @@ describe("公式与流程图", () => {
 		expect(render("行内 $a^2+b^2$ 结束")).toContain("math-inline");
 	});
 
-	it("mermaid 围栏有容器", () => {
-		expect(render("```mermaid\ngraph TD\nA-->B\n```")).toContain("mermaid-block");
+	it("mermaid 围栏走自己的卡片", () => {
+		const html = render("```mermaid\ngraph TD\nA-->B\n```");
+		expect(html).toContain("mermaid-card");
+		expect(html).toContain("mermaid-source");
 	});
 
 	it("写坏的公式与流程图不让正文渲染失败", () => {
 		const broken = render("$$\n\\notacommand{$\n$$\n\n```mermaid\n这不是流程图\n```\n\n后面的正文");
 		expect(broken).toContain("math-block");
-		expect(broken).toContain("mermaid-block");
+		expect(broken).toContain("mermaid-card");
 		expect(broken).toContain("后面的正文");
 	});
 });

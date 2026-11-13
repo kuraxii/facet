@@ -23,13 +23,25 @@ import {
 	outlineTickMagnification,
 } from "./chat-outline.ts";
 
+/** 正文列的最大宽度，决定竖轨两侧各有多少留白可用。 */
+const CONTENT_MAX_WIDTH = 780;
+
+/** 竖轨的间距加轨宽在 100% 缩放下的基准值，实际留白按缩放倍数放大。 */
+const RAIL_FOOTPRINT = 10 + 36;
+
 /**
- * 竖轨的最小可用宽度。
+ * 算出竖轨的最小可用宽度。
  *
- * 正文列最宽 780px，居中之后左右各留 (宽 - 780) / 2；这段留白要放得下竖轨的间距加轨宽，
- * 短条才不会压到正文上：780 + 2 × (10 + 36) = 872，向上取整到 880。
+ * 正文列居中之后左右各留 (宽 - 780) / 2，这段留白要放得下竖轨的间距加轨宽，短条才不会压到
+ * 正文上；缩放设成 200% 时留白的需求也翻倍，所以这里跟着 `--outline-scale` 走。
  */
-const MIN_HOST_WIDTH = 880;
+function minHostWidth(): number {
+	const raw = Number.parseFloat(
+		getComputedStyle(document.documentElement).getPropertyValue("--outline-scale"),
+	);
+	const scale = Number.isFinite(raw) && raw > 0 ? raw : 1;
+	return CONTENT_MAX_WIDTH + 2 * RAIL_FOOTPRINT * scale;
+}
 
 /** 跳转后这条消息距视口上沿留多少像素，避免贴着顶部。 */
 const JUMP_OFFSET = 12;
@@ -114,9 +126,10 @@ export function ChatOutline({ items, container }: ChatOutlineProps) {
 		if (host === null || host === undefined) {
 			return;
 		}
-		const observer = new ResizeObserver(() => setIsNarrow(host.clientWidth < MIN_HOST_WIDTH));
+		const measure = (): void => setIsNarrow(host.clientWidth < minHostWidth());
+		const observer = new ResizeObserver(measure);
 		observer.observe(host);
-		setIsNarrow(host.clientWidth < MIN_HOST_WIDTH);
+		measure();
 		return () => observer.disconnect();
 	}, []);
 

@@ -32,15 +32,19 @@
 	/* 两个面板分隔条的命中区宽度，以及悬停时那条高亮的颜色 */
 	--divider-hit-width: 6px;
 	--divider-highlight: color-mix(in srgb, var(--acc) 55%, transparent);
-	/* 对话导航竖轨：离主区左缘的间距、轨宽、短条静止尺寸、当前轮次的加宽倍数
-	   （黄金比例）、指针附近的额外放大，单位都是 px 或倍数 */
-	--outline-inset: 10px;
-	--outline-rail-width: 36px;
-	--outline-pill-width: 10px;
-	--outline-pill-height: 2px;
+	/* 对话导航的缩放倍数，由设置里的百分比写入；下面每个尺寸都是它的倍数 */
+	--outline-scale: 1;
+	/* 对话导航竖轨：离主区左缘的间距、轨宽、轨内边距、短条静止尺寸、当前轮次的加宽倍数
+	   （黄金比例）、指针附近的额外放大，基准值都是 px，实际值再乘缩放 */
+	--outline-inset: calc(10px * var(--outline-scale));
+	--outline-rail-width: calc(36px * var(--outline-scale));
+	--outline-rail-inset: calc(3px * var(--outline-scale));
+	--outline-slot-size: calc(8px * var(--outline-scale));
+	--outline-pill-width: calc(10px * var(--outline-scale));
+	--outline-pill-height: calc(2px * var(--outline-scale));
 	--outline-pill-active-scale: 1.618;
-	--outline-pill-grow-width: 12px;
-	--outline-pill-grow-height: 2px;
+	--outline-pill-grow-width: calc(12px * var(--outline-scale));
+	--outline-pill-grow-height: calc(2px * var(--outline-scale));
 	/* 过程组的缩进：竖线到行内容的距离，以及竖线本身相对正文列的位置
 	   （后者来自展开箭头字形在图标盒子里的内缩，改箭头图标时跟着调） */
 	--indent-rail-offset: 16px;
@@ -1504,7 +1508,7 @@ svg.fl {
 .outline-slot {
 	position: relative;
 	display: flex;
-	flex-basis: 8px;
+	flex-basis: var(--outline-slot-size);
 	flex-shrink: 1;
 	width: 100%;
 	min-height: 0;
@@ -1518,9 +1522,9 @@ svg.fl {
 	height: 100%;
 	align-items: center;
 	justify-content: flex-start;
-	padding: 0 0 0 3px;
+	padding: 0 0 0 var(--outline-rail-inset);
 	border: 0;
-	border-radius: 4px;
+	border-radius: calc(4px * var(--outline-scale));
 	background: transparent;
 }
 
@@ -1536,7 +1540,7 @@ svg.fl {
 	flex: none;
 	width: min(
 		calc(var(--outline-pill-base) + var(--outline-grow) * var(--outline-pill-grow-width)),
-		calc(var(--outline-rail-width) - 6px)
+		calc(var(--outline-rail-width) - 2 * var(--outline-rail-inset))
 	);
 	height: calc(var(--outline-pill-height) + var(--outline-grow) * var(--outline-pill-grow-height));
 	border-radius: 9999px;
@@ -1559,7 +1563,7 @@ svg.fl {
 .outline-preview {
 	position: absolute;
 	top: 50%;
-	left: calc(var(--outline-rail-width) + 2px);
+	left: calc(var(--outline-rail-width) + 2px * var(--outline-scale));
 	display: flex;
 	width: 260px;
 	min-height: 48px;

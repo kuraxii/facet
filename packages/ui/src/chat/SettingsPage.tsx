@@ -633,6 +633,23 @@ function AppearanceSection({
 						aria-label="减少动效"
 					/>
 				</SettingsRow>
+				<SettingsRow title="对话导航缩放">
+					<input
+						className="set-input is-number mono"
+						type="number"
+						min={50}
+						max={200}
+						step={5}
+						value={appearance.outlineScale}
+						onChange={(event) => {
+							const next = Number(event.target.value);
+							if (Number.isFinite(next)) {
+								patchAppearance({ outlineScale: next });
+							}
+						}}
+						aria-label="对话导航缩放"
+					/>
+				</SettingsRow>
 			</SettingsGroup>
 
 			<SettingsGroup label="字体">

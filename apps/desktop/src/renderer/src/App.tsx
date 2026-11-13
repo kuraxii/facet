@@ -275,6 +275,8 @@ function applyAppearance(appearance: FacetSettings["appearance"]): void {
 	root.dataset.theme = resolveUiTheme(appearance.theme, prefersLight());
 	root.dataset.motion = appearance.reducedMotion ? "reduced" : "full";
 	root.dataset.liveMotion = appearance.liveMotion;
+	// 对话导航的所有尺寸都是 `--outline-scale` 的倍数，百分比在这里换算成倍数
+	root.style.setProperty("--outline-scale", String(appearance.outlineScale / 100));
 	// 空串表示用样式表里的缺省栈：这里把内联值去掉，`:root` 的默认值就生效；
 	// 编辑器与终端的字体在样式表里默认跟着代码字体走
 	const applyFont = (name: string, value: string): void => {

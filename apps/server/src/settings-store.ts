@@ -30,6 +30,9 @@ export interface SettingsStoreOptions {
 /** 字号允许的范围，超出时按边界处理。 */
 const MIN_FONT_SIZE = 11;
 const MAX_FONT_SIZE = 20;
+/** 对话导航缩放百分比的范围，步长在界面上给。 */
+const MIN_OUTLINE_SCALE = 50;
+const MAX_OUTLINE_SCALE = 200;
 /** 侧栏宽度允许的范围。 */
 const MIN_SIDEBAR_WIDTH = 200;
 const MAX_SIDEBAR_WIDTH = 520;
@@ -131,6 +134,12 @@ export function parseSettings(value: unknown): FacetSettings {
 				appearance.liveMotion,
 				LIVE_MOTIONS,
 				DEFAULT_SETTINGS.appearance.liveMotion,
+			),
+			outlineScale: readNumber(
+				appearance.outlineScale,
+				DEFAULT_SETTINGS.appearance.outlineScale,
+				MIN_OUTLINE_SCALE,
+				MAX_OUTLINE_SCALE,
 			),
 		},
 		input: {

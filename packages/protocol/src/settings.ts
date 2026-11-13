@@ -68,6 +68,8 @@ export interface AppearanceSettings {
 	reducedMotion: boolean;
 	/** 运行中状态用哪种动效；呼吸只改不透明度，扫光逐帧重绘文字，更费电 */
 	liveMotion: LiveMotion;
+	/** 对话导航的缩放百分比，取值 50 到 200，步长 5；100 表示既定尺寸 */
+	outlineScale: number;
 }
 
 /** 输入设置。 */
@@ -113,6 +115,7 @@ export const DEFAULT_SETTINGS: FacetSettings = {
 		terminalFontSize: 12.5,
 		reducedMotion: false,
 		liveMotion: "pulse",
+		outlineScale: 100,
 	},
 	input: { sendKey: "enter" },
 	layout: { sidebarWidth: 272 },

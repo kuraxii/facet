@@ -1803,8 +1803,9 @@ svg.fl {
 	text-align: left;
 }
 
+/* 工具行同样不加底色：悬停只让短名变亮，展开的也一样 */
 .tr-head:hover {
-	background: var(--surface2);
+	background: transparent;
 	color: var(--t1);
 }
 
@@ -1823,6 +1824,11 @@ svg.fl {
 
 .tr-name {
 	flex: none;
+	color: var(--t2);
+}
+
+.tr-head:hover .tr-name,
+.tr-head[aria-expanded="true"] .tr-name {
 	color: var(--t1);
 }
 
@@ -1906,18 +1912,7 @@ svg.fl {
 	padding-left: 8px;
 }
 
-.assistant-body > .tr .tr-head:hover {
-	background: transparent;
-}
 
-.assistant-body > .tr .tr-head .tr-name {
-	color: var(--t2);
-}
-
-.assistant-body > .tr .tr-head:hover .tr-name,
-.assistant-body > .tr .tr-head[aria-expanded="true"] .tr-name {
-	color: var(--t1);
-}
 
 /* 这一轮收尾：时长、复制、分叉 */
 

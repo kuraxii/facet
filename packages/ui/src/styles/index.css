@@ -1702,7 +1702,7 @@ svg.fl {
 	gap: 7px;
 	max-width: 100%;
 	margin-left: -8px;
-	padding: 4px 9px;
+	padding: 4px 8px;
 	border: 0;
 	border-radius: 999px;
 	background: transparent;
@@ -1772,13 +1772,13 @@ svg.fl {
 	}
 }
 
-/* 竖线对齐展开箭头图标的左缘：图标的盒子比字形多 3px 内缩，这里补上 */
+/* 过程组里唯一的横向定位：竖线落在展开箭头字形的左缘，行内容距竖线 16px */
 .group-body {
 	display: flex;
 	flex-direction: column;
 	gap: 1px;
 	margin: 2px 0 0 4px;
-	padding-left: 17px;
+	padding-left: 15px;
 	border-left: 1px solid var(--line);
 }
 
@@ -1794,7 +1794,7 @@ svg.fl {
 	gap: 8px;
 	width: 100%;
 	min-width: 0;
-	padding: 5px 8px;
+	padding: 5px 0;
 	border: 0;
 	border-radius: 7px;
 	background: transparent;
@@ -1864,7 +1864,7 @@ svg.fl {
 
 /* 输出：没有边框与底色，直接缩进在行下面 */
 .tr-out {
-	padding: 0 8px 4px 30px;
+	padding: 0 0 4px 22px;
 }
 
 .tr-out pre {
@@ -1896,7 +1896,7 @@ svg.fl {
 	max-height: 320px;
 	overflow: auto;
 	margin: 0;
-	padding: 2px 8px 6px 30px;
+	padding: 2px 0 6px 22px;
 	color: var(--t3);
 	font-family: var(--font-sans);
 	font-size: 12.5px;
@@ -1905,12 +1905,9 @@ svg.fl {
 	word-break: break-word;
 }
 
-/* 直接放在答复正文里的思考行（这一轮没有工具调用）：与 Markdown 左对齐，不缩进；
-   收起态和过程组一样只让文字变亮，不加底色 */
-.assistant-body > .tr .tr-head,
+/* 直接放在答复正文里的思考行（这一轮没有工具调用）：正文与 Markdown 左对齐，不缩进 */
 .assistant-body > .tr .tr-think {
-	margin-left: -8px;
-	padding-left: 8px;
+	padding-left: 0;
 }
 
 

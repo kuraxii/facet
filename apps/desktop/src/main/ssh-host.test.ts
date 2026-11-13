@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import {
 	isSshTarget,
 	matchSshConfig,
+	parseHostKeyBlob,
 	parseKnownHosts,
 	parseSshConfig,
 	parseSshTarget,
@@ -71,6 +72,41 @@ describe("known_hosts", () => {
 
 	it("注释与空行跳过", () => {
 		expect(parseKnownHosts("# 注释\n\nlaptop ssh-ed25519 abc\n")).toHaveLength(1);
+	});
+});
+
+describe("parseHostKeyBlob", () => {
+	/** 照 SSH 线上的写法拼一个公钥 blob：4 字节长度 + 算法名 + 密钥数据。 */
+	const blob = (keyType: string, keyData: Buffer): Buffer => {
+		const name = Buffer.from(keyType, "utf8");
+		const length = Buffer.alloc(4);
+		length.writeUInt32BE(name.length, 0);
+		return Buffer.concat([length, name, keyData]);
+	};
+
+	it("从二进制 blob 里取出算法名与 base64", () => {
+		const raw = Buffer.from("密钥数据", "utf8");
+		const parsed = parseHostKeyBlob(blob("ssh-ed25519", raw));
+		expect(parsed?.keyType).toBe("ssh-ed25519");
+		// known_hosts 存的是整段 blob 的 base64，和握手给的字节一致
+		expect(parsed?.key).toBe(blob("ssh-ed25519", raw).toString("base64"));
+	});
+
+	it("解析结果能直接和 known_hosts 对上", () => {
+		const raw = Buffer.from("密钥数据", "utf8");
+		const key = blob("ssh-ed25519", raw);
+		const entries = parseKnownHosts(`10.1.10.152 ssh-ed25519 ${key.toString("base64")}`);
+		const parsed = parseHostKeyBlob(key);
+		expect(parsed).toBeDefined();
+		expect(verifyHostKey(entries, "10.1.10.152", 22, parsed?.keyType ?? "", parsed?.key ?? "")).toBe(true);
+	});
+
+	it("长度越界或算法名不像公钥类型时给 undefined", () => {
+		const truncated = Buffer.from([0, 0, 0, 40, 0x61]);
+		expect(parseHostKeyBlob(truncated)).toBeUndefined();
+		expect(parseHostKeyBlob(Buffer.alloc(0))).toBeUndefined();
+		const weird = Buffer.from([0, 0, 0, 3, 0x41, 0x42, 0x43]);
+		expect(parseHostKeyBlob(weird)).toBeUndefined();
 	});
 });
 

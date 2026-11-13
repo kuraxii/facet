@@ -336,7 +336,7 @@ export class SshHosts {
 				...(agent === undefined ? {} : { agent }),
 				readyTimeout: this.options.connectTimeoutMs ?? 10_000,
 				hostVerifier: (key: Buffer): boolean => {
-					const parsed = splitPublicKey(key);
+					const parsed = parseHostKeyBlob(key);
 					if (parsed === undefined) {
 						return false;
 					}
@@ -384,14 +384,30 @@ export class SshHosts {
 }
 
 /** 把 ssh2 给的公钥拆成类型与 base64。 */
-function splitPublicKey(key: Buffer): { keyType: string; key: string } | undefined {
-	const text = key.toString("utf8").trim();
-	const [keyType, keyPart] = text.split(/\s+/);
-	if (keyType === undefined || keyPart === undefined) {
+/**
+ * 解析 SSH 握手给出的主机公钥。
+ *
+ * ssh2 交给 hostVerifier 的是 SSH 线上的公钥 blob：4 字节大端长度加算法名，后面跟着
+ * 密钥数据，整段不是可读文本。known_hosts 那一列存的是同一个 blob 的 base64，所以这里
+ * 解出算法名，再把整段按 base64 还原成可比对的形式。
+ */
+export function parseHostKeyBlob(blob: Buffer): { keyType: string; key: string } | undefined {
+	if (blob.length < 4) {
 		return undefined;
 	}
-	return { keyType, key: keyPart };
+	const nameLength = blob.readUInt32BE(0);
+	if (nameLength === 0 || nameLength > blob.length - 4) {
+		return undefined;
+	}
+	const keyType = blob.subarray(4, 4 + nameLength).toString("utf8");
+	if (!KEY_TYPE_PATTERN.test(keyType)) {
+		return undefined;
+	}
+	return { keyType, key: blob.toString("base64") };
 }
+
+/** 算法名只可能是 ssh- / ecdsa- / sk- 开头的可见字符。 */
+const KEY_TYPE_PATTERN = /^(ssh-|ecdsa-|sk-)[A-Za-z0-9@.-]+$/;
 
 /** 默认的 SSH 连接：用 ssh2 连上并包成 SshClientLike。 */
 const defaultConnector: SshConnector = async (config) => {

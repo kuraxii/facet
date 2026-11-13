@@ -2947,8 +2947,8 @@ svg.fl {
 	background: color-mix(in srgb, var(--delbg) 72%, transparent);
 }
 
-.md .markstream-react .mermaid-block,
-.md .markstream-react .math-block {
+/* 图形块套一层卡片；公式块只留公式本身，不加底色与描边 */
+.md .markstream-react .mermaid-block {
 	border: 1px solid var(--line);
 	border-radius: 10px;
 	background: var(--card);
@@ -2969,6 +2969,8 @@ svg.fl {
 
 .md .markstream-react .math-block {
 	overflow-x: auto;
+	border: 0;
+	background: transparent;
 }
 
 /* 公式跟随正文颜色，长公式在块内滚动 */

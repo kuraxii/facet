@@ -434,7 +434,7 @@ function ModelsSection({
 		<>
 			<h2 className="set-section-title">模型</h2>
 			<SettingsGroup label="默认设置">
-				<SettingsRow title="默认模型" description="已有会话保持自己的选择">
+				<SettingsRow title="默认模型">
 					<select
 						className="set-input"
 						value={selected === undefined ? "" : modelKey(selected)}
@@ -456,7 +456,7 @@ function ModelsSection({
 						))}
 					</select>
 				</SettingsRow>
-				<SettingsRow title="默认思考档位" description="由模型决定时按模型支持的范围收边">
+				<SettingsRow title="默认思考档位">
 					<select
 						className="set-input"
 						value={draft.defaultThinkingLevel ?? ""}

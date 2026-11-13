@@ -757,6 +757,7 @@ svg.fl {
 	background: var(--bg);
 }
 
+/* 拖宽用的命中区，画面上什么都不显示；hr 自带边框要先清掉，否则那条线会留在分界上 */
 .panel-resizer {
 	position: absolute;
 	top: 0;
@@ -764,6 +765,8 @@ svg.fl {
 	left: -3px;
 	z-index: 2;
 	width: 6px;
+	margin: 0;
+	border: 0;
 	cursor: col-resize;
 	background: transparent;
 }

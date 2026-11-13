@@ -7,6 +7,7 @@
 import type { ProjectInfo, SessionSummary } from "@facet/protocol";
 import { Plus, Search, Settings } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { PaneResizer } from "../panel/pane-resizer.tsx";
 import { ChevronIcon } from "../transcript/chevron.tsx";
 import { FolderIcon, MoonIcon, SunIcon } from "../transcript/icons.tsx";
 import { SidebarHeader } from "./sidebar-header.tsx";
@@ -19,6 +20,7 @@ import {
 	samePath,
 	shortTime,
 } from "./sidebar-model.ts";
+import { SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "./sidebar-state.ts";
 
 /** 界面主题。切换写入根节点的 data-theme，样式按此选择变量组。 */
 export type ThemeName = "dark" | "light";
@@ -54,6 +56,12 @@ export interface SessionSidebarProps {
 	onSearchOpenChange: (open: boolean) => void;
 	/** 头部是否画在自己身上；窄屏抽屉里要自己带一份，宽屏时头部在外壳顶带里 */
 	showHeader?: boolean;
+	/** 宽度，单位 px；给了才带右缘那条可拖动的分隔条 */
+	width?: number | undefined;
+	/** 拖动分隔条后提交新宽度 */
+	onWidthChange?: ((width: number) => void) | undefined;
+	/** 收起侧栏；给了头部才显示收起按钮 */
+	onCollapse?: (() => void) | undefined;
 	/** 项目列表上一次刷新失败，过滤器里给出重试入口 */
 	isProjectsStale?: boolean;
 	/** 重新拉取项目列表 */
@@ -127,6 +135,9 @@ export function SessionSidebar({
 	isSearchOpen,
 	onSearchOpenChange,
 	showHeader = false,
+	width,
+	onWidthChange,
+	onCollapse,
 	isProjectsStale = false,
 	onRefreshProjects,
 	onRenameProject,
@@ -387,11 +398,24 @@ export function SessionSidebar({
 
 	return (
 		<aside className={isOpen ? "sb is-open" : "sb"}>
+			{width === undefined || onWidthChange === undefined ? null : (
+				<PaneResizer
+					className="sb-resizer"
+					label="调整左侧栏宽度"
+					width={width}
+					min={SIDEBAR_MIN_WIDTH}
+					max={SIDEBAR_MAX_WIDTH}
+					cssVar="--sidebar-width"
+					side="end"
+					onWidthChange={onWidthChange}
+				/>
+			)}
 			{showHeader ? (
 				<SidebarHeader
 					isSearchOpen={isSearchOpen}
 					onToggleSearch={() => onSearchOpenChange(!isSearchOpen)}
 					onAddProject={onAddProject}
+					{...(onCollapse === undefined ? {} : { onCollapse })}
 				/>
 			) : null}
 			<button

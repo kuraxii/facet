@@ -275,6 +275,7 @@ svg.fl {
 /* 侧栏 */
 
 .sb {
+	position: relative;
 	display: flex;
 	flex: none;
 	flex-direction: column;
@@ -285,6 +286,30 @@ svg.fl {
 	background: var(--sb);
 	overflow: hidden;
 	transition: background-color var(--dur-fast) var(--ease);
+}
+
+/* 拖宽用的命中区，和右栏那条对称：画面上什么都不显示，只在悬停时给一条强调线 */
+.sb-resizer {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	right: 0;
+	z-index: 3;
+	width: 6px;
+	margin: 0;
+	border: 0;
+	cursor: col-resize;
+	background: transparent;
+}
+
+.sb-resizer:hover,
+.sb-resizer:active {
+	background: linear-gradient(
+		to left,
+		transparent 0 3px,
+		color-mix(in srgb, var(--acc) 40%, transparent) 3px 5px,
+		transparent 5px 100%
+	);
 }
 
 .sb-head {

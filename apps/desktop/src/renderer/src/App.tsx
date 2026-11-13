@@ -29,6 +29,7 @@ import {
 	CodeThemeProvider,
 	Composer,
 	CreateProjectDialog,
+	clampSidebarWidth,
 	DEFAULT_DARK_THEME,
 	EmptyState,
 	endpointLabel,
@@ -45,6 +46,7 @@ import {
 	type RightPanelState,
 	readHostList,
 	readPanelState,
+	readSidebarWidth,
 	resolveUiTheme,
 	type SavedHost,
 	SessionSidebar,
@@ -60,6 +62,7 @@ import {
 	useStickToBottom,
 	writeHostList,
 	writePanelState,
+	writeSidebarWidth,
 } from "@facet/ui";
 import { FileView } from "@facet/ui-editor";
 import {
@@ -359,6 +362,12 @@ export function App() {
 	const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 	/** 侧栏头部那个会话搜索框是否展开；头部在顶带里，状态放在这里 */
 	const [isSidebarSearchOpen, setIsSidebarSearchOpen] = useState(false);
+	const [sidebarWidth, setSidebarWidth] = useState(() => readSidebarWidth(window.localStorage));
+	const updateSidebarWidth = useCallback((next: number) => {
+		const width = clampSidebarWidth(next);
+		setSidebarWidth(width);
+		writeSidebarWidth(window.localStorage, width);
+	}, []);
 	const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 	/** 880px 以下走抽屉；侧栏开关在两套行为之间切换 */
 	const isNarrow = useSyncExternalStore(subscribeResize, readIsNarrow);
@@ -1462,23 +1471,31 @@ export function App() {
 	return (
 		<CodeThemeProvider value={codeThemeValue}>
 			<AppFrame
-				sidebarWidth={isSidebarOpen && !isNarrow ? "272px" : "0px"}
+				sidebarWidth={isSidebarOpen && !isNarrow ? `${sidebarWidth}px` : "0px"}
 				panelWidth={panel.open ? `${panel.width}px` : "0px"}
 				chrome={
 					<>
 						<div className="chrome-slot is-sidebar">
-							{isNarrow ? null : (
+							{isNarrow || !isSidebarOpen ? null : (
 								<SidebarHeader
 									isSearchOpen={isSidebarSearchOpen}
 									onToggleSearch={() => {
 										setIsSidebarSearchOpen((open) => !open);
 									}}
 									onAddProject={() => setIsProjectDialogOpen(true)}
+									onCollapse={toggleSidebar}
 								/>
 							)}
 						</div>
 						<div className="chrome-slot is-main">
-							<SidebarToggle isOpen={isSidebarOpen} onToggle={toggleSidebar} />
+							{/* 侧栏展开时开关在它自己的头部里，收起之后才回到主区左上角 */}
+							{isNarrow ? (
+								isDrawerOpen ? null : (
+									<SidebarToggle isOpen={false} onToggle={toggleSidebar} />
+								)
+							) : isSidebarOpen ? null : (
+								<SidebarToggle isOpen={false} onToggle={toggleSidebar} />
+							)}
 						</div>
 						<div className={panel.open ? "chrome-slot is-panel" : "chrome-slot is-panel is-compact"}>
 							<PanelToggle isOpen={panel.open} onToggle={() => updatePanel({ open: !panel.open })} />
@@ -1516,6 +1533,9 @@ export function App() {
 						isSearchOpen={isSidebarSearchOpen}
 						onSearchOpenChange={setIsSidebarSearchOpen}
 						showHeader={isNarrow}
+						width={isNarrow ? undefined : sidebarWidth}
+						onWidthChange={isNarrow ? undefined : updateSidebarWidth}
+						onCollapse={() => setIsDrawerOpen(false)}
 						isProjectsStale={isProjectsStale}
 						onRefreshProjects={() => void refreshProjects()}
 						onRenameProject={renameProject}

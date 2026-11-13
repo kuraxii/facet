@@ -316,8 +316,10 @@ svg.fl {
 	background: transparent;
 }
 
-.shell:has(.sb-resizer:hover) .sb,
-.shell:has(.sb-resizer:active) .sb {
+.app:has(.sb-resizer:hover) .sb,
+.app:has(.sb-resizer:active) .sb,
+.app:has(.sb-resizer:hover) .chrome-slot.is-sidebar,
+.app:has(.sb-resizer:active) .chrome-slot.is-sidebar {
 	border-right-color: var(--divider-highlight);
 	box-shadow: inset -1px 0 0 var(--divider-highlight);
 }
@@ -968,8 +970,10 @@ svg.fl {
  * 高亮就是分界线本身，两个面板各自往自己那一侧叠，所以左右两边看上去一致；命中区始终透明，
  * 边框宽度也不变，内容不会跳。
  */
-.shell:has(.panel-resizer:hover) .panel,
-.shell:has(.panel-resizer:active) .panel {
+.app:has(.panel-resizer:hover) .panel,
+.app:has(.panel-resizer:active) .panel,
+.app:has(.panel-resizer:hover) .chrome-slot.is-panel,
+.app:has(.panel-resizer:active) .chrome-slot.is-panel {
 	border-left-color: var(--divider-highlight);
 	box-shadow: inset 1px 0 0 var(--divider-highlight);
 }

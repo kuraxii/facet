@@ -2902,19 +2902,22 @@ svg.fl {
 	white-space: nowrap;
 }
 
+/* 复制代码：与消息上的复制同一套，只是一枚图标，没有底色与描边 */
 .code-copy {
-	padding: 3px 8px;
-	border: 1px solid var(--line);
+	display: grid;
+	place-items: center;
+	width: 22px;
+	height: 22px;
+	padding: 0;
+	border: 0;
 	border-radius: 6px;
-	background: color-mix(in srgb, var(--code-surface) 78%, transparent);
-	backdrop-filter: blur(8px);
-	color: var(--t2);
-	font-size: 11.5px;
+	background: transparent;
+	color: var(--t3);
+	transition: color var(--dur-fast) var(--ease);
 	pointer-events: auto;
 }
 
 .code-copy:hover {
-	border-color: var(--line2);
 	color: var(--t1);
 }
 

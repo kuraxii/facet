@@ -33,3 +33,21 @@ describe("公式与流程图", () => {
 		expect(broken).toContain("后面的正文");
 	});
 });
+
+describe("代码块", () => {
+	/** 数卡片里的行数。 */
+	function codeLineCount(html: string): number {
+		return html.match(/code-card-line/g)?.length ?? 0;
+	}
+
+	it("结尾的换行不再多出一行", () => {
+		expect(codeLineCount(render("```ts\nconst a = 1;\n```"))).toBe(1);
+		expect(codeLineCount(render("```ts\nconst a = 1;\nconst b = 2;\n```"))).toBe(2);
+	});
+
+	it("复制按钮用图标，带无障碍名", () => {
+		const html = render("```ts\nconst a = 1;\n```");
+		expect(html).toContain('aria-label="复制代码"');
+		expect(html).toContain("<svg");
+	});
+});

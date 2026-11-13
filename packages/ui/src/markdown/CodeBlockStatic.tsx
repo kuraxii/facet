@@ -6,6 +6,7 @@
  * 标题栏常态隐身,悬浮或聚焦时才出现复制按钮。
  */
 
+import { Check, Copy } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import type { CodeBlockNode } from "stream-markdown-parser";
 import { codeThemeName } from "../theme.ts";
@@ -22,9 +23,16 @@ export interface CodeBlockStaticProps {
 	stream?: boolean;
 }
 
+/** 去掉结尾那一个换行:围栏里的代码以换行收尾,拆行后会多出一个空行。 */
+function trimTrailingNewline(code: string): string {
+	return code.endsWith("\n") ? code.slice(0, -1) : code;
+}
+
 /** 纯文本按行拆开,高亮就绪前与分词失败时使用。 */
 function plainLines(code: string): readonly HighlightLine[] {
-	return code.split("\n").map((line) => ({ tokens: [{ text: line, color: undefined }] }));
+	return trimTrailingNewline(code)
+		.split("\n")
+		.map((line) => ({ tokens: [{ text: line, color: undefined }] }));
 }
 
 /** 行首的增删标记,diff 围栏按行上红绿。 */
@@ -79,6 +87,8 @@ function CopyButton({ code }: { code: string }) {
 		<button
 			type="button"
 			className="code-copy"
+			aria-label={copied ? "已复制" : "复制代码"}
+			title={copied ? "已复制" : "复制代码"}
 			onClick={() => {
 				void navigator.clipboard?.writeText(code).then(
 					() => setCopied(true),
@@ -86,7 +96,7 @@ function CopyButton({ code }: { code: string }) {
 				);
 			}}
 		>
-			{copied ? "已复制" : "复制"}
+			{copied ? <Check size={13} strokeWidth={1.5} /> : <Copy size={13} strokeWidth={1.5} />}
 		</button>
 	);
 }
@@ -116,7 +126,8 @@ function CodeCard({ code, language }: { code: string; language: string }) {
 				if (cancelled) {
 					return;
 				}
-				setLines(highlightLines(instance, code, language, theme) ?? plainLines(code));
+				const source = trimTrailingNewline(code);
+				setLines(highlightLines(instance, source, language, theme) ?? plainLines(code));
 			},
 			() => {
 				if (!cancelled) {

@@ -4,8 +4,20 @@
  * 与代码块同一套卡片：标题栏常态隐身，悬浮才出现复制与源码切换。图表交给 mermaid 自己渲染，
  * 配色取界面上的 CSS 变量，节点文字走 SVG（`htmlLabels` 关掉），宽度跟着对话列走。
  */
-import { Check, Code2, Copy, Workflow } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { Check, Code2, Copy, Maximize2, Workflow, ZoomIn, ZoomOut } from "lucide-react";
+import {
+	type PointerEvent as ReactPointerEvent,
+	useCallback,
+	useEffect,
+	useId,
+	useRef,
+	useState,
+} from "react";
+
+/** 缩放的上下限与单步倍率。 */
+const MIN_SCALE = 0.5;
+const MAX_SCALE = 4;
+const ZOOM_STEP = 1.25;
 
 export interface MermaidBlockProps {
 	/** 库解析出来的代码块节点 */
@@ -205,6 +217,7 @@ export function MermaidBlock({ node }: MermaidBlockProps) {
 						}
 						setSvg(rendered.svg);
 						setError(undefined);
+						setView({ scale: 1, x: 0, y: 0 });
 					} catch (cause) {
 						if (cancelled || current !== revision.current) {
 							return;
@@ -226,12 +239,115 @@ export function MermaidBlock({ node }: MermaidBlockProps) {
 		};
 	}, [code, isLoading, palette, instance]);
 
+	// 视图：1 表示铺满宽度，缩放与平移都叠在它上面
+	const [view, setView] = useState({ scale: 1, x: 0, y: 0 });
+	const [isPanning, setIsPanning] = useState(false);
+	const panStart = useRef<{ x: number; y: number; viewX: number; viewY: number } | undefined>(undefined);
+
+	const zoomBy = useCallback((factor: number) => {
+		setView((current) => {
+			const scale = Math.min(Math.max(current.scale * factor, MIN_SCALE), MAX_SCALE);
+			// 回到 1 倍就是把图放回原位，不留偏移
+			return scale <= 1 ? { scale, x: 0, y: 0 } : { ...current, scale };
+		});
+	}, []);
+
+	/**
+	 * 滚轮缩放要能拦住默认行为，React 的 onWheel 是 passive 的，只能挂原生监听。
+	 *
+	 * 视图容器要等图画出来才挂载，所以用回调 ref 在挂上时接、摘时断，不能按 ref 的值在
+	 * effect 里取一次。
+	 */
+	const detachWheel = useRef<(() => void) | undefined>(undefined);
+	const attachViewport = useCallback(
+		(element: HTMLDivElement | null) => {
+			detachWheel.current?.();
+			detachWheel.current = undefined;
+			if (element === null) {
+				return;
+			}
+			const onWheel = (event: WheelEvent): void => {
+				// 只有按着修饰键才缩放，普通滚轮留给页面滚动
+				if (!event.ctrlKey && !event.metaKey) {
+					return;
+				}
+				event.preventDefault();
+				zoomBy(event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP);
+			};
+			element.addEventListener("wheel", onWheel, { passive: false });
+			detachWheel.current = () => element.removeEventListener("wheel", onWheel);
+		},
+		[zoomBy],
+	);
+	useEffect(() => () => detachWheel.current?.(), []);
+
+	const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>): void => {
+		if (view.scale <= 1) {
+			return;
+		}
+		// 先记起点再抓指针：抓取失败（指针已失效）时拖动仍然可用
+		panStart.current = { x: event.clientX, y: event.clientY, viewX: view.x, viewY: view.y };
+		event.currentTarget.setPointerCapture(event.pointerId);
+		setIsPanning(true);
+	};
+
+	const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>): void => {
+		const start = panStart.current;
+		if (start === undefined) {
+			return;
+		}
+		setView((current) => ({
+			...current,
+			x: start.viewX + (event.clientX - start.x),
+			y: start.viewY + (event.clientY - start.y),
+		}));
+	};
+
+	const handlePointerUp = (event: ReactPointerEvent<HTMLDivElement>): void => {
+		panStart.current = undefined;
+		setIsPanning(false);
+		event.currentTarget.releasePointerCapture(event.pointerId);
+	};
+
 	const showsSource = showSource || isLoading || svg === undefined;
 
 	return (
 		<div className="code-card mermaid-card">
 			<div className="code-card-head">
 				<span className="code-lang">mermaid</span>
+				{svg === undefined || showSource ? null : (
+					<>
+						<button
+							type="button"
+							className="code-copy"
+							aria-label="缩小"
+							title="缩小"
+							disabled={view.scale <= MIN_SCALE}
+							onClick={() => zoomBy(1 / ZOOM_STEP)}
+						>
+							<ZoomOut size={13} strokeWidth={1.5} />
+						</button>
+						<button
+							type="button"
+							className="code-copy"
+							aria-label="放大"
+							title="放大"
+							disabled={view.scale >= MAX_SCALE}
+							onClick={() => zoomBy(ZOOM_STEP)}
+						>
+							<ZoomIn size={13} strokeWidth={1.5} />
+						</button>
+						<button
+							type="button"
+							className="code-copy"
+							aria-label="适应宽度"
+							title="适应宽度"
+							onClick={() => setView({ scale: 1, x: 0, y: 0 })}
+						>
+							<Maximize2 size={13} strokeWidth={1.5} />
+						</button>
+					</>
+				)}
 				{svg === undefined ? null : (
 					<button
 						type="button"
@@ -251,10 +367,30 @@ export function MermaidBlock({ node }: MermaidBlockProps) {
 					{error === undefined ? null : <p className="mermaid-note">{error}</p>}
 				</>
 			) : (
-				<div className="mermaid-body">
-					{/* 跳过安全检查：SVG 由 mermaid 以 securityLevel: "strict" 生成 */}
-					{/* biome-ignore lint/security/noDangerouslySetInnerHtml: mermaid 生成的 SVG */}
-					<div className="mermaid-diagram" dangerouslySetInnerHTML={{ __html: svg ?? "" }} />
+				<div
+					className={
+						view.scale > 1
+							? isPanning
+								? "mermaid-viewport is-zoomed is-panning"
+								: "mermaid-viewport is-zoomed"
+							: "mermaid-viewport"
+					}
+					ref={attachViewport}
+					onPointerDown={handlePointerDown}
+					onPointerMove={handlePointerMove}
+					onPointerUp={handlePointerUp}
+					onPointerCancel={handlePointerUp}
+					onDoubleClick={() => setView({ scale: 1, x: 0, y: 0 })}
+					role="img"
+					aria-label="流程图"
+				>
+					<div
+						className="mermaid-diagram"
+						style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}
+						// 跳过安全检查：SVG 由 mermaid 以 securityLevel: "strict" 生成
+						// biome-ignore lint/security/noDangerouslySetInnerHtml: mermaid 生成的 SVG
+						dangerouslySetInnerHTML={{ __html: svg ?? "" }}
+					/>
 				</div>
 			)}
 		</div>

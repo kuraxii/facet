@@ -2951,17 +2951,34 @@ svg.fl {
 	background: color-mix(in srgb, var(--delbg) 72%, transparent);
 }
 
-/* 流程图：卡片外观沿用代码块，图表居中，宽了在块内横向滚动 */
-.mermaid-body {
-	display: flex;
-	justify-content: center;
-	max-height: 420px;
-	overflow: auto;
+/*
+ * 流程图：卡片外观沿用代码块。图是放进去自己缩放、拖动的，不再用滚动条：
+ * 1 倍时铺满宽度，放大后按住拖动看其余部分，双击回到 1 倍。
+ */
+.mermaid-viewport {
+	max-height: 460px;
+	overflow: hidden;
 	padding: 12px 14px;
+	/* 拖动是平移图表，不能顺手把标签文字选上 */
+	user-select: none;
+	touch-action: none;
+}
+
+.mermaid-viewport.is-zoomed {
+	cursor: grab;
+}
+
+.mermaid-viewport.is-panning {
+	cursor: grabbing;
 }
 
 .mermaid-diagram {
-	width: 100%;
+	transform-origin: 0 0;
+	transition: transform var(--dur-fast) var(--ease);
+}
+
+.mermaid-viewport.is-panning .mermaid-diagram {
+	transition: none;
 }
 
 .mermaid-diagram svg {

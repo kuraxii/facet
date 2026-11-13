@@ -88,6 +88,8 @@ export {
 } from "./panel/panel-state.ts";
 export type { RightPanelProps } from "./panel/right-panel.tsx";
 export { RightPanel } from "./panel/right-panel.tsx";
+export type { TopBarProps } from "./panel/top-bar.tsx";
+export { TopBar } from "./panel/top-bar.tsx";
 export type { CodeThemeOption, UiThemeOption } from "./theme.ts";
 export {
 	CODE_THEME_OPTIONS,

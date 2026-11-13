@@ -41,6 +41,7 @@ import {
 	QueueStrip,
 	RightPanel,
 	type RightPanelState,
+	TopBar,
 	readHostList,
 	readPanelState,
 	resolveUiTheme,
@@ -66,7 +67,7 @@ import {
 	type TerminalDockState,
 	writeDockState,
 } from "@facet/ui-terminal";
-import { PanelLeft, X } from "lucide-react";
+import { X } from "lucide-react";
 import {
 	type ReactNode,
 	useCallback,
@@ -108,6 +109,43 @@ declare global {
 }
 
 const bridge = window.facet;
+
+/** 窄屏断点：880px 以下侧栏变抽屉，与样式表里的媒体查询保持一致。 */
+const NARROW_QUERY = "(max-width: 880px)";
+
+function subscribeResize(listener: () => void): () => void {
+	const query = window.matchMedia(NARROW_QUERY);
+	query.addEventListener("change", listener);
+	window.addEventListener("resize", listener);
+	return () => {
+		query.removeEventListener("change", listener);
+		window.removeEventListener("resize", listener);
+	};
+}
+
+function readIsNarrow(): boolean {
+	return window.matchMedia(NARROW_QUERY).matches;
+}
+
+/** 外壳类名：抽屉展开时给 has-drawer，宽屏收起侧栏时给 is-sb-hidden。 */
+function shellClassName(
+	isSidebarOpen: boolean,
+	isDrawerOpen: boolean,
+	isSidebarCollapsed: boolean,
+	isNarrow: boolean,
+): string {
+	const names = ["shell"];
+	if (isNarrow && isDrawerOpen) {
+		names.push("has-drawer");
+	}
+	if (!isNarrow && isSidebarCollapsed) {
+		names.push("is-sb-hidden");
+	}
+	if (isSidebarOpen) {
+		names.push("is-sb-open");
+	}
+	return names.join(" ");
+}
 
 /**
  * 应用外壳。
@@ -281,8 +319,19 @@ export function App() {
 	const [theme, setTheme] = useState<ThemeName>(readTheme);
 	/** 主机上的偏好设置；没读到之前先用缺省值 */
 	const [settings, setSettings] = useState<FacetSettings>(DEFAULT_SETTINGS);
-	/** 窄屏时侧栏是抽屉，这个开关控制它展开 */
-	const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+	/** 窄屏时侧栏是抽屉，这个开关控制它展开；宽屏时侧栏常驻，另行记收起的意图 */
+	const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+	const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+	/** 880px 以下走抽屉；侧栏开关在两套行为之间切换 */
+	const isNarrow = useSyncExternalStore(subscribeResize, readIsNarrow);
+	const isSidebarOpen = isNarrow ? isDrawerOpen : !isSidebarCollapsed;
+	const toggleSidebar = useCallback(() => {
+		if (isNarrow) {
+			setIsDrawerOpen((open) => !open);
+		} else {
+			setIsSidebarCollapsed((collapsed) => !collapsed);
+		}
+	}, [isNarrow]);
 	/** 主区域显示对话还是设置 */
 	const [view, setView] = useState<"chat" | "settings">("chat");
 	/** 主机清单：本机之外用户添加的远程主机，以及当前连着的端点 */
@@ -1373,13 +1422,13 @@ export function App() {
 	return (
 		<CodeThemeProvider value={codeThemeValue}>
 			<AppFrame>
-				<div className={isSidebarOpen ? "shell has-drawer" : "shell"}>
-					{isSidebarOpen ? (
+				<div className={shellClassName(isSidebarOpen, isDrawerOpen, isSidebarCollapsed, isNarrow)}>
+					{isDrawerOpen ? (
 						<button
 							type="button"
 							className="sb-backdrop"
 							aria-label="收起侧栏"
-							onClick={() => setIsSidebarOpen(false)}
+							onClick={() => setIsDrawerOpen(false)}
 						/>
 					) : null}
 					<SessionSidebar
@@ -1409,11 +1458,9 @@ export function App() {
 							setView("settings");
 						}}
 						isSettingsOpen={view === "settings"}
-						onTogglePanel={() => updatePanel({ open: !panel.open })}
-						isPanelOpen={panel.open}
 						hostStatus={isReconnecting ? "重连中" : host?.role === "viewer" ? "只读" : undefined}
-						isOpen={isSidebarOpen}
-						onNavigate={() => setIsSidebarOpen(false)}
+						isOpen={isDrawerOpen}
+						onNavigate={() => setIsDrawerOpen(false)}
 						hostSwitcher={
 							<HostSwitcher
 								localEndpoint={LOCAL_TARGET}
@@ -1430,15 +1477,16 @@ export function App() {
 						}
 					/>
 
+					<TopBar
+						isSidebarOpen={isSidebarOpen}
+						onToggleSidebar={toggleSidebar}
+						isPanelOpen={panel.open}
+						onTogglePanel={() => updatePanel({ open: !panel.open })}
+						panelTab={panel.tab}
+						onSelectPanelTab={(tab) => updatePanel({ tab, open: true })}
+					/>
+
 					<main className="main">
-						<button
-							type="button"
-							className="sb-toggle"
-							aria-label="展开侧栏"
-							onClick={() => setIsSidebarOpen((open) => !open)}
-						>
-							<PanelLeft size={16} strokeWidth={1.5} />
-						</button>
 						{session === undefined ? null : <ChatOutline items={transcript} container={scrollElement} />}
 						{session === undefined ? (
 							<div className="empty-wrap">
@@ -1569,10 +1617,8 @@ export function App() {
 					{panel.open ? (
 						<RightPanel
 							tab={panel.tab}
-							onTabChange={(tab) => updatePanel({ tab })}
 							width={panel.width}
 							onWidthChange={(width) => updatePanel({ width })}
-							onClose={() => updatePanel({ open: false })}
 						>
 							{panel.tab === "changes" ? (
 								<ChangesPane

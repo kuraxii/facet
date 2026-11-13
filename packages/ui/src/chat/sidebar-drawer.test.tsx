@@ -32,8 +32,6 @@ function render(isOpen: boolean | undefined): string {
 			onToggleTheme: () => {},
 			onOpenSettings: () => {},
 			isSettingsOpen: false,
-			onTogglePanel: () => {},
-			isPanelOpen: false,
 			...(isOpen === undefined ? {} : { isOpen }),
 		}),
 	);

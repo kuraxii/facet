@@ -156,6 +156,63 @@ svg.fl {
 	-webkit-app-region: drag;
 }
 
+/* 顶部工具条：中间是右栏分页，两侧是左右栏开关；整组不参与拖动 */
+.top-bar {
+	position: absolute;
+	top: 0;
+	left: 50%;
+	z-index: 2;
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	height: var(--chrome-height);
+	transform: translateX(-50%);
+	-webkit-app-region: no-drag;
+}
+
+.top-bar-btn {
+	display: grid;
+	place-items: center;
+	width: 28px;
+	height: 28px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--t3);
+}
+
+.top-bar-btn:hover {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+.top-bar-tabs {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	margin: 0 4px;
+}
+
+.top-bar-tab {
+	height: 26px;
+	padding: 0 10px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--t3);
+	font-size: 12.5px;
+}
+
+.top-bar-tab:hover {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+.top-bar-tab.is-on {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
 /* 窗口按钮：浮在拖动区之上，自己标 no-drag */
 .window-controls {
 	position: absolute;
@@ -190,9 +247,14 @@ svg.fl {
 }
 
 .shell {
+	position: relative;
 	display: flex;
 	height: 100%;
 	overflow: hidden;
+}
+
+.shell.is-sb-hidden .sb {
+	display: none;
 }
 /* 侧栏 */
 
@@ -853,43 +915,6 @@ svg.fl {
 		color-mix(in srgb, var(--acc) 40%, transparent) 3px 5px,
 		transparent 5px 100%
 	);
-}
-
-.panel-head {
-	position: relative;
-	z-index: 2;
-	display: flex;
-	flex: none;
-	align-items: center;
-	-webkit-app-region: no-drag;
-	justify-content: space-between;
-	gap: 8px;
-	height: 38px;
-	padding: 0 8px 0 10px;
-}
-
-.panel-tabs {
-	display: flex;
-	gap: 2px;
-}
-
-.panel-tab {
-	height: 24px;
-	padding: 0 8px;
-	border: 0;
-	border-radius: 6px;
-	background: transparent;
-	color: var(--t3);
-	font-size: 12px;
-}
-
-.panel-tab:hover {
-	color: var(--t1);
-}
-
-.panel-tab.is-on {
-	background: var(--surface2);
-	color: var(--t1);
 }
 
 .panel-body {
@@ -3850,10 +3875,6 @@ svg.fl {
 	display: none;
 }
 
-.sb-toggle {
-	display: none;
-}
-
 @media (max-width: 880px) {
 	.shell {
 		position: relative;
@@ -3880,23 +3901,6 @@ svg.fl {
 		display: block;
 		border: none;
 		background: rgb(0 0 0 / 45%);
-		cursor: pointer;
-	}
-
-	.sb-toggle {
-		position: absolute;
-		top: 10px;
-		left: 10px;
-		z-index: 20;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 28px;
-		height: 28px;
-		border: 1px solid var(--line);
-		border-radius: 7px;
-		background: var(--surface2);
-		color: var(--t2);
 		cursor: pointer;
 	}
 

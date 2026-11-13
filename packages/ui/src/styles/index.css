@@ -172,6 +172,10 @@ svg.fl {
 	-webkit-app-region: no-drag;
 }
 
+.chrome-toggle[aria-pressed="true"] {
+	color: var(--t2);
+}
+
 .chrome-toggle:hover {
 	background: var(--surface2);
 	color: var(--t1);
@@ -183,6 +187,11 @@ svg.fl {
 
 .chrome-toggle.is-panel {
 	right: calc(var(--window-button-width) * 3 + 4px);
+}
+
+/* 展开后它排在右栏分页行最前面，不再绝对定位 */
+.panel-tabs .chrome-toggle {
+	position: static;
 }
 
 /* 窗口按钮：浮在拖动区之上，自己标 no-drag */
@@ -891,29 +900,32 @@ svg.fl {
 	);
 }
 
-.panel-head {
+/* 分页落在窗口顶部那条带里，贴在面板左上角；带下面才是正文 */
+.panel-tabs {
+	position: absolute;
+	top: 0;
+	left: 6px;
+	z-index: 2;
 	display: flex;
-	flex: none;
 	align-items: center;
-	justify-content: space-between;
-	gap: 8px;
-	height: 34px;
-	padding: 0 8px 0 10px;
+	gap: 4px;
+	height: var(--chrome-height);
+	-webkit-app-region: no-drag;
 }
 
-.panel-tabs {
+.panel-tab-list {
 	display: flex;
 	gap: 2px;
 }
 
 .panel-tab {
-	height: 24px;
-	padding: 0 8px;
+	height: 26px;
+	padding: 0 10px;
 	border: 0;
 	border-radius: 6px;
 	background: transparent;
 	color: var(--t3);
-	font-size: 12px;
+	font-size: 12.5px;
 }
 
 .panel-tab:hover {

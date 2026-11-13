@@ -1478,10 +1478,12 @@ export function App() {
 						}
 					/>
 
-					<PanelToggle isOpen={panel.open} onToggle={() => updatePanel({ open: !panel.open })} />
-
 					<main className="main">
 						<SidebarToggle isOpen={isSidebarOpen} onToggle={toggleSidebar} />
+						{/* 右栏收起时开关贴在窗口右上角、窗口按钮左边；展开后挪到右栏分页行最前面 */}
+						{panel.open ? null : (
+							<PanelToggle isOpen={false} onToggle={() => updatePanel({ open: true })} />
+						)}
 						{session === undefined ? null : <ChatOutline items={transcript} container={scrollElement} />}
 						{session === undefined ? (
 							<div className="empty-wrap">
@@ -1613,6 +1615,9 @@ export function App() {
 						<RightPanel
 							tab={panel.tab}
 							onTabChange={(tab) => updatePanel({ tab })}
+							headerLeading={
+								<PanelToggle isOpen onToggle={() => updatePanel({ open: false })} />
+							}
 							width={panel.width}
 							onWidthChange={(width) => updatePanel({ width })}
 						>

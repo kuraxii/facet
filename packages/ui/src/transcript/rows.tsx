@@ -5,13 +5,13 @@
  * 默认只有过程行与文件改动行收起,其余行展开。
  */
 import type { Part, ToolCallPart, TranscriptItem } from "@facet/client-core";
-import { Check, Copy, Split, Undo2 } from "lucide-react";
+import { Brain, Check, Copy, Edit3, FileText, Search, Split, Terminal, Undo2, Wrench } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { Markdown } from "../markdown/Markdown.tsx";
-import { ChevronIcon } from "./chevron.tsx";
+import { ChevronIcon, TreeChevron } from "./chevron.tsx";
 import { lineClass, patchLines } from "./diff-lines.ts";
-import { type DiffChunk, type DisplayRow, groupRows, metaSummary } from "./group.ts";
-import { foldOutput, toolStatusText, toolTarget } from "./tool-text.ts";
+import { type DiffChunk, type DisplayRow, groupLabel, groupRows, turnDurationText } from "./group.ts";
+import { foldOutput, type ToolCategory, toolKind, toolTarget } from "./tool-text.ts";
 
 /** 面板参数。 */
 export interface ChatTranscriptProps {
@@ -119,17 +119,20 @@ function preview(text: string, limit = 48): string {
 	return flat.length > limit ? `${flat.slice(0, limit)}…` : flat;
 }
 
-/** 过程中最近一次工具调用,运行中时显示在过程行右侧。 */
-function activeTool(row: DisplayRow): string {
-	let name = "";
-	for (const item of row.items) {
-		for (const part of item.parts) {
-			if (part.kind === "toolCall") {
-				name = part.name;
-			}
-		}
+/** 归类对应的行首图标。 */
+function categoryIcon(category: ToolCategory): ReactNode {
+	switch (category) {
+		case "command":
+			return <Terminal size={14} strokeWidth={1.5} />;
+		case "read":
+			return <FileText size={14} strokeWidth={1.5} />;
+		case "edit":
+			return <Edit3 size={14} strokeWidth={1.5} />;
+		case "search":
+			return <Search size={14} strokeWidth={1.5} />;
+		default:
+			return <Wrench size={14} strokeWidth={1.5} />;
 	}
-	return name;
 }
 
 function shortPath(path: string): string {
@@ -137,50 +140,69 @@ function shortPath(path: string): string {
 	return parts.length <= 2 ? parts.join("/") : parts.slice(-2).join("/");
 }
 
-/** 一次工具调用卡。 */
-function ToolCard({ part }: { part: ToolCallPart }) {
-	const [isOpen, setOpen] = useState(part.status === "running");
+/**
+ * 一次工具调用。
+ *
+ * 一行里只有图标、短名与参数摘要，点开才看输出；输出没有边框与底色，直接跟在下面。
+ */
+function ToolRow({ part }: { part: ToolCallPart }) {
+	const [isOpen, setOpen] = useState(false);
 	const [isExpanded, setExpanded] = useState(false);
 	const output = part.output ?? "";
 	const folded = foldOutput(output);
 	const isLong = folded.hiddenLines > 0;
 	const shown = isLong && !isExpanded ? folded.preview : output;
 	const target = toolTarget(part.input);
-	const statusText = toolStatusText(part.status, part.durationMs);
+	const kind = toolKind(part.name);
 
 	return (
-		<div className={`tool is-${part.status}`}>
-			<button type="button" className="tool-head" onClick={() => setOpen((open) => !open)}>
-				<ChevronIcon isOpen={isOpen} />
-				<span className="tool-name">{part.name}</span>
-				{target.length > 0 ? <span className="tool-arg">{target}</span> : null}
-				<span className="tool-status">
-					{part.status === "running" ? <i className="dot is-warn pulse" /> : null}
-					{statusText}
-				</span>
+		<div className={`tr is-${part.status}`}>
+			<button
+				type="button"
+				className="tr-head"
+				onClick={() => setOpen((open) => !open)}
+				aria-expanded={isOpen}
+				title={part.name}
+			>
+				<span className="tr-icon">{categoryIcon(kind.category)}</span>
+				<span className="tr-name">{kind.label}</span>
+				{target.length > 0 ? <span className="tr-arg">{target}</span> : null}
+				{part.status === "skipped" ? <span className="tr-status">未执行</span> : null}
+				{part.status === "failed" ? <span className="tr-status is-err">失败</span> : null}
+				{part.status === "running" ? <i className="dot is-warn pulse tr-dot" /> : null}
 			</button>
-			{isOpen && output.length > 0 ? <pre className="tool-out">{shown}</pre> : null}
-			{isOpen && isLong && !isExpanded ? (
-				<button type="button" className="tool-more" onClick={() => setExpanded(true)}>
-					已折叠 {folded.hiddenLines} 行 · 显示全部
-				</button>
+			{isOpen && output.length > 0 ? (
+				<div className="tr-out">
+					<pre>{shown}</pre>
+					{isLong && !isExpanded ? (
+						<button type="button" className="tr-more" onClick={() => setExpanded(true)}>
+							已折叠 {folded.hiddenLines} 行 · 显示全部
+						</button>
+					) : null}
+				</div>
 			) : null}
 		</div>
 	);
 }
 
-/** 一段思考。收起时只留一句预览。 */
-function ThinkingLine({ text }: { text: string }) {
+/** 一段思考。收起时只有一行，点开是正文。 */
+function ThinkingRow({ text }: { text: string }) {
 	const [isOpen, setOpen] = useState(false);
 	return (
-		<>
-			<button type="button" className="think" onClick={() => setOpen((open) => !open)}>
-				<ChevronIcon isOpen={isOpen} />
-				<em>思考</em>
-				{isOpen ? null : <span className="preview">{preview(text, 60)}</span>}
+		<div className="tr is-think">
+			<button
+				type="button"
+				className="tr-head"
+				onClick={() => setOpen((open) => !open)}
+				aria-expanded={isOpen}
+			>
+				<span className="tr-icon">
+					<Brain size={14} strokeWidth={1.5} />
+				</span>
+				<span className="tr-name">Thinking</span>
 			</button>
-			{isOpen ? <pre className="think-text">{text}</pre> : null}
-		</>
+			{isOpen ? <pre className="tr-think">{text}</pre> : null}
+		</div>
 	);
 }
 
@@ -190,9 +212,9 @@ function PartView({ part, isStreaming }: { part: Part; isStreaming: boolean }) {
 		return <Markdown text={part.text} isStreaming={isStreaming} />;
 	}
 	if (part.kind === "thinking") {
-		return <ThinkingLine text={part.text} />;
+		return <ThinkingRow text={part.text} />;
 	}
-	return <ToolCard part={part} />;
+	return <ToolRow part={part} />;
 }
 
 /** 一轮的文件改动。文件是按钮,点开看这一段补丁。 */
@@ -412,6 +434,9 @@ export function ChatTranscript({
 					return (
 						<Shell key={row.id} className="is-fork">
 							<div className="turn-actions">
+								{turnDurationText(row, now).length === 0 ? null : (
+									<span className="turn-time">{turnDurationText(row, now)}</span>
+								)}
 								{onCopyText === undefined || lastAnswerText.length === 0 || row.isStreaming ? null : (
 									<CopyButton text={lastAnswerText} onCopy={onCopyText} />
 								)}
@@ -519,27 +544,26 @@ export function ChatTranscript({
 				}
 
 				if (row.kind === "meta") {
-					const active = activeTool(row);
+					// 收起时是一行图标加标题，展开时标题变成药丸底、左侧换成下箭头
 					return (
 						<Shell key={row.id} className="is-process">
-							<div className="proc-box">
+							<div className="group">
 								<button
 									type="button"
-									className="proc"
+									className={isCollapsed ? "group-head" : "group-head is-open"}
 									onClick={() => toggle(row)}
 									aria-expanded={!isCollapsed}
 									aria-label="过程"
 								>
-									<span className="summary">{metaSummary(row, now)}</span>
-									{row.isStreaming ? (
-										<span className="live">
-											<i className="dot pulse" />
-											{active.length > 0 ? `第 ${row.toolCount} 次 · ${active}` : "进行中"}
-										</span>
-									) : null}
+									<span className="group-icon">
+										{isCollapsed ? <Wrench size={14} strokeWidth={1.5} /> : <TreeChevron isOpen />}
+									</span>
+									<span className={row.isStreaming ? "group-label is-live" : "group-label"}>
+										{groupLabel(row)}
+									</span>
 								</button>
 								{isCollapsed ? null : (
-									<div className="proc-body">
+									<div className="group-body">
 										{row.items.flatMap((item) =>
 											item.parts.map((part) => (
 												<PartView

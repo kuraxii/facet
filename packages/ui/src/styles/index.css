@@ -1678,192 +1678,222 @@ svg.fl {
 	}
 }
 
-/* 过程行 */
+/* 过程行：一行标题，展开后是缩进区；工作本身不再有边框卡片 */
 
-.proc-box {
-	border: 1px dashed var(--line2);
-	border-radius: 10px;
-	background: transparent;
-	overflow: hidden;
-}
-
-.proc {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	width: 100%;
-	padding: 7px 12px;
-	border: 0;
-	border-radius: 0;
-	background: transparent;
-	color: var(--t2);
-	font-size: 12.5px;
-	text-align: left;
-}
-
-.proc:hover {
-	background: var(--card);
-}
-
-.proc .summary {
-	color: var(--t2);
-}
-
-.proc .live {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	margin-left: auto;
-	color: var(--ok);
-	font-size: 12px;
-}
-
-.proc-body {
+.group {
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
-	padding: 2px 12px 12px 28px;
-}
-
-.think {
-	display: flex;
 	align-items: flex-start;
-	gap: 6px;
-	width: 100%;
-	padding: 0;
-	border: 0;
-	background: transparent;
-	color: var(--t2);
-	font-size: 12.5px;
-	text-align: left;
+	gap: 2px;
 }
 
-.think em {
-	color: var(--t3);
-	font-style: normal;
-}
-
-.think .preview {
-	overflow: hidden;
-	color: var(--t3);
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.think-text {
-	margin: 0;
-	padding: 0 0 0 14px;
-	border-left: 2px solid var(--line);
-	color: var(--t3);
-	font-size: 12.5px;
-	line-height: 1.65;
-	white-space: pre-wrap;
-	word-break: break-word;
-}
-
-/* 工具卡 */
-
-.tool {
-	border: 1px solid var(--line);
-	border-radius: 8px;
-	background: var(--card);
-	font-size: 12px;
-	overflow: hidden;
-}
-
-.tool.is-failed {
-	border-color: var(--err);
-}
-
-.tool.is-running {
-	border-color: var(--line2);
-}
-
-.tool.is-skipped {
-	border-style: dashed;
-	border-color: var(--line2);
-}
-
-.tool-head {
+.group-head {
 	display: flex;
 	align-items: center;
-	gap: 8px;
-	width: 100%;
-	padding: 7px 10px;
+	gap: 7px;
+	max-width: 100%;
+	margin-left: -8px;
+	padding: 4px 9px;
 	border: 0;
+	border-radius: 999px;
 	background: transparent;
+	color: var(--t3);
+	font-size: 13px;
+	line-height: 1.4;
 	text-align: left;
 }
 
-.tool.is-failed .tool-head {
-	background: var(--errbg);
+.group-head:hover {
+	background: var(--surface2);
+	color: var(--t2);
 }
 
-.tool-name {
-	font-family: var(--font-mono);
-	font-weight: 600;
+.group-head.is-open {
+	background: var(--surface2);
 	color: var(--t1);
 }
 
-.tool-arg {
+.group-icon {
+	display: grid;
+	flex: none;
+	place-items: center;
+	width: 14px;
+	height: 14px;
+}
+
+.group-label {
 	overflow: hidden;
-	color: var(--t2);
-	font-family: var(--font-mono);
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
-.tool-status {
+/* 运行中：标题文字上有一道扫光，结束后停住 */
+.group-label.is-live {
+	background-image: linear-gradient(
+		90deg,
+		var(--t3) 0%,
+		var(--t3) 35%,
+		var(--t1) 50%,
+		var(--t3) 65%,
+		var(--t3) 100%
+	);
+	background-size: 220% 100%;
+	background-clip: text;
+	-webkit-background-clip: text;
+	color: transparent;
+	-webkit-text-fill-color: transparent;
+	animation: group-shimmer 1.9s linear infinite;
+}
+
+@keyframes group-shimmer {
+	from {
+		background-position: 120% 0;
+	}
+	to {
+		background-position: -120% 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.group-label.is-live {
+		animation: none;
+		color: var(--t2);
+		-webkit-text-fill-color: currentColor;
+		background: none;
+	}
+}
+
+.group-body {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	margin: 2px 0 0 1px;
+	padding-left: 20px;
+	border-left: 1px solid var(--line);
+}
+
+/* 组里的一行：图标、短名、参数，点开才有输出 */
+
+.tr {
+	min-width: 0;
+}
+
+.tr-head {
 	display: flex;
 	align-items: center;
-	gap: 6px;
-	margin-left: auto;
+	gap: 8px;
+	width: 100%;
+	min-width: 0;
+	padding: 5px 8px;
+	border: 0;
+	border-radius: 7px;
+	background: transparent;
+	color: var(--t2);
+	font-size: 13px;
+	line-height: 1.45;
+	text-align: left;
+}
+
+.tr-head:hover {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+.tr-icon {
+	display: grid;
 	flex: none;
-	color: var(--ok);
-	font-size: 12px;
-}
-
-.tool.is-failed .tool-status {
-	color: var(--err);
-}
-
-.tool.is-skipped .tool-status {
+	place-items: center;
+	width: 14px;
+	height: 14px;
 	color: var(--t3);
 }
 
-.tool.is-running .tool-status {
-	color: var(--warn);
+.tr-head:hover .tr-icon {
+	color: var(--t2);
 }
 
-.tool-out {
+.tr-name {
+	flex: none;
+	color: var(--t1);
+}
+
+.tr-arg {
+	overflow: hidden;
+	min-width: 0;
+	color: var(--t3);
+	font-family: var(--font-mono);
+	font-size: 12px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tr-status {
+	flex: none;
+	margin-left: auto;
+	color: var(--t3);
+	font-size: 11.5px;
+}
+
+.tr-status.is-err {
+	color: var(--err);
+}
+
+.tr-dot {
+	margin-left: auto;
+}
+
+.tr.is-failed .tr-name {
+	color: var(--err);
+}
+
+/* 输出：没有边框与底色，直接缩进在行下面 */
+.tr-out {
+	padding: 0 8px 4px 30px;
+}
+
+.tr-out pre {
 	max-height: 260px;
 	overflow: auto;
 	margin: 0;
-	padding: 8px 10px;
-	border-top: 1px solid var(--line);
-	background: var(--card2);
 	color: var(--t2);
 	font-family: var(--font-mono);
 	font-size: 11.5px;
-	line-height: 1.55;
+	line-height: 1.6;
 	white-space: pre-wrap;
 	word-break: break-word;
 }
 
-.tool.is-failed .tool-out {
+.tr.is-failed .tr-out pre {
 	color: var(--err);
 }
 
-.tool-more {
-	display: block;
-	width: 100%;
-	padding: 6px;
+.tr-more {
+	margin-top: 4px;
+	padding: 0;
 	border: 0;
-	border-top: 1px solid var(--line);
 	background: transparent;
 	color: var(--acc);
 	font-size: 11.5px;
-	text-align: center;
+}
+
+.tr-think {
+	max-height: 320px;
+	overflow: auto;
+	margin: 0;
+	padding: 2px 8px 6px 30px;
+	color: var(--t3);
+	font-family: var(--font-sans);
+	font-size: 12.5px;
+	line-height: 1.7;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+/* 这一轮收尾：时长、复制、分叉 */
+
+.turn-time {
+	color: var(--t3);
+	font-size: 12px;
 }
 
 /* 文件改动 */

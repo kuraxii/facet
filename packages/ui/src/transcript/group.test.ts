@@ -1,6 +1,6 @@
 import type { TranscriptItem } from "@facet/client-core";
 import { describe, expect, it } from "vitest";
-import { groupRows, metaSummary } from "./group.ts";
+import { groupLabel, groupRows, turnDurationText } from "./group.ts";
 
 function item(overrides: Partial<TranscriptItem> & Pick<TranscriptItem, "id" | "role">): TranscriptItem {
 	return {
@@ -47,14 +47,14 @@ describe("分行", () => {
 		]);
 		expect(rows.map((row) => row.kind)).toEqual(["user", "meta", "assistant", "fork"]);
 		expect(rows[1]?.items.map((entry) => entry.id)).toEqual(["m2", "m3"]);
-		expect(rows[1]?.thinkingCount).toBe(1);
-		expect(rows[1]?.toolCount).toBe(1);
-		expect(rows[1]?.toolCount).toBe(1);
-		// 没有时间戳就算不出这一轮的工作时长,摘要留空
-		expect(metaSummary(rows[1] as (typeof rows)[number])).toBe("");
+		expect(rows[1]?.counts.thoughts).toBe(1);
+		expect(rows[1]?.counts.reads).toBe(1);
+		expect(groupLabel(rows[1] as (typeof rows)[number])).toBe("读取了 1 个文件");
+		// 没有时间戳就算不出这一轮的时长
+		expect(turnDurationText(rows[2] as (typeof rows)[number])).toBe("");
 	});
 
-	it("过程行说的是这一轮的工作时长,不是工具耗时之和", () => {
+	it("收尾行说的是这一轮的工作时长,不是工具耗时之和", () => {
 		const rows = groupRows([
 			item({ id: "m1", role: "user", parts: [text("text:0", "改一下")], startedAt: 1_000, endedAt: 1_000 }),
 			item({
@@ -72,8 +72,9 @@ describe("分行", () => {
 				endedAt: 1_800,
 			}),
 		]);
-		expect(rows[1]?.durationMs).toBe(800);
-		expect(metaSummary(rows[1] as (typeof rows)[number])).toBe("工作 800 毫秒");
+		// 过程行、答复行、收尾行：时长落在收尾行上
+		expect(rows.at(-1)?.durationMs).toBe(800);
+		expect(turnDurationText(rows.at(-1) as (typeof rows)[number])).toBe("800 毫秒");
 	});
 
 	it("没有答复时按已见到的最后时间算", () => {
@@ -81,7 +82,7 @@ describe("分行", () => {
 			item({ id: "m1", role: "user", parts: [text("text:0", "问")], startedAt: 1_000, endedAt: 1_000 }),
 			item({ id: "m2", role: "assistant", parts: [tool("tool:c1", "c1")], startedAt: 1_000, endedAt: 2_500 }),
 		]);
-		expect(rows[1]?.durationMs).toBe(1_500);
+		expect(rows.at(-1)?.durationMs).toBe(1_500);
 	});
 
 	it("下一轮重新计时", () => {
@@ -104,7 +105,7 @@ describe("分行", () => {
 				endedAt: 9_500,
 			}),
 		]);
-		expect(rows[3]?.durationMs).toBe(500);
+		expect(rows.at(-1)?.durationMs).toBe(500);
 	});
 
 	it("正文是过程行的边界", () => {
@@ -177,7 +178,7 @@ describe("分行", () => {
 			}),
 		]);
 		expect(rows.map((row) => row.kind)).toEqual(["assistant", "diff", "fork"]);
-		expect(rows[0]?.toolCount).toBe(1);
+		expect(rows[0]?.counts.reads).toBe(1);
 	});
 
 	it("每一轮末尾各有一个分叉点", () => {
@@ -227,7 +228,7 @@ describe("思考段的归属", () => {
 		]);
 		expect(rows.map((row) => row.kind)).toEqual(["user", "assistant", "fork"]);
 		expect(rows[1]?.items[0]?.parts.map((part) => part.kind)).toEqual(["thinking", "text"]);
-		expect(rows[1]?.thinkingCount).toBe(1);
+		expect(rows[1]?.counts.thoughts).toBe(1);
 	});
 
 	it("这一轮有过程时,答复行里的思考并进过程行", () => {
@@ -245,10 +246,10 @@ describe("思考段的归属", () => {
 			}),
 		]);
 		expect(rows.map((row) => row.kind)).toEqual(["user", "meta", "assistant", "fork"]);
-		expect(rows[1]?.thinkingCount).toBe(2);
-		expect(rows[1]?.toolCount).toBe(1);
+		expect(rows[1]?.counts.thoughts).toBe(2);
+		expect(rows[1]?.counts.reads).toBe(1);
 		expect(rows[2]?.items[0]?.parts.map((part) => part.kind)).toEqual(["text"]);
-		expect(rows[2]?.thinkingCount).toBe(0);
+		expect(rows[2]?.counts.thoughts).toBe(0);
 	});
 
 	it("并入过程后答复行的工具调用仍留在答复行", () => {
@@ -272,7 +273,7 @@ describe("思考段的归属", () => {
 			item({ id: "m4", role: "assistant", parts: [thinking("thinking:0", "想"), text("text:1", "再答")] }),
 		]);
 		expect(rows.map((row) => row.kind)).toEqual(["meta", "assistant", "user", "assistant", "fork"]);
-		expect(rows[3]?.thinkingCount).toBe(1);
+		expect(rows[3]?.counts.thoughts).toBe(1);
 	});
 });
 
@@ -289,9 +290,9 @@ describe("工作时长", () => {
 				endedAt: 1_000,
 			}),
 		]);
-		const meta = rows[1] as (typeof rows)[number];
+		const meta = rows.at(-1) as (typeof rows)[number];
 		expect(meta.startedAt).toBe(1_000);
-		expect(metaSummary(meta, 4_500)).toBe("工作 3.5 秒");
+		expect(turnDurationText(meta, 4_500)).toBe("3.5 秒");
 	});
 
 	it("结束后用主机记录的起止时间,不再随时间走", () => {
@@ -300,8 +301,8 @@ describe("工作时长", () => {
 			item({ id: "m2", role: "assistant", parts: [tool("tool:c1", "c1")], startedAt: 1_000, endedAt: 3_000 }),
 			item({ id: "m3", role: "assistant", parts: [text("text:0", "答")], startedAt: 3_000, endedAt: 4_000 }),
 		]);
-		const meta = rows[1] as (typeof rows)[number];
+		const meta = rows.at(-1) as (typeof rows)[number];
 		expect(meta.durationMs).toBe(3_000);
-		expect(metaSummary(meta, 99_000)).toBe("工作 3.0 秒");
+		expect(turnDurationText(meta, 99_000)).toBe("3.0 秒");
 	});
 });

@@ -100,7 +100,7 @@ export {
 	uiThemeLabel,
 } from "./theme.ts";
 export type { DiffChunk, DisplayRow, ForkPoint, RowKind } from "./transcript/group.ts";
-export { formatDuration, groupRows, metaSummary } from "./transcript/group.ts";
+export { formatDuration, groupLabel, groupRows, turnDurationText } from "./transcript/group.ts";
 export { ArrowDownIcon } from "./transcript/icons.tsx";
 export type { ChatTranscriptProps } from "./transcript/rows.tsx";
 export { ChatTranscript } from "./transcript/rows.tsx";

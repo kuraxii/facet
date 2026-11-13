@@ -771,6 +771,12 @@ svg.fl {
 	background: transparent;
 }
 
+/* 悬停与拖动时只让那条 1px 分界线换成强调色，不铺宽带 */
+.panel:has(.panel-resizer:hover),
+.panel:has(.panel-resizer:active) {
+	border-left-color: color-mix(in srgb, var(--acc) 40%, transparent);
+}
+
 .panel-head {
 	display: flex;
 	flex: none;

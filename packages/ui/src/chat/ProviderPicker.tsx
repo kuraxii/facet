@@ -1,10 +1,9 @@
 /**
  * 添加提供商的挑选弹窗。
  *
- * 列出 pi 目录里的全部提供方，内置的在前、自定义的在后，按名字搜索过滤。已经配置好凭证的
- * 标成「已添加」；没配置的直接在这里填 API key，存完这个提供方就出现在设置页的列表里。
+ * 只列还没配置的提供方，按名字搜索过滤。选中一个就在行内填 API key，存完它出现在设置页的
+ * 已配置列表里，也从这里消失。自定义提供方一律算已配置，不在这里出现。
  */
-import type { CustomProviderInfo } from "@facet/protocol";
 import { Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ProviderRow } from "./provider-rows.ts";
@@ -15,8 +14,6 @@ export interface ProviderPickerProps {
 	rows: readonly ProviderRow[];
 	/** 存下某个提供方的凭证；失败时抛出并显示在那一行下面 */
 	onSaveCredential: (providerId: string, key: string) => Promise<void>;
-	/** 转到自定义提供方的编辑表单 */
-	onEditCustom: (custom: CustomProviderInfo) => void;
 	/** 转到新建自定义提供方的表单 */
 	onCreateCustom: () => void;
 	onClose: () => void;
@@ -27,13 +24,7 @@ function isAdded(row: ProviderRow): boolean {
 	return row.provider.authenticated || row.custom !== undefined;
 }
 
-export function ProviderPicker({
-	rows,
-	onSaveCredential,
-	onEditCustom,
-	onCreateCustom,
-	onClose,
-}: ProviderPickerProps) {
+export function ProviderPicker({ rows, onSaveCredential, onCreateCustom, onClose }: ProviderPickerProps) {
 	const [query, setQuery] = useState("");
 	/** 展开输入凭证的提供方 */
 	const [editingId, setEditingId] = useState<string | undefined>(undefined);
@@ -47,16 +38,13 @@ export function ProviderPicker({
 		searchRef.current?.focus({ preventScroll: true });
 	}, []);
 
-	// 内置在前、自定义在后；同组内保持目录顺序
-	const ordered = useMemo(
-		() => [...rows].sort((a, b) => Number(a.custom !== undefined) - Number(b.custom !== undefined)),
-		[rows],
-	);
+	// 已经在用的不列：有凭证的、自定义的都不在这里
+	const pending = useMemo(() => rows.filter((row) => !isAdded(row)), [rows]);
 	const keyword = query.trim().toLowerCase();
 	const visible =
 		keyword.length === 0
-			? ordered
-			: ordered.filter(
+			? pending
+			: pending.filter(
 					(row) =>
 						row.provider.name.toLowerCase().includes(keyword) ||
 						row.provider.id.toLowerCase().includes(keyword),
@@ -101,39 +89,22 @@ export function ProviderPicker({
 				<ul className="picker-list">
 					{visible.map((row) => {
 						const provider = row.provider;
-						const added = isAdded(row);
 						const isBusy = busyId === provider.id;
 						return (
 							<li key={provider.id} className="picker-row">
 								<div className="picker-row-head">
 									<span className="picker-name ell">{provider.name}</span>
-									{row.custom === undefined ? null : <span className="set-badge is-custom">自定义</span>}
-									<span className={added ? "set-badge is-on" : "set-badge"}>
-										{added ? "已添加" : "未配置"}
-									</span>
-									<span className="picker-meta mono">{provider.modelCount} 个模型</span>
-
-									{row.custom !== undefined ? (
-										<button
-											type="button"
-											className="set-row-action"
-											onClick={() => onEditCustom(row.custom as CustomProviderInfo)}
-										>
-											编辑
-										</button>
-									) : provider.authenticated ? null : (
-										<button
-											type="button"
-											className="set-row-action"
-											onClick={() => {
-												setFailure(undefined);
-												setKey("");
-												setEditingId(editingId === provider.id ? undefined : provider.id);
-											}}
-										>
-											添加
-										</button>
-									)}
+									<button
+										type="button"
+										className="set-row-action"
+										onClick={() => {
+											setFailure(undefined);
+											setKey("");
+											setEditingId(editingId === provider.id ? undefined : provider.id);
+										}}
+									>
+										添加
+									</button>
 								</div>
 
 								{editingId === provider.id ? (
@@ -168,7 +139,9 @@ export function ProviderPicker({
 							</li>
 						);
 					})}
-					{visible.length === 0 ? <li className="picker-empty">没有匹配的提供商</li> : null}
+					{visible.length === 0 ? (
+						<li className="picker-empty">{pending.length === 0 ? "都配置好了" : "没有匹配的提供商"}</li>
+					) : null}
 				</ul>
 
 				<div className="dialog-actions">

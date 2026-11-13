@@ -176,13 +176,12 @@ export function ProvidersSection({
 								<span className="set-row-name ell">{provider.name}</span>
 								{custom === undefined ? (
 									<>
-										<span className={provider.authenticated ? "set-badge is-on" : "set-badge"}>
-											{provider.authenticated
-												? provider.subscription
-													? "订阅登录"
-													: "已配置凭证"
-												: "未配置凭证"}
-										</span>
+										{/* 列表里只有配置好的，所以凭证徽标只表示登录方式，不给「未配置」 */}
+										{provider.authenticated ? (
+											<span className="set-badge is-on">
+												{provider.subscription ? "订阅登录" : "已配置凭证"}
+											</span>
+										) : null}
 										{provider.authSource === undefined ? null : (
 											<span className="set-row-meta mono">{provider.authSource}</span>
 										)}
@@ -191,7 +190,6 @@ export function ProvidersSection({
 									// 自定义提供方的密钥写在模型配置里，凭证状态与来源都由「编辑」那支管
 									<span className="set-badge is-custom">自定义</span>
 								)}
-								<span className="set-row-meta mono">{provider.modelCount} 个模型</span>
 
 								{custom === undefined ? (
 									<button
@@ -346,10 +344,6 @@ export function ProvidersSection({
 				<ProviderPicker
 					rows={providerRows(providers, customs ?? [])}
 					onSaveCredential={saveCredentialInPicker}
-					onEditCustom={(custom) => {
-						setIsPickerOpen(false);
-						setForm({ initial: custom });
-					}}
 					onCreateCustom={() => {
 						setIsPickerOpen(false);
 						setForm({ initial: undefined });

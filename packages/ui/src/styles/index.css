@@ -19,6 +19,47 @@
 	--fs-code-scale: 1;
 }
 
+/*
+ * 滚动条统一成细的悬浮条：没有外框、轨道与两端的箭头，只剩一条半透明的拇指，指针落上去
+ * 才提亮。Chromium 一旦给了 `scrollbar-width` 或 `scrollbar-color` 就按标准画，会带箭头，
+ * 所以这里只走 webkit 伪元素；下面再用 `@supports` 给没有伪元素的引擎一份等效的细条。
+ */
+*::-webkit-scrollbar {
+	width: 10px;
+	height: 10px;
+	background: transparent;
+}
+
+*::-webkit-scrollbar-button {
+	display: none;
+	width: 0;
+	height: 0;
+}
+
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+	background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+	border: 3px solid transparent;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--t3) 40%, transparent);
+	background-clip: content-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+	background: var(--t2);
+	background-clip: content-box;
+}
+
+@supports (-moz-appearance: none) {
+	* {
+		scrollbar-width: thin;
+		scrollbar-color: color-mix(in srgb, var(--t3) 40%, transparent) transparent;
+	}
+}
+
 * {
 	box-sizing: border-box;
 }
@@ -2080,6 +2121,8 @@ svg.fl {
 	font: inherit;
 	font-size: 14px;
 	line-height: 1.6;
+	/* 内容超过一屏时滚动条出现也不让文字跟着跳 */
+	scrollbar-gutter: stable;
 }
 
 .composer textarea::placeholder {

@@ -1374,8 +1374,6 @@ export function App() {
 					isSettingsOpen={view === "settings"}
 					onTogglePanel={() => updatePanel({ open: !panel.open })}
 					isPanelOpen={panel.open}
-					onToggleTerminal={toggleTerminal}
-					isTerminalOpen={dock.open}
 					hostStatus={isReconnecting ? "重连中" : host?.role === "viewer" ? "只读" : undefined}
 					isOpen={isSidebarOpen}
 					onNavigate={() => setIsSidebarOpen(false)}

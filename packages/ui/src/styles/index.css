@@ -1706,15 +1706,15 @@ svg.fl {
 	border: 0;
 	border-radius: 999px;
 	background: transparent;
-	color: var(--t3);
+	color: var(--t2);
 	font-size: 13px;
 	line-height: 1.4;
 	text-align: left;
 }
 
+/* 收起时只有文字变亮，不加底色；展开时标题才是药丸底 */
 .group-head:hover {
-	background: var(--surface2);
-	color: var(--t2);
+	color: var(--t1);
 }
 
 .group-head.is-open {
@@ -1898,11 +1898,25 @@ svg.fl {
 	word-break: break-word;
 }
 
-/* 直接放在答复正文里的思考行（这一轮没有工具调用）：与 Markdown 左对齐，不缩进 */
+/* 直接放在答复正文里的思考行（这一轮没有工具调用）：与 Markdown 左对齐，不缩进；
+   收起态和过程组一样只让文字变亮，不加底色 */
 .assistant-body > .tr .tr-head,
 .assistant-body > .tr .tr-think {
 	margin-left: -8px;
 	padding-left: 8px;
+}
+
+.assistant-body > .tr .tr-head:hover {
+	background: transparent;
+}
+
+.assistant-body > .tr .tr-head .tr-name {
+	color: var(--t2);
+}
+
+.assistant-body > .tr .tr-head:hover .tr-name,
+.assistant-body > .tr .tr-head[aria-expanded="true"] .tr-name {
+	color: var(--t1);
 }
 
 /* 这一轮收尾：时长、复制、分叉 */

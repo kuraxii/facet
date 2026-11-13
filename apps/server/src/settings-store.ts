@@ -11,6 +11,8 @@ import {
 	type CodeTheme,
 	DEFAULT_SETTINGS,
 	type FacetSettings,
+	LIVE_MOTIONS,
+	type LiveMotion,
 	type SendKey,
 	type ThemeMode,
 	UI_THEMES,
@@ -125,6 +127,11 @@ export function parseSettings(value: unknown): FacetSettings {
 				typeof appearance.reducedMotion === "boolean"
 					? appearance.reducedMotion
 					: DEFAULT_SETTINGS.appearance.reducedMotion,
+			liveMotion: readChoice<LiveMotion>(
+				appearance.liveMotion,
+				LIVE_MOTIONS,
+				DEFAULT_SETTINGS.appearance.liveMotion,
+			),
 		},
 		input: {
 			sendKey: readChoice<SendKey>(input.sendKey, ["enter", "shiftEnter"], DEFAULT_SETTINGS.input.sendKey),

@@ -1882,10 +1882,30 @@ svg.fl {
 	white-space: nowrap;
 }
 
-/* 运行中：文字上有一道扫光，结束后停住。过程组标题与工具行的短名、参数共用这一套 */
+/*
+ * 运行中：默认让文字在两个不透明度之间呼吸，只改 opacity，由合成器执行，文字不参与重绘。
+ * 设置里选「扫光」时改成文字填充上一道渐变带扫过，逐帧重绘，更费电。
+ */
 .tr-name.is-live,
 .tr-arg.is-live,
 .group-label.is-live {
+	color: var(--t1);
+	animation: live-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+	0%,
+	100% {
+		opacity: 0.45;
+	}
+	50% {
+		opacity: 1;
+	}
+}
+
+[data-live-motion="shimmer"] .tr-name.is-live,
+[data-live-motion="shimmer"] .tr-arg.is-live,
+[data-live-motion="shimmer"] .group-label.is-live {
 	background-image: linear-gradient(
 		90deg,
 		var(--t2) 0%,
@@ -1916,7 +1936,13 @@ svg.fl {
 	.tr-arg.is-live,
 	.group-label.is-live {
 		animation: none;
-		color: var(--t2);
+		opacity: 1;
+	}
+
+	[data-live-motion="shimmer"] .tr-name.is-live,
+	[data-live-motion="shimmer"] .tr-arg.is-live,
+	[data-live-motion="shimmer"] .group-label.is-live {
+		color: var(--t1);
 		-webkit-text-fill-color: currentColor;
 		background: none;
 	}

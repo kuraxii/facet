@@ -38,6 +38,12 @@ export type CodeTheme = (typeof CODE_THEMES)[number];
 /** 发送键位。enter 为回车发送，shiftEnter 为回车换行、⌘/Ctrl+回车发送。 */
 export type SendKey = "enter" | "shiftEnter";
 
+/** 运行中状态的表现方式。pulse 为文字不透明度呼吸，shimmer 为一道光带扫过。 */
+export type LiveMotion = "pulse" | "shimmer";
+
+/** 可选的运行中动效，设置页按这个顺序列出。 */
+export const LIVE_MOTIONS: readonly LiveMotion[] = ["pulse", "shimmer"];
+
 /** 外观设置。 */
 export interface AppearanceSettings {
 	/** 主题 */
@@ -60,6 +66,8 @@ export interface AppearanceSettings {
 	terminalFontSize: number;
 	/** 是否减少动效，开启后界面不做过渡与动画 */
 	reducedMotion: boolean;
+	/** 运行中状态用哪种动效；呼吸只改不透明度，扫光逐帧重绘文字，更费电 */
+	liveMotion: LiveMotion;
 }
 
 /** 输入设置。 */
@@ -104,6 +112,7 @@ export const DEFAULT_SETTINGS: FacetSettings = {
 		terminalFont: "",
 		terminalFontSize: 12.5,
 		reducedMotion: false,
+		liveMotion: "pulse",
 	},
 	input: { sendKey: "enter" },
 	layout: { sidebarWidth: 272 },

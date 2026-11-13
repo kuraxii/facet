@@ -77,7 +77,6 @@ export function reduceSession(view: SessionView, action: Action): SessionView {
 		case "session/pendingMessageSet":
 		case "session/queueCleared":
 		case "session/compact":
-		case "session/usageChanged":
 			return view;
 		case "chat/messageAppended":
 		case "chat/messageUpdated":

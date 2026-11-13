@@ -15,8 +15,11 @@ export function usageLabel(usage: ContextUsage | undefined): string {
 	return `上下文窗口已使用 ${percent}% · ${formatTokens(usage.tokens)} / ${formatTokens(usage.contextWindow)}`;
 }
 
-/** token 数收成便于阅读的写法：一万以上按千取整，千位保留一位小数。 */
+/** token 数收成便于阅读的写法：百万以上按兆取整，一万以上按千取整，千位保留一位小数。 */
 export function formatTokens(tokens: number): string {
+	if (tokens >= 1_000_000) {
+		return `${Math.round(tokens / 1_000_000)}m`;
+	}
 	if (tokens >= 10_000) {
 		return `${Math.round(tokens / 1000)}k`;
 	}
@@ -24,6 +27,22 @@ export function formatTokens(tokens: number): string {
 		return `${(tokens / 1000).toFixed(1)}k`;
 	}
 	return String(tokens);
+}
+
+/** 浮层中间那行：已使用的比例。估不出来时为 null，正在压缩时由界面另说一句。 */
+export function usagePercentText(usage: ContextUsage | undefined): string | null {
+	if (usage === undefined || usage.percent === null || usage.tokens === null) {
+		return null;
+	}
+	return `已使用 ${Math.round(usage.percent)}%`;
+}
+
+/** 浮层底行：已用量与窗口大小。估不出来时为 null。 */
+export function usageDetailText(usage: ContextUsage | undefined): string | null {
+	if (usage === undefined || usage.tokens === null || usage.percent === null) {
+		return null;
+	}
+	return `${formatTokens(usage.tokens)} / ${formatTokens(usage.contextWindow)} tokens`;
 }
 
 /** 占用比例的档位：普通、提醒、危险。 */

@@ -12,7 +12,7 @@ import { Brain, FileUp, ImagePlus, Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronIcon } from "../transcript/chevron.tsx";
 import { SendIcon, StopIcon } from "../transcript/icons.tsx";
-import { ContextRing, usageLabel } from "./ContextRing.tsx";
+import { ContextRing, usageDetailText, usageLabel, usagePercentText } from "./ContextRing.tsx";
 
 /** 输入区参数。 */
 export interface ComposerProps {
@@ -315,7 +315,13 @@ export function Composer({
 						</button>
 						{openMenu === "context" ? (
 							<div className="chip-pop is-context" role="dialog" aria-label="上下文用量">
-								<p className="ctx-pop-text">{isCompacting ? "正在压缩上下文…" : usageLabel(contextUsage)}</p>
+								<p className="ctx-pop-title">上下文窗口</p>
+								<p className="ctx-pop-value">
+									{isCompacting ? "正在压缩…" : (usagePercentText(contextUsage) ?? "暂无数据")}
+								</p>
+								{isCompacting || usageDetailText(contextUsage) === null ? null : (
+									<p className="ctx-pop-detail">{usageDetailText(contextUsage)}</p>
+								)}
 								{onCompact === undefined ? null : (
 									<button
 										type="button"

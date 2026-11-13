@@ -4,17 +4,34 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { ContextRing, formatTokens, usageLabel, usageLevel } from "./ContextRing.tsx";
+import {
+	ContextRing,
+	formatTokens,
+	usageDetailText,
+	usageLabel,
+	usageLevel,
+	usagePercentText,
+} from "./ContextRing.tsx";
 
 function render(usage: Parameters<typeof ContextRing>[0]["usage"]): string {
 	return renderToStaticMarkup(createElement(ContextRing, { usage }));
 }
 
 describe("上下文用量环", () => {
-	it("token 数按千取整，便于一眼读", () => {
+	it("token 数按千与兆取整，便于一眼读", () => {
 		expect(formatTokens(820)).toBe("820");
 		expect(formatTokens(1500)).toBe("1.5k");
 		expect(formatTokens(83_400)).toBe("83k");
+		expect(formatTokens(393_000)).toBe("393k");
+		expect(formatTokens(1_048_576)).toBe("1m");
+	});
+
+	it("浮层中间与底行的文案", () => {
+		const usage = { tokens: 393_000, contextWindow: 1_048_576, percent: 37.4 };
+		expect(usagePercentText(usage)).toBe("已使用 37%");
+		expect(usageDetailText(usage)).toBe("393k / 1m tokens");
+		expect(usagePercentText(undefined)).toBeNull();
+		expect(usageDetailText({ tokens: null, contextWindow: 200_000, percent: null })).toBeNull();
 	});
 
 	it("有数值时写出比例与已用、窗口", () => {

@@ -32,13 +32,30 @@ function hasDiagramContent(svg: string): boolean {
 	return (template.content.querySelector("svg")?.querySelectorAll("g, text, rect").length ?? 0) > 1;
 }
 
+/**
+ * 补几处 themeVariables 管不到的默认样式。
+ *
+ * 边标签的默认做法是给文字描一圈同色边再把底块做成半透明，字会显得粗；状态图的状态名默认拿
+ * `stateBkg` 当文字色，深色底上等于看不见。
+ */
+function themeCss(palette: Record<string, string>): string {
+	const text = palette.textColor ?? "#fafafa";
+	return `
+		.edgeLabel .label, .edgeLabel .label * { stroke: none; }
+		.edgeLabel rect { opacity: 1; stroke: none; }
+		.stateLabel text, .stateGroup .state-title, .statediagram-state .nodeLabel { fill: ${text}; }
+		.stateLabel .box { opacity: 1; }
+	`;
+}
+
 /** 把界面上的语义色读成 mermaid 的 themeVariables。 */
 function readThemeVariables(): Record<string, string> {
 	const css = getComputedStyle(document.documentElement);
 	const read = (name: string, fallback: string): string => css.getPropertyValue(name).trim() || fallback;
 	const card = read("--card", "#1b1b1f");
 	const surface = read("--surface2", "#232327");
-	const line = read("--line", "#2e2e33");
+	// 边框与线条要比底色亮一档，否则深色底上几乎看不见
+	const border = read("--t3", "#71717a");
 	const text = read("--t1", "#fafafa");
 	const muted = read("--t2", "#a1a1aa");
 	const font = read("--font-sans", "sans-serif");
@@ -47,24 +64,47 @@ function readThemeVariables(): Record<string, string> {
 		mainBkg: surface,
 		primaryColor: surface,
 		primaryTextColor: text,
-		primaryBorderColor: line,
+		primaryBorderColor: border,
 		secondaryColor: surface,
 		secondaryTextColor: text,
-		secondaryBorderColor: line,
+		secondaryBorderColor: border,
 		tertiaryColor: card,
 		tertiaryTextColor: text,
-		tertiaryBorderColor: line,
+		tertiaryBorderColor: border,
 		nodeBkg: surface,
-		nodeBorder: line,
+		nodeBorder: border,
 		nodeTextColor: text,
 		clusterBkg: card,
-		clusterBorder: line,
+		clusterBorder: border,
 		lineColor: muted,
 		textColor: text,
 		titleColor: text,
 		edgeLabelBackground: card,
 		labelBackground: card,
 		labelTextColor: text,
+		// 时序图：坐标轴、消息线、激活条与备注块，缺一个就会在深色底上掉线
+		actorBkg: surface,
+		actorBorder: border,
+		actorTextColor: text,
+		actorLineColor: border,
+		signalColor: muted,
+		signalTextColor: text,
+		activationBkgColor: surface,
+		activationBorderColor: border,
+		noteBkgColor: surface,
+		noteBorderColor: border,
+		noteTextColor: text,
+		labelBoxBkgColor: surface,
+		labelBoxBorderColor: border,
+		loopTextColor: text,
+		sequenceNumberColor: card,
+		// 状态图：状态块与转移线。状态名默认取 `stateBkg` 当文字色（等于画在底色上），必须单列
+		stateBkg: surface,
+		stateBorder: border,
+		stateLabelColor: text,
+		labelColor: text,
+		transitionColor: muted,
+		transitionLabelColor: text,
 		fontFamily: font,
 		fontSize: "14px",
 	};
@@ -151,12 +191,7 @@ export function MermaidBlock({ node }: MermaidBlockProps) {
 								themeVariables: palette,
 								flowchart: { htmlLabels: false, curve: "basis" },
 								class: { htmlLabels: false },
-								// 默认给边标签的文字描一圈同色描边（1.8px），字看起来被加粗；底色块也只有半透明。
-								// 这里去掉描边、把底块做成不透的，标签就是普通字重压在实色块上。
-								themeCSS: `
-									.edgeLabel .label, .edgeLabel .label * { stroke: none; }
-									.edgeLabel rect { opacity: 1; stroke: none; }
-								`,
+								themeCSS: themeCss(palette),
 							});
 							return mermaid.render(`facet-mermaid-${instance}-${current}`, code);
 						});

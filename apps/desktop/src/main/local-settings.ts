@@ -21,24 +21,12 @@ export interface WindowBounds {
 	maximized: boolean;
 }
 
-/** 本机主机的开关。 */
-export interface HostPrefs {
-	/**
-	 * 关掉窗口后主机是否继续运行。
-	 *
-	 * 打开时主机脱离桌面留在后台，下次打开应用接上它；关掉时应用退出会连主机一起结束。
-	 */
-	keepOnClose: boolean;
-}
-
 /** 桌面本地设置。 */
 export interface LocalSettings {
 	/** 文件格式版本 */
 	version: 1;
 	/** 上次退出时的窗口位置与尺寸，缺省时用应用默认值 */
 	window?: WindowBounds;
-	/** 本机主机的开关 */
-	host?: HostPrefs;
 }
 
 /** 缺省宽度，没有记录时用。 */
@@ -77,23 +65,12 @@ export function parseLocalSettings(text: string): LocalSettings {
 	if (typeof data !== "object" || data === null) {
 		return { version: 1 };
 	}
-	const record = data as { version?: unknown; window?: unknown; host?: unknown };
+	const record = data as { version?: unknown; window?: unknown };
 	const window = readWindowBounds(record.window);
-	const host = readHostPrefs(record.host);
 	return {
 		version: 1,
 		...(window === undefined ? {} : { window }),
-		...(host === undefined ? {} : { host }),
 	};
-}
-
-/** 读主机开关，缺省时关窗后继续运行。 */
-export function readHostPrefs(value: unknown): HostPrefs | undefined {
-	if (typeof value !== "object" || value === null) {
-		return undefined;
-	}
-	const record = value as Record<string, unknown>;
-	return { keepOnClose: record.keepOnClose !== false };
 }
 
 /** 读窗口记录，缺字段或越界时收回合理范围。 */

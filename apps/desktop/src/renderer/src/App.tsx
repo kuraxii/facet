@@ -74,14 +74,6 @@ interface FacetBridge extends HostChannelBridge {
 	pickDirectory: () => Promise<string | undefined>;
 	/** 用系统的保存窗口写一段文本,取消时返回 false */
 	saveText: (suggestedName: string, text: string) => Promise<boolean>;
-	/** 关掉窗口后本机主机是否继续运行 */
-	keepHostOnClose: boolean;
-	/** 读本机主机的开关 */
-	getHostPrefs: () => Promise<{ keepOnClose: boolean }>;
-	/** 结束本机主机 */
-	stopHost: () => Promise<void>;
-	/** 改本机主机的开关，返回保存后的值 */
-	setHostPrefs: (prefs: { keepOnClose: boolean }) => Promise<{ keepOnClose: boolean }>;
 }
 
 declare global {
@@ -260,9 +252,6 @@ export function App() {
 			writeHostList(localStorage, { ...hostList, activeEndpoint: LOCAL_TARGET });
 		}
 	}, [hostList]);
-
-	/** 关掉窗口后本机主机是否继续运行；开关在桌面的本地设置里 */
-	const [keepOnClose, setKeepOnClose] = useState(bridge.keepHostOnClose);
 
 	/** 右栏的状态；展开、分页与宽度都记在本地 */
 	const [panel, setPanel] = useState<RightPanelState>(() => readPanelState(localStorage));
@@ -759,36 +748,6 @@ export function App() {
 		},
 		[endpoint, hostList, switchHost, updateHostList],
 	);
-
-	/** 改「关掉窗口后继续运行」，保存失败时保持界面上的旧值。 */
-	const toggleKeepOnClose = useCallback((next: boolean): void => {
-		setKeepOnClose(next);
-		void bridge.setHostPrefs({ keepOnClose: next }).then(
-			(saved) => setKeepOnClose(saved.keepOnClose),
-			() => setKeepOnClose(!next),
-		);
-	}, []);
-
-	/**
-	 * 结束当前主机；失败时把原因交回清单。
-	 *
-	 * 本机主机交给桌面主进程结束，那边才不会把它当成崩溃重新拉起；连的是远程主机时直接
-	 * 向主机发请求。主机应答后端点就断了，界面落到「连不上主机」。
-	 */
-	const shutdownHost = useCallback(async (): Promise<string | undefined> => {
-		try {
-			if (endpoint === LOCAL_TARGET) {
-				await bridge.stopHost();
-			} else {
-				await client.shutdownHost();
-			}
-			setFailure("主机已结束");
-			setPhase("failed");
-			return undefined;
-		} catch (error) {
-			return error instanceof Error ? error.message : String(error);
-		}
-	}, [endpoint]);
 
 	/** 输入区可选的模型：去掉设置里隐藏的那些。 */
 	const visibleModels = useMemo(
@@ -1333,9 +1292,6 @@ export function App() {
 							onAddHost={addHost}
 							onRemoveHost={removeHost}
 							onRenameHost={renameHost}
-							keepOnClose={keepOnClose}
-							onToggleKeepOnClose={toggleKeepOnClose}
-							onShutdownHost={shutdownHost}
 						/>
 					}
 				/>

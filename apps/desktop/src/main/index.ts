@@ -8,13 +8,11 @@ import {
 	type HostDiscovery,
 	readDiscovery,
 	resolveDataDir,
-	stopDiscoveredHost,
 } from "./host-daemon.ts";
 import { countBusySessions } from "./host-query.ts";
 import {
 	DEFAULT_WINDOW_HEIGHT,
 	DEFAULT_WINDOW_WIDTH,
-	type HostPrefs,
 	type LocalSettings,
 	readLocalSettings,
 	type WindowBounds,
@@ -66,11 +64,6 @@ let quitting = false;
 
 /** 等待主机就绪的兑现函数，就绪或超时时清掉。 */
 let resolveReady: ((info: HostDiscovery | undefined) => void) | undefined;
-
-/** 本机主机的开关，缺省关窗后继续运行 */
-function hostPrefs(): HostPrefs {
-	return localSettings.host ?? { keepOnClose: true };
-}
 
 /**
  * 由窗口记录得到创建参数。
@@ -132,17 +125,14 @@ function saveWindowBounds(window: BrowserWindow): void {
 /**
  * 真正退出。
  *
- * 关掉窗口后继续运行时主机留在后台，下次启动按发现文件接上；否则先请主机收尾再退出，
- * 不能只发一个不等的请求——进程先没了，主机就留了下来。
+ * 主机一直留在后台：桌面退出只是断开自己那条通道，会话与运行中的任务都不受影响，下次
+ * 启动按发现文件接上。
  */
 async function finishQuit(window: BrowserWindow | undefined): Promise<void> {
 	if (window !== undefined && !window.isDestroyed()) {
 		saveWindowBounds(window);
 	}
 	hostChannels?.dispose();
-	if (!hostPrefs().keepOnClose) {
-		await stopDiscoveredHost(dataDir);
-	}
 	quitConfirmed = true;
 	app.exit(0);
 }
@@ -157,16 +147,13 @@ async function confirmQuit(window: BrowserWindow | undefined): Promise<boolean> 
 	if (busy === 0) {
 		return true;
 	}
-	const keepsRunning = hostPrefs().keepOnClose;
 	const options = {
 		type: "warning",
-		buttons: ["取消", keepsRunning ? "关闭窗口" : "仍然退出"],
+		buttons: ["取消", "关闭窗口"],
 		defaultId: 0,
 		cancelId: 0,
 		message: "有会话还在运行",
-		detail: keepsRunning
-			? `${busy} 个会话上有任务正在运行。关闭窗口后主机继续在后台运行，任务不受影响，下次打开应用回到这里。`
-			: `退出会终止 ${busy} 个会话上正在进行的任务。`,
+		detail: `${busy} 个会话上有任务正在运行。关闭窗口后主机继续在后台运行，任务不受影响，下次打开应用回到这里。`,
 	} as const;
 	const choice =
 		window === undefined
@@ -190,7 +177,6 @@ function createWindow(): BrowserWindow {
 			sandbox: true,
 			additionalArguments: [
 				`--facet-host-mode=${externalEndpoint === undefined ? "local" : "external"}`,
-				`--facet-keep-host=${hostPrefs().keepOnClose ? "1" : "0"}`,
 				`--facet-project=${projectDir}`,
 				`--facet-platform=${process.platform}`,
 				`--facet-version=${app.getVersion()}`,
@@ -344,26 +330,6 @@ ipcMain.on("facet:host-write", (_event, id: number, text: string) => {
 
 ipcMain.on("facet:host-close", (_event, id: number) => {
 	hostChannels?.close(id);
-});
-
-ipcMain.handle("facet:host-prefs", () => hostPrefs());
-
-ipcMain.handle("facet:stop-host", async () => {
-	// 用户主动结束主机：本进程拉起的那台不再自动重启，上一次留下的那台按发现文件结束
-	if (host !== undefined) {
-		await host.stop();
-		return;
-	}
-	await stopDiscoveredHost(dataDir);
-});
-
-ipcMain.handle("facet:set-host-prefs", async (_event, patch: unknown) => {
-	const next: HostPrefs = {
-		keepOnClose: (patch as HostPrefs | undefined)?.keepOnClose !== false,
-	};
-	localSettings = { ...localSettings, host: next };
-	await writeLocalSettings(localSettingsFile, localSettings);
-	return next;
 });
 
 app.whenReady().then(async () => {

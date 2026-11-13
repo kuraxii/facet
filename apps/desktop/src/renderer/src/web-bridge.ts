@@ -35,11 +35,6 @@ export function installWebBridge(): void {
 		appVersion: "web",
 		// Web 端连的就是当前这台主机，没有「本机/远程」之分
 		hostMode: "external",
-		// 关掉页面不会结束主机，这两个开关在 Web 上不起作用
-		keepHostOnClose: true,
-		getHostPrefs: async () => ({ keepOnClose: true }),
-		setHostPrefs: async (prefs) => prefs,
-		stopHost: async () => {},
 		getLocalHost: async () => ({ target: "local", address: location.host, token }),
 		onLocalHostChanged: () => () => {},
 		openHostChannel: async (target, handlers) => {

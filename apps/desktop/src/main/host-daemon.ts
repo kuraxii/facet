@@ -194,8 +194,6 @@ export interface HostDaemonOptions {
 export class HostDaemon {
 	private readonly options: HostDaemonOptions;
 	private child: ReturnType<typeof spawn> | undefined;
-	/** 主动停止中，退出后不再重启 */
-	private stopping = false;
 	/** 连续重启的次数，就绪后清零 */
 	private restartCount = 0;
 	private restartTimer: NodeJS.Timeout | undefined;
@@ -220,7 +218,6 @@ export class HostDaemon {
 		if (this.child !== undefined) {
 			return;
 		}
-		this.stopping = false;
 		// 日志写文件：主机要能脱离桌面继续跑，桌面的管道关掉之后不该再有写入
 		const logFile = openSync(join(this.options.dataDir, "host.log"), "a");
 		// 用 Electron 自己的可执行文件当 Node 跑，打包后不需要额外的 node 安装
@@ -248,25 +245,9 @@ export class HostDaemon {
 			if (this.child === child) {
 				this.child = undefined;
 			}
-			const restarting = !this.stopping;
-			this.options.onExit(code, restarting);
-			if (restarting) {
-				this.scheduleRestart();
-			}
+			this.options.onExit(code, true);
+			this.scheduleRestart();
 		});
-	}
-
-	/**
-	 * 结束主机。
-	 *
-	 * 先按发现文件里的进程标识请它自己收尾（删发现文件、关端点），进程不在了就算了；
-	 * 收尾期间一直在等，超时补一次 SIGTERM。
-	 */
-	async stop(): Promise<void> {
-		this.stopping = true;
-		this.clearTimers();
-		this.child = undefined;
-		await stopDiscoveredHost(this.options.dataDir);
 	}
 
 	/** 等发现文件出现并与主机握手，就绪后回调一次。 */
@@ -305,75 +286,4 @@ export class HostDaemon {
 			this.restartTimer = undefined;
 		}
 	}
-}
-
-/**
- * 结束数据目录里记着的那台主机。
- *
- * 这台主机可能是本次拉起的，也可能是上次留下的，按发现文件里的进程标识处理。
- */
-export async function stopDiscoveredHost(dataDir: string): Promise<void> {
-	const discovery = await readDiscovery(dataDir);
-	if (discovery === undefined || !isProcessAlive(discovery.pid)) {
-		return;
-	}
-	const pid = discovery.pid;
-	// 请主机自己收尾，它会把发现文件删掉、端点关干净；信号对它不一定送达
-	if (await requestShutdown(discovery)) {
-		await waitForExit(pid, 3000);
-		if (!isProcessAlive(pid)) {
-			return;
-		}
-	}
-	await stopProcess(pid);
-}
-
-/** 发一个结束主机的请求，连不上或超时返回 false。 */
-async function requestShutdown(discovery: HostDiscovery): Promise<boolean> {
-	const transport = connectToDiscovery(discovery);
-	try {
-		await transport.connect();
-		await transport.request("shutdownHost", {});
-		return true;
-	} catch {
-		return false;
-	} finally {
-		transport.close();
-	}
-}
-
-/** 等进程退出，超时返回。 */
-async function waitForExit(pid: number, timeoutMs: number): Promise<void> {
-	const deadline = Date.now() + timeoutMs;
-	while (Date.now() < deadline) {
-		if (!isProcessAlive(pid)) {
-			return;
-		}
-		await new Promise((resolve) => setTimeout(resolve, 100));
-	}
-}
-
-/** 请一个进程退出：SIGTERM 后还在就 SIGKILL。 */
-async function stopProcess(pid: number): Promise<void> {
-	if (!isProcessAlive(pid)) {
-		return;
-	}
-	await new Promise<void>((resolve) => {
-		const timer = setInterval(() => {
-			if (!isProcessAlive(pid)) {
-				clearInterval(timer);
-				resolve();
-			}
-		}, 100);
-		process.kill(pid, "SIGTERM");
-		setTimeout(() => {
-			if (isProcessAlive(pid)) {
-				process.kill(pid, "SIGKILL");
-			}
-		}, 3000).unref();
-		setTimeout(() => {
-			clearInterval(timer);
-			resolve();
-		}, 5000).unref();
-	});
 }

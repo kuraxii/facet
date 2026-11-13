@@ -326,15 +326,6 @@ export class SessionClient {
 		);
 	}
 
-	/**
-	 * 结束主机。
-	 *
-	 * 主机应答后关闭端点并退出进程，调用方的连接随后断开。只有本机连接能这么做。
-	 */
-	async shutdownHost(): Promise<void> {
-		await this.transport.request("shutdownHost", {});
-	}
-
 	/** 列出用户自己添加的提供方。 */
 	async listCustomProviders(): Promise<CustomProviderInfo[]> {
 		const result = await this.transport.request("listCustomProviders", {});

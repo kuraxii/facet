@@ -165,7 +165,6 @@ export interface RequestParams {
 	/** 列出正在运行的会话文件。退出前确认有没有任务会被带走。 */
 	busySessions: Record<string, never>;
 	/** 结束主机：应答后关闭端点并退出进程。只接受来自回环地址的连接。 */
-	shutdownHost: Record<string, never>;
 	/** 新建会话并返回初始快照。 */
 	createSession: {
 		cwd?: string;
@@ -314,7 +313,6 @@ export interface RequestParams {
 export interface RequestResults {
 	listSessions: { sessions: SessionSummary[] };
 	busySessions: { files: string[] };
-	shutdownHost: Record<string, never>;
 	createSession: SessionSnapshot;
 	openSession: SessionSnapshot;
 	forkSession: SessionSnapshot;

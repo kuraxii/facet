@@ -79,7 +79,6 @@ const ADMIN_ONLY_REQUESTS = new Set<string>([
 	"setProjectTrust",
 	"revealProject",
 	"diagnostics",
-	"shutdownHost",
 ]);
 
 /** 只读连接不能做的请求：会改会话或文件。 */
@@ -152,8 +151,6 @@ interface EndpointContext {
 	/** 主机标识的派生来源，诊断里说明这台机器有没有 machine-id */
 	readonly hostSource: HostSource;
 	readonly connections: Set<Connection>;
-	/** 收到结束主机的请求后调用，由进程入口决定怎么收尾 */
-	readonly requestShutdown: () => void;
 	/** 会话清单通道，所有端订阅同一条 */
 	readonly sessions: SessionsChannel;
 	/** 终端登记与终端通道 */
@@ -584,15 +581,6 @@ async function handleRequest(
 		}
 		case "busySessions":
 			return { files: context.hub.busyFiles() };
-		case "shutdownHost": {
-			// 结束主机等于把主机上正在跑的任务一起停掉，只允许本机连接
-			if (connection.role !== "admin") {
-				throw new RequestError("rejected", "只有本机连接可以结束主机");
-			}
-			// 先给出应答再退，否则发出请求的端只会看到连接断开
-			setTimeout(() => context.requestShutdown(), 50).unref();
-			return {};
-		}
 		case "diagnostics": {
 			const [sessions, settings] = await Promise.all([
 				context.factory.listSessions(),
@@ -940,8 +928,6 @@ export async function startEndpoint(options: {
 	hostId: string;
 	/** 主机标识的派生来源，缺省当作由 machine-id 派生 */
 	hostSource?: HostSource;
-	/** 收到 shutdownHost 请求后调用 */
-	requestShutdown?: () => void;
 	/** 会话清单通道 */
 	sessions: SessionsChannel;
 	/** 终端登记与终端通道 */
@@ -958,7 +944,6 @@ export async function startEndpoint(options: {
 		hostId: options.hostId,
 		hostSource: options.hostSource ?? "machine-id",
 		connections: new Set(),
-		requestShutdown: options.requestShutdown ?? (() => {}),
 		sessions: options.sessions,
 		terminals:
 			options.terminals ?? new TerminalService({ backend: new DisabledPtyBackend("这台主机没有装配终端") }),

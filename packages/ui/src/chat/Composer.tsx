@@ -130,6 +130,8 @@ export function Composer({
 	const canSend =
 		blockedReason === undefined && value.trim().length > 0 && (activity === "idle" || activity === "running");
 	const isQueuing = activity === "running";
+	/** 这一轮还在跑且没内容要发时，按钮换成停止；有内容时按钮换回发送（排队）。 */
+	const showsStop = activity !== "idle" && !canSend;
 	const [openMenu, setOpenMenu] = useState<"model" | "level" | "attach" | "context" | undefined>(undefined);
 	const modelRef = useDismiss(openMenu === "model", () => setOpenMenu(undefined));
 	const attachRef = useDismiss(openMenu === "attach", () => setOpenMenu(undefined));
@@ -429,22 +431,33 @@ export function Composer({
 							</div>
 						) : null}
 					</span>
-					{activity === "idle" ? null : (
-						<button type="button" className="btn" onClick={onStop} disabled={activity === "stopping"}>
-							<StopIcon size={11} />
-							{activity === "stopping" ? "停止中" : "停止"}
+					{/*
+					 * 发送与停止共用一个按钮：有内容要发时是发送（运行中就是排队），
+					 * 没有内容而这一轮还在跑时是停止。位置与尺寸不变，两者互相替换。
+					 */}
+					{showsStop ? (
+						<button
+							type="button"
+							className="send is-stop"
+							onClick={onStop}
+							disabled={activity !== "running"}
+							aria-label={activity === "stopping" ? "停止中" : "停止"}
+							title={activity === "stopping" ? "正在停止" : "停止这一轮"}
+						>
+							<StopIcon size={15} />
+						</button>
+					) : (
+						<button
+							type="button"
+							className="send"
+							aria-label={isQueuing ? "排队" : "发送"}
+							title={isQueuing ? "插入当前轮次" : undefined}
+							onClick={onSend}
+							disabled={!canSend}
+						>
+							<SendIcon size={16} />
 						</button>
 					)}
-					<button
-						type="button"
-						className="send"
-						aria-label={isQueuing ? "排队" : "发送"}
-						title={isQueuing ? "插入当前轮次" : undefined}
-						onClick={onSend}
-						disabled={!canSend}
-					>
-						<SendIcon size={16} />
-					</button>
 				</span>
 			</div>
 		</div>

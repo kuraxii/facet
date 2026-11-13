@@ -48,11 +48,11 @@ export function ArrowDownIcon({ size, ...rest }: IconProps) {
 	);
 }
 
-/** 停止。 */
+/** 停止：红色方块，外围的边界由按钮自己画。 */
 export function StopIcon({ size, ...rest }: IconProps) {
 	return (
 		<Icon size={size} {...rest}>
-			<rect x="7" y="7" width="10" height="10" rx="2" />
+			<rect x="4" y="4" width="16" height="16" rx="3" fill="var(--err)" stroke="none" />
 		</Icon>
 	);
 }

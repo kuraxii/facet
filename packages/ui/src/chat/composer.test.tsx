@@ -27,8 +27,19 @@ describe("输入区", () => {
 	});
 
 	it("压缩与停止中不接受新输入", () => {
-		expect(renderComposer("compacting", "补充一句")).toMatch(/class="send"[^>]*disabled/);
-		expect(renderComposer("stopping", "补充一句")).toMatch(/class="send"[^>]*disabled/);
+		expect(renderComposer("compacting", "补充一句")).toMatch(/class="send[^"]*"[^>]*disabled/);
+		expect(renderComposer("stopping", "补充一句")).toMatch(/class="send[^"]*"[^>]*disabled/);
+	});
+
+	it("发送与停止占同一个按钮", () => {
+		// 没有内容要发时按钮是停止
+		const running = renderComposer("running", "");
+		expect(running).toMatch(/class="send is-stop"/);
+		expect(running).not.toContain('aria-label="排队"');
+		// 有内容时同一个位置换回发送，运行中的含义是排队
+		expect(renderComposer("running", "补充一句")).not.toContain("is-stop");
+		// 空闲时不出现停止
+		expect(renderComposer("idle", "")).not.toContain("is-stop");
 	});
 
 	it("空闲时按发送处理", () => {

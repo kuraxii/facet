@@ -2365,6 +2365,17 @@ svg.fl {
 	cursor: default;
 }
 
+/* 停止：边界与发送是同一个方框（同尺寸同圆角），中间换成红色方块 */
+.send.is-stop {
+	border: 1px solid color-mix(in srgb, var(--t3) 62%, transparent);
+	background: transparent;
+}
+
+.send.is-stop:hover:not(:disabled) {
+	border-color: var(--t3);
+	background: var(--card2);
+}
+
 .notices {
 	display: flex;
 	flex-wrap: wrap;

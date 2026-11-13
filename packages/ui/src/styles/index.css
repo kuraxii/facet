@@ -24,6 +24,10 @@
 	   （后者来自展开箭头字形在图标盒子里的内缩，改箭头图标时跟着调） */
 	--indent-rail-offset: 16px;
 	--indent-rail-inset: 4px;
+	/* 行首图标的边长，以及图标到短名的间距；短名列与输出、思考正文都用两者之和 */
+	--indent-rail-icon: 14px;
+	--indent-rail-gap: 8px;
+	--indent-rail-label: calc(var(--indent-rail-icon) + var(--indent-rail-gap));
 }
 
 /*
@@ -1795,7 +1799,7 @@ svg.fl {
 .tr-head {
 	display: flex;
 	align-items: center;
-	gap: 8px;
+	gap: var(--indent-rail-gap);
 	width: 100%;
 	min-width: 0;
 	padding: 5px 0;
@@ -1818,8 +1822,8 @@ svg.fl {
 	display: grid;
 	flex: none;
 	place-items: center;
-	width: 14px;
-	height: 14px;
+	width: var(--indent-rail-icon);
+	height: var(--indent-rail-icon);
 	color: var(--t3);
 }
 
@@ -1868,7 +1872,7 @@ svg.fl {
 
 /* 输出：没有边框与底色，直接缩进在行下面 */
 .tr-out {
-	padding: 0 0 4px 22px;
+	padding: 0 0 4px var(--indent-rail-label);
 }
 
 .tr-out pre {
@@ -1900,7 +1904,7 @@ svg.fl {
 	max-height: 320px;
 	overflow: auto;
 	margin: 0;
-	padding: 2px 0 6px 22px;
+	padding: 2px 0 6px var(--indent-rail-label);
 	color: var(--t3);
 	font-family: var(--font-sans);
 	font-size: 12.5px;

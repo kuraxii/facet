@@ -1772,12 +1772,13 @@ svg.fl {
 	}
 }
 
+/* 竖线对齐展开箭头图标的左缘：图标的盒子比字形多 3px 内缩，这里补上 */
 .group-body {
 	display: flex;
 	flex-direction: column;
 	gap: 1px;
-	margin: 2px 0 0 1px;
-	padding-left: 20px;
+	margin: 2px 0 0 4px;
+	padding-left: 17px;
 	border-left: 1px solid var(--line);
 }
 

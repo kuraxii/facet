@@ -240,6 +240,7 @@ svg.fl {
 	flex: 1;
 }
 
+/* 顶带里的图标按钮：开与关同一个亮度，展开与否由面板本身看得出来 */
 .chrome-toggle {
 	display: grid;
 	flex: none;
@@ -249,12 +250,8 @@ svg.fl {
 	border: 0;
 	border-radius: 6px;
 	background: transparent;
-	color: var(--t3);
-	-webkit-app-region: no-drag;
-}
-
-.chrome-toggle[aria-expanded="true"] {
 	color: var(--t2);
+	-webkit-app-region: no-drag;
 }
 
 .chrome-toggle:hover {

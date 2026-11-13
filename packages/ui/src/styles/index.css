@@ -3160,16 +3160,6 @@ svg.fl {
 	opacity: 0.6;
 }
 
-.set-readonly {
-	margin: 0 0 16px;
-	padding: 8px 12px;
-	border: 1px solid var(--line2);
-	border-radius: 9px;
-	background: var(--card);
-	color: var(--t3);
-	font-size: 12px;
-}
-
 .set-group {
 	display: flex;
 	flex-direction: column;
@@ -3222,12 +3212,6 @@ svg.fl {
 .set-item-title {
 	color: var(--t1);
 	font-size: 13px;
-}
-
-.set-item-desc {
-	color: var(--t3);
-	font-size: 11.5px;
-	line-height: 1.5;
 }
 
 .set-item-control {
@@ -3711,17 +3695,6 @@ svg.fl {
 .chip-pop-item:disabled {
 	opacity: 0.45;
 	cursor: default;
-}
-
-.composer-blocked {
-	margin: 0 0 6px;
-	padding: 5px 10px;
-	border: 1px solid var(--warnbd);
-	border-radius: 7px;
-	background: var(--warnbg);
-	color: var(--warn);
-	font-size: 11.5px;
-	line-height: 1.5;
 }
 
 .prov-form {

@@ -43,8 +43,8 @@ export interface ComposerProps {
 	onThinkingLevelChange?: (level: ThinkingLevel) => void;
 	/** 发送键位：true 表示 Shift+回车发送 */
 	shiftEnterToSend?: boolean;
-	/** 现在不能发送的原因，给出时输入区上方显示说明并禁用发送 */
-	blockedReason?: string | undefined;
+	/** 现在能不能发送：断开、只读、压缩中、停止中等情况下给出 true，按钮禁用，不额外显示说明 */
+	isBlocked?: boolean | undefined;
 	/** 上下文用量，未估算出来时为空 */
 	contextUsage?: ContextUsage | undefined;
 	/** 是否正在压缩上下文 */
@@ -118,7 +118,7 @@ export function Composer({
 	onModelChange,
 	onThinkingLevelChange,
 	shiftEnterToSend = false,
-	blockedReason,
+	isBlocked,
 	contextUsage,
 	isCompacting = false,
 	canCompact = true,
@@ -128,7 +128,7 @@ export function Composer({
 }: ComposerProps) {
 	// 运行中发送走排队，插入当前轮次；压缩、停止中与连接断开时不接受新输入
 	const canSend =
-		blockedReason === undefined && value.trim().length > 0 && (activity === "idle" || activity === "running");
+		isBlocked !== true && value.trim().length > 0 && (activity === "idle" || activity === "running");
 	const isQueuing = activity === "running";
 	/** 这一轮还在跑且没内容要发时，按钮换成停止；有内容时按钮换回发送（排队）。 */
 	const showsStop = activity !== "idle" && !canSend;
@@ -191,7 +191,6 @@ export function Composer({
 
 	return (
 		<div className="composer">
-			{blockedReason === undefined ? null : <p className="composer-blocked">{blockedReason}</p>}
 			<textarea
 				rows={2}
 				value={value}

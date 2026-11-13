@@ -299,34 +299,28 @@ export function ProvidersSection({
 							) : null}
 
 							{addressId === provider.id ? (
-								<>
-									<p className="set-hint mono">
-										当前生效:{provider.baseUrl ?? "由提供方决定"}
-										{provider.baseUrlOverride === undefined ? "" : "（已覆写）"}
-									</p>
-									<div className="set-row-edit">
-										<input
-											className="set-input mono"
-											value={address}
-											onChange={(event) => setAddress(event.target.value)}
-											onKeyDown={(event) => {
-												if (event.key === "Enter") {
-													void saveAddress(provider.id);
-												}
-											}}
-											placeholder="接口地址,留空恢复默认"
-											aria-label={`${provider.name} 的接口地址`}
-										/>
-										<button
-											type="button"
-											className="set-save"
-											disabled={isBusy}
-											onClick={() => void saveAddress(provider.id)}
-										>
-											{isBusy ? "保存中…" : "保存"}
-										</button>
-									</div>
-								</>
+								<div className="set-row-edit">
+									<input
+										className="set-input mono"
+										value={address}
+										onChange={(event) => setAddress(event.target.value)}
+										onKeyDown={(event) => {
+											if (event.key === "Enter") {
+												void saveAddress(provider.id);
+											}
+										}}
+										placeholder="接口地址,留空恢复默认"
+										aria-label={`${provider.name} 的接口地址`}
+									/>
+									<button
+										type="button"
+										className="set-save"
+										disabled={isBusy}
+										onClick={() => void saveAddress(provider.id)}
+									>
+										{isBusy ? "保存中…" : "保存"}
+									</button>
+								</div>
 							) : null}
 
 							{failure?.providerId === provider.id ? (

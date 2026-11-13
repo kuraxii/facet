@@ -806,25 +806,18 @@ export function App() {
 	);
 
 	/**
-	 * 现在不能发送的原因。
+	 * 现在不能发送。
 	 *
-	 * 依次看连接、阶段与凭证：任何一条不满足都不该把消息送出去，说明写在输入区上方，
-	 * 草稿留在输入框里。
+	 * 依次看连接、阶段与凭证：任何一条不满足都不该把消息送出去，草稿留在输入框里。界面上只
+	 * 禁用发送按钮，不写一行说明。
 	 */
-	let blockedReason: string | undefined;
-	if (!isOnline) {
-		blockedReason = "与主机的连接已断开,恢复之后可以继续发送";
-	} else if (host?.role === "viewer") {
-		blockedReason = "这条连接是只读的,不能发送消息";
-	} else if (activity === "compacting") {
-		blockedReason = "正在压缩上下文,完成之后再发送";
-	} else if (activity === "stopping") {
-		blockedReason = "正在停止这一轮,稍后可以继续发送";
-	} else if (session !== undefined && session.state.model === undefined) {
-		blockedReason = "这个会话没有可用模型,到设置里配置提供方与凭证";
-	} else if (session !== undefined && providerAuth[session.state.model?.provider ?? ""] === false) {
-		blockedReason = "当前模型的提供方还没有配置凭证,到设置里补上";
-	}
+	const isBlocked =
+		!isOnline ||
+		host?.role === "viewer" ||
+		activity === "compacting" ||
+		activity === "stopping" ||
+		(session !== undefined && session.state.model === undefined) ||
+		(session !== undefined && providerAuth[session.state.model?.provider ?? ""] === false);
 	const queued = session?.state.queued ?? { steering: [], followUp: [] };
 	const canFork = activity === "idle" && session?.state.maintenance === undefined;
 
@@ -1474,7 +1467,7 @@ export function App() {
 										onModelChange={(next) => client.setModel({ provider: next.provider, id: next.id })}
 										onThinkingLevelChange={(level) => client.setThinkingLevel(level)}
 										shiftEnterToSend={settings.input.sendKey === "shiftEnter"}
-										blockedReason={blockedReason}
+										isBlocked={isBlocked}
 										contextUsage={session.state.contextUsage}
 										isCompacting={activity === "compacting"}
 										canCompact={activity === "idle"}

@@ -262,9 +262,6 @@ export function SettingsPage({
 					</nav>
 
 					<div className="set-content">
-						{canEdit || section === "about" ? null : (
-							<p className="set-readonly">这条连接只能看，改设置请从桌面端连过来。</p>
-						)}
 						{section === "about" ? <AboutSection about={about} data={data} /> : null}
 
 						{section === "models" || section === "appearance" || section === "input" ? (
@@ -480,9 +477,6 @@ function ModelsSection({
 					</select>
 				</SettingsRow>
 			</SettingsGroup>
-			{selectedModel !== undefined && !selectedModel.reasoning ? (
-				<p className="set-hint">这个模型不支持思考，档位只保留「off」。</p>
-			) : null}
 
 			<ProvidersSection
 				providers={providers}
@@ -575,7 +569,7 @@ function AppearanceSection({
 		<>
 			<h2 className="set-section-title">外观</h2>
 			<SettingsGroup label="通用">
-				<SettingsRow title="主题" description="六套深色与一套浅色，也可以跟随系统" isStacked>
+				<SettingsRow title="主题" isStacked>
 					<div className="set-swatches">
 						{UI_THEME_OPTIONS.map((option) => (
 							<button
@@ -604,7 +598,7 @@ function AppearanceSection({
 						</button>
 					</div>
 				</SettingsRow>
-				<SettingsRow title="减少动效" description="关掉过渡与动画">
+				<SettingsRow title="减少动效">
 					<input
 						type="checkbox"
 						checked={appearance.reducedMotion}
@@ -615,7 +609,7 @@ function AppearanceSection({
 			</SettingsGroup>
 
 			<SettingsGroup label="字体">
-				<SettingsRow title="界面字体" description="侧栏、弹窗、控件与聊天正文，留空用 Inter">
+				<SettingsRow title="界面字体">
 					<input
 						className="set-input"
 						value={appearance.uiFont}
@@ -624,10 +618,8 @@ function AppearanceSection({
 						aria-label="界面字体"
 					/>
 				</SettingsRow>
-				<SettingsRow title="界面字号" description="聊天正文的字号，单位 px">
-					{sizeInput(appearance.uiFontSize, "uiFontSize")}
-				</SettingsRow>
-				<SettingsRow title="代码字体" description="聊天里的代码块与补丁，留空用 Maple Mono">
+				<SettingsRow title="界面字号">{sizeInput(appearance.uiFontSize, "uiFontSize")}</SettingsRow>
+				<SettingsRow title="代码字体">
 					<input
 						className="set-input"
 						value={appearance.codeFont}
@@ -636,7 +628,7 @@ function AppearanceSection({
 						aria-label="代码字体"
 					/>
 				</SettingsRow>
-				<SettingsRow title="编辑器字体" description="右栏打开文件时用，留空跟代码字体">
+				<SettingsRow title="编辑器字体">
 					<input
 						className="set-input"
 						value={appearance.editorFont}
@@ -645,10 +637,8 @@ function AppearanceSection({
 						aria-label="编辑器字体"
 					/>
 				</SettingsRow>
-				<SettingsRow title="编辑器字号" description="单位 px，重新打开文件后生效">
-					{sizeInput(appearance.editorFontSize, "editorFontSize")}
-				</SettingsRow>
-				<SettingsRow title="终端字体" description="底部终端用，留空跟代码字体">
+				<SettingsRow title="编辑器字号">{sizeInput(appearance.editorFontSize, "editorFontSize")}</SettingsRow>
+				<SettingsRow title="终端字体">
 					<input
 						className="set-input"
 						value={appearance.terminalFont}
@@ -657,13 +647,13 @@ function AppearanceSection({
 						aria-label="终端字体"
 					/>
 				</SettingsRow>
-				<SettingsRow title="终端字号" description="单位 px，新开的终端生效">
+				<SettingsRow title="终端字号">
 					{sizeInput(appearance.terminalFontSize, "terminalFontSize")}
 				</SettingsRow>
 			</SettingsGroup>
 
 			<SettingsGroup label="代码配色">
-				<SettingsRow title="代码配色" description="代码块、补丁与编辑器的高亮">
+				<SettingsRow title="代码配色">
 					<select
 						className="set-input"
 						value={appearance.codeTheme}
@@ -698,7 +688,7 @@ function InputSection({
 		<>
 			<h2 className="set-section-title">输入</h2>
 			<SettingsGroup label="发送">
-				<SettingsRow title="发送键位" description="回车与 Shift+回车各管一件事">
+				<SettingsRow title="发送键位">
 					<select
 						className="set-input"
 						value={draft.input.sendKey}
@@ -782,7 +772,6 @@ function AboutSection({ about, data }: { about: SettingsPageProps["about"]; data
 					<span className="set-row-meta mono">{about.endpoint}</span>
 				</li>
 			</ul>
-			<p className="set-hint">诊断包含版本、平台、数据目录与模型状态，凭证与令牌不会写进去。</p>
 			<div className="set-actions">
 				<button
 					type="button"

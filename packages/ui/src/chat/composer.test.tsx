@@ -149,7 +149,7 @@ describe("模型与思考档位芯片", () => {
 });
 
 describe("发送受阻", () => {
-	it("给出原因时显示说明并禁用发送", () => {
+	it("受阻时只禁用发送，不显示说明", () => {
 		const html = renderToStaticMarkup(
 			createElement(Composer, {
 				value: "有待发送的内容",
@@ -159,11 +159,10 @@ describe("发送受阻", () => {
 				activity: "idle",
 				model: undefined,
 				thinkingLevel: undefined,
-				blockedReason: "与主机的连接已断开",
+				isBlocked: true,
 			}),
 		);
-		expect(html).toContain("composer-blocked");
-		expect(html).toContain("与主机的连接已断开");
+		expect(html).not.toContain("composer-blocked");
 		expect(html).toMatch(/class="send"[^>]*disabled/);
 	});
 });

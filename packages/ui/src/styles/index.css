@@ -33,12 +33,12 @@
 	--divider-hit-width: 6px;
 	--divider-highlight: color-mix(in srgb, var(--acc) 55%, transparent);
 	/* 对话导航竖轨：离主区左缘的间距、轨宽、短条静止尺寸、当前轮次的加宽倍数
-	   （1 加黄金比例）、指针附近的额外放大，单位都是 px 或倍数 */
+	   （黄金比例）、指针附近的额外放大，单位都是 px 或倍数 */
 	--outline-inset: 10px;
 	--outline-rail-width: 36px;
 	--outline-pill-width: 10px;
 	--outline-pill-height: 2px;
-	--outline-pill-active-scale: 2.618;
+	--outline-pill-active-scale: 1.618;
 	--outline-pill-grow-width: 12px;
 	--outline-pill-grow-height: 2px;
 	/* 过程组的缩进：竖线到行内容的距离，以及竖线本身相对正文列的位置

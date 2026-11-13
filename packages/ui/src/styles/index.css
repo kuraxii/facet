@@ -349,7 +349,8 @@ svg.fl {
 	align-items: center;
 	justify-content: space-between;
 	width: 100%;
-	padding: 2px 0 8px 6px;
+	/* 上下各留 4px，28px 的图标按钮正好在 36px 的顶带里居中 */
+	padding: 4px 0 4px 6px;
 	-webkit-app-region: drag;
 }
 

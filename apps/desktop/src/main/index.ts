@@ -171,6 +171,9 @@ function createWindow(): BrowserWindow {
 		autoHideMenuBar: true,
 		backgroundColor: "#0c0c0d",
 		title: "facet",
+		// 标题栏由界面自己画：最小化、最大化、关闭三个按钮走 IPC，拖动区由 CSS 指定
+		frame: false,
+		titleBarStyle: "hidden",
 		webPreferences: {
 			preload: join(app.getAppPath(), "out/preload/index.cjs"),
 			contextIsolation: true,
@@ -196,6 +199,16 @@ function createWindow(): BrowserWindow {
 	window.on("closed", () => {
 		hostChannels?.closeFor(contentsId);
 	});
+
+	// 最大化状态由主进程推给界面，界面据此在两个图标之间切换
+	const pushWindowState = (): void => {
+		if (!window.isDestroyed()) {
+			window.webContents.send("facet:window-state", window.isMaximized());
+		}
+	};
+	window.on("maximize", pushWindowState);
+	window.on("unmaximize", pushWindowState);
+	window.webContents.on("did-finish-load", pushWindowState);
 
 	window.on("close", (event) => {
 		if (quitConfirmed) {
@@ -299,6 +312,27 @@ ipcMain.handle("facet:save-text", async (event, suggestedName: string, text: str
 	}
 	await writeFile(result.filePath, text, "utf8");
 	return true;
+});
+
+/** 自绘标题栏的三个按钮：界面只管发指令，窗口动作留在主进程。 */
+ipcMain.on("facet:window-minimize", (event) => {
+	BrowserWindow.fromWebContents(event.sender)?.minimize();
+});
+
+ipcMain.on("facet:window-toggle-maximize", (event) => {
+	const window = BrowserWindow.fromWebContents(event.sender);
+	if (window === null) {
+		return;
+	}
+	if (window.isMaximized()) {
+		window.unmaximize();
+	} else {
+		window.maximize();
+	}
+});
+
+ipcMain.on("facet:window-close", (event) => {
+	BrowserWindow.fromWebContents(event.sender)?.close();
 });
 
 /** 本机主机的连接信息：界面只知道「本机」这个目标与展示地址，具体端口与令牌在主进程。 */

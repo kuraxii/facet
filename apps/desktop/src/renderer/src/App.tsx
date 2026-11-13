@@ -67,8 +67,17 @@ import {
 	writeDockState,
 } from "@facet/ui-terminal";
 import { PanelLeft, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+	type ReactNode,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+	useSyncExternalStore,
+} from "react";
 import { type HostChannelBridge, LOCAL_TARGET, makeTransport } from "./host-connection.ts";
+import { readWindowControls, TitleBar } from "./TitleBar.tsx";
 
 /** 预加载脚本注入的启动参数 */
 interface FacetBridge extends HostChannelBridge {
@@ -82,6 +91,14 @@ interface FacetBridge extends HostChannelBridge {
 	pickDirectory: () => Promise<string | undefined>;
 	/** 用系统的保存窗口写一段文本,取消时返回 false */
 	saveText: (suggestedName: string, text: string) => Promise<boolean>;
+	/** 最小化窗口；浏览器端没有 */
+	minimize?: () => void;
+	/** 最大化与还原之间切换；浏览器端没有 */
+	toggleMaximize?: () => void;
+	/** 关闭窗口；浏览器端没有 */
+	close?: () => void;
+	/** 订阅最大化状态；浏览器端没有 */
+	onWindowState?: (listener: (maximized: boolean) => void) => () => void;
 }
 
 declare global {
@@ -91,6 +108,22 @@ declare global {
 }
 
 const bridge = window.facet;
+
+/**
+ * 应用外壳：自绘标题栏加内容区。
+ *
+ * 连接中与连不上的界面也要套上，否则无边框窗口连关闭按钮都没有。浏览器里没有窗口动作，
+ * 整条栏不渲染。
+ */
+function AppFrame({ children }: { children: ReactNode }): ReactNode {
+	const controls = readWindowControls(bridge);
+	return (
+		<div className="app">
+			{controls === undefined ? null : <TitleBar controls={controls} />}
+			{children}
+		</div>
+	);
+}
 
 /**
  * 当前要连的目标。
@@ -1274,352 +1307,358 @@ export function App() {
 
 	if (phase === "failed") {
 		return (
-			<main className="boot">
-				<h1>连不上主机</h1>
-				<p>{failure}</p>
-				<p>{endpoint}</p>
-				<div className="boot-hosts">
-					<button
-						type="button"
-						className="boot-host"
-						onClick={() => void switchHost(LOCAL_TARGET)}
-						disabled={endpoint === LOCAL_TARGET}
-					>
-						本机 · {endpointLabel(LOCAL_TARGET)}
-					</button>
-					{hostList.hosts.map((host) => (
+			<AppFrame>
+				<main className="boot">
+					<h1>连不上主机</h1>
+					<p>{failure}</p>
+					<p>{endpoint}</p>
+					<div className="boot-hosts">
 						<button
-							key={host.id}
 							type="button"
 							className="boot-host"
-							onClick={() => void switchHost(host.endpoint)}
-							disabled={endpoint === host.endpoint}
+							onClick={() => void switchHost(LOCAL_TARGET)}
+							disabled={endpoint === LOCAL_TARGET}
 						>
-							{host.name} · {endpointLabel(host.endpoint)}
+							本机 · {endpointLabel(LOCAL_TARGET)}
 						</button>
-					))}
-				</div>
-				<button
-					type="button"
-					className="boot-retry"
-					onClick={() => {
-						setPhase("connecting");
-						void reconnect().then(
-							() => setPhase("ready"),
-							(error: unknown) => {
-								setFailure(error instanceof Error ? error.message : String(error));
-								setPhase("failed");
-							},
-						);
-					}}
-				>
-					重试
-				</button>
-			</main>
+						{hostList.hosts.map((host) => (
+							<button
+								key={host.id}
+								type="button"
+								className="boot-host"
+								onClick={() => void switchHost(host.endpoint)}
+								disabled={endpoint === host.endpoint}
+							>
+								{host.name} · {endpointLabel(host.endpoint)}
+							</button>
+						))}
+					</div>
+					<button
+						type="button"
+						className="boot-retry"
+						onClick={() => {
+							setPhase("connecting");
+							void reconnect().then(
+								() => setPhase("ready"),
+								(error: unknown) => {
+									setFailure(error instanceof Error ? error.message : String(error));
+									setPhase("failed");
+								},
+							);
+						}}
+					>
+						重试
+					</button>
+				</main>
+			</AppFrame>
 		);
 	}
 
 	if (phase === "connecting") {
 		return (
-			<main className="boot">
-				<h1>正在连接主机</h1>
-				<p>{endpoint}</p>
-			</main>
+			<AppFrame>
+				<main className="boot">
+					<h1>正在连接主机</h1>
+					<p>{endpoint}</p>
+				</main>
+			</AppFrame>
 		);
 	}
 
 	return (
 		<CodeThemeProvider value={codeThemeValue}>
-			<div className={isSidebarOpen ? "shell has-drawer" : "shell"}>
-				{isSidebarOpen ? (
-					<button
-						type="button"
-						className="sb-backdrop"
-						aria-label="收起侧栏"
-						onClick={() => setIsSidebarOpen(false)}
-					/>
-				) : null}
-				<SessionSidebar
-					sessions={sessions}
-					projects={projects}
-					activeFile={activeFile}
-					runningFile={activity === "idle" ? undefined : activeFile}
-					runningDot={activity === "compacting" ? "compacting" : "running"}
-					createCwd={createCwd}
-					theme={theme}
-					onSelect={(path) => void openSession(path)}
-					onCreate={(cwd) => {
-						setCreateCwd(cwd);
-						void createSession(cwd);
-					}}
-					canCreate={phase === "ready"}
-					onAddProject={() => setIsProjectDialogOpen(true)}
-					isProjectsStale={isProjectsStale}
-					onRefreshProjects={() => void refreshProjects()}
-					onRenameProject={renameProject}
-					onRemoveProject={removeProject}
-					onRevealProject={revealProject}
-					onRenameSession={renameSession}
-					onDeleteSession={deleteSession}
-					onToggleTheme={toggleTheme}
-					onOpenSettings={() => {
-						setView("settings");
-					}}
-					isSettingsOpen={view === "settings"}
-					onTogglePanel={() => updatePanel({ open: !panel.open })}
-					isPanelOpen={panel.open}
-					hostStatus={isReconnecting ? "重连中" : host?.role === "viewer" ? "只读" : undefined}
-					isOpen={isSidebarOpen}
-					onNavigate={() => setIsSidebarOpen(false)}
-					hostSwitcher={
-						<HostSwitcher
-							localEndpoint={LOCAL_TARGET}
-							localName={host?.hostName ?? "本机"}
-							activeEndpoint={hostList.activeEndpoint}
-							hosts={hostList.hosts}
-							isOnline={isOnline}
-							isReconnecting={isReconnecting}
-							onConnect={(next) => void switchHost(next)}
-							onAddHost={addHost}
-							onRemoveHost={removeHost}
-							onRenameHost={renameHost}
+			<AppFrame>
+				<div className={isSidebarOpen ? "shell has-drawer" : "shell"}>
+					{isSidebarOpen ? (
+						<button
+							type="button"
+							className="sb-backdrop"
+							aria-label="收起侧栏"
+							onClick={() => setIsSidebarOpen(false)}
 						/>
-					}
-				/>
-
-				<main className="main">
-					<button
-						type="button"
-						className="sb-toggle"
-						aria-label="展开侧栏"
-						onClick={() => setIsSidebarOpen((open) => !open)}
-					>
-						<PanelLeft size={16} strokeWidth={1.5} />
-					</button>
-					{session === undefined ? null : <ChatOutline items={transcript} container={scrollElement} />}
-					{session === undefined ? (
-						<div className="empty-wrap">
-							{errorBar}
-							<EmptyState
-								cwd={emptyCreateCwd}
-								canCreate={phase === "ready"}
-								onCreate={() => {
-									if (emptyCreateCwd !== undefined) {
-										createSession(emptyCreateCwd);
-									}
-								}}
-								onAddProject={() => setIsProjectDialogOpen(true)}
+					) : null}
+					<SessionSidebar
+						sessions={sessions}
+						projects={projects}
+						activeFile={activeFile}
+						runningFile={activity === "idle" ? undefined : activeFile}
+						runningDot={activity === "compacting" ? "compacting" : "running"}
+						createCwd={createCwd}
+						theme={theme}
+						onSelect={(path) => void openSession(path)}
+						onCreate={(cwd) => {
+							setCreateCwd(cwd);
+							void createSession(cwd);
+						}}
+						canCreate={phase === "ready"}
+						onAddProject={() => setIsProjectDialogOpen(true)}
+						isProjectsStale={isProjectsStale}
+						onRefreshProjects={() => void refreshProjects()}
+						onRenameProject={renameProject}
+						onRemoveProject={removeProject}
+						onRevealProject={revealProject}
+						onRenameSession={renameSession}
+						onDeleteSession={deleteSession}
+						onToggleTheme={toggleTheme}
+						onOpenSettings={() => {
+							setView("settings");
+						}}
+						isSettingsOpen={view === "settings"}
+						onTogglePanel={() => updatePanel({ open: !panel.open })}
+						isPanelOpen={panel.open}
+						hostStatus={isReconnecting ? "重连中" : host?.role === "viewer" ? "只读" : undefined}
+						isOpen={isSidebarOpen}
+						onNavigate={() => setIsSidebarOpen(false)}
+						hostSwitcher={
+							<HostSwitcher
+								localEndpoint={LOCAL_TARGET}
+								localName={host?.hostName ?? "本机"}
+								activeEndpoint={hostList.activeEndpoint}
+								hosts={hostList.hosts}
+								isOnline={isOnline}
+								isReconnecting={isReconnecting}
+								onConnect={(next) => void switchHost(next)}
+								onAddHost={addHost}
+								onRemoveHost={removeHost}
+								onRenameHost={renameHost}
 							/>
-						</div>
-					) : (
-						<>
-							<section className="scroll" ref={scrollRef}>
-								<div className="column">
-									<ChatTranscript
-										items={transcript}
-										canFork={canFork}
-										onFork={forkTurn}
-										canRevert={canFork}
-										onRevert={revertTo}
-										retry={retryOf(session.state.maintenance)}
-										onRetryTurn={retryTurn}
-										onCopyDetails={(text) => {
-											void navigator.clipboard.writeText(text).catch(() => undefined);
-										}}
-										onCopyText={(text) => {
-											void navigator.clipboard.writeText(text).catch(() => undefined);
-										}}
-										renames={chat?.renames}
-										emptyHint="还没有消息,输入内容开始"
-									/>
-								</div>
-							</section>
-
-							<div className="footer">
-								{isPinned ? null : (
-									<button
-										type="button"
-										className="to-bottom"
-										aria-label="回到底部"
-										onClick={() => scrollToBottom("smooth")}
-									>
-										<ArrowDownIcon size={16} />
-									</button>
-								)}
-								<div className="footer-column">
-									{errorBar}
-									<QueueStrip queued={queued} onClear={takeBackQueue} />
-									<Composer
-										value={draft}
-										onChange={updateDraft}
-										onSend={send}
-										onStop={() => client.cancel()}
-										activity={activity}
-										model={session.state.model}
-										thinkingLevel={session.state.thinkingLevel}
-										thinkingLevels={session.state.availableThinkingLevels}
-										models={catalog.models}
-										providerAuth={providerAuth}
-										onModelChange={(next) => client.setModel({ provider: next.provider, id: next.id })}
-										onThinkingLevelChange={(level) => client.setThinkingLevel(level)}
-										shiftEnterToSend={settings.input.sendKey === "shiftEnter"}
-										isBlocked={isBlocked}
-										contextUsage={session.state.contextUsage}
-										isCompacting={activity === "compacting"}
-										canCompact={activity === "idle"}
-										onCompact={() => client.compact()}
-										commands={commands}
-										onRunCommand={(command, args) => {
-											runFacetCommand(command.name, args);
-										}}
-									/>
-
-									{chat && chat.notices.length > 0 ? (
-										<div className="notices">
-											{chat.notices.map((notice) => (
-												<span
-													key={`${notice.level}:${notice.message}`}
-													className={notice.level === "error" ? "chip is-error" : "chip"}
-												>
-													{notice.message}
-												</span>
-											))}
-										</div>
-									) : null}
-								</div>
-							</div>
-						</>
-					)}
-
-					{terminalError === undefined ? null : (
-						<p className="term-dock-error">
-							{terminalError}
-							<button
-								type="button"
-								className="chg-retry"
-								onClick={() => {
-									setTerminalError(undefined);
-									void openTerminal();
-								}}
-							>
-								重试
-							</button>
-						</p>
-					)}
-					<TerminalDock
-						isOpen={dock.open}
-						height={dock.height}
-						terminals={terminals}
-						activeId={dock.activeId}
-						cwd={terminalCwd}
-						client={terminalClient}
-						appearance={terminalAppearance}
-						disabledReason={terminalDisabledReason}
-						onHeightChange={(height) => updateDock({ height })}
-						onSelect={(id) => updateDock({ activeId: id })}
-						onCreate={() => void openTerminal()}
-						onKill={(id) => void killTerminal(id)}
-						onClose={toggleTerminal}
+						}
 					/>
-				</main>
 
-				{panel.open ? (
-					<RightPanel
-						tab={panel.tab}
-						onTabChange={(tab) => updatePanel({ tab })}
-						width={panel.width}
-						onWidthChange={(width) => updatePanel({ width })}
-						onClose={() => updatePanel({ open: false })}
-					>
-						{panel.tab === "changes" ? (
-							<ChangesPane
-								status={changes.status}
-								isLoading={changes.isLoading}
-								error={changes.error}
-								onRefresh={() => void refreshChanges()}
-								loadDiff={(file: GitFileChange) =>
-									sessionCwd === undefined
-										? Promise.reject(new Error("还没有打开会话"))
-										: client.gitDiff(sessionCwd, file.path, file.status === "untracked")
-								}
-							/>
-						) : openedFile === undefined ? (
-							fileError === undefined ? (
-								<FilesPane
-									loadDirectory={(path) =>
+					<main className="main">
+						<button
+							type="button"
+							className="sb-toggle"
+							aria-label="展开侧栏"
+							onClick={() => setIsSidebarOpen((open) => !open)}
+						>
+							<PanelLeft size={16} strokeWidth={1.5} />
+						</button>
+						{session === undefined ? null : <ChatOutline items={transcript} container={scrollElement} />}
+						{session === undefined ? (
+							<div className="empty-wrap">
+								{errorBar}
+								<EmptyState
+									cwd={emptyCreateCwd}
+									canCreate={phase === "ready"}
+									onCreate={() => {
+										if (emptyCreateCwd !== undefined) {
+											createSession(emptyCreateCwd);
+										}
+									}}
+									onAddProject={() => setIsProjectDialogOpen(true)}
+								/>
+							</div>
+						) : (
+							<>
+								<section className="scroll" ref={scrollRef}>
+									<div className="column">
+										<ChatTranscript
+											items={transcript}
+											canFork={canFork}
+											onFork={forkTurn}
+											canRevert={canFork}
+											onRevert={revertTo}
+											retry={retryOf(session.state.maintenance)}
+											onRetryTurn={retryTurn}
+											onCopyDetails={(text) => {
+												void navigator.clipboard.writeText(text).catch(() => undefined);
+											}}
+											onCopyText={(text) => {
+												void navigator.clipboard.writeText(text).catch(() => undefined);
+											}}
+											renames={chat?.renames}
+											emptyHint="还没有消息,输入内容开始"
+										/>
+									</div>
+								</section>
+
+								<div className="footer">
+									{isPinned ? null : (
+										<button
+											type="button"
+											className="to-bottom"
+											aria-label="回到底部"
+											onClick={() => scrollToBottom("smooth")}
+										>
+											<ArrowDownIcon size={16} />
+										</button>
+									)}
+									<div className="footer-column">
+										{errorBar}
+										<QueueStrip queued={queued} onClear={takeBackQueue} />
+										<Composer
+											value={draft}
+											onChange={updateDraft}
+											onSend={send}
+											onStop={() => client.cancel()}
+											activity={activity}
+											model={session.state.model}
+											thinkingLevel={session.state.thinkingLevel}
+											thinkingLevels={session.state.availableThinkingLevels}
+											models={catalog.models}
+											providerAuth={providerAuth}
+											onModelChange={(next) => client.setModel({ provider: next.provider, id: next.id })}
+											onThinkingLevelChange={(level) => client.setThinkingLevel(level)}
+											shiftEnterToSend={settings.input.sendKey === "shiftEnter"}
+											isBlocked={isBlocked}
+											contextUsage={session.state.contextUsage}
+											isCompacting={activity === "compacting"}
+											canCompact={activity === "idle"}
+											onCompact={() => client.compact()}
+											commands={commands}
+											onRunCommand={(command, args) => {
+												runFacetCommand(command.name, args);
+											}}
+										/>
+
+										{chat && chat.notices.length > 0 ? (
+											<div className="notices">
+												{chat.notices.map((notice) => (
+													<span
+														key={`${notice.level}:${notice.message}`}
+														className={notice.level === "error" ? "chip is-error" : "chip"}
+													>
+														{notice.message}
+													</span>
+												))}
+											</div>
+										) : null}
+									</div>
+								</div>
+							</>
+						)}
+
+						{terminalError === undefined ? null : (
+							<p className="term-dock-error">
+								{terminalError}
+								<button
+									type="button"
+									className="chg-retry"
+									onClick={() => {
+										setTerminalError(undefined);
+										void openTerminal();
+									}}
+								>
+									重试
+								</button>
+							</p>
+						)}
+						<TerminalDock
+							isOpen={dock.open}
+							height={dock.height}
+							terminals={terminals}
+							activeId={dock.activeId}
+							cwd={terminalCwd}
+							client={terminalClient}
+							appearance={terminalAppearance}
+							disabledReason={terminalDisabledReason}
+							onHeightChange={(height) => updateDock({ height })}
+							onSelect={(id) => updateDock({ activeId: id })}
+							onCreate={() => void openTerminal()}
+							onKill={(id) => void killTerminal(id)}
+							onClose={toggleTerminal}
+						/>
+					</main>
+
+					{panel.open ? (
+						<RightPanel
+							tab={panel.tab}
+							onTabChange={(tab) => updatePanel({ tab })}
+							width={panel.width}
+							onWidthChange={(width) => updatePanel({ width })}
+							onClose={() => updatePanel({ open: false })}
+						>
+							{panel.tab === "changes" ? (
+								<ChangesPane
+									status={changes.status}
+									isLoading={changes.isLoading}
+									error={changes.error}
+									onRefresh={() => void refreshChanges()}
+									loadDiff={(file: GitFileChange) =>
 										sessionCwd === undefined
 											? Promise.reject(new Error("还没有打开会话"))
-											: client.listDirectory(sessionCwd, path)
+											: client.gitDiff(sessionCwd, file.path, file.status === "untracked")
 									}
-									onOpenFile={(path) => void openFile(path)}
 								/>
+							) : openedFile === undefined ? (
+								fileError === undefined ? (
+									<FilesPane
+										loadDirectory={(path) =>
+											sessionCwd === undefined
+												? Promise.reject(new Error("还没有打开会话"))
+												: client.listDirectory(sessionCwd, path)
+										}
+										onOpenFile={(path) => void openFile(path)}
+									/>
+								) : (
+									<p className="chg-note is-error">
+										{fileError}
+										<button type="button" className="chg-retry" onClick={() => setFileError(undefined)}>
+											返回目录
+										</button>
+									</p>
+								)
 							) : (
-								<p className="chg-note is-error">
-									{fileError}
-									<button type="button" className="chg-retry" onClick={() => setFileError(undefined)}>
-										返回目录
-									</button>
-								</p>
-							)
-						) : (
-							<FileView
-								path={openedFile.path}
-								content={openedFile.content}
-								onClose={() => setOpenedFile(undefined)}
-								onSave={(text, expectedRevision) =>
-									sessionCwd === undefined
-										? Promise.reject(new Error("还没有打开会话"))
-										: client.writeFile(sessionCwd, openedFile.path, text, expectedRevision)
-								}
-								onReload={async () => {
-									if (sessionCwd === undefined) {
-										throw new Error("还没有打开会话");
+								<FileView
+									path={openedFile.path}
+									content={openedFile.content}
+									onClose={() => setOpenedFile(undefined)}
+									onSave={(text, expectedRevision) =>
+										sessionCwd === undefined
+											? Promise.reject(new Error("还没有打开会话"))
+											: client.writeFile(sessionCwd, openedFile.path, text, expectedRevision)
 									}
-									const next = await client.readFile(sessionCwd, openedFile.path);
-									setOpenedFile({ path: openedFile.path, content: next });
-									return next;
-								}}
-							/>
-						)}
-					</RightPanel>
-				) : null}
+									onReload={async () => {
+										if (sessionCwd === undefined) {
+											throw new Error("还没有打开会话");
+										}
+										const next = await client.readFile(sessionCwd, openedFile.path);
+										setOpenedFile({ path: openedFile.path, content: next });
+										return next;
+									}}
+								/>
+							)}
+						</RightPanel>
+					) : null}
 
-				{view === "settings" ? (
-					<SettingsPage
-						section={settingsSection}
-						onSectionChange={setSettingsSection}
-						onClose={() => setView("chat")}
-						data={settingsData}
-						onSettingsApplied={setSettings}
-						onAppearancePreview={(appearance) => {
-							applyAppearance(appearance);
-							setTheme(resolveTheme(appearance.theme));
-						}}
-						about={{
-							appVersion: bridge.appVersion,
-							runtime: `Electron ${bridge.platform}`,
-							endpoint,
-						}}
-						// 浏览器入口改不了主机配置，桌面与 SSH 通道可以
-						canEdit={host?.canManage === true}
+					{view === "settings" ? (
+						<SettingsPage
+							section={settingsSection}
+							onSectionChange={setSettingsSection}
+							onClose={() => setView("chat")}
+							data={settingsData}
+							onSettingsApplied={setSettings}
+							onAppearancePreview={(appearance) => {
+								applyAppearance(appearance);
+								setTheme(resolveTheme(appearance.theme));
+							}}
+							about={{
+								appVersion: bridge.appVersion,
+								runtime: `Electron ${bridge.platform}`,
+								endpoint,
+							}}
+							// 浏览器入口改不了主机配置，桌面与 SSH 通道可以
+							canEdit={host?.canManage === true}
+						/>
+					) : null}
+
+					<CreateProjectDialog
+						isOpen={isProjectDialogOpen}
+						onPickFolder={() => window.facet.pickDirectory()}
+						onCreate={createProject}
+						onClose={() => setIsProjectDialogOpen(false)}
 					/>
-				) : null}
 
-				<CreateProjectDialog
-					isOpen={isProjectDialogOpen}
-					onPickFolder={() => window.facet.pickDirectory()}
-					onCreate={createProject}
-					onClose={() => setIsProjectDialogOpen(false)}
-				/>
-
-				{trustPrompt ? (
-					<TrustDialog
-						cwd={trustPrompt.cwd}
-						onDecide={decideTrust}
-						onCancel={() => setTrustPrompt(undefined)}
-					/>
-				) : null}
-			</div>
+					{trustPrompt ? (
+						<TrustDialog
+							cwd={trustPrompt.cwd}
+							onDecide={decideTrust}
+							onCancel={() => setTrustPrompt(undefined)}
+						/>
+					) : null}
+				</div>
+			</AppFrame>
 		</CodeThemeProvider>
 	);
 }

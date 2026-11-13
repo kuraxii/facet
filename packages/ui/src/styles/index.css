@@ -20,6 +20,9 @@
 	--dur-slow: 180ms;
 	/* 代码字号乘数,由设置里的字号档位写入 */
 	--fs-code-scale: 1;
+	/* 自绘标题栏的高度与每个窗口按钮的宽度 */
+	--titlebar-height: 36px;
+	--titlebar-button-width: 46px;
 	/* 过程组的缩进：竖线到行内容的距离，以及竖线本身相对正文列的位置
 	   （后者来自展开箭头字形在图标盒子里的内缩，改箭头图标时跟着调） */
 	--indent-rail-offset: 16px;
@@ -136,9 +139,70 @@ svg.fl {
 
 /* 外壳 */
 
+/* 应用外壳：自绘标题栏在上，内容区占满剩下的高度 */
+.app {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	overflow: hidden;
+}
+
+/* 标题栏：整条是拖动区，按钮自己标 no-drag；双击空白处由 Chromium 处理成最大化切换 */
+.titlebar {
+	position: relative;
+	display: flex;
+	flex: none;
+	align-items: stretch;
+	height: var(--titlebar-height);
+	background: var(--sb);
+	-webkit-app-region: drag;
+}
+
+.titlebar-drag {
+	position: absolute;
+	inset: 0;
+}
+
+/* 顶上留 4px 不是拖动区：无边框窗口靠这一条交给窗口管理器做上边缘缩放 */
+.titlebar::before {
+	position: absolute;
+	top: 0;
+	right: 0;
+	left: 0;
+	height: 4px;
+	content: "";
+	-webkit-app-region: no-drag;
+}
+
+.titlebar-actions {
+	display: flex;
+	margin-left: auto;
+	-webkit-app-region: no-drag;
+}
+
+.titlebar-btn {
+	display: grid;
+	place-items: center;
+	width: var(--titlebar-button-width);
+	border: 0;
+	background: transparent;
+	color: var(--t3);
+}
+
+.titlebar-btn:hover {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+.titlebar-btn.is-close:hover {
+	background: var(--errbg);
+	color: var(--err);
+}
+
 .shell {
 	display: flex;
-	height: 100%;
+	flex: 1;
+	min-height: 0;
 	overflow: hidden;
 }
 /* 侧栏 */
@@ -1918,8 +1982,6 @@ svg.fl {
 	padding-left: 0;
 }
 
-
-
 /* 这一轮收尾：时长、复制、分叉 */
 
 .turn-time {
@@ -2449,11 +2511,12 @@ svg.fl {
 
 .boot {
 	display: flex;
+	flex: 1;
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
 	gap: 8px;
-	height: 100%;
+	min-height: 0;
 }
 
 .boot h1 {

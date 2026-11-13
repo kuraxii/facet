@@ -9,9 +9,9 @@
 	],
 	"scripts": {
 		"postinstall": "node scripts/ensure-electron.mjs",
-		"dev": "npm run dev -w @facet/desktop",
+		"dev": "node scripts/dev-split.mjs",
+		"dev:desktop": "npm run dev -w @facet/desktop",
 		"dev:host": "node scripts/dev-host.mjs",
-		"dev:client": "npm run dev -w @facet/desktop",
 		"dev:split": "node scripts/dev-split.mjs",
 		"build": "npm run build --workspaces --if-present",
 		"typecheck": "npm run typecheck --workspaces --if-present",

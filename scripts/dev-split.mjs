@@ -4,11 +4,10 @@
  * 先把主机单独跑起来（改主机代码只重启它，桌面界面不受影响），等端点可用之后再启动桌面并
  * 指向那个端点。两边输出各加前缀，Ctrl+C 一起结束。
  */
-import { homedir } from "node:os";
-import { isAbsolute, join } from "node:path";
-import { homedir } from "node:os";
-import { isAbsolute, join } from "node:path";
+import { readFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
+import { homedir } from "node:os";
+import { isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /** 仓库根目录 */
@@ -74,14 +73,19 @@ function run(label, args, env) {
 
 /** 轮询端点，主机起来之前桌面就连会一直失败。 */
 async function waitForHost() {
+	// 主机监听的是按帧收发的字节流，不能用 HTTP 探活；就绪的凭据是它写下的发现文件
+	const discovery = join(devDataDir(process.env), "endpoint.json");
 	const deadline = Date.now() + READY_WAIT_MS;
 	while (Date.now() < deadline) {
 		try {
-			await fetch(`http://127.0.0.1:${port}/endpoint`);
-			return true;
+			const record = JSON.parse(await readFile(discovery, "utf8"));
+			if (record?.endpoint !== undefined) {
+				return true;
+			}
 		} catch {
-			await new Promise((done) => setTimeout(done, POLL_INTERVAL_MS));
+			// 还没写出来，继续等
 		}
+		await new Promise((done) => setTimeout(done, POLL_INTERVAL_MS));
 	}
 	return false;
 }

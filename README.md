@@ -24,19 +24,21 @@ npm install
 开发时主机固定跑在 `ws://127.0.0.1:4319/endpoint`，桌面缺省连这个地址：
 
 ```bash
+npm run dev            # 主机与桌面一起起，各自热重启
+npm run dev:desktop    # 只起桌面，连 4319
 npm run dev:host       # 只起主机，固定 4319 端口（FACET_PORT 可换）
-npm run dev            # 只起桌面，连 4319
-npm run dev:client     # 同上，给需要并排调试时用
-npm run dev:split      # 主机与桌面一起起，各自热重启
+npm run dev:split      # 与 dev 相同，保留这个更明确的名字
 ```
+
+要分开看两边日志时用 `npm run dev:host` 加 `npm run dev:desktop` 各起一个终端。
 
 主机端口由 `FACET_PORT` 决定，缺省 4319；桌面端点由 `FACET_ENDPOINT` 决定，开发时缺省是 `ws://127.0.0.1:4319/endpoint`。要连别处的主机：
 
 ```bash
-FACET_ENDPOINT=ws://192.168.1.20:4319/endpoint npm run dev:client
+FACET_ENDPOINT=ws://192.168.1.20:4319/endpoint npm run dev:desktop
 ```
 
-开发时想跑打包那样的本机模式（桌面自己拉起主机）用 `FACET_EMBEDDED=1 npm run dev`；打包运行不带 `FACET_ENDPOINT` 时本来就是本机模式。
+开发时想跑打包那样的本机模式（桌面自己拉起主机）用 `FACET_EMBEDDED=1 npm run dev:desktop`；打包运行不带 `FACET_ENDPOINT` 时本来就是本机模式。
 
 ## 连接方式与令牌
 
@@ -180,7 +182,7 @@ scripts/build-fonts.sh <字体目录>
 | `$XDG_DATA_HOME/facet`（缺省 `~/.local/share/facet`） | 主机身份 `host.json`、项目清单 `projects.json`、界面设置 `settings.json`、终端登记 `terminals.json`、审计 `audit.log`；独立启动时还有发现文件 `endpoint.json` | `FACET_DATA_DIR` |
 | `$XDG_CONFIG_HOME/facet`（缺省 `~/.config/facet`） | 桌面本地记录 `desktop.json`：窗口位置与尺寸 | — |
 
-开发实例的两处目录都带 `-dev` 后缀：数据目录是 `~/.local/share/facet-dev`，配置目录是 `~/.config/facet-dev`。`npm run dev`、`dev:split`、`dev:host` 三者都用这份，因此开发时跑的东西与装好的包互不影响，`projects.json` 与主机身份各有一份。
+开发实例的两处目录都带 `-dev` 后缀：数据目录是 `~/.local/share/facet-dev`，配置目录是 `~/.config/facet-dev`。`npm run dev`（即 `dev:split`）、`dev:host`、`dev:desktop` 都用这份，因此开发时跑的东西与装好的包互不影响，`projects.json` 与主机身份各有一份。
 
 用 `agent-dev` 而不是 `~/.pi/agent`，是为了和 pi 命令行共用凭证与模型配置，同时不把开发期的会话混进真实目录。
 

@@ -29,6 +29,9 @@
 	/* 滚动条占的宽度，以及其中拇指的宽度；轨道其余部分是透明的 */
 	--scrollbar-width: 8px;
 	--scrollbar-thumb: 4px;
+	/* 两个面板分隔条的命中区宽度，以及悬停时那条高亮的颜色 */
+	--divider-hit-width: 6px;
+	--divider-highlight: color-mix(in srgb, var(--acc) 55%, transparent);
 	/* 过程组的缩进：竖线到行内容的距离，以及竖线本身相对正文列的位置
 	   （后者来自展开箭头字形在图标盒子里的内缩，改箭头图标时跟着调） */
 	--indent-rail-offset: 16px;
@@ -182,9 +185,10 @@ svg.fl {
 	min-width: 0;
 }
 
-/* 侧栏那一格：宽度与正文的侧栏一致 */
+/* 侧栏那一格：宽度与正文的侧栏一致，右边留出与侧栏一致的内边距 */
 .chrome-slot.is-sidebar {
 	width: var(--sidebar-width);
+	padding-right: 10px;
 	overflow: hidden;
 }
 
@@ -288,28 +292,24 @@ svg.fl {
 	transition: background-color var(--dur-fast) var(--ease);
 }
 
-/* 拖宽用的命中区，和右栏那条对称：画面上什么都不显示，只在悬停时给一条强调线 */
+/* 拖宽用的命中区，和右栏那条对称 */
 .sb-resizer {
 	position: absolute;
 	top: 0;
 	bottom: 0;
 	right: 0;
 	z-index: 3;
-	width: 6px;
+	width: var(--divider-hit-width);
 	margin: 0;
 	border: 0;
 	cursor: col-resize;
 	background: transparent;
 }
 
-.sb-resizer:hover,
-.sb-resizer:active {
-	background: linear-gradient(
-		to left,
-		transparent 0 3px,
-		color-mix(in srgb, var(--acc) 40%, transparent) 3px 5px,
-		transparent 5px 100%
-	);
+.shell:has(.sb-resizer:hover) .sb,
+.shell:has(.sb-resizer:active) .sb {
+	border-right-color: var(--divider-highlight);
+	box-shadow: inset -1px 0 0 var(--divider-highlight);
 }
 
 .sb-head {
@@ -318,6 +318,7 @@ svg.fl {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
+	width: 100%;
 	padding: 2px 0 8px 6px;
 	-webkit-app-region: drag;
 }
@@ -942,24 +943,25 @@ svg.fl {
 	position: absolute;
 	top: 0;
 	bottom: 0;
-	left: -3px;
+	left: calc(-1 * var(--divider-hit-width) / 2);
 	z-index: 2;
-	width: 6px;
+	width: var(--divider-hit-width);
 	margin: 0;
 	border: 0;
 	cursor: col-resize;
 	background: transparent;
 }
 
-/* 悬停与拖动时在分界上叠一条 2px 的强调线：命中区本身始终透明，也不改边框宽度免得内容跳 */
-.panel-resizer:hover,
-.panel-resizer:active {
-	background: linear-gradient(
-		to right,
-		transparent 0 3px,
-		color-mix(in srgb, var(--acc) 40%, transparent) 3px 5px,
-		transparent 5px 100%
-	);
+/*
+ * 悬停与拖动时把面板自己那条边染成强调色，再从内侧叠一条同色的 1px。
+ *
+ * 高亮就是分界线本身，两个面板各自往自己那一侧叠，所以左右两边看上去一致；命中区始终透明，
+ * 边框宽度也不变，内容不会跳。
+ */
+.shell:has(.panel-resizer:hover) .panel,
+.shell:has(.panel-resizer:active) .panel {
+	border-left-color: var(--divider-highlight);
+	box-shadow: inset 1px 0 0 var(--divider-highlight);
 }
 
 .panel-tabs {

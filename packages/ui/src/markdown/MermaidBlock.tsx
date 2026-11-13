@@ -14,8 +14,8 @@ import {
 	useState,
 } from "react";
 
-/** 缩放的上下限与单步倍率。 */
-const MIN_SCALE = 0.5;
+/** 缩放的上下限与单步倍率。1 倍是铺满宽度，不再往更小缩。 */
+const MIN_SCALE = 1;
 const MAX_SCALE = 4;
 const ZOOM_STEP = 1.25;
 

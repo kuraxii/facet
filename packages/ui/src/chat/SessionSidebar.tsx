@@ -233,7 +233,7 @@ export function SessionSidebar({
 		};
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
-	}, []);
+	}, [onSearchOpenChange]);
 
 	useEffect(() => {
 		if (!isSearchOpen) {

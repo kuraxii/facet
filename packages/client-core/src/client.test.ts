@@ -10,7 +10,8 @@ import type {
 	SessionSnapshot,
 } from "@facet/protocol";
 import { describe, expect, it, vi } from "vitest";
-import { type HostHandshake, SessionClient, type SessionTransport } from "./client.ts";
+import { formatCommitLog, type HostHandshake, SessionClient, type SessionTransport } from "./client.ts";
+import type { EntryView } from "./state.ts";
 import { toTranscript } from "./transcript.ts";
 
 const CHAT = "chat:/s1" as const;
@@ -905,5 +906,40 @@ describe("回退", () => {
 		expect(after).toBeGreaterThan(before);
 		// 清空之后重新装载，条目不会叠加
 		expect(client.chatView()?.items).toHaveLength(25);
+	});
+});
+
+describe("提交日志排版", () => {
+	/** 只关心 id 与条目 id，其余字段给占位值。 */
+	function item(id: string, entryId?: string): EntryView {
+		return {
+			id,
+			entry: entryId === undefined ? undefined : ({ id: entryId } as Entry),
+			message: undefined,
+			streaming: {},
+			isStreaming: false,
+		};
+	}
+
+	it("摘要一行给出本轮条数、叶子、边界与视图总量", () => {
+		const text = formatCommitLog("提升成功", 8, "76190aeb", "76190aeb", [item("e:a1", "a1"), item("e:b2")]);
+		const [head] = text.split("\n");
+		expect(head).toBe("提升成功 · 本轮 8 条 · 叶子 76190aeb · 边界 76190aeb · 视图 2 条，其中已提升 1 条");
+	});
+
+	it("条目按行宽折开，每行不超过宽度加缩进", () => {
+		const items = Array.from({ length: 40 }, (_, index) =>
+			item(`e:${String(index).padStart(40, "0")}`, `id${index}`),
+		);
+		const lines = formatCommitLog("提升成功", 40, "leaf", "leaf", items).split("\n").slice(1);
+		expect(lines.length).toBeGreaterThan(1);
+		for (const line of lines) {
+			expect(line.startsWith("  ")).toBe(true);
+			expect(line.length).toBeLessThanOrEqual(122);
+		}
+	});
+
+	it("没有条目时只输出摘要", () => {
+		expect(formatCommitLog("提升成功", 0, null, null, []).split("\n")).toHaveLength(1);
 	});
 });

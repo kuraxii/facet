@@ -16,21 +16,21 @@ export interface RightPanelProps {
 	children: ReactNode;
 }
 
+/**
+ * 拖动期间直接改根节点上的宽度变量，不经过 React 渲染。
+ *
+ * 每移动一次就 setState 会把整个界面重画一遍，流式输出时尤其卡；这里只写一个 CSS 变量，
+ * 松手时才把最终宽度提交给宿主保存。
+ */
+function applyWidth(element: HTMLElement, next: number): void {
+	const app = element.closest(".app");
+	if (app instanceof HTMLElement) {
+		app.style.setProperty("--panel-width", `${next}px`);
+	}
+}
+
 export function RightPanel({ width, onWidthChange, children }: RightPanelProps) {
 	const dragging = useRef<{ startX: number; startWidth: number; current: number } | undefined>(undefined);
-
-	/**
-	 * 拖动期间直接改根节点上的宽度变量，不经过 React 渲染。
-	 *
-	 * 每移动一次就 setState 会把整个界面重画一遍，流式输出时尤其卡；这里只写一个 CSS 变量，
-	 * 松手时才把最终宽度提交给宿主保存。
-	 */
-	const applyWidth = (element: HTMLElement, next: number): void => {
-		const app = element.closest(".app");
-		if (app instanceof HTMLElement) {
-			app.style.setProperty("--panel-width", `${next}px`);
-		}
-	};
 
 	/** 按住分隔条开始拖：记住起点，指针捕获到分隔条上，拖出栏外也不会断。 */
 	const handlePointerDown = useCallback(
@@ -43,18 +43,15 @@ export function RightPanel({ width, onWidthChange, children }: RightPanelProps) 
 	);
 
 	/** 往左拖变宽，往右拖变窄，宽度收在上下限之间。 */
-	const handlePointerMove = useCallback(
-		(event: ReactPointerEvent<HTMLHRElement>) => {
-			const start = dragging.current;
-			if (start === undefined) {
-				return;
-			}
-			const next = clampPanelWidth(start.startWidth - (event.clientX - start.startX));
-			start.current = next;
-			applyWidth(event.currentTarget, next);
-		},
-		[onWidthChange],
-	);
+	const handlePointerMove = useCallback((event: ReactPointerEvent<HTMLHRElement>) => {
+		const start = dragging.current;
+		if (start === undefined) {
+			return;
+		}
+		const next = clampPanelWidth(start.startWidth - (event.clientX - start.startX));
+		start.current = next;
+		applyWidth(event.currentTarget, next);
+	}, []);
 
 	const handlePointerUp = useCallback(
 		(event: ReactPointerEvent<HTMLHRElement>) => {

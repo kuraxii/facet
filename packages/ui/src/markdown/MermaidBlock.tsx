@@ -151,6 +151,12 @@ export function MermaidBlock({ node }: MermaidBlockProps) {
 								themeVariables: palette,
 								flowchart: { htmlLabels: false, curve: "basis" },
 								class: { htmlLabels: false },
+								// 默认给边标签的文字描一圈同色描边（1.8px），字看起来被加粗；底色块也只有半透明。
+								// 这里去掉描边、把底块做成不透的，标签就是普通字重压在实色块上。
+								themeCSS: `
+									.edgeLabel .label, .edgeLabel .label * { stroke: none; }
+									.edgeLabel rect { opacity: 1; stroke: none; }
+								`,
 							});
 							return mermaid.render(`facet-mermaid-${instance}-${current}`, code);
 						});

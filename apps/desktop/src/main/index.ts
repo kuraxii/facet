@@ -105,8 +105,11 @@ function isOnScreen(x: number, y: number): boolean {
 	});
 }
 
-/** 记下窗口位置与尺寸，关闭与退出时各存一次。 */
+/** 记下窗口位置与尺寸，关闭与退出时各存一次。窗口已经销毁时直接跳过。 */
 function saveWindowBounds(window: BrowserWindow): void {
+	if (window.isDestroyed()) {
+		return;
+	}
 	const isMaximized = window.isMaximized();
 	// 最大化时记的是还原后的尺寸，否则再打开会一直停在最大化
 	const bounds = isMaximized ? window.getNormalBounds() : window.getBounds();
@@ -202,9 +205,10 @@ function createWindow(): BrowserWindow {
 		window.show();
 	});
 
-	// 关闭时先确认有没有正在跑的会话，再记下窗口尺寸
+	// 退出时 app.exit 会同步销毁窗口，`closed` 里再读 webContents 已经拿不到，先把 id 取出来
+	const contentsId = window.webContents.id;
 	window.on("closed", () => {
-		hostChannels?.closeFor(window.webContents.id);
+		hostChannels?.closeFor(contentsId);
 	});
 
 	window.on("close", (event) => {

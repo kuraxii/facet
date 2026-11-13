@@ -2153,30 +2153,54 @@ svg.fl {
 
 /* 错误与提示 */
 
-.error-actions {
-	display: flex;
-	gap: 6px;
-	margin-top: 8px;
-}
-
+/* 错误行：一层浅色底，不描边；正文可以选中，长串（JSON 报错）在任意位置断开 */
 .error-line {
 	display: flex;
-	align-items: center;
-	gap: 10px;
-	padding: 10px 12px 10px 14px;
-	border: 1px solid var(--err);
-	border-radius: 10px;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 10px 12px;
+	border-radius: 6px;
 	background: var(--errbg);
+}
+
+.error-mark {
+	flex: none;
+	margin-top: 1px;
+	color: var(--err);
+}
+
+.error-body {
+	flex: 1;
+	min-width: 0;
+}
+
+.error-text {
+	color: var(--t1);
+	font-size: var(--text-size);
+	line-height: 1.4;
+	overflow-wrap: anywhere;
+	user-select: text;
+}
+
+.error-actions {
+	display: flex;
+	gap: 12px;
+	margin-top: 6px;
+}
+
+.error-btn {
+	height: 20px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--t2);
 	font-size: 13px;
 }
 
-.error-line b {
-	color: var(--err);
-	font-weight: 600;
-}
-
-.error-line span {
-	min-width: 0;
+.error-btn:hover,
+.error-btn:focus-visible {
+	color: var(--t1);
+	text-decoration: underline;
 }
 
 .retry-line {

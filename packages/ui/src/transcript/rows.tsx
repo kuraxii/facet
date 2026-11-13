@@ -5,7 +5,19 @@
  * 默认只有过程行与文件改动行收起,其余行展开。
  */
 import type { Part, ToolCallPart, TranscriptItem } from "@facet/client-core";
-import { Brain, Check, Copy, Edit3, FileText, Search, Split, Terminal, Undo2, Wrench } from "lucide-react";
+import {
+	Brain,
+	Check,
+	CircleAlert,
+	Copy,
+	Edit3,
+	FileText,
+	Search,
+	Split,
+	Terminal,
+	Undo2,
+	Wrench,
+} from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { Markdown } from "../markdown/Markdown.tsx";
 import { ChevronIcon, TreeChevron } from "./chevron.tsx";
@@ -488,27 +500,32 @@ export function ChatTranscript({
 									text: textOf(lastUser.items.flatMap((item) => item.parts)),
 								};
 					const canRetry = onRetryTurn !== undefined && canRevert && retryTarget?.entryId !== undefined;
+					// 一条带色底的提示：图标固定在左上，正文自己换行，动作是文字按钮
 					return (
 						<Shell key={row.id} className="is-error">
-							<div className="error-line">
-								<b>出错</b>
-								<span className="t2">{message}</span>
-							</div>
-							<div className="error-actions">
-								{canRetry ? (
-									<button
-										type="button"
-										className="btn"
-										onClick={() => onRetryTurn(retryTarget.entryId as string, retryTarget.text)}
-									>
-										重试
-									</button>
-								) : null}
-								{onCopyDetails === undefined ? null : (
-									<button type="button" className="btn" onClick={() => onCopyDetails(message)}>
-										复制详情
-									</button>
-								)}
+							<div className="error-line" role="alert">
+								<CircleAlert className="error-mark" size={16} strokeWidth={1.5} />
+								<div className="error-body">
+									<div className="error-text">{message}</div>
+									{!canRetry && onCopyDetails === undefined ? null : (
+										<div className="error-actions">
+											{canRetry ? (
+												<button
+													type="button"
+													className="error-btn"
+													onClick={() => onRetryTurn(retryTarget.entryId as string, retryTarget.text)}
+												>
+													重试
+												</button>
+											) : null}
+											{onCopyDetails === undefined ? null : (
+												<button type="button" className="error-btn" onClick={() => onCopyDetails(message)}>
+													复制详情
+												</button>
+											)}
+										</div>
+									)}
+								</div>
 							</div>
 						</Shell>
 					);

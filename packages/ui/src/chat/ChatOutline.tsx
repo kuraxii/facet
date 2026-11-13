@@ -6,6 +6,7 @@
  */
 
 import type { TranscriptItem } from "@facet/client-core";
+import type { CSSProperties } from "react";
 import {
 	type PointerEvent as ReactPointerEvent,
 	useCallback,
@@ -22,8 +23,13 @@ import {
 	outlineTickMagnification,
 } from "./chat-outline.ts";
 
-/** 竖轨的最小可用宽度，主区域比这窄时留白不够，直接不显示。 */
-const MIN_HOST_WIDTH = 720;
+/**
+ * 竖轨的最小可用宽度。
+ *
+ * 正文列最宽 780px，居中之后左右各留 (宽 - 780) / 2；这段留白要放得下竖轨的间距加轨宽，
+ * 短条才不会压到正文上：780 + 2 × (10 + 36) = 872，向上取整到 880。
+ */
+const MIN_HOST_WIDTH = 880;
 
 /** 跳转后这条消息距视口上沿留多少像素，避免贴着顶部。 */
 const JUMP_OFFSET = 12;
@@ -197,11 +203,11 @@ export function ChatOutline({ items, container }: ChatOutlineProps) {
 												? "outline-pill is-active"
 												: "outline-pill"
 									}
-									style={{
-										// 放大只改短条的宽高，槽位尺寸不动，指针不会把目标推走
-										width: `${8 + magnification * 12}px`,
-										height: `${2 + magnification * 2}px`,
-									}}
+									style={
+										// 放大只改短条的宽高，槽位尺寸不动，指针不会把目标推走；
+										// 基准宽度、加宽倍数与放大步长都在样式表的变量里
+										{ "--outline-grow": magnification.toFixed(3) } as CSSProperties
+									}
 								/>
 							</button>
 							{hasAttention ? (

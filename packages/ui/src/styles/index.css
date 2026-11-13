@@ -20,6 +20,10 @@
 	--dur-slow: 180ms;
 	/* 代码字号乘数,由设置里的字号档位写入 */
 	--fs-code-scale: 1;
+	/* 过程组的缩进：竖线到行内容的距离，以及竖线本身相对正文列的位置
+	   （后者来自展开箭头字形在图标盒子里的内缩，改箭头图标时跟着调） */
+	--indent-rail-offset: 16px;
+	--indent-rail-inset: 4px;
 }
 
 /*
@@ -1772,13 +1776,13 @@ svg.fl {
 	}
 }
 
-/* 过程组里唯一的横向定位：竖线落在展开箭头字形的左缘，行内容距竖线 16px */
+/* 过程组里唯一的横向定位：竖线落在展开箭头字形的左缘，行内容距竖线由变量给出 */
 .group-body {
 	display: flex;
 	flex-direction: column;
 	gap: 1px;
-	margin: 2px 0 0 4px;
-	padding-left: 15px;
+	margin: 2px 0 0 var(--indent-rail-inset);
+	padding-left: calc(var(--indent-rail-offset) - 1px);
 	border-left: 1px solid var(--line);
 }
 

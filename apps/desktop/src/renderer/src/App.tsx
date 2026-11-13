@@ -114,20 +114,17 @@ declare global {
 const bridge = window.facet;
 
 /** 窄屏断点：880px 以下侧栏变抽屉，与样式表里的媒体查询保持一致。 */
-const NARROW_QUERY = "(max-width: 880px)";
+const narrowQuery = window.matchMedia("(max-width: 880px)");
 
 function subscribeResize(listener: () => void): () => void {
-	const query = window.matchMedia(NARROW_QUERY);
-	query.addEventListener("change", listener);
-	window.addEventListener("resize", listener);
+	narrowQuery.addEventListener("change", listener);
 	return () => {
-		query.removeEventListener("change", listener);
-		window.removeEventListener("resize", listener);
+		narrowQuery.removeEventListener("change", listener);
 	};
 }
 
 function readIsNarrow(): boolean {
-	return window.matchMedia(NARROW_QUERY).matches;
+	return narrowQuery.matches;
 }
 
 /** 外壳类名：抽屉展开时给 has-drawer，宽屏收起侧栏时给 is-sb-hidden。 */
@@ -163,17 +160,32 @@ function shellClassName(
 function AppFrame({
 	children,
 	chrome,
-	vars,
+	sidebarWidth = "272px",
+	panelWidth = "0px",
 }: {
 	children: ReactNode;
 	/** 顶带里的内容；不给时这条带只放窗口按钮 */
 	chrome?: ReactNode;
-	/** 三栏宽度变量，由调用方按当前状态给出 */
-	vars?: Record<string, string>;
+	/** 侧栏当前宽度，收起时是 0 */
+	sidebarWidth?: string;
+	/** 右栏当前宽度，收起时是 0 */
+	panelWidth?: string;
 }): ReactNode {
 	const controls = readWindowControls(bridge);
+	const appRef = useRef<HTMLDivElement>(null);
+
+	// 宽度只用两个变量表达，写在根节点上；拖动分隔条时由右栏直接改这两个变量，不经过渲染
+	useEffect(() => {
+		const element = appRef.current;
+		if (element === null) {
+			return;
+		}
+		element.style.setProperty("--sidebar-width", sidebarWidth);
+		element.style.setProperty("--panel-width", panelWidth);
+	}, [sidebarWidth, panelWidth]);
+
 	return (
-		<div className="app" style={vars}>
+		<div className="app" ref={appRef}>
 			{controls === undefined ? null : <div className="app-drag" />}
 			<div className="app-chrome">
 				{chrome ?? (
@@ -349,8 +361,8 @@ export function App() {
 	const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 	/** 880px 以下走抽屉；侧栏开关在两套行为之间切换 */
 	const isNarrow = useSyncExternalStore(subscribeResize, readIsNarrow);
-	/** 窗口按钮；浏览器端没有 */
-	const windowControls = readWindowControls(bridge);
+	/** 窗口按钮；浏览器端没有。桥上的方法引用稳定，这个对象只要建一次 */
+	const windowControls = useMemo(() => readWindowControls(bridge), []);
 	const isSidebarOpen = isNarrow ? isDrawerOpen : !isSidebarCollapsed;
 	const toggleSidebar = useCallback(() => {
 		if (isNarrow) {
@@ -1449,10 +1461,8 @@ export function App() {
 	return (
 		<CodeThemeProvider value={codeThemeValue}>
 			<AppFrame
-				vars={{
-					"--sidebar-width": isSidebarOpen && !isNarrow ? "272px" : "0px",
-					"--panel-width": panel.open ? `${panel.width}px` : "0px",
-				}}
+				sidebarWidth={isSidebarOpen && !isNarrow ? "272px" : "0px"}
+				panelWidth={panel.open ? `${panel.width}px` : "0px"}
 				chrome={
 					<>
 						<div className="chrome-slot is-sidebar">

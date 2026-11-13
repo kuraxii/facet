@@ -17,13 +17,26 @@ export interface RightPanelProps {
 }
 
 export function RightPanel({ width, onWidthChange, children }: RightPanelProps) {
-	const dragging = useRef<{ startX: number; startWidth: number } | undefined>(undefined);
+	const dragging = useRef<{ startX: number; startWidth: number; current: number } | undefined>(undefined);
+
+	/**
+	 * 拖动期间直接改根节点上的宽度变量，不经过 React 渲染。
+	 *
+	 * 每移动一次就 setState 会把整个界面重画一遍，流式输出时尤其卡；这里只写一个 CSS 变量，
+	 * 松手时才把最终宽度提交给宿主保存。
+	 */
+	const applyWidth = (element: HTMLElement, next: number): void => {
+		const app = element.closest(".app");
+		if (app instanceof HTMLElement) {
+			app.style.setProperty("--panel-width", `${next}px`);
+		}
+	};
 
 	/** 按住分隔条开始拖：记住起点，指针捕获到分隔条上，拖出栏外也不会断。 */
 	const handlePointerDown = useCallback(
 		(event: ReactPointerEvent<HTMLHRElement>) => {
 			event.preventDefault();
-			dragging.current = { startX: event.clientX, startWidth: width };
+			dragging.current = { startX: event.clientX, startWidth: width, current: width };
 			event.currentTarget.setPointerCapture(event.pointerId);
 		},
 		[width],
@@ -36,18 +49,28 @@ export function RightPanel({ width, onWidthChange, children }: RightPanelProps) 
 			if (start === undefined) {
 				return;
 			}
-			onWidthChange(clampPanelWidth(start.startWidth - (event.clientX - start.startX)));
+			const next = clampPanelWidth(start.startWidth - (event.clientX - start.startX));
+			start.current = next;
+			applyWidth(event.currentTarget, next);
 		},
 		[onWidthChange],
 	);
 
-	const handlePointerUp = useCallback((event: ReactPointerEvent<HTMLHRElement>) => {
-		dragging.current = undefined;
-		event.currentTarget.releasePointerCapture(event.pointerId);
-	}, []);
+	const handlePointerUp = useCallback(
+		(event: ReactPointerEvent<HTMLHRElement>) => {
+			const start = dragging.current;
+			dragging.current = undefined;
+			event.currentTarget.releasePointerCapture(event.pointerId);
+			// 松手时才提交：宿主保存宽度，并把变量对齐到这一个值
+			if (start !== undefined && start.current !== width) {
+				onWidthChange(start.current);
+			}
+		},
+		[onWidthChange, width],
+	);
 
 	return (
-		<aside className="panel" style={{ width }}>
+		<aside className="panel">
 			<hr
 				className="panel-resizer"
 				aria-orientation="vertical"

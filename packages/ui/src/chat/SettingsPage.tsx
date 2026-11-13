@@ -82,7 +82,6 @@ export function SettingsPage({
 	/** 正在编辑的那份；保存成功前不回写 settings */
 	const [draft, setDraft] = useState<FacetSettings | undefined>(undefined);
 	const [isLoading, setIsLoading] = useState(false);
-	const [isSaving, setIsSaving] = useState(false);
 	const [loadError, setLoadError] = useState<string | undefined>(undefined);
 	const [saveError, setSaveError] = useState<string | undefined>(undefined);
 	const [providers, setProviders] = useState<readonly ProviderInfo[] | undefined>(undefined);
@@ -172,7 +171,6 @@ export function SettingsPage({
 
 	const save = useCallback(
 		async (next: FacetSettings): Promise<void> => {
-			setIsSaving(true);
 			setSaveError(undefined);
 			try {
 				const saved = await data.saveSettings(next);
@@ -184,8 +182,6 @@ export function SettingsPage({
 				onSettingsApplied?.(saved);
 			} catch (error) {
 				setSaveError(error instanceof Error ? error.message : String(error));
-			} finally {
-				setIsSaving(false);
 			}
 		},
 		[data, onSettingsApplied],
@@ -288,9 +284,6 @@ export function SettingsPage({
 												tone="error"
 											/>
 										)}
-										<div className="set-auto" aria-live="polite">
-											{isSaving ? "保存中…" : isDirty ? "改动将在 1 秒后自动保存" : "已自动保存"}
-										</div>
 									</>
 								)}
 							</section>

@@ -5,7 +5,14 @@ import {
 	TerminalClient,
 	toTranscript,
 } from "@facet/client-core";
-import type { FileContent, GitFileChange, GitStatus, TerminalInfo } from "@facet/protocol";
+import type {
+	FileContent,
+	GitFileChange,
+	GitStatus,
+	SlashCommand,
+	TerminalInfo,
+	ThinkingLevel,
+} from "@facet/protocol";
 import {
 	DEFAULT_SETTINGS,
 	type FacetSettings,
@@ -30,6 +37,7 @@ import {
 	hasEndpoint,
 	isDarkTheme,
 	normalizeEndpoint,
+	parseCommand,
 	QueueStrip,
 	RightPanel,
 	type RightPanelState,
@@ -267,6 +275,9 @@ export function App() {
 	});
 	/** 变更请求的序号，只采用最后一次的结果 */
 	const changesSeq = useRef(0);
+
+	/** 输入区能用的命令：界面自带几条，加会话里的扩展、模板与技能 */
+	const [commands, setCommands] = useState<SlashCommand[]>([]);
 
 	/** 终端面板的状态：是否展开、高度、当前标签 */
 	const [dock, setDock] = useState<TerminalDockState>(() => readDockState(localStorage));
@@ -991,9 +1002,73 @@ export function App() {
 		localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts));
 	}, [drafts]);
 
+	/**
+	 * 跑一条界面自己处理的命令。
+	 *
+	 * 这些命令在图形界面里有对应入口，就地执行，不当成消息发出去；参数不对时把说明留在
+	 * 错误条上，草稿不丢。
+	 */
+	const runFacetCommand = useCallback(
+		(name: string, args: string): boolean => {
+			if (name === "compact") {
+				client.compact();
+				return true;
+			}
+			if (name === "model") {
+				const [provider, id] = args.split("/");
+				if (provider === undefined || id === undefined || provider.length === 0 || id.length === 0) {
+					setSessionError({
+						message: "用法：/model <提供方>/<模型>，例如 /model openai/gpt-5",
+						retry: () => {},
+					});
+					return true;
+				}
+				client.setModel({ provider, id });
+				return true;
+			}
+			if (name === "thinking") {
+				const level = args as ThinkingLevel;
+				const allowed = session?.state.availableThinkingLevels ?? [];
+				if (!allowed.includes(level)) {
+					setSessionError({
+						message: allowed.length === 0 ? "当前模型没有可选的思考档位" : `可选档位：${allowed.join(" / ")}`,
+						retry: () => {},
+					});
+					return true;
+				}
+				client.setThinkingLevel(level);
+				return true;
+			}
+			if (name === "name") {
+				if (args.length === 0) {
+					setSessionError({ message: "用法：/name <名字>", retry: () => {} });
+					return true;
+				}
+				void client.renameSession(activeFile ?? "", args).then(
+					() => void refreshSessions(),
+					(error: unknown) => setSessionError({ message: String(error), retry: () => {} }),
+				);
+				return true;
+			}
+			return false;
+		},
+		[activeFile, refreshSessions, session?.state.availableThinkingLevels],
+	);
+
 	const send = useCallback(() => {
 		const text = draft.trim();
 		if (text.length === 0) {
+			return;
+		}
+		// 界面自己处理的命令就地执行，不当消息发出去
+		const command = parseCommand(text);
+		if (
+			command !== undefined &&
+			commands.some((item) => item.name === command.name && item.handler === "facet")
+		) {
+			if (runFacetCommand(command.name, command.args)) {
+				updateDraft("");
+			}
 			return;
 		}
 		// 草稿留到主机确认再收,发送被拒时不用重打
@@ -1002,7 +1077,7 @@ export function App() {
 			return;
 		}
 		client.send(text);
-	}, [activity, draft]);
+	}, [activity, commands, draft, runFacetCommand, updateDraft]);
 
 	/**
 	 * 收回排队内容:清空主机侧队列,把文字拼回输入框。
@@ -1161,6 +1236,31 @@ export function App() {
 				</button>
 			</div>
 		);
+
+	// 换会话时重取命令清单：扩展、模板与技能都跟着会话走
+	const openedSessionId = session === undefined ? undefined : client.current?.snapshot.id;
+	useEffect(() => {
+		if (openedSessionId === undefined) {
+			setCommands([]);
+			return;
+		}
+		let cancelled = false;
+		void client.listCommands().then(
+			(list) => {
+				if (!cancelled) {
+					setCommands(list);
+				}
+			},
+			() => {
+				if (!cancelled) {
+					setCommands([]);
+				}
+			},
+		);
+		return () => {
+			cancelled = true;
+		};
+	}, [openedSessionId]);
 
 	const transcript = useMemo(() => (chat ? toTranscript(chat) : []), [chat]);
 	const {
@@ -1380,6 +1480,10 @@ export function App() {
 										isCompacting={activity === "compacting"}
 										canCompact={activity === "idle"}
 										onCompact={() => client.compact()}
+										commands={commands}
+										onRunCommand={(command, args) => {
+											runFacetCommand(command.name, args);
+										}}
 									/>
 
 									{chat && chat.notices.length > 0 ? (

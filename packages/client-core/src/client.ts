@@ -31,6 +31,7 @@ import type {
 	RequestResults,
 	SessionSnapshot,
 	SessionSummary,
+	SlashCommand,
 	ThinkingLevel,
 } from "@facet/protocol";
 import { makeChannel, parseChannel, sessionsChannelFor } from "@facet/protocol";
@@ -743,6 +744,13 @@ export class SessionClient {
 	 */
 	cancel(): number {
 		return this.transport.dispatch(this.requireOpened().chatChannel, { type: "chat/turnCancelled" });
+	}
+
+	/** 会话里能用的命令：界面自带的几条，加上扩展命令、提示词模板与技能。 */
+	async listCommands(): Promise<SlashCommand[]> {
+		const opened = this.requireOpened();
+		const result = await this.transport.request("listCommands", { sessionId: opened.snapshot.id });
+		return result.commands;
 	}
 
 	/**

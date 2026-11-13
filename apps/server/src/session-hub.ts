@@ -13,7 +13,7 @@ import { rm, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import type { ForkPiAgentOptions, OpenPiAgentOptions, PiAgent, PiAgentLaunchOptions } from "@facet/agent";
-import type { Action, ActionFrame, Channel, SessionSnapshot } from "@facet/protocol";
+import type { Action, ActionFrame, Channel, SessionSnapshot, SlashCommand } from "@facet/protocol";
 import { makeChannel, parseChannel } from "@facet/protocol";
 import { ActionProjector } from "./action-projector.ts";
 import { EventLog } from "./event-log.ts";
@@ -33,6 +33,7 @@ export type HubAgent = Pick<
 	| "setName"
 	| "compact"
 	| "contextUsage"
+	| "commands"
 	| "revertTo"
 	| "leafEntryId"
 	| "dispose"
@@ -428,6 +429,13 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 	}
 
 	/** 取会话的对外状态。会话正在建立时等它建好。 */
+	/** 会话里能用的命令，界面在输入区列出它们。 */
+	async commands(sessionId: string): Promise<SlashCommand[]> {
+		const row = await this.requireReady(sessionId);
+		this.touch(row);
+		return row.agent?.commands() ?? [];
+	}
+
 	async snapshot(sessionId: string): Promise<SessionSnapshot> {
 		const row = await this.requireReady(sessionId);
 		this.touch(row);

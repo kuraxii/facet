@@ -14,6 +14,13 @@ export type { CreateProjectDialogProps } from "./chat/CreateProjectDialog.tsx";
 export { CreateProjectDialog } from "./chat/CreateProjectDialog.tsx";
 export type { OutlinePrompt } from "./chat/chat-outline.ts";
 export { outlinePrompts } from "./chat/chat-outline.ts";
+export {
+	commandQuery,
+	filterCommands,
+	isFacetCommand,
+	parseCommand,
+	SOURCE_LABELS,
+} from "./chat/command-palette.ts";
 export type { EmptyStateProps } from "./chat/EmptyState.tsx";
 export { EmptyState } from "./chat/EmptyState.tsx";
 export type { HostSwitcherProps } from "./chat/HostSwitcher.tsx";

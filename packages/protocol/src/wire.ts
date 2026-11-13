@@ -7,6 +7,7 @@
  */
 import type { Action, ActionOrigin } from "./action.ts";
 import type { Channel } from "./channel.ts";
+import type { SlashCommand } from "./command.ts";
 import type { FileContent, FileEntry, FileWriteResult } from "./file.ts";
 import type { GitDiff, GitStatus } from "./git.ts";
 import type {
@@ -162,6 +163,8 @@ export interface SubscribeResult {
 export interface RequestParams {
 	/** 列出会话。指定 cwd 时只列该目录。 */
 	listSessions: { cwd?: string };
+	/** 列出某个会话里能用的命令：界面自带的几条，加上扩展命令、提示词模板与技能。 */
+	listCommands: { sessionId: string };
 	/** 列出正在运行的会话文件。退出前确认有没有任务会被带走。 */
 	busySessions: Record<string, never>;
 	/** 结束主机：应答后关闭端点并退出进程。只接受来自回环地址的连接。 */
@@ -312,6 +315,7 @@ export interface RequestParams {
 /** 每条请求的应答数据。 */
 export interface RequestResults {
 	listSessions: { sessions: SessionSummary[] };
+	listCommands: { commands: SlashCommand[] };
 	busySessions: { files: string[] };
 	createSession: SessionSnapshot;
 	openSession: SessionSnapshot;

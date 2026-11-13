@@ -431,6 +431,10 @@ async function handleRequest(
 		auditRemote(context, connection, method);
 	}
 	switch (method) {
+		case "listCommands": {
+			const source = asObject(params);
+			return { commands: await context.hub.commands(requiredString(source, "sessionId")) };
+		}
 		case "listSessions": {
 			const source = asObject(params ?? {});
 			return { sessions: await context.factory.listSessions(optionalString(source, "cwd")) };

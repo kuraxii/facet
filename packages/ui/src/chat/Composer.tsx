@@ -7,12 +7,13 @@
  * 附件与引用还没有实现，按钮保持可见但不可点。
  */
 import type { ChatActivity } from "@facet/client-core";
-import type { ContextUsage, ModelInfo, ThinkingLevel } from "@facet/protocol";
+import type { ContextUsage, ModelInfo, SlashCommand, ThinkingLevel } from "@facet/protocol";
 import { Brain, FileUp, ImagePlus, Plus } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronIcon } from "../transcript/chevron.tsx";
 import { SendIcon, StopIcon } from "../transcript/icons.tsx";
 import { ContextRing, usageDetailText, usageLabel, usagePercentText } from "./ContextRing.tsx";
+import { commandQuery, filterCommands, isFacetCommand, SOURCE_LABELS } from "./command-palette.ts";
 
 /** 输入区参数。 */
 export interface ComposerProps {
@@ -52,6 +53,10 @@ export interface ComposerProps {
 	canCompact?: boolean;
 	/** 手动压缩上下文 */
 	onCompact?: () => void;
+	/** 输入区可以触发的命令 */
+	commands?: readonly SlashCommand[];
+	/** 选中一条界面自己处理的命令 */
+	onRunCommand?: (command: SlashCommand, args: string) => void;
 }
 
 /** 模型芯片的显示文本。 */
@@ -118,6 +123,8 @@ export function Composer({
 	isCompacting = false,
 	canCompact = true,
 	onCompact,
+	commands,
+	onRunCommand,
 }: ComposerProps) {
 	// 运行中发送走排队，插入当前轮次；压缩、停止中与连接断开时不接受新输入
 	const canSend =
@@ -128,6 +135,34 @@ export function Composer({
 	const attachRef = useDismiss(openMenu === "attach", () => setOpenMenu(undefined));
 	const levelRef = useDismiss(openMenu === "level", () => setOpenMenu(undefined));
 	const contextRef = useDismiss(openMenu === "context", () => setOpenMenu(undefined));
+	/** 命令列表里高亮的那一条 */
+	const [commandIndex, setCommandIndex] = useState(0);
+	/** 用户按 Esc 关掉列表之后，输入内容没变就不再弹出来 */
+	const [isCommandClosed, setCommandClosed] = useState(false);
+
+	/** 现在要列出的候选：只在开头打命令且还没写参数时出现 */
+	const query = commandQuery(value);
+	const matches = useMemo(
+		() => (query === undefined || isCommandClosed ? [] : filterCommands(commands ?? [], query)),
+		[commands, isCommandClosed, query],
+	);
+	const isPaletteOpen = matches.length > 0;
+	const highlighted = matches[Math.min(commandIndex, matches.length - 1)];
+
+	/** 选中一条候选：界面自己处理的直接执行，交给 pi 的填进输入框等用户补参数。 */
+	const pickCommand = useCallback(
+		(command: SlashCommand): void => {
+			if (isFacetCommand(command)) {
+				onRunCommand?.(command, "");
+				onChange("");
+			} else {
+				onChange(`/${command.name} `);
+			}
+			setCommandClosed(true);
+			setCommandIndex(0);
+		},
+		[onChange, onRunCommand],
+	);
 
 	// 没有给出可选模型时退化成只展示的芯片
 	const canPickModel = models !== undefined && onModelChange !== undefined;
@@ -165,8 +200,34 @@ export function Composer({
 							? "输入消息,回车发送"
 							: "输入消息,Shift+回车发送"
 				}
-				onChange={(event) => onChange(event.target.value)}
+				onChange={(event) => {
+					onChange(event.target.value);
+					setCommandClosed(false);
+					setCommandIndex(0);
+				}}
 				onKeyDown={(event) => {
+					if (isPaletteOpen) {
+						if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+							event.preventDefault();
+							const step = event.key === "ArrowDown" ? 1 : -1;
+							setCommandIndex((current) => (current + step + matches.length) % matches.length);
+							return;
+						}
+						if (
+							(event.key === "Enter" || event.key === "Tab") &&
+							highlighted !== undefined &&
+							!event.shiftKey
+						) {
+							event.preventDefault();
+							pickCommand(highlighted);
+							return;
+						}
+						if (event.key === "Escape") {
+							event.preventDefault();
+							setCommandClosed(true);
+							return;
+						}
+					}
 					if (event.key !== "Enter") {
 						return;
 					}
@@ -180,6 +241,29 @@ export function Composer({
 					}
 				}}
 			/>
+			{isPaletteOpen ? (
+				<div className="cmd-pop" role="listbox" aria-label="命令">
+					{matches.map((command, index) => (
+						<button
+							key={`${command.source}:${command.name}`}
+							type="button"
+							role="option"
+							aria-selected={index === Math.min(commandIndex, matches.length - 1)}
+							className={index === Math.min(commandIndex, matches.length - 1) ? "cmd-row is-on" : "cmd-row"}
+							title={command.origin}
+							onMouseEnter={() => setCommandIndex(index)}
+							onClick={() => pickCommand(command)}
+						>
+							<span className="cmd-name">/{command.name}</span>
+							{command.argumentHint === undefined ? null : (
+								<span className="cmd-hint">{command.argumentHint}</span>
+							)}
+							<span className="cmd-desc">{command.description ?? ""}</span>
+							<span className="cmd-source">{SOURCE_LABELS[command.source]}</span>
+						</button>
+					))}
+				</div>
+			) : null}
 			<div className="composer-row">
 				<div className="chip-wrap" ref={attachRef}>
 					<button

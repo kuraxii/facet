@@ -9,7 +9,7 @@ export { InvalidProviderError } from "./model-config-store.ts";
 export type { PageWindow } from "./paging.ts";
 export { pageOf } from "./paging.ts";
 export { DEFAULT_AGENT_DIR } from "./paths.ts";
-export { PiAgent } from "./pi-agent.ts";
+export { FACET_COMMANDS, PiAgent } from "./pi-agent.ts";
 export type { ScanSessionProjectsOptions, SessionProject } from "./projects.ts";
 export { normalizeProjectPath, projectIdOf, scanSessionProjects } from "./projects.ts";
 export type {

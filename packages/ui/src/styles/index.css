@@ -26,6 +26,9 @@
 	/* 三栏宽度：顶带的格子与下面的正文共用，由界面按当前状态写入 */
 	--sidebar-width: 272px;
 	--panel-width: 0px;
+	/* 滚动条占的宽度，以及其中拇指的宽度；轨道其余部分是透明的 */
+	--scrollbar-width: 8px;
+	--scrollbar-thumb: 4px;
 	/* 过程组的缩进：竖线到行内容的距离，以及竖线本身相对正文列的位置
 	   （后者来自展开箭头字形在图标盒子里的内缩，改箭头图标时跟着调） */
 	--indent-rail-offset: 16px;
@@ -42,8 +45,8 @@
  * 所以这里只走 webkit 伪元素；下面再用 `@supports` 给没有伪元素的引擎一份等效的细条。
  */
 *::-webkit-scrollbar {
-	width: 10px;
-	height: 10px;
+	width: var(--scrollbar-width);
+	height: var(--scrollbar-width);
 	background: transparent;
 }
 
@@ -59,7 +62,7 @@
 }
 
 *::-webkit-scrollbar-thumb {
-	border: 3px solid transparent;
+	border: calc((var(--scrollbar-width) - var(--scrollbar-thumb)) / 2) solid transparent;
 	border-radius: 999px;
 	background: color-mix(in srgb, var(--t3) 40%, transparent);
 	background-clip: content-box;

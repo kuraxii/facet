@@ -771,10 +771,15 @@ svg.fl {
 	background: transparent;
 }
 
-/* 悬停与拖动时只让那条 1px 分界线换成强调色，不铺宽带 */
-.panel:has(.panel-resizer:hover),
-.panel:has(.panel-resizer:active) {
-	border-left-color: color-mix(in srgb, var(--acc) 40%, transparent);
+/* 悬停与拖动时在分界上叠一条 2px 的强调线：命中区本身始终透明，也不改边框宽度免得内容跳 */
+.panel-resizer:hover,
+.panel-resizer:active {
+	background: linear-gradient(
+		to right,
+		transparent 0 3px,
+		color-mix(in srgb, var(--acc) 40%, transparent) 3px 5px,
+		transparent 5px 100%
+	);
 }
 
 .panel-head {

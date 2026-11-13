@@ -2238,8 +2238,9 @@ svg.fl {
 
 /* 会话搜索：居中偏上的一层，遮住正文但让出窗口顶带 */
 
+/* 固定在视口上，顶带一起变暗；窗口按钮单独提到遮罩之上，遮罩期间仍然可点 */
 .search-overlay {
-	position: absolute;
+	position: fixed;
 	inset: 0;
 	z-index: 60;
 	display: flex;

@@ -520,11 +520,6 @@ svg.fl {
 	color: var(--t3);
 }
 
-.sb-search.is-inline {
-	flex: none;
-	margin-bottom: 6px;
-}
-
 .sb-opts {
 	display: flex;
 	flex-direction: column;
@@ -2239,6 +2234,115 @@ svg.fl {
 .chg-diff .diff-line {
 	width: max-content;
 	min-width: 100%;
+}
+
+/* 会话搜索：居中偏上的一层，遮住正文但让出窗口顶带 */
+
+.search-overlay {
+	position: absolute;
+	inset: 0;
+	z-index: 60;
+	display: flex;
+	justify-content: center;
+	align-items: flex-start;
+	padding-top: 12vh;
+	background: rgb(0 0 0 / 45%);
+}
+
+.search-panel {
+	display: flex;
+	flex-direction: column;
+	width: min(560px, calc(100vw - 32px));
+	max-height: min(60vh, 460px);
+	border: 1px solid var(--line2);
+	border-radius: 12px;
+	background: var(--card);
+	box-shadow: 0 24px 64px rgb(0 0 0 / 45%);
+	overflow: hidden;
+}
+
+.search-field {
+	display: flex;
+	flex: none;
+	align-items: center;
+	gap: 8px;
+	padding: 12px 14px;
+	border-bottom: 1px solid var(--line);
+	color: var(--t3);
+}
+
+.search-field input {
+	flex: 1;
+	min-width: 0;
+	border: 0;
+	outline: 0;
+	background: transparent;
+	color: var(--t1);
+	font: inherit;
+	font-size: 15px;
+}
+
+.search-field input::placeholder {
+	color: var(--t3);
+}
+
+.search-results {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	overflow-y: auto;
+	padding: 6px;
+	scrollbar-gutter: stable;
+}
+
+.search-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	padding: 7px 8px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--t2);
+	font: inherit;
+	font-size: 13px;
+	text-align: left;
+}
+
+.search-row.is-selected {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+.search-row-title {
+	flex: none;
+	max-width: 45%;
+}
+
+.search-row-proj {
+	flex: 1;
+	min-width: 0;
+	color: var(--t3);
+	font-size: 12px;
+}
+
+.search-row-time {
+	flex: none;
+	color: var(--t3);
+	font-size: 12px;
+}
+
+.search-row-time.is-active {
+	color: var(--acc);
+}
+
+.search-empty {
+	margin: 0;
+	padding: 16px 10px;
+	color: var(--t3);
+	font-size: 13px;
+	text-align: center;
 }
 
 /* 错误与提示 */

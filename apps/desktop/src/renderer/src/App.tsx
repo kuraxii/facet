@@ -49,6 +49,7 @@ import {
 	readSidebarWidth,
 	resolveUiTheme,
 	type SavedHost,
+	SessionSearch,
 	SessionSidebar,
 	type SettingsDataSource,
 	SettingsPage,
@@ -363,8 +364,20 @@ export function App() {
 	/** 窄屏时侧栏是抽屉，这个开关控制它展开；宽屏时侧栏常驻，另行记收起的意图 */
 	const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 	/** 侧栏头部那个会话搜索框是否展开；头部在顶带里，状态放在这里 */
-	const [isSidebarSearchOpen, setIsSidebarSearchOpen] = useState(false);
+	const [isSearchOpen, setIsSearchOpen] = useState(false);
 	const [sidebarWidth, setSidebarWidth] = useState(() => readSidebarWidth(window.localStorage));
+	// ⌘K 打开会话搜索，与页脚提示的快捷键一致
+	useEffect(() => {
+		const onKeyDown = (event: KeyboardEvent) => {
+			if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+				event.preventDefault();
+				setIsSearchOpen(true);
+			}
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, []);
+
 	const updateSidebarWidth = useCallback((next: number) => {
 		const width = clampSidebarWidth(next);
 		setSidebarWidth(width);
@@ -1484,10 +1497,8 @@ export function App() {
 						>
 							{isNarrow || !isSidebarOpen ? null : (
 								<SidebarHeader
-									isSearchOpen={isSidebarSearchOpen}
-									onToggleSearch={() => {
-										setIsSidebarSearchOpen((open) => !open);
-									}}
+									isSearchOpen={isSearchOpen}
+									onToggleSearch={() => setIsSearchOpen((open) => !open)}
 									onAddProject={() => setIsProjectDialogOpen(true)}
 									onCollapse={toggleSidebar}
 								/>
@@ -1536,8 +1547,11 @@ export function App() {
 						}}
 						canCreate={phase === "ready"}
 						onAddProject={() => setIsProjectDialogOpen(true)}
-						isSearchOpen={isSidebarSearchOpen}
-						onSearchOpenChange={setIsSidebarSearchOpen}
+						isSearchOpen={isSearchOpen}
+						onOpenSearch={() => {
+							setIsDrawerOpen(false);
+							setIsSearchOpen(true);
+						}}
 						showHeader={isNarrow}
 						width={isNarrow ? undefined : sidebarWidth}
 						onWidthChange={isNarrow ? undefined : updateSidebarWidth}
@@ -1755,6 +1769,15 @@ export function App() {
 							)}
 						</RightPanel>
 					) : null}
+
+					<SessionSearch
+						isOpen={isSearchOpen}
+						sessions={sessions}
+						activeFile={activeFile}
+						runningFile={activity === "idle" ? undefined : activeFile}
+						onClose={() => setIsSearchOpen(false)}
+						onSelect={(path) => void openSession(path)}
+					/>
 
 					{view === "settings" ? (
 						<SettingsPage

@@ -37,6 +37,8 @@ export type { ProviderFormProps } from "./chat/ProviderForm.tsx";
 export { ProviderForm } from "./chat/ProviderForm.tsx";
 export type { QueueStripProps } from "./chat/QueueStrip.tsx";
 export { QueueStrip } from "./chat/QueueStrip.tsx";
+export type { SessionSearchProps } from "./chat/SessionSearch.tsx";
+export { SessionSearch } from "./chat/SessionSearch.tsx";
 export type { SessionSidebarProps, ThemeName } from "./chat/SessionSidebar.tsx";
 export { SessionSidebar } from "./chat/SessionSidebar.tsx";
 export type {

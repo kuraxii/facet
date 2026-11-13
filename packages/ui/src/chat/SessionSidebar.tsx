@@ -50,12 +50,12 @@ export interface SessionSidebarProps {
 	canCreate: boolean;
 	/** 打开添加项目 */
 	onAddProject: () => void;
-	/** 会话搜索框是否展开；头部在外壳里，状态由外面保管 */
-	isSearchOpen: boolean;
-	/** 开合会话搜索框 */
-	onSearchOpenChange: (open: boolean) => void;
 	/** 头部是否画在自己身上；窄屏抽屉里要自己带一份，宽屏时头部在外壳顶带里 */
 	showHeader?: boolean;
+	/** 会话搜索浮窗是否展开，头部按它标 aria-pressed */
+	isSearchOpen?: boolean;
+	/** 打开会话搜索浮窗；窄屏抽屉里点搜索会顺手收起抽屉 */
+	onOpenSearch?: (() => void) | undefined;
 	/** 宽度，单位 px；给了才带右缘那条可拖动的分隔条 */
 	width?: number | undefined;
 	/** 拖动分隔条后提交新宽度 */
@@ -132,9 +132,9 @@ export function SessionSidebar({
 	onCreate,
 	canCreate,
 	onAddProject,
-	isSearchOpen,
-	onSearchOpenChange,
 	showHeader = false,
+	isSearchOpen = false,
+	onOpenSearch,
 	width,
 	onWidthChange,
 	onCollapse,
@@ -153,7 +153,6 @@ export function SessionSidebar({
 	isOpen = true,
 	onNavigate,
 }: SessionSidebarProps) {
-	const [keyword, setKeyword] = useState("");
 	const [projectKeyword, setProjectKeyword] = useState("");
 	const [isFilterOpen, setIsFilterOpen] = useState(false);
 	const [isFilterUp, setIsFilterUp] = useState(false);
@@ -186,7 +185,6 @@ export function SessionSidebar({
 	const panelRef = useRef<HTMLDivElement>(null);
 	const triggerRef = useRef<HTMLButtonElement>(null);
 	const projectSearchRef = useRef<HTMLInputElement>(null);
-	const searchRef = useRef<HTMLInputElement>(null);
 
 	const activeCwd = sessions.find((session) => session.path === activeFile)?.cwd;
 	const scopeCwd = showsAll ? undefined : (pickedCwd ?? activeCwd);
@@ -199,9 +197,8 @@ export function SessionSidebar({
 				runningFile,
 				runningDot,
 				projectCwd: scopeCwd,
-				keyword,
 			}),
-		[sessions, storedProjects, runningFile, runningDot, scopeCwd, keyword],
+		[sessions, storedProjects, runningFile, runningDot, scopeCwd],
 	);
 
 	const currentProject: SidebarProject | undefined =
@@ -233,26 +230,6 @@ export function SessionSidebar({
 
 	const dismissFilter = useCallback(() => closeFilter(false), [closeFilter]);
 	useDismiss(filterRef, isFilterOpen, dismissFilter);
-
-	// ⌘K 聚焦会话搜索，与页脚提示的快捷键一致
-	useEffect(() => {
-		const onKeyDown = (event: KeyboardEvent) => {
-			if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-				event.preventDefault();
-				onSearchOpenChange(true);
-			}
-		};
-		window.addEventListener("keydown", onKeyDown);
-		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [onSearchOpenChange]);
-
-	useEffect(() => {
-		if (!isSearchOpen) {
-			return;
-		}
-		const frame = requestAnimationFrame(() => searchRef.current?.focus());
-		return () => cancelAnimationFrame(frame);
-	}, [isSearchOpen]);
 
 	// 浮层打开时量一次可用空间：下方放不下且上方更宽裕就向上弹出，焦点移进搜索框
 	useEffect(() => {
@@ -389,12 +366,7 @@ export function SessionSidebar({
 		}
 	};
 
-	const isSearching = keyword.trim().length > 0;
-	const emptyHint = isSearching
-		? "没有匹配的会话"
-		: scopeCwd === undefined
-			? "还没有会话"
-			: "这个项目还没有会话";
+	const emptyHint = scopeCwd === undefined ? "还没有会话" : "这个项目还没有会话";
 
 	return (
 		<aside className={isOpen ? "sb is-open" : "sb"}>
@@ -413,7 +385,7 @@ export function SessionSidebar({
 			{showHeader ? (
 				<SidebarHeader
 					isSearchOpen={isSearchOpen}
-					onToggleSearch={() => onSearchOpenChange(!isSearchOpen)}
+					onToggleSearch={onOpenSearch ?? (() => undefined)}
 					onAddProject={onAddProject}
 					{...(onCollapse === undefined ? {} : { onCollapse })}
 				/>
@@ -637,31 +609,6 @@ export function SessionSidebar({
 					</div>
 				) : null}
 			</div>
-
-			{isSearchOpen ? (
-				<label className="sb-search is-inline">
-					<Search size={13} strokeWidth={1.5} />
-					<input
-						ref={searchRef}
-						value={keyword}
-						onChange={(event) => setKeyword(event.target.value)}
-						onBlur={() => {
-							if (keyword.trim().length === 0) {
-								onSearchOpenChange(false);
-							}
-						}}
-						onKeyDown={(event) => {
-							if (event.key === "Escape") {
-								setKeyword("");
-								onSearchOpenChange(false);
-							}
-						}}
-						placeholder="搜索会话"
-						aria-label="搜索会话"
-					/>
-					<span className="kbd mono">⌘K</span>
-				</label>
-			) : null}
 
 			<div className="sb-queue">
 				{data.groups.length === 0 ? <p className="sb-empty">{emptyHint}</p> : null}

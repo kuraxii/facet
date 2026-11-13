@@ -84,6 +84,17 @@ export interface SidebarInput {
 	now?: number;
 }
 
+/**
+ * 会话搜索：标题匹配关键词，最近改动的在前，最多返回 `limit` 条。
+ *
+ * 队列的过滤与搜索是两件事，搜索浮窗单独用这个函数取一份结果，不参与侧栏分组。
+ */
+export function searchSessions(input: SidebarInput & { limit?: number }): SidebarSession[] {
+	const groups = buildSidebar(input).groups;
+	const flat = groups.flatMap((group) => group.sessions);
+	return input.limit === undefined ? flat : flat.slice(0, input.limit);
+}
+
 /** 侧栏的展示数据。 */
 export interface SidebarData {
 	/** 队列分组，空组不出现 */

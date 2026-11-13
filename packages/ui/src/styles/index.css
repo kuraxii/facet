@@ -3017,6 +3017,27 @@ svg.fl {
 }
 
 /* 设置分组：组标题在上，下面是卡片；卡片里一行一个设置，左文字右控件 */
+.set-lock {
+	min-width: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.set-lock:disabled {
+	opacity: 0.6;
+}
+
+.set-readonly {
+	margin: 0 0 16px;
+	padding: 8px 12px;
+	border: 1px solid var(--line2);
+	border-radius: 9px;
+	background: var(--card);
+	color: var(--t3);
+	font-size: 12px;
+}
+
 .set-group {
 	display: flex;
 	flex-direction: column;

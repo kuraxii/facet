@@ -46,6 +46,13 @@ export interface SettingsPageProps {
 	onAppearancePreview?: (appearance: FacetSettings["appearance"]) => void;
 	/** 应用版本等只读信息 */
 	about: { appVersion: string; runtime: string; endpoint: string };
+	/**
+	 * 这条连接能不能改设置。
+	 *
+	 * 凭证、设置与项目清单由主机限定只在本机操作，远程连接（含 Web 端）能读不能改；
+	 * 关掉之后内容照常显示，控件不可用，也不会有自动保存。
+	 */
+	canEdit?: boolean;
 }
 
 /** 一段加载或保存失败的信息，带重试。 */
@@ -76,6 +83,7 @@ export function SettingsPage({
 	onSettingsApplied,
 	onAppearancePreview,
 	about,
+	canEdit = true,
 }: SettingsPageProps) {
 	/** 已加载的设置；为空表示还没读到 */
 	const [settings, setSettings] = useState<FacetSettings | undefined>(undefined);
@@ -253,40 +261,49 @@ export function SettingsPage({
 					</nav>
 
 					<div className="set-content">
+						{canEdit || section === "about" ? null : (
+							<p className="set-readonly">这条连接只能看，设置的修改要在主机本机进行。</p>
+						)}
 						{section === "providers" ? (
-							<ProvidersSection
-								providers={providers}
-								error={providersError}
-								onReload={() => void loadProviders()}
-								data={data}
-							/>
+							<fieldset className="set-lock" disabled={!canEdit}>
+								<ProvidersSection
+									providers={providers}
+									error={providersError}
+									onReload={() => void loadProviders()}
+									data={data}
+								/>
+							</fieldset>
 						) : null}
 
 						{section === "about" ? <AboutSection about={about} data={data} /> : null}
 
 						{section === "models" || section === "appearance" || section === "input" ? (
-							<section className="set-section">
-								{loadError === undefined ? null : (
-									<StatusNote message={`读取设置失败:${loadError}`} onRetry={loadSettings} tone="error" />
-								)}
-								{isLoading ? <p className="set-hint">正在读取设置…</p> : null}
-								{draft === undefined ? null : (
-									<>
-										{section === "models" ? <ModelsSection draft={draft} patch={patch} data={data} /> : null}
-										{section === "appearance" ? (
-											<AppearanceSection draft={draft} patch={patch} onPreview={onAppearancePreview} />
-										) : null}
-										{section === "input" ? <InputSection draft={draft} patch={patch} /> : null}
-										{saveError === undefined ? null : (
-											<StatusNote
-												message={`保存失败:${saveError}`}
-												onRetry={() => void save(draft)}
-												tone="error"
-											/>
-										)}
-									</>
-								)}
-							</section>
+							<fieldset className="set-lock" disabled={!canEdit}>
+								<section className="set-section">
+									{loadError === undefined ? null : (
+										<StatusNote message={`读取设置失败:${loadError}`} onRetry={loadSettings} tone="error" />
+									)}
+									{isLoading ? <p className="set-hint">正在读取设置…</p> : null}
+									{draft === undefined ? null : (
+										<>
+											{section === "models" ? (
+												<ModelsSection draft={draft} patch={patch} data={data} />
+											) : null}
+											{section === "appearance" ? (
+												<AppearanceSection draft={draft} patch={patch} onPreview={onAppearancePreview} />
+											) : null}
+											{section === "input" ? <InputSection draft={draft} patch={patch} /> : null}
+											{saveError === undefined ? null : (
+												<StatusNote
+													message={`保存失败:${saveError}`}
+													onRetry={() => void save(draft)}
+													tone="error"
+												/>
+											)}
+										</>
+									)}
+								</section>
+							</fieldset>
 						) : null}
 					</div>
 				</div>

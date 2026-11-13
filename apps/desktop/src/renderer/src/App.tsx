@@ -1616,6 +1616,8 @@ export function App() {
 							runtime: `Electron ${bridge.platform}`,
 							endpoint,
 						}}
+						// 凭证、设置与项目清单由主机限定本机操作，非管理档连接只能看
+						canEdit={host?.role === "admin"}
 					/>
 				) : null}
 

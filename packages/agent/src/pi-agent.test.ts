@@ -168,6 +168,32 @@ describe("阶段与维护动作", () => {
 		expect(agent.currentMaintenance).toBeUndefined();
 	});
 
+	it("摘要请求重试期间保持压缩动作，收到结束事件才清除", () => {
+		const { agent, emitToAgent } = createAgent();
+		emitToAgent({ type: "compaction_start", reason: "manual" });
+		emitToAgent({ type: "summarization_retry_scheduled", attempt: 1, maxAttempts: 3, delayMs: 1000 });
+		expect(agent.currentMaintenance?.kind).toBe("compaction");
+		emitToAgent({
+			type: "summarization_retry_attempt_start",
+			source: "compaction",
+			reason: "manual",
+			willRetry: false,
+		});
+		expect(agent.currentMaintenance?.kind).toBe("compaction");
+		emitToAgent({ type: "summarization_retry_finished" });
+		expect(agent.currentMaintenance?.kind).toBe("compaction");
+		emitToAgent({ type: "compaction_end", reason: "manual", aborted: false, willRetry: false });
+		expect(agent.currentMaintenance).toBeUndefined();
+	});
+
+	it("分支摘要重试使用 SDK 给出的等待时长", () => {
+		const { agent, emitToAgent } = createAgent();
+		emitToAgent({ type: "summarization_retry_scheduled", attempt: 2, maxAttempts: 3, delayMs: 1500 });
+		expect(agent.currentMaintenance).toEqual({ kind: "retry", attempt: 2, maxAttempts: 3, delayMs: 1500 });
+		emitToAgent({ type: "summarization_retry_finished" });
+		expect(agent.currentMaintenance).toBeUndefined();
+	});
+
 	it("维护动作期间算忙,空闲回收不会动手", () => {
 		const { agent, emitToAgent } = createAgent();
 		expect(agent.isBusy).toBe(false);

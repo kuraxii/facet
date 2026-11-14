@@ -1,4 +1,5 @@
 import type { TranscriptItem } from "@facet/client-core";
+import type { Maintenance } from "@facet/protocol";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -36,7 +37,7 @@ function render(
 	items: TranscriptItem[],
 	canRevert: boolean,
 	reverted: string[] = [],
-	options: { withCopy?: boolean } = {},
+	options: { withCopy?: boolean; maintenance?: Maintenance } = {},
 ): string {
 	return renderToStaticMarkup(
 		createElement(ChatTranscript, {
@@ -45,6 +46,7 @@ function render(
 			onFork: () => {},
 			canRevert,
 			onRevert: (entryId: string) => reverted.push(entryId),
+			maintenance: options.maintenance,
 			...(options.withCopy === true ? { onCopyText: () => {} } : {}),
 		}),
 	);
@@ -77,6 +79,62 @@ describe("用户消息的回退入口", () => {
 	it("只有一条用户消息时没有回退入口", () => {
 		const html = render([userItem("e:u1", "u1", "唯一一条"), assistantItem("e:a1", "答复")], true);
 		expect(html).not.toContain("revert-btn");
+	});
+});
+
+describe("上下文摘要", () => {
+	const maintenance: Maintenance = {
+		kind: "compaction",
+		reason: "manual",
+		tokensBefore: undefined,
+		estimatedTokensAfter: undefined,
+	};
+	const summary: TranscriptItem = {
+		...assistantItem("e:c1", "## 当前目标\n完整摘要首行\n\n完整摘要末行"),
+		kind: "compaction",
+		role: undefined,
+		stopReason: undefined,
+	};
+
+	it("压缩期间显示动效行且不展示进度数值", () => {
+		const html = render(twoTurns, false, [], { maintenance });
+		expect(html).toContain("上下文摘要");
+		expect(html).toContain('role="status"');
+		expect(html).toContain('aria-busy="true"');
+		expect(html).toContain("group-label is-live");
+		expect(html).not.toContain("压缩中");
+		expect(html).not.toContain("%");
+	});
+
+	it("空会话压缩期间仍然显示摘要行", () => {
+		const html = render([], false, [], { maintenance });
+		expect(html).toContain("上下文摘要");
+		expect(html).not.toContain("还没有消息");
+	});
+
+	it("压缩条目显示可展开的分界并保留完整摘要", () => {
+		const html = render([...twoTurns, summary], true);
+		expect(html).toContain('<details class="context-summary">');
+		expect(html).toContain('<summary class="divider">');
+		expect(html).toContain("上下文摘要");
+		expect(html).toContain("完整摘要首行");
+		expect(html).toContain("完整摘要末行");
+		expect(html).not.toContain('<details class="context-summary" open');
+		expect(html).not.toContain('role="status"');
+		expect(html).not.toContain("上下文已压缩");
+	});
+
+	it("维护动作结束后不生成额外的完成分界", () => {
+		const html = render(twoTurns, true);
+		expect(html).not.toContain("上下文摘要");
+		expect(html).not.toContain('role="status"');
+	});
+
+	it("重复压缩期间保留已有摘要与新的动效行", () => {
+		const html = render([...twoTurns, summary], false, [], { maintenance });
+		expect((html.match(/上下文摘要/g) ?? []).length).toBe(2);
+		expect((html.match(/<details /g) ?? []).length).toBe(1);
+		expect((html.match(/role="status"/g) ?? []).length).toBe(1);
 	});
 });
 

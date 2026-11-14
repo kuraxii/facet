@@ -17,7 +17,7 @@ import { toTranscript } from "./transcript.ts";
 const CHAT = "chat:/s1" as const;
 const SESSION = "session:/s1" as const;
 
-function assistant(text: string): Message {
+function assistant(text: string): Extract<Message, { role: "assistant" }> {
 	return {
 		role: "assistant",
 		content: [{ type: "text", text }],
@@ -91,6 +91,7 @@ class FakeTransport implements SessionTransport {
 	readonly failSubscribe = new Set<Channel>();
 	/** 为真时订阅按主机不认识这个会话报错,模拟主机重启过 */
 	unknownSession = false;
+	entriesAfterGate: Promise<void> | undefined;
 
 	constructor(entryCount: number) {
 		this.entries = Array.from({ length: entryCount }, (_, index) => ({
@@ -190,6 +191,9 @@ class FakeTransport implements SessionTransport {
 					return {};
 			}
 		})();
+		if (method === "entriesAfter") {
+			await this.entriesAfterGate;
+		}
 		return result as RequestResults[M];
 	}
 
@@ -246,6 +250,14 @@ function createClient(entryCount: number, options: { initialPages?: number; page
 	const client = new SessionClient({ transport, ...options });
 	client.attach(handshake);
 	return { transport, client };
+}
+
+function transcriptOf(client: SessionClient) {
+	const view = client.chatView();
+	if (view === undefined) {
+		throw new Error("会话尚未打开");
+	}
+	return toTranscript(view);
 }
 
 describe("SessionClient", () => {
@@ -535,6 +547,387 @@ describe("SessionClient", () => {
 		expect(transport.calls.filter((call) => call.method === "entriesAfter")).toEqual([
 			{ method: "entriesAfter", params: { sessionId: opened.sessionId, afterEntryId: "e2" } },
 		]);
+	});
+
+	it("手动压缩结束后同步分界，重新打开仍然保留", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		transport.emit(SESSION, {
+			type: "session/phase",
+			phase: "idle",
+			maintenance: {
+				kind: "compaction",
+				reason: "manual",
+				tokensBefore: undefined,
+				estimatedTokensAfter: undefined,
+			},
+		});
+		expect(client.sessionView()?.state.maintenance?.kind).toBe("compaction");
+		transport.entries.push({
+			id: "c1",
+			parentId: "e2",
+			kind: "compaction",
+			timestamp: "2026-11-08T00:00:03Z",
+			summary: "完整上下文摘要",
+		});
+		transport.emit(SESSION, { type: "session/phase", phase: "idle", maintenance: undefined });
+		await vi.waitFor(() =>
+			expect(client.chatView()?.items.map((item) => item.id)).toEqual(["e:e1", "e:e2", "e:c1"]),
+		);
+		expect(transcriptOf(client)[2]).toMatchObject({
+			kind: "compaction",
+			parts: [{ text: "完整上下文摘要" }],
+		});
+		transport.emit(CHAT, { type: "chat/settled", aborted: false });
+		await vi.waitFor(() =>
+			expect(transport.calls.filter((call) => call.method === "entriesAfter")).toHaveLength(2),
+		);
+		expect(transcriptOf(client).filter((item) => item.kind === "compaction")).toHaveLength(1);
+		await client.openSession("/tmp/s1.jsonl");
+		expect(transcriptOf(client).filter((item) => item.kind === "compaction")).toHaveLength(1);
+	});
+
+	it("自动压缩后继续输出时保留流式消息与增量", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		transport.emit(CHAT, {
+			type: "chat/messageAppended",
+			messageId: "m1",
+			message: assistant("工具处理结束"),
+		});
+		transport.entries.push({
+			id: "e3",
+			parentId: "e2",
+			kind: "message",
+			timestamp: "2026-11-08T00:00:02Z",
+			message: assistant("工具处理结束"),
+		});
+		transport.emit(SESSION, {
+			type: "session/phase",
+			phase: "running",
+			maintenance: {
+				kind: "compaction",
+				reason: "threshold",
+				tokensBefore: undefined,
+				estimatedTokensAfter: undefined,
+			},
+		});
+		transport.entries.push({
+			id: "c1",
+			parentId: "e3",
+			kind: "compaction",
+			timestamp: "2026-11-08T00:00:03Z",
+			summary: "中途摘要",
+		});
+		transport.emit(SESSION, { type: "session/phase", phase: "running", maintenance: undefined });
+		transport.emit(CHAT, {
+			type: "chat/messageAppended",
+			messageId: "m2",
+			message: { ...assistant(""), stopReason: "pending" },
+		});
+		transport.emit(CHAT, {
+			type: "chat/delta",
+			messageId: "m2",
+			partIndex: 0,
+			kind: "text",
+			delta: "继续生成",
+		});
+		await vi.waitFor(() =>
+			expect(client.chatView()?.items.map((item) => item.id)).toEqual(["e:e1", "e:e2", "e:e3", "e:c1", "m2"]),
+		);
+		expect(client.chatView()?.items.at(-1)).toMatchObject({
+			isStreaming: true,
+			streaming: { 0: { text: "继续生成" } },
+		});
+		transport.emit(CHAT, {
+			type: "chat/messageUpdated",
+			messageId: "m2",
+			message: assistant("继续生成完成"),
+		});
+		transport.entries.push({
+			id: "e4",
+			parentId: "c1",
+			kind: "message",
+			timestamp: "2026-11-08T00:00:04Z",
+			message: assistant("继续生成完成"),
+		});
+		transport.emit(CHAT, { type: "chat/settled", aborted: false });
+		await vi.waitFor(() => expect(client.chatView()?.items.at(-1)?.id).toBe("e:e4"));
+		expect(transcriptOf(client).filter((item) => item.kind === "compaction")).toHaveLength(1);
+		expect(
+			transport.calls.filter((call) => call.method === "entriesAfter").map((call) => call.params),
+		).toEqual([
+			{ sessionId: "s1", afterEntryId: "e2" },
+			{ sessionId: "s1", afterEntryId: "c1" },
+		]);
+	});
+
+	it("检查点响应延迟期间继续输出，分界仍保留在两段消息之间", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		let release = () => {};
+		transport.entriesAfterGate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		transport.emit(SESSION, {
+			type: "session/phase",
+			phase: "running",
+			maintenance: {
+				kind: "compaction",
+				reason: "threshold",
+				tokensBefore: undefined,
+				estimatedTokensAfter: undefined,
+			},
+		});
+		transport.entries.push({
+			id: "c1",
+			parentId: "e2",
+			kind: "compaction",
+			timestamp: "2026-11-08T00:00:03Z",
+			summary: "摘要",
+		});
+		transport.emit(SESSION, { type: "session/phase", phase: "running", maintenance: undefined });
+		await vi.waitFor(() =>
+			expect(transport.calls.filter((call) => call.method === "entriesAfter")).toHaveLength(1),
+		);
+		transport.emit(CHAT, {
+			type: "chat/messageAppended",
+			messageId: "m1",
+			message: { ...assistant(""), stopReason: "pending" },
+		});
+		transport.emit(CHAT, {
+			type: "chat/delta",
+			messageId: "m1",
+			partIndex: 0,
+			kind: "text",
+			delta: "同步期间的内容",
+		});
+		release();
+		await vi.waitFor(() =>
+			expect(client.chatView()?.items.map((item) => item.id)).toEqual(["e:e1", "e:e2", "e:c1", "m1"]),
+		);
+		expect(client.chatView()?.items.at(-1)).toMatchObject({
+			isStreaming: true,
+			streaming: { 0: { text: "同步期间的内容" } },
+		});
+	});
+
+	it("检查点只同步到压缩条目，后续消息继续接收增量", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		transport.emit(SESSION, {
+			type: "session/phase",
+			phase: "running",
+			maintenance: {
+				kind: "compaction",
+				reason: "threshold",
+				tokensBefore: undefined,
+				estimatedTokensAfter: undefined,
+			},
+		});
+		transport.entries.push(
+			{ id: "c1", parentId: "e2", kind: "compaction", timestamp: "2026-11-08T00:00:03Z", summary: "摘要" },
+			{
+				id: "e3",
+				parentId: "c1",
+				kind: "message",
+				timestamp: "2026-11-08T00:00:04Z",
+				message: assistant("后续答复"),
+			},
+		);
+		transport.emit(SESSION, { type: "session/phase", phase: "running", maintenance: undefined });
+		transport.emit(CHAT, {
+			type: "chat/messageAppended",
+			messageId: "m1",
+			message: { ...assistant(""), stopReason: "pending" },
+		});
+		await vi.waitFor(() =>
+			expect(client.chatView()?.items.map((item) => item.id)).toEqual(["e:e1", "e:e2", "e:c1", "m1"]),
+		);
+		transport.emit(CHAT, {
+			type: "chat/delta",
+			messageId: "m1",
+			partIndex: 0,
+			kind: "text",
+			delta: "仍然接收",
+		});
+		expect(client.chatView()?.items.at(-1)).toMatchObject({
+			id: "m1",
+			streaming: { 0: { text: "仍然接收" } },
+		});
+		transport.emit(CHAT, { type: "chat/messageUpdated", messageId: "m1", message: assistant("后续答复") });
+		transport.emit(CHAT, { type: "chat/settled", aborted: false });
+		await vi.waitFor(() => expect(client.chatView()?.items.at(-1)?.id).toBe("e:e3"));
+		expect(transport.calls.filter((call) => call.method === "entriesAfter").at(-1)?.params).toEqual({
+			sessionId: "s1",
+			afterEntryId: "c1",
+		});
+	});
+
+	it("压缩完成同步期间切换会话，旧响应不写入新会话", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		let release = () => {};
+		transport.entriesAfterGate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		transport.emit(SESSION, {
+			type: "session/phase",
+			phase: "idle",
+			maintenance: {
+				kind: "compaction",
+				reason: "manual",
+				tokensBefore: undefined,
+				estimatedTokensAfter: undefined,
+			},
+		});
+		transport.entries.push({
+			id: "c1",
+			parentId: "e2",
+			kind: "compaction",
+			timestamp: "2026-11-08T00:00:03Z",
+			summary: "原会话摘要",
+		});
+		transport.emit(SESSION, { type: "session/phase", phase: "idle", maintenance: undefined });
+		await vi.waitFor(() =>
+			expect(transport.calls.filter((call) => call.method === "entriesAfter")).toHaveLength(1),
+		);
+		transport.entries.splice(0, transport.entries.length, {
+			id: "u2",
+			parentId: null,
+			kind: "message",
+			timestamp: "2026-11-08T00:00:04Z",
+			message: user("新会话消息"),
+		});
+		await client.openSession("/tmp/s2.jsonl");
+		release();
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(client.current?.sessionId).toBe("s2");
+		expect(client.chatView()?.items.map((item) => item.id)).toEqual(["e:u2"]);
+	});
+
+	it.each(["取消", "失败"])("压缩%s后没有压缩条目就不生成分界", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		transport.emit(SESSION, {
+			type: "session/phase",
+			phase: "idle",
+			maintenance: {
+				kind: "compaction",
+				reason: "manual",
+				tokensBefore: undefined,
+				estimatedTokensAfter: undefined,
+			},
+		});
+		transport.emit(SESSION, { type: "session/phase", phase: "idle", maintenance: undefined });
+		await vi.waitFor(() =>
+			expect(transport.calls.filter((call) => call.method === "entriesAfter")).toHaveLength(1),
+		);
+		expect(client.sessionView()?.state.maintenance).toBeUndefined();
+		expect(transcriptOf(client).filter((item) => item.kind === "compaction")).toHaveLength(0);
+	});
+
+	it("压缩期间断线后重连，快照结束压缩时同步摘要", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		transport.emit(SESSION, {
+			type: "session/phase",
+			phase: "idle",
+			maintenance: {
+				kind: "compaction",
+				reason: "manual",
+				tokensBefore: undefined,
+				estimatedTokensAfter: undefined,
+			},
+		});
+		transport.entries.push({
+			id: "c1",
+			parentId: "e2",
+			kind: "compaction",
+			timestamp: "2026-11-08T00:00:03Z",
+			summary: "重连摘要",
+		});
+		await client.resume();
+		expect(client.sessionView()?.state.maintenance).toBeUndefined();
+		expect(transcriptOf(client).filter((item) => item.kind === "compaction")).toHaveLength(1);
+	});
+
+	it("重复压缩状态帧不追加同步请求", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		const start: Action = {
+			type: "session/phase",
+			phase: "idle",
+			maintenance: {
+				kind: "compaction",
+				reason: "manual",
+				tokensBefore: undefined,
+				estimatedTokensAfter: undefined,
+			},
+		};
+		transport.emit(SESSION, start, 1);
+		transport.emit(SESSION, { type: "session/phase", phase: "idle", maintenance: undefined }, 2);
+		await vi.waitFor(() =>
+			expect(transport.calls.filter((call) => call.method === "entriesAfter")).toHaveLength(1),
+		);
+		transport.emit(SESSION, start, 1);
+		transport.emit(SESSION, { type: "session/phase", phase: "idle", maintenance: undefined }, 2);
+		await Promise.resolve();
+		expect(transport.calls.filter((call) => call.method === "entriesAfter")).toHaveLength(1);
+	});
+
+	it("压缩结束的同步请求失败时保留继续生成的内容", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		const historyRequests = transport.calls.filter((call) => call.method === "entries").length;
+		transport.emit(SESSION, {
+			type: "session/phase",
+			phase: "running",
+			maintenance: {
+				kind: "compaction",
+				reason: "threshold",
+				tokensBefore: undefined,
+				estimatedTokensAfter: undefined,
+			},
+		});
+		transport.failNext = "entriesAfter";
+		transport.emit(SESSION, { type: "session/phase", phase: "running", maintenance: undefined });
+		transport.emit(CHAT, {
+			type: "chat/messageAppended",
+			messageId: "m1",
+			message: { ...assistant(""), stopReason: "pending" },
+		});
+		transport.emit(CHAT, {
+			type: "chat/delta",
+			messageId: "m1",
+			partIndex: 0,
+			kind: "text",
+			delta: "继续内容",
+		});
+		await vi.waitFor(() =>
+			expect(transport.calls.filter((call) => call.method === "entriesAfter")).toHaveLength(1),
+		);
+		expect(transport.calls.filter((call) => call.method === "entries")).toHaveLength(historyRequests);
+		expect(client.chatView()?.items.at(-1)).toMatchObject({
+			id: "m1",
+			streaming: { 0: { text: "继续内容" } },
+		});
+		transport.entries.push(
+			{ id: "c1", parentId: "e2", kind: "compaction", timestamp: "2026-11-08T00:00:03Z", summary: "摘要" },
+			{
+				id: "e3",
+				parentId: "c1",
+				kind: "message",
+				timestamp: "2026-11-08T00:00:04Z",
+				message: assistant("继续内容"),
+			},
+		);
+		transport.emit(CHAT, { type: "chat/messageUpdated", messageId: "m1", message: assistant("继续内容") });
+		transport.emit(CHAT, { type: "chat/settled", aborted: false });
+		await vi.waitFor(() =>
+			expect(transcriptOf(client).filter((item) => item.kind === "compaction")).toHaveLength(1),
+		);
 	});
 
 	it("工具结果与流式增量都在本轮内一并提升", async () => {

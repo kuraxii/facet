@@ -375,6 +375,59 @@ describe("toTranscript", () => {
 		expect(item).toMatchObject({ kind: "compaction", parts: [{ kind: "text", text: "前面聊了很多" }] });
 	});
 
+	it("压缩条目从 summary 生成分界项并保留顺序", () => {
+		const entry: Entry = {
+			id: "c1",
+			parentId: "u1",
+			kind: "compaction",
+			timestamp: "2026-11-08T00:00:00Z",
+			summary: "## 当前目标\n保留完整摘要",
+		};
+		const items = toTranscript(
+			viewWith([
+				historyItem("u1", { role: "user", content: [{ type: "text", text: "问题" }], timestamp: 1 }),
+				{ id: "e:c1", entry, message: undefined, streaming: {}, isStreaming: false },
+				historyItem("a1", assistant([{ type: "text", text: "继续答复" }])),
+			]),
+		);
+		expect(items.map((item) => item.kind)).toEqual(["message", "compaction", "message"]);
+		expect(items[1]).toMatchObject({
+			id: "e:c1",
+			entryId: "c1",
+			role: undefined,
+			parts: [{ kind: "text", text: entry.summary }],
+			startedAt: Date.parse(entry.timestamp),
+			endedAt: Date.parse(entry.timestamp),
+		});
+	});
+
+	it("空摘要与无效时间仍保留压缩分界", () => {
+		const entry: Entry = { id: "c1", parentId: null, kind: "compaction", timestamp: "invalid" };
+		const [item] = toTranscript(
+			viewWith([{ id: "e:c1", entry, message: undefined, streaming: {}, isStreaming: false }]),
+		);
+		expect(item).toMatchObject({
+			kind: "compaction",
+			parts: [{ kind: "text", text: "" }],
+			startedAt: undefined,
+			endedAt: undefined,
+		});
+	});
+
+	it("分支摘要条目同样生成分界项", () => {
+		const entry: Entry = {
+			id: "b1",
+			parentId: null,
+			kind: "branch_summary",
+			timestamp: "2026-11-08T00:00:00Z",
+			summary: "分支内容",
+		};
+		const [item] = toTranscript(
+			viewWith([{ id: "e:b1", entry, message: undefined, streaming: {}, isStreaming: false }]),
+		);
+		expect(item).toMatchObject({ kind: "branch", parts: [{ kind: "text", text: "分支内容" }] });
+	});
+
 	it("系统消息不进渲染单元", () => {
 		const items = toTranscript(
 			viewWith([

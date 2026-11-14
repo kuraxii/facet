@@ -35,6 +35,10 @@
 	--tool-tip-gap: 6px;
 	--tool-tip-width: 560px;
 	--tool-tip-height: 320px;
+	--context-divider-gap: 12px;
+	--context-divider-padding: 4px;
+	--context-divider-line-height: 1px;
+	--context-summary-gap: 8px;
 	--status-dot: 6px;
 	--status-dot-failed: 8px;
 	--status-ring-stroke: 1.5px;
@@ -2580,16 +2584,38 @@ svg.fl {
 .divider {
 	display: flex;
 	align-items: center;
-	gap: 12px;
-	padding: 4px 0;
+	gap: var(--context-divider-gap);
+	padding: var(--context-divider-padding) 0;
 	color: var(--t3);
 	font-size: 12px;
 }
 
 .divider span.line {
 	flex: 1;
-	height: 1px;
+	height: var(--context-divider-line-height);
 	background: var(--line);
+}
+
+.context-summary > summary {
+	list-style: none;
+	cursor: pointer;
+}
+
+.context-summary > summary::-webkit-details-marker {
+	display: none;
+}
+
+.context-summary > summary:hover,
+.context-summary > summary:focus-visible {
+	color: var(--t1);
+}
+
+.context-summary[open] .context-summary-chevron {
+	transform: rotate(180deg);
+}
+
+.context-summary-body {
+	margin-top: var(--context-summary-gap);
 }
 
 .btn {

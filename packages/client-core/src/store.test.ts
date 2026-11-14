@@ -197,6 +197,105 @@ describe("SessionStore", () => {
 		expect(view?.renames).toEqual({ m1: "e:e9", m2: "e:e11" });
 	});
 
+	it("压缩检查点提升已完成的消息并保留后续流式内容", () => {
+		const store = new SessionStore();
+		store.ensureChat(chatChannel);
+		store.apply(
+			frame(chatChannel, 1, {
+				type: "chat/messageAppended",
+				messageId: "m1",
+				message: assistant("压缩前答复"),
+			}),
+		);
+		store.apply(
+			frame(chatChannel, 2, {
+				type: "chat/messageAppended",
+				messageId: "m2",
+				message: { ...assistant(""), stopReason: "pending" },
+			}),
+		);
+		store.apply(
+			frame(chatChannel, 3, {
+				type: "chat/delta",
+				messageId: "m2",
+				partIndex: 0,
+				kind: "text",
+				delta: "继续输出",
+			}),
+		);
+		const committed: Entry[] = [
+			{
+				id: "a1",
+				parentId: null,
+				kind: "message",
+				timestamp: "2026-11-08T00:00:00Z",
+				message: assistant("压缩前答复"),
+			},
+			{
+				id: "c1",
+				parentId: "a1",
+				kind: "compaction",
+				timestamp: "2026-11-08T00:00:01Z",
+				summary: "上下文内容",
+			},
+		];
+		expect(store.promote(chatChannel, committed, "checkpoint")).toBe(true);
+		const view = store.chatView(chatChannel);
+		expect(view?.items.map((item) => item.id)).toEqual(["e:a1", "e:c1", "m2"]);
+		expect(view?.items[2]).toMatchObject({ isStreaming: true, streaming: { 0: { text: "继续输出" } } });
+		expect(view?.renames).toEqual({ m1: "e:a1" });
+	});
+
+	it("没有实时消息时也能追加压缩检查点", () => {
+		const store = new SessionStore();
+		store.ensureChat(chatChannel);
+		expect(
+			store.promote(
+				chatChannel,
+				[
+					{
+						id: "c1",
+						parentId: null,
+						kind: "compaction",
+						timestamp: "2026-11-08T00:00:00Z",
+						summary: "摘要",
+					},
+				],
+				"checkpoint",
+			),
+		).toBe(true);
+		expect(store.chatView(chatChannel)?.items.map((item) => item.id)).toEqual(["e:c1"]);
+	});
+
+	it("检查点不替换尚在流式输出的消息", () => {
+		const store = new SessionStore();
+		store.ensureChat(chatChannel);
+		store.apply(
+			frame(chatChannel, 1, {
+				type: "chat/messageAppended",
+				messageId: "m1",
+				message: { ...assistant(""), stopReason: "pending" },
+			}),
+		);
+		expect(
+			store.promote(
+				chatChannel,
+				[
+					{
+						id: "a1",
+						parentId: null,
+						kind: "message",
+						timestamp: "2026-11-08T00:00:00Z",
+						message: assistant("完整内容"),
+					},
+				],
+				"checkpoint",
+			),
+		).toBe(false);
+		expect(store.chatView(chatChannel)?.items[0]?.id).toBe("m1");
+		expect(store.chatView(chatChannel)?.items[0]?.isStreaming).toBe(true);
+	});
+
 	it("条目数与实时消息不符时不提升", () => {
 		const store = new SessionStore();
 		store.ensureChat(chatChannel);

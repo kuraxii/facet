@@ -16,7 +16,6 @@ import type {
 import {
 	DEFAULT_SETTINGS,
 	type FacetSettings,
-	type Maintenance,
 	type ModelInfo,
 	type ProjectInfo,
 	type SessionSummary,
@@ -236,15 +235,6 @@ type Phase = "connecting" | "ready" | "failed";
 
 /** 主题在本地保存键，主机上的设置读不到时先用它，避免启动时闪一下 */
 const THEME_KEY = "facet.theme";
-
-/** 等重试期间给对话面板的提示,其余维护动作不显示。 */
-function retryOf(
-	maintenance: Maintenance | undefined,
-): { attempt: number; maxAttempts: number; delayMs: number } | undefined {
-	return maintenance?.kind === "retry"
-		? { attempt: maintenance.attempt, maxAttempts: maintenance.maxAttempts, delayMs: maintenance.delayMs }
-		: undefined;
-}
 
 /** 草稿在本地保存的键 */
 const DRAFTS_KEY = "facet.drafts";
@@ -1676,7 +1666,7 @@ export function App() {
 											onFork={forkTurn}
 											canRevert={canFork}
 											onRevert={revertTo}
-											retry={retryOf(session.state.maintenance)}
+											maintenance={session.state.maintenance}
 											onRetryTurn={retryTurn}
 											onCopyDetails={(text) => {
 												void navigator.clipboard.writeText(text).catch(() => undefined);

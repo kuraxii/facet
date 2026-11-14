@@ -10,6 +10,7 @@ import { join } from "node:path";
 import {
 	createAgentSession,
 	createCodemodeExtension,
+	createMcpExtension,
 	createToolSearchExtension,
 	DefaultResourceLoader,
 	type ExtensionUIContext,
@@ -126,12 +127,17 @@ export function thinkingLevelForModel(
  * pi 的内置扩展。
  *
  * 命令行入口会自动把它们塞进资源加载器，SDK 这条路要自己加：不加就一个都没有，比如
- * `codemode` 工具根本不会注册（更谈不上用 `defaultTools` 激活）。MCP 扩展暂不在这里，
- * 它会按设置拉起外部进程，等主机侧有 MCP 配置入口再加。
+ * `codemode` 工具根本不会注册（更谈不上激活）。
+ *
+ * MCP 扩展也在里面，行为与命令行一致：`agentDir/mcp.json`（以及受信任项目里的 `.pi/mcp.json`）
+ * 里配了服务器时才会拉起进程。它还负责一件事——服务器的工具只暴露给脚本时（`exposure`
+ * 缺省就是这个），自动激活 `codemode`，所以配了 MCP 的目录里 `codemode` 不写 `defaultTools`
+ * 也能用。
  */
 const BUILTIN_EXTENSIONS: InlineExtension[] = [
 	{ name: "codemode", factory: createCodemodeExtension(), builtin: true, replaceable: true },
 	{ name: "tool-search", factory: createToolSearchExtension(), builtin: true, replaceable: true },
+	{ name: "mcp", factory: createMcpExtension(), builtin: true, replaceable: true },
 ];
 
 export class PiAgentFactory {

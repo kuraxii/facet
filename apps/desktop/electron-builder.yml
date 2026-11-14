@@ -50,8 +50,10 @@ deb:
   maintainer: Facet <facet@localhost>
   packageName: facet
   priority: optional
+  afterInstall: build/after-install.sh
 
 rpm:
   maintainer: Facet <facet@localhost>
   packageName: facet
   synopsis: Pi 编码助手的桌面端
+  afterInstall: build/after-install.sh

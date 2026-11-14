@@ -18,10 +18,11 @@
 | 项 | 说明 | 对应需求 |
 |---|---|---|
 | 扩展的命令上下文 | `commandContextActions`（`waitForIdle` / `newSession` / `fork` / `navigateTree` / `reload`）与 `shutdownHandler` 都没提供,扩展发不起这些动作 | FR-EXT-01 |
+| 扩展导入 pi SDK | server 把 pi SDK 打进单文件后,加载器把 `@earendil-works/pi-coding-agent` 别名算成 `<产物>/../index.js`,该文件不存在;导入 SDK 运行值的扩展（例如 `pi-web-access`）会在加载时报 `Cannot find module` | FR-EXT-16 |
 | 组件式扩展界面 | `custom()`、组件式 `setWidget()`、`setHeader()`、`setFooter()` 与终端输入需要 TUI 组件,当前按 rpc 降级返回空值 | FR-EXT-04 |
 | 扩展与 MCP 的加载错误 | `PiAgent.issues` 收集 `extensionsResult.errors/warnings`,没有任何消费者,只进服务器日志;MCP 服务器起不来时界面看不出异常 | FR-EXT-16、FR-EXT-17 |
 | OAuth 登录 | `credential-store` 认识 `type: "oauth"`,但唯一写入路径固定写 `{ type: "api_key" }`;`resetApiProviders` 未用 | FR-SET-03 |
-| MCP 配置管理 | 只从 `~/.pi/agent-dev/mcp.json` 读,没有界面,也没有服务器与工具状态 | FR-EXT-14 |
+| MCP 配置管理 | 只从 agent 目录的 `mcp.json` 读,没有界面,也没有服务器与工具状态 | FR-EXT-14 |
 | `@` 文件引用 | 输入区没有补全入口;数据侧 `listDirectory` / `readFile` 现成 | FR-COMPOSE-04 |
 | 会话重载 | `session.reload()` 未用,改完扩展或 pi 设置后不能热重载;只有建会话时跑 `resourceLoader.reload` | FR-EXT-16 |
 
@@ -39,7 +40,7 @@
 
 ## 四、pi 的设置文件不读不写
 
-facet 只读写自己的 `~/.local/share/facet-dev/settings.json`,从不碰 `~/.pi/agent-dev/settings.json`。因此落在 pi 侧、只有 pi 会读的开关都够不着:`images.blockImages`、`followUpMode`、`steeringMode`、`terminal.*`、`defaultProjectTrust`。要么由 facet 写进去,要么给一份映射。
+facet 只读写自己的 `~/.local/share/facet-dev/settings.json`,从不碰 pi 的 `settings.json`。因此落在 pi 侧、只有 pi 会读的开关都够不着:`images.blockImages`、`followUpMode`、`steeringMode`、`terminal.*`、`defaultProjectTrust`。要么由 facet 写进去,要么给一份映射。
 
 ## 建议顺序
 

@@ -23,7 +23,7 @@ export {
 } from "./chat/command-palette.ts";
 export type { EmptyStateProps } from "./chat/EmptyState.tsx";
 export { EmptyState } from "./chat/EmptyState.tsx";
-export { ExtensionDialog } from "./chat/ExtensionDialog.tsx";
+export { ExtensionPromptCard } from "./chat/ExtensionPromptCard.tsx";
 export type { HostSwitcherProps } from "./chat/HostSwitcher.tsx";
 export { HostSwitcher } from "./chat/HostSwitcher.tsx";
 export type { HostListState, HostListStorage, SavedHost } from "./chat/host-list.ts";

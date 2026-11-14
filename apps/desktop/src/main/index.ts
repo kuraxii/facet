@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { DEFAULT_AGENT_DIR, DEV_AGENT_DIR } from "@facet/agent";
 import { app, BrowserWindow, dialog, ipcMain, screen, shell } from "electron";
 import { HostChannels, LOCAL_TARGET } from "./host-channel.ts";
 import {
@@ -49,6 +50,9 @@ const READY_WAIT_MS = 20_000;
 
 /** 主机数据目录，发现文件与主机日志都在这里；开发实例带 -dev 后缀，与发布实例分开 */
 const dataDir = resolveDataDir(process.env, { isDev });
+
+/** 本机 pi 数据目录：发布版与 pi 共用，开发态用独立的 agent-dev */
+const agentDir = process.env.FACET_AGENT_DIR?.trim() || (isDev ? DEV_AGENT_DIR : DEFAULT_AGENT_DIR);
 
 /** server 怎么起：用独立产物里自带的 Node；没有产物时为空，界面会显示连不上并能重试 */
 const hostLaunch = resolveHostLaunch();
@@ -436,6 +440,7 @@ app.whenReady().then(async () => {
 				// 开发启动打开主机侧调试日志，打包运行留给 FACET_DEBUG 手动开启
 				env: {
 					...hostLaunch.env,
+					FACET_AGENT_DIR: agentDir,
 					...(isDev ? { FACET_DEBUG: "1" } : {}),
 					// 开发态自己拉起的 server 跟着桌面一起退，免得留下一堆进程；打包后由主机自己管生命周期
 					...(isDev ? { FACET_PARENT_PID: String(process.pid) } : {}),

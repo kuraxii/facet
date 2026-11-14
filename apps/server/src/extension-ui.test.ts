@@ -147,6 +147,41 @@ describe("pi 扩展交互完整链路", () => {
 		]);
 	});
 
+	it("结构化请求按题返回选项与备注", async () => {
+		await start(`pi.on("session_start", async (_, ctx) => {
+			const answers = await ctx.ui.askForm([
+				{ id: "p1", title: "选择项目", header: "项目", body: "两个候选。", allowCustom: true, choices: [{ label: "A", description: "写入报告", preview: "报告" }, { label: "B" }] },
+				{ id: "p2", title: "补充说明", multiple: true, allowCustom: true, choices: [{ label: "日志" }] },
+			]);
+			if (answers) ctx.ui.notify(JSON.stringify(answers));
+		});`);
+		const { client } = await openPeer();
+		await client.createSession({ cwd: dir });
+		const pending = await prompt(client, "form");
+		expect(pending).toMatchObject({
+			questions: [
+				{ id: "p1", title: "选择项目", choices: [{ label: "A", description: "写入报告" }, { label: "B" }] },
+				{ id: "p2", title: "补充说明", multiple: true, allowCustom: true, choices: [{ label: "日志" }] },
+			],
+		});
+		await client.respondUi(pending.requestId, {
+			kind: "form",
+			answers: [
+				{ id: "p1", selections: ["B"], comment: "先看候选" },
+				{ id: "p2", selections: ["日志"], custom: "只看错误" },
+			],
+		});
+		await ready(client);
+		expect(client.sessionView()?.state.extensionUi.notices).toEqual([
+			expect.objectContaining({
+				message: JSON.stringify([
+					{ id: "p1", selections: ["B"], comment: "先看候选" },
+					{ id: "p2", selections: ["日志"], custom: "只看错误" },
+				]),
+			}),
+		]);
+	});
+
 	it("扩展命令依次完成四种交互、草稿写入与发送确认，内容不写入 JSONL", async () => {
 		await start(`pi.registerCommand("bridge", { handler: async (_, ctx) => {
 			if (!await ctx.ui.confirm("确认", "继续？")) return;

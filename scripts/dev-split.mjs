@@ -19,6 +19,10 @@ const root = fileURLToPath(new URL("..", import.meta.url));
  *
  * 桌面在开发模式下按同一规则取目录，两边算法不一致就接不上对方写下的 endpoint.json。
  */
+function devAgentDir(env) {
+	return env.FACET_AGENT_DIR?.trim() || join(homedir(), ".pi", "agent-dev");
+}
+
 function devDataDir(env) {
 	const explicit = env.FACET_DATA_DIR?.trim();
 	if (explicit !== undefined && explicit.length > 0) {
@@ -107,6 +111,7 @@ execFileSync("node", ["scripts/build-server.mjs"], { cwd: root, stdio: "inherit"
 const artifact = join(root, "apps", "desktop", "dist-server");
 const server = run("server", [join(artifact, "bin", "node"), join(artifact, "lib", "server.mjs")], {
 	FACET_DATA_DIR: devDataDir(process.env),
+	FACET_AGENT_DIR: devAgentDir(process.env),
 	// 桌面意外消失时 server 也自己收尾，不留孤儿进程
 	FACET_PARENT_PID: String(process.pid),
 });

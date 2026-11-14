@@ -49,6 +49,123 @@ describe("扩展交互", () => {
 		expect(ui.snapshot().prompts).toEqual([]);
 	});
 
+	it("结构化请求按题给出选项与备注", async () => {
+		const ui = bridge();
+		const result = ui.context.askForm([
+			{
+				id: "p1",
+				title: "\u001b[31m选择项目",
+				body: "两个候选",
+				choices: [{ label: "A", description: "写入报告" }, { label: "B" }],
+			},
+			{ id: "p2", title: "补充", multiple: true, choices: [{ label: "X" }, { label: "Y" }] },
+		]);
+		expect(ui.snapshot().prompts[0]).toMatchObject({
+			kind: "form",
+			title: "选择项目",
+			questions: [
+				{
+					id: "p1",
+					title: "选择项目",
+					body: "两个候选",
+					choices: [{ label: "A", description: "写入报告" }, { label: "B" }],
+				},
+				{ id: "p2", title: "补充", multiple: true, choices: [{ label: "X" }, { label: "Y" }] },
+			],
+		});
+		const id = requestId(ui);
+		expect(() => ui.respond(id, { kind: "form", answers: [{ id: "p1", selections: ["A"] }] })).toThrow(
+			"数量",
+		);
+		expect(() =>
+			ui.respond(id, {
+				kind: "form",
+				answers: [
+					{ id: "p1", selections: ["A", "B"] },
+					{ id: "p2", selections: ["X"] },
+				],
+			}),
+		).toThrow("单选");
+		expect(() =>
+			ui.respond(id, {
+				kind: "form",
+				answers: [
+					{ id: "p1", selections: ["C"] },
+					{ id: "p2", selections: ["X"] },
+				],
+			}),
+		).toThrow("选项");
+		expect(
+			ui.respond(id, {
+				kind: "form",
+				answers: [
+					{ id: "p1", selections: ["B"], comment: "先看候选" },
+					{ id: "p2", selections: ["X", "Y"] },
+				],
+			}),
+		).toBe(true);
+		await expect(result).resolves.toEqual([
+			{ id: "p1", selections: ["B"], comment: "先看候选" },
+			{ id: "p2", selections: ["X", "Y"] },
+		]);
+	});
+
+	it("自定义答案需要请求允许，且单选题不能同时提交选项", async () => {
+		const ui = bridge();
+		const result = ui.context.askForm([
+			{
+				id: "p1",
+				title: "选择",
+				allowCustom: true,
+				choices: [{ label: "A", preview: "预览" }],
+			},
+			{ id: "p2", title: "只选", choices: [{ label: "B" }] },
+		]);
+		const id = requestId(ui);
+		expect(() =>
+			ui.respond(id, {
+				kind: "form",
+				answers: [
+					{ id: "p1", selections: ["A"], custom: "自定义" },
+					{ id: "p2", selections: [] },
+				],
+			}),
+		).toThrow("同时");
+		expect(() =>
+			ui.respond(id, {
+				kind: "form",
+				answers: [
+					{ id: "p1", selections: [] },
+					{ id: "p2", selections: [], custom: "自定义" },
+				],
+			}),
+		).toThrow("自定义");
+		expect(
+			ui.respond(id, {
+				kind: "form",
+				answers: [
+					{ id: "p1", selections: [], custom: "自定义" },
+					{ id: "p2", selections: ["B"] },
+				],
+			}),
+		).toBe(true);
+		await expect(result).resolves.toEqual([
+			{ id: "p1", selections: [], custom: "自定义" },
+			{ id: "p2", selections: ["B"] },
+		]);
+	});
+
+	it("结构化请求随 signal 取消", async () => {
+		const ui = bridge();
+		const controller = new AbortController();
+		const result = ui.context.askForm([{ id: "p1", title: "选择", choices: [{ label: "A" }] }], {
+			signal: controller.signal,
+		});
+		controller.abort();
+		await expect(result).resolves.toBeUndefined();
+		expect(ui.snapshot().prompts).toEqual([]);
+	});
+
 	it("取消确认返回 false，其余返回 undefined", async () => {
 		const ui = bridge();
 		const results = [

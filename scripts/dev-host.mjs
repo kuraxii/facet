@@ -17,6 +17,10 @@ const root = fileURLToPath(new URL("..", import.meta.url));
  *
  * 桌面在开发模式下按同一规则取目录，两边算法不一致就接不上对方写下的 endpoint.json。
  */
+function devAgentDir(env) {
+	return env.FACET_AGENT_DIR?.trim() || join(homedir(), ".pi", "agent-dev");
+}
+
 function devDataDir(env) {
 	const explicit = env.FACET_DATA_DIR?.trim();
 	if (explicit !== undefined && explicit.length > 0) {
@@ -36,7 +40,7 @@ const artifact = join(root, "apps", "desktop", "dist-server");
 const child = spawn(join(artifact, "bin", "node"), [join(artifact, "lib", "server.mjs")], {
 	cwd: root,
 	stdio: "inherit",
-	env: { ...process.env, FACET_DATA_DIR: devDataDir(process.env) },
+	env: { ...process.env, FACET_DATA_DIR: devDataDir(process.env), FACET_AGENT_DIR: devAgentDir(process.env) },
 });
 
 const shutdown = () => child.kill("SIGTERM");

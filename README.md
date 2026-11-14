@@ -150,7 +150,7 @@ FACET_WEB_ROOT=apps/desktop/out/renderer \
 - 桌面拉起主机时让它自成一组，应用退出后主机留在后台；下次启动读到发现文件并与主机握上手，就直接接上，会话与运行中的任务都还在。
 - 关掉窗口后主机一律留在后台：应用里没有「退出时结束主机」的开关，也没有结束主机的按钮。要停就按数据目录里的 `endpoint.json` 找进程号自行结束，开发时在起主机的终端里 Ctrl+C。
 
-首次启动会读取 `~/.pi/agent-dev` 下的凭证与模型配置；没有凭证时先在设置页的「模型」里点「添加提供商」配好密钥，或改用自定义提供方。
+安装版启动会读取 `~/.pi/agent` 下的凭证与模型配置；开发态读取 `~/.pi/agent-dev`。没有凭证时先在设置页的「模型」里点「添加提供商」配好密钥，或改用自定义提供方。
 
 ## 右侧栏
 
@@ -227,13 +227,13 @@ scripts/build-fonts.sh <字体目录>
 
 | 路径 | 内容 | 覆盖方式 |
 |---|---|---|
-| `~/.pi/agent-dev` | 凭证 `auth.json`、模型 `models.json`、设置、会话目录 | `FACET_AGENT_DIR` |
+| `~/.pi/agent`（开发态 `~/.pi/agent-dev`） | 凭证 `auth.json`、模型 `models.json`、设置、会话目录 | `FACET_AGENT_DIR` |
 | `$XDG_DATA_HOME/facet`（缺省 `~/.local/share/facet`） | 主机身份 `host.json`、项目清单 `projects.json`、界面设置 `settings.json`、终端登记 `terminals.json`、审计 `audit.log`；独立启动时还有发现文件 `endpoint.json` | `FACET_DATA_DIR` |
 | `$XDG_CONFIG_HOME/facet`（缺省 `~/.config/facet`） | 桌面本地记录 `desktop.json`：窗口位置与尺寸 | — |
 
-开发实例的两处目录都带 `-dev` 后缀：数据目录是 `~/.local/share/facet-dev`，配置目录是 `~/.config/facet-dev`。`npm run dev`（即 `dev:split`）、`dev:host`、`dev:desktop` 都用这份，因此开发时跑的东西与装好的包互不影响，`projects.json` 与主机身份各有一份。
+开发实例的三处目录都带 `-dev` 后缀：数据目录是 `~/.local/share/facet-dev`，配置目录是 `~/.config/facet-dev`，pi 数据目录是 `~/.pi/agent-dev`。`npm run dev`（即 `dev:split`）、`dev:host`、`dev:desktop` 都用这一套，因此开发时跑的东西与装好的包互不影响，`projects.json`、主机身份与 pi 会话各有一份。
 
-用 `agent-dev` 而不是 `~/.pi/agent`，是为了和 pi 命令行共用凭证与模型配置，同时不把开发期的会话混进真实目录。
+发布版与 pi 命令行共用 `~/.pi/agent` 的凭证与模型配置；开发态用 `agent-dev`，避免开发期的会话混进真实目录。
 
 主机标识在首次启动时生成并写入 `host.json`：取 `/etc/machine-id` 拼上数据目录做 SHA-256，取前 20 位；读不到 machine-id 时改用时间戳加随机串。同一台机器跑多份（不同数据目录）各有各的标识，删掉 `host.json` 即可换一个。
 
@@ -291,3 +291,7 @@ npm run dist -w @facet/desktop
 - `docs/backlog.md`：进度、设计取舍与遗留项
 - `todo.md`：按优先级排的功能推进顺序
 - `AGENTS.md`：分支、提交与注释规范
+
+## 插件与 skill
+
+适配 facet 的 pi 扩展与 skill 放在 `plugins/`，见 [`plugins/README.md`](plugins/README.md)。

@@ -16,10 +16,12 @@ import {
 	type ExtensionUIContext,
 	hasTrustRequiringProjectResources,
 	type InlineExtension,
+	type LoadExtensionsResult,
 	ModelRuntime,
 	ProjectTrustStore,
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
+import { facetAskUserQuestion } from "@facet/plugin-ask-user-question";
 import type { ModelInfo, ModelRef, ProviderInfo, SessionSummary, ThinkingLevel } from "@facet/protocol";
 import { toModelInfo } from "./convert.ts";
 import { FileCredentialStore } from "./credential-store.ts";
@@ -144,7 +146,34 @@ const BUILTIN_EXTENSIONS: InlineExtension[] = [
 	{ name: "codemode", factory: createCodemodeExtension(), builtin: true, replaceable: true },
 	{ name: "tool-search", factory: createToolSearchExtension(), builtin: true, replaceable: true },
 	{ name: "mcp", factory: createMcpExtension(), builtin: true, replaceable: true },
+	{ name: "ask-user-question", factory: facetAskUserQuestion, builtin: true },
 ];
+
+/** 内置扩展里不允许被同名用户扩展替换的路径。 */
+const PRIORITY_BUILTIN_PATHS = new Set(["builtin:ask-user-question"]);
+
+/**
+ * 让指定的内置扩展排在其它扩展前面。
+ *
+ * pi 按扩展顺序取第一个同名工具；内置扩展默认追加在文件扩展之后，同名时会被用户版本盖住。
+ * 这里把受影响的内置扩展挪到最前，并去掉因此产生的冲突诊断。
+ */
+function prioritizeBuiltinExtensions(result: LoadExtensionsResult): LoadExtensionsResult {
+	const prioritized = result.extensions.filter((extension) => PRIORITY_BUILTIN_PATHS.has(extension.path));
+	if (prioritized.length === 0) return result;
+	const names = new Set(prioritized.flatMap((extension) => [...extension.tools.keys()]));
+	const isExpectedConflict = (issue: { path: string; error: string }) =>
+		PRIORITY_BUILTIN_PATHS.has(issue.path) &&
+		[...names].some((name) => issue.error.startsWith(`Tool "${name}" conflicts with`));
+	return {
+		...result,
+		extensions: [
+			...prioritized,
+			...result.extensions.filter((extension) => !PRIORITY_BUILTIN_PATHS.has(extension.path)),
+		],
+		errors: result.errors.filter((issue) => !isExpectedConflict(issue)),
+	};
+}
 
 export class PiAgentFactory {
 	/** 全局配置目录 */
@@ -583,6 +612,7 @@ export class PiAgentFactory {
 			cwd,
 			agentDir: this.agentDir,
 			extensionFactories: [...BUILTIN_EXTENSIONS, ...(options.extensionFactories ?? [])],
+			extensionsOverride: prioritizeBuiltinExtensions,
 			noExtensions: options.noExtensions,
 		});
 		// 项目级扩展与 MCP 配置只在目录被信任时加载；没做过决定的一律按不信任处理

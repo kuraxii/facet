@@ -31,7 +31,7 @@ import {
 	clampSidebarWidth,
 	DEFAULT_DARK_THEME,
 	EmptyState,
-	ExtensionDialog,
+	ExtensionPromptCard,
 	endpointLabel,
 	FilesPane,
 	HostSwitcher,
@@ -1740,6 +1740,20 @@ export function App() {
 											<p className="dialog-error">{session.state.initialization.message}</p>
 										) : null}
 										<QueueStrip queued={queued} onClear={takeBackQueue} />
+										{session.state.extensionUi.prompts[0] === undefined ? null : (
+											<ExtensionPromptCard
+												key={`${host?.hostId}:${session.channel}:${session.state.extensionUi.prompts[0].requestId}`}
+												prompt={session.state.extensionUi.prompts[0]}
+												canRespond={isOnline && host?.role !== "viewer"}
+												onRespond={async (response) => {
+													await client.respondUi(
+														session.state.extensionUi.prompts[0]?.requestId ?? "",
+														response,
+														openedSessionId,
+													);
+												}}
+											/>
+										)}
 										<Composer
 											value={draft}
 											onChange={updateDraft}
@@ -1912,21 +1926,6 @@ export function App() {
 						onCreate={createProject}
 						onClose={() => setIsProjectDialogOpen(false)}
 					/>
-
-					{session?.state.extensionUi.prompts[0] === undefined ? null : (
-						<ExtensionDialog
-							key={`${host?.hostId}:${session.channel}:${session.state.extensionUi.prompts[0].requestId}`}
-							prompt={session.state.extensionUi.prompts[0]}
-							canRespond={isOnline && host?.role !== "viewer"}
-							onRespond={async (response) => {
-								await client.respondUi(
-									session.state.extensionUi.prompts[0]?.requestId ?? "",
-									response,
-									openedSessionId,
-								);
-							}}
-						/>
-					)}
 
 					{trustPrompt ? (
 						<TrustDialog

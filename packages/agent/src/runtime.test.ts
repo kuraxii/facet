@@ -54,6 +54,48 @@ describe("项目信任", () => {
 	});
 });
 
+describe("内置插件", () => {
+	it("同名用户扩展不覆盖内置 ask_user_question", async () => {
+		const cwd = await projectWithExtension("override-plugin");
+		await writeFile(
+			join(cwd, ".pi", "extensions", "probe.ts"),
+			`export default (pi) => {
+				pi.registerTool({
+					name: "ask_user_question",
+					label: "User",
+					description: "user version",
+					parameters: { type: "object", properties: {} },
+				});
+			};`,
+			"utf8",
+		);
+		factory.setProjectTrust(cwd, true);
+		const agent = await factory.create({ cwd });
+		try {
+			expect(agent.tools().find((tool) => tool.name === "ask_user_question")?.description).toContain(
+				"structured questions",
+			);
+			expect(agent.issues).toEqual([]);
+		} finally {
+			agent.dispose();
+		}
+	});
+
+	it("新会话默认注册 facet 的 ask_user_question", async () => {
+		const cwd = join(root, "builtin-plugin");
+		await mkdir(cwd);
+		const agent = await factory.create({ cwd });
+		try {
+			expect(agent.activeToolNames()).toContain("ask_user_question");
+			expect(agent.tools().find((tool) => tool.name === "ask_user_question")?.description).toContain(
+				"structured questions",
+			);
+		} finally {
+			agent.dispose();
+		}
+	});
+});
+
 describe("新建会话的思考档位", () => {
 	it("模型支持思考时保留设置里的档位", () => {
 		expect(thinkingLevelForModel({ reasoning: true }, "high")).toBe("high");

@@ -467,6 +467,35 @@ function parseUiResponse(value: unknown): UiResponse {
 			if (typeof source.value !== "string") throw new RequestError("bad_params", "value must be a string");
 			return { kind: source.kind, value: source.value };
 		}
+		case "form": {
+			if (!Array.isArray(source.answers)) throw new RequestError("bad_params", "answers must be an array");
+			return {
+				kind: "form",
+				answers: source.answers.map((value) => {
+					const answer = asObject(value);
+					if (typeof answer.id !== "string")
+						throw new RequestError("bad_params", "answer id must be a string");
+					if (
+						!Array.isArray(answer.selections) ||
+						answer.selections.some((item) => typeof item !== "string")
+					) {
+						throw new RequestError("bad_params", "selections must be a string array");
+					}
+					if (answer.comment !== undefined && typeof answer.comment !== "string") {
+						throw new RequestError("bad_params", "comment must be a string");
+					}
+					if (answer.custom !== undefined && typeof answer.custom !== "string") {
+						throw new RequestError("bad_params", "custom must be a string");
+					}
+					return {
+						id: answer.id,
+						selections: answer.selections as string[],
+						...(answer.custom === undefined ? {} : { custom: answer.custom }),
+						...(answer.comment === undefined ? {} : { comment: answer.comment }),
+					};
+				}),
+			};
+		}
 		default:
 			throw new RequestError("bad_params", "unsupported UI response");
 	}

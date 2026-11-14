@@ -1,3 +1,43 @@
+/** 结构化请求里的一个选项。 */
+export interface UiFormChoice {
+	/** 提交时原样返回的选项文字。 */
+	label: string;
+	/** 选项下方的补充说明。 */
+	description?: string;
+	/** 选项对应的预览内容，按纯文本展示并保留换行。 */
+	preview?: string;
+}
+
+/** 结构化请求里的一道题；同一请求的多道题按顺序展示。 */
+export interface UiFormQuestion {
+	/** 题目标识，应答按它对应。 */
+	id: string;
+	/** 题目标题。 */
+	title: string;
+	/** 题目标签页上的短名；缺省时只显示题号。 */
+	header?: string;
+	/** 题目正文，保留换行。 */
+	body?: string;
+	/** 允许多选；缺省为单选。 */
+	multiple?: boolean;
+	/** 允许在选项之外填写自定义答案。 */
+	allowCustom?: boolean;
+	/** 选项列表；空数组表示只收备注。 */
+	choices: UiFormChoice[];
+}
+
+/** 一道题的应答。 */
+export interface UiFormAnswer {
+	/** 与请求里的题目 id 对应。 */
+	id: string;
+	/** 选中的选项文字；多选按点选顺序排列。 */
+	selections: string[];
+	/** 自定义答案；单选题填写后不再带选中项。 */
+	custom?: string;
+	/** 备注；没有填写时省略。 */
+	comment?: string;
+}
+
 /** 扩展交互请求；requestId 在一次会话运行内唯一，expiresAt 由 server 计时。 */
 export type UiPrompt = {
 	/** 应答定位标识，完成后不可再次使用。 */
@@ -31,6 +71,12 @@ export type UiPrompt = {
 			/** 完整的初始内容，保留换行与空白。 */
 			prefill?: string;
 	  }
+	| {
+			/** 一次提交多道题的选项与备注。 */
+			kind: "form";
+			/** 按展示顺序排列的题目。 */
+			questions: UiFormQuestion[];
+	  }
 );
 
 /** 用户应答；cancel 对确认请求返回 false，对其他请求返回 undefined。 */
@@ -62,6 +108,12 @@ export type UiResponse =
 			kind: "editor";
 			/** 用户提交的完整内容，保留空白。 */
 			value: string;
+	  }
+	| {
+			/** 结构化请求的应答。 */
+			kind: "form";
+			/** 与 questions 一一对应，按原顺序排列。 */
+			answers: UiFormAnswer[];
 	  };
 
 /** 对应会话的输入草稿替换请求。 */

@@ -5,7 +5,8 @@
 	"type": "module",
 	"workspaces": [
 		"apps/*",
-		"packages/*"
+		"packages/*",
+		"plugins/extensions/*"
 	],
 	"scripts": {
 		"postinstall": "node scripts/ensure-electron.mjs",

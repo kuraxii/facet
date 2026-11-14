@@ -166,6 +166,9 @@ export function SessionSidebar({
 	const [projectError, setProjectError] = useState<string | undefined>(undefined);
 	/** 展开了操作面板的会话文件 */
 	const [sessionMenuPath, setSessionMenuPath] = useState<string | undefined>(undefined);
+	const [sessionMenuPosition, setSessionMenuPosition] = useState<{ x: number; y: number } | undefined>(
+		undefined,
+	);
 	/** 正在改名的会话与输入中的名字 */
 	const [sessionRename, setSessionRename] = useState<{ path: string; value: string } | undefined>(undefined);
 	/** 正在确认删除的会话文件 */
@@ -198,6 +201,10 @@ export function SessionSidebar({
 	const currentProject: SidebarProject | undefined =
 		scopeCwd === undefined ? undefined : data.projects.find((item) => samePath(item.cwd, scopeCwd));
 	const filterLabel = currentProject?.name ?? (scopeCwd === undefined ? "全部项目" : baseName(scopeCwd));
+	const menuSession =
+		sessionMenuPath === undefined
+			? undefined
+			: data.groups.flatMap((group) => group.sessions).find((session) => session.path === sessionMenuPath);
 	const filterCount = currentProject?.sessionCount ?? data.total;
 	const newSessionCwd = scopeCwd ?? createCwd;
 
@@ -308,12 +315,42 @@ export function SessionSidebar({
 	};
 
 	/** 收起会话操作面板并清掉其中的临时状态。 */
-	const closeSessionMenu = (): void => {
+	const closeSessionMenu = useCallback((): void => {
 		setSessionMenuPath(undefined);
+		setSessionMenuPosition(undefined);
 		setSessionRename(undefined);
 		setSessionDeletePath(undefined);
 		setSessionMenuError(undefined);
-	};
+	}, []);
+
+	// 会话菜单是浮层：点外面或按 Esc 收起，打开后把焦点放到第一个菜单项。
+	useEffect(() => {
+		if (sessionMenuPath === undefined) {
+			return;
+		}
+		const onPointerDown = (event: PointerEvent) => {
+			const target = event.target;
+			if (!(target instanceof Element)) return;
+			if (target.closest(".sb-session-menu") !== null) return;
+			closeSessionMenu();
+		};
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") closeSessionMenu();
+		};
+		const onScroll = () => closeSessionMenu();
+		const frame = requestAnimationFrame(() => {
+			document.querySelector<HTMLButtonElement>(".sb-session-menu .sb-menu-item")?.focus();
+		});
+		document.addEventListener("pointerdown", onPointerDown);
+		document.addEventListener("keydown", onKeyDown);
+		window.addEventListener("scroll", onScroll, true);
+		return () => {
+			cancelAnimationFrame(frame);
+			document.removeEventListener("pointerdown", onPointerDown);
+			document.removeEventListener("keydown", onKeyDown);
+			window.removeEventListener("scroll", onScroll, true);
+		};
+	}, [closeSessionMenu, sessionMenuPath]);
 
 	/** 跑一次会话操作，失败时把错误留在面板里。 */
 	const runSessionMenuAction = async (work: () => Promise<void>): Promise<void> => {
@@ -613,127 +650,137 @@ export function SessionSidebar({
 							<span className="mono">{group.sessions.length}</span>
 						</h2>
 						{group.sessions.map((session) => {
-							const isMenuOpen = sessionMenuPath === session.path;
-							const isRenaming = isMenuOpen && sessionRename !== undefined;
+							const twoLine = scopeCwd === undefined;
 							return (
 								<div key={session.path} className="sb-row-item">
 									<div className="sb-row-wrap">
 										<button
 											type="button"
-											className={session.path === activeFile ? "sb-row is-active" : "sb-row"}
+											className={`sb-row${session.path === activeFile ? " is-active" : ""}${twoLine ? " is-two-line" : ""}`}
 											aria-current={session.path === activeFile}
 											onClick={() => openSession(session)}
+											onContextMenu={(event) => {
+												if (session.isPlaceholder === true) return;
+												event.preventDefault();
+												setSessionMenuError(undefined);
+												setSessionRename(undefined);
+												setSessionDeletePath(undefined);
+												setSessionMenuPath(session.path);
+												setSessionMenuPosition({
+													x: Math.min(event.clientX, window.innerWidth - 240),
+													y: Math.min(event.clientY, window.innerHeight - 180),
+												});
+											}}
 											disabled={session.isPlaceholder === true}
 											title={session.title}
 										>
 											<SessionStatusMark bucket={statusBucketOfDot(session.dot)} />
-											<span className="sb-row-title ell">{session.title}</span>
-											{scopeCwd === undefined && session.host === undefined ? (
-												<span className="sb-row-proj ell">{session.project}</span>
-											) : null}
-											<span className="sb-row-time mono">{shortTime(session.modified)}</span>
-										</button>
-										<button
-											type="button"
-											className="sb-row-more"
-											aria-label="会话操作"
-											aria-expanded={isMenuOpen}
-											onClick={() => {
-												setSessionMenuError(undefined);
-												setSessionRename(undefined);
-												setSessionDeletePath(undefined);
-												setSessionMenuPath(isMenuOpen ? undefined : session.path);
-											}}
-										>
-											⋯
+											{twoLine ? (
+												<span className="sb-row-body">
+													<span className="sb-row-title ell">{session.title}</span>
+													<span className="sb-row-meta">
+														<span className="sb-row-proj ell">{session.host ?? session.project}</span>
+														<span className="sb-row-time mono">{shortTime(session.modified)}</span>
+													</span>
+												</span>
+											) : (
+												<>
+													<span className="sb-row-title ell">{session.title}</span>
+													<span className="sb-row-time mono">{shortTime(session.modified)}</span>
+												</>
+											)}
 										</button>
 									</div>
-
-									{isMenuOpen ? (
-										<div className="sb-opt-menu">
-											{isRenaming ? (
-												<label className="sb-rename">
-													<input
-														className="sb-rename-input"
-														value={sessionRename.value}
-														onChange={(event) =>
-															setSessionRename({ path: sessionRename.path, value: event.target.value })
-														}
-														onKeyDown={(event) => {
-															if (event.key === "Enter") {
-																void submitSessionRename();
-															}
-															if (event.key === "Escape") {
-																setSessionRename(undefined);
-															}
-														}}
-														placeholder="会话名称"
-														aria-label="会话名称"
-													/>
-													<button
-														type="button"
-														className="sb-opt-action"
-														disabled={isSessionBusy}
-														onClick={() => void submitSessionRename()}
-													>
-														保存
-													</button>
-												</label>
-											) : sessionDeletePath === session.path ? (
-												<div className="sb-confirm">
-													<span className="sb-confirm-text">删除后会话文件不可恢复</span>
-													<div className="sb-confirm-actions">
-														<button
-															type="button"
-															className="sb-opt-action is-danger"
-															disabled={isSessionBusy}
-															onClick={() =>
-																void runSessionMenuAction(async () => {
-																	await onDeleteSession?.(session.path);
-																})
-															}
-														>
-															删除
-														</button>
-														<button
-															type="button"
-															className="sb-opt-action"
-															onClick={() => setSessionDeletePath(undefined)}
-														>
-															取消
-														</button>
-													</div>
-												</div>
-											) : (
-												<div className="sb-menu-actions">
-													<button
-														type="button"
-														className="sb-menu-item"
-														onClick={() => setSessionRename({ path: session.path, value: session.title })}
-													>
-														重命名
-													</button>
-													<button
-														type="button"
-														className="sb-menu-item is-danger"
-														onClick={() => setSessionDeletePath(session.path)}
-													>
-														删除
-													</button>
-												</div>
-											)}
-
-											{sessionMenuError === undefined ? null : (
-												<p className="sb-menu-error">{sessionMenuError}</p>
-											)}
-										</div>
-									) : null}
 								</div>
 							);
 						})}
 					</section>
 				))}
 			</div>
+
+			{menuSession === undefined ? null : (
+				<div
+					role="menu"
+					aria-label="会话操作"
+					className="sb-pop sb-session-menu sb-context-menu"
+					style={{ left: sessionMenuPosition?.x, top: sessionMenuPosition?.y }}
+					onContextMenu={(event) => event.preventDefault()}
+				>
+					{sessionRename?.path === menuSession.path ? (
+						<label className="sb-rename">
+							<input
+								className="sb-rename-input"
+								value={sessionRename.value}
+								onChange={(event) =>
+									setSessionRename({ path: sessionRename.path, value: event.target.value })
+								}
+								onKeyDown={(event) => {
+									if (event.key === "Enter") {
+										void submitSessionRename();
+									}
+									if (event.key === "Escape") {
+										setSessionRename(undefined);
+									}
+								}}
+								placeholder="会话名称"
+								aria-label="会话名称"
+							/>
+							<button
+								type="button"
+								className="sb-opt-action"
+								disabled={isSessionBusy}
+								onClick={() => void submitSessionRename()}
+							>
+								保存
+							</button>
+						</label>
+					) : sessionDeletePath === menuSession.path ? (
+						<div className="sb-confirm">
+							<span className="sb-confirm-text">删除后会话文件不可恢复</span>
+							<div className="sb-confirm-actions">
+								<button
+									type="button"
+									className="sb-opt-action is-danger"
+									disabled={isSessionBusy}
+									onClick={() =>
+										void runSessionMenuAction(async () => {
+											await onDeleteSession?.(menuSession.path);
+										})
+									}
+								>
+									删除
+								</button>
+								<button
+									type="button"
+									className="sb-opt-action"
+									onClick={() => setSessionDeletePath(undefined)}
+								>
+									取消
+								</button>
+							</div>
+						</div>
+					) : (
+						<div className="sb-menu-actions">
+							<button
+								type="button"
+								className="sb-menu-item"
+								onClick={() => setSessionRename({ path: menuSession.path, value: menuSession.title })}
+							>
+								重命名
+							</button>
+							<button
+								type="button"
+								className="sb-menu-item is-danger"
+								onClick={() => setSessionDeletePath(menuSession.path)}
+							>
+								删除
+							</button>
+						</div>
+					)}
+
+					{sessionMenuError === undefined ? null : <p className="sb-menu-error">{sessionMenuError}</p>}
+				</div>
+			)}
 
 			<footer className="sb-foot">
 				{hostSwitcher}

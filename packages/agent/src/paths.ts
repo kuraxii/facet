@@ -1,9 +1,9 @@
 /**
  * facet 的数据目录。
  *
- * pi 的缺省目录 ~/.pi/agent 与命令行工具共用,开发期写入会混进真实的凭证、模型配置
- * 与会话文件。facet 缺省改用 ~/.pi/agent-dev。pi 的全部缺省路径(凭证、模型目录、
- * 会话、设置、工具、提示词)都由同一个环境变量推出,设置一次即整体搬迁。
+ * 发布版与 pi 命令行共用 ~/.pi/agent，凭证、模型、会话与提示词同源；开发脚本与开发
+ * 态桌面改用 ~/.pi/agent-dev，避免开发期的写入混进真实目录。pi 的全部缺省路径都由
+ * 同一个环境变量推出，设置一次即整体搬迁。
  */
 import { homedir } from "node:os";
 import { resolve } from "node:path";
@@ -12,8 +12,11 @@ import { getAgentDir } from "@earendil-works/pi-coding-agent";
 /** pi 读取 agent 目录的环境变量名 */
 const AGENT_DIR_ENV = "PI_CODING_AGENT_DIR";
 
-/** facet 的开发期数据目录 */
-export const DEFAULT_AGENT_DIR = resolve(homedir(), ".pi", "agent-dev");
+/** 发布版与 pi 共用的数据目录 */
+export const DEFAULT_AGENT_DIR = resolve(homedir(), ".pi", "agent");
+
+/** 开发期的数据目录，与发布版分开 */
+export const DEV_AGENT_DIR = resolve(homedir(), ".pi", "agent-dev");
 
 /** 展开路径开头的波浪号,相对路径按进程工作目录解析成绝对路径。 */
 function expandPath(path: string): string {

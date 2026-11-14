@@ -2,13 +2,28 @@
 import { randomUUID } from "node:crypto";
 import { stripVTControlCharacters } from "node:util";
 import type { ExtensionUIContext, ExtensionUIDialogOptions } from "@earendil-works/pi-coding-agent";
-import type { ExtensionUiState, NoticeLevel, UiNotice, UiPrompt, UiResponse } from "@facet/protocol";
+import type {
+	ExtensionUiState,
+	NoticeLevel,
+	UiFormAnswer,
+	UiFormQuestion,
+	UiNotice,
+	UiPrompt,
+	UiResponse,
+} from "@facet/protocol";
 
 type PromptInput =
 	| { kind: "select"; title: string; options: string[] }
 	| { kind: "confirm"; title: string; message: string }
 	| { kind: "input"; title: string; placeholder?: string }
-	| { kind: "editor"; title: string; prefill?: string };
+	| { kind: "editor"; title: string; prefill?: string }
+	| { kind: "form"; title: string; questions: UiFormQuestion[] };
+
+/** 在 pi 的交互 API 上补一个结构化请求入口，供扩展一次提交多道题。 */
+export type FacetUiContext = ExtensionUIContext & {
+	/** 提交整组题目并等待逐题应答；取消时返回 undefined。 */
+	askForm(questions: UiFormQuestion[], opts?: ExtensionUIDialogOptions): Promise<UiFormAnswer[] | undefined>;
+};
 
 type PendingPrompt = {
 	/** 对外发布的请求。 */
@@ -19,8 +34,8 @@ type PendingPrompt = {
 
 /** Promise、超时与中止的单一所有者；断线不改变待答请求。 */
 export class ExtensionUi {
-	/** 交给 bindExtensions 的 RPC 模式实现。 */
-	readonly context: ExtensionUIContext;
+	/** 交给 bindExtensions 的 RPC 模式实现，另含 askForm。 */
+	readonly context: FacetUiContext;
 	private readonly pending = new Map<string, PendingPrompt>();
 	private editor: ExtensionUiState["editor"];
 	private readonly notices: UiNotice[] = [];
@@ -57,6 +72,33 @@ export class ExtensionUi {
 					...(prefill === undefined ? {} : { prefill }),
 				});
 				return result.kind === "editor" ? result.value : undefined;
+			},
+			askForm: async (questions, opts) => {
+				const result = await this.ask(
+					{
+						kind: "form",
+						title: questions[0]?.title ?? "",
+						questions: questions.map((question) => ({
+							id: question.id,
+							title: stripVTControlCharacters(question.title),
+							...(question.header === undefined ? {} : { header: stripVTControlCharacters(question.header) }),
+							...(question.body === undefined ? {} : { body: stripVTControlCharacters(question.body) }),
+							...(question.multiple === true ? { multiple: true } : {}),
+							...(question.allowCustom === true ? { allowCustom: true } : {}),
+							choices: question.choices.map((choice) => ({
+								label: stripVTControlCharacters(choice.label),
+								...(choice.description === undefined
+									? {}
+									: { description: stripVTControlCharacters(choice.description) }),
+								...(choice.preview === undefined
+									? {}
+									: { preview: stripVTControlCharacters(choice.preview) }),
+							})),
+						})),
+					},
+					opts,
+				);
+				return result.kind === "form" ? result.answers : undefined;
 			},
 			notify: (message, level = "info") => this.notify(level, stripVTControlCharacters(message)),
 			setEditorText: (text) => this.setEditor(text),
@@ -101,6 +143,30 @@ export class ExtensionUi {
 			!pending.prompt.options.includes(response.value)
 		) {
 			throw new Error("选项不在请求列表中");
+		}
+		if (pending.prompt.kind === "form" && response.kind === "form") {
+			if (response.answers.length !== pending.prompt.questions.length) {
+				throw new Error("应答题目数量与请求不一致");
+			}
+			pending.prompt.questions.forEach((question, index) => {
+				const answer = response.answers[index];
+				if (answer === undefined || answer.id !== question.id) {
+					throw new Error("应答题目与请求顺序不一致");
+				}
+				if (!question.multiple && answer.selections.length > 1) {
+					throw new Error("单选题只能提交一个选项");
+				}
+				if (answer.custom !== undefined && answer.custom.length > 0) {
+					if (question.allowCustom !== true) throw new Error("请求不允许自定义答案");
+					if (!question.multiple && answer.selections.length > 0) {
+						throw new Error("单选题不能同时提交选项与自定义答案");
+					}
+				}
+				const labels = question.choices.map((choice) => choice.label);
+				if (answer.selections.some((value) => !labels.includes(value))) {
+					throw new Error("选项不在请求列表中");
+				}
+			});
 		}
 		pending.finish(response);
 		return true;

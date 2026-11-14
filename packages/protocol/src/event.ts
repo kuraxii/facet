@@ -5,6 +5,7 @@
  * run_end 之后仍可能有重试与排队工作，需要等待 settled 才能判定会话不再自动继续。
  */
 import type { ToolOutput } from "./content.ts";
+import type { ExtensionUiState, SessionInitialization } from "./extension-ui.ts";
 import type { Message } from "./message.ts";
 import type { ModelInfo, ThinkingLevel } from "./model.ts";
 import type { EntryKind, Maintenance, TurnPhase } from "./session.ts";
@@ -17,6 +18,8 @@ export type DeltaKind = "text" | "thinking" | "toolCall";
 
 /** 会话事件。 */
 export type SessionEvent =
+	| { type: "initialized"; initialization: SessionInitialization }
+	| { type: "ui"; ui: ExtensionUiState }
 	/** 阶段或维护动作发生变化 */
 	| { type: "phase"; phase: TurnPhase; maintenance: Maintenance | undefined }
 	/** 一次底层运行开始 */

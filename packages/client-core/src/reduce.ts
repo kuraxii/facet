@@ -48,6 +48,10 @@ function unhandled(value: never): never {
 /** 归约一条会话通道动作。对话动作原样返回。 */
 export function reduceSession(view: SessionView, action: Action): SessionView {
 	switch (action.type) {
+		case "session/initialized":
+			return { ...view, state: { ...view.state, initialization: action.initialization } };
+		case "session/uiChanged":
+			return { ...view, state: { ...view.state, extensionUi: action.ui } };
 		case "session/phase":
 			return { ...view, state: { ...view.state, phase: action.phase, maintenance: action.maintenance } };
 		case "session/usageChanged":
@@ -78,6 +82,7 @@ export function reduceSession(view: SessionView, action: Action): SessionView {
 		case "session/queueCleared":
 		case "session/compact":
 			return view;
+		case "chat/inputHandled":
 		case "chat/messageAppended":
 		case "chat/messageUpdated":
 		case "chat/delta":
@@ -201,9 +206,12 @@ export function reduceChat(view: ChatView, action: Action): ChatView {
 		case "chat/branchMoved":
 			return view;
 		// 发出消息与中止请求都由主机回过来,这里不需要改视图
+		case "chat/inputHandled":
 		case "chat/turnStarted":
 		case "chat/turnCancelled":
 			return view;
+		case "session/initialized":
+		case "session/uiChanged":
 		case "session/phase":
 		case "session/modelChanged":
 		case "session/thinkingLevelChanged":

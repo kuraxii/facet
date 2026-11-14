@@ -62,6 +62,12 @@ class FakeAgent implements HubAgent {
 		this.file = file;
 	}
 
+	async initialize(): Promise<void> {}
+	respondUi(): boolean {
+		return false;
+	}
+	cancelUi(): void {}
+
 	get isBusy(): boolean {
 		return this.busy;
 	}

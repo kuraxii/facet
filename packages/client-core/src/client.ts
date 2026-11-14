@@ -33,6 +33,7 @@ import type {
 	SessionSummary,
 	SlashCommand,
 	ThinkingLevel,
+	UiResponse,
 } from "@facet/protocol";
 import { makeChannel, parseChannel, sessionsChannelFor } from "@facet/protocol";
 import { debugLog } from "./log.ts";
@@ -617,7 +618,7 @@ export class SessionClient {
 	async refreshSession(): Promise<void> {
 		const opened = this.requireOpened();
 		const snapshot = await this.transport.request("snapshot", { sessionId: opened.sessionId });
-		this.state.ensureSession(opened.sessionChannel, snapshot);
+		if (this.opened === opened) this.state.ensureSession(opened.sessionChannel, snapshot);
 	}
 
 	/**
@@ -682,10 +683,11 @@ export class SessionClient {
 	 * 界面在主机把这条用户消息放进对话之后才算发出:那之前草稿留在输入框,被拒时用户可以
 	 * 直接改或重发。
 	 */
-	send(text: string): number {
+	send(text: string, streamingBehavior?: "steer" | "followUp"): number {
 		const clientSeq = this.transport.dispatch(this.requireOpened().chatChannel, {
 			type: "chat/turnStarted",
 			text,
+			...(streamingBehavior === undefined ? {} : { streamingBehavior }),
 		});
 		this.pendingSend = { clientSeq, text, kind: "turn" };
 		return clientSeq;
@@ -727,14 +729,20 @@ export class SessionClient {
 		if (opened === undefined || pending === undefined) {
 			return;
 		}
+		const handled =
+			frame.action.type === "chat/inputHandled" &&
+			frame.channel === opened.chatChannel &&
+			frame.origin?.clientId === this.handshake?.clientId &&
+			frame.origin?.clientSeq === pending.clientSeq;
 		const accepted =
-			pending.kind === "turn"
+			handled ||
+			(pending.kind === "turn"
 				? frame.channel === opened.chatChannel &&
 					frame.action.type === "chat/messageAppended" &&
 					frame.action.message.role === "user"
 				: frame.channel === opened.sessionChannel &&
 					frame.action.type === "session/queueChanged" &&
-					[...frame.action.steering, ...frame.action.followUp].includes(pending.text);
+					[...frame.action.steering, ...frame.action.followUp].includes(pending.text));
 		if (!accepted) {
 			return;
 		}
@@ -799,6 +807,19 @@ export class SessionClient {
 	 */
 	cancel(): number {
 		return this.transport.dispatch(this.requireOpened().chatChannel, { type: "chat/turnCancelled" });
+	}
+
+	/** 应答绑定发起时的会话；过期应答重取快照，使弹窗及时关闭。 */
+	async respondUi(
+		requestId: string,
+		response: UiResponse,
+		sessionId = this.requireOpened().sessionId,
+	): Promise<boolean> {
+		const opened = this.requireOpened();
+		if (opened.sessionId !== sessionId) return false;
+		const { accepted } = await this.transport.request("respondUi", { sessionId, requestId, response });
+		if (!accepted && this.opened === opened) await this.refreshSession();
+		return accepted;
 	}
 
 	/** 会话里能用的命令：界面自带的几条，加上扩展命令、提示词模板与技能。 */

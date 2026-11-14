@@ -45,6 +45,8 @@ export interface ComposerProps {
 	shiftEnterToSend?: boolean;
 	/** 现在能不能发送：断开、只读、压缩中、停止中等情况下给出 true，按钮禁用，不额外显示说明 */
 	isBlocked?: boolean | undefined;
+	/** 是否允许停止；连接断开或只读时为 false。 */
+	canStop?: boolean;
 	/** 上下文用量，未估算出来时为空 */
 	contextUsage?: ContextUsage | undefined;
 	/** 是否正在压缩上下文 */
@@ -119,6 +121,7 @@ export function Composer({
 	onThinkingLevelChange,
 	shiftEnterToSend = false,
 	isBlocked,
+	canStop = activity === "running",
 	contextUsage,
 	isCompacting = false,
 	canCompact = true,
@@ -439,7 +442,7 @@ export function Composer({
 							type="button"
 							className="send is-stop"
 							onClick={onStop}
-							disabled={activity !== "running"}
+							disabled={!canStop || activity === "stopping"}
 							aria-label={activity === "stopping" ? "停止中" : "停止"}
 							title={activity === "stopping" ? "正在停止" : "停止这一轮"}
 						>

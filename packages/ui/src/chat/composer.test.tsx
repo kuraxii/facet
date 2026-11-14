@@ -149,6 +149,26 @@ describe("模型与思考档位芯片", () => {
 });
 
 describe("发送受阻", () => {
+	it("等待扩展询问时停止可用，只读与断线时禁用停止", () => {
+		for (const canStop of [true, false]) {
+			const html = renderToStaticMarkup(
+				createElement(Composer, {
+					value: "已有草稿",
+					onChange: () => {},
+					onSend: () => {},
+					onStop: () => {},
+					activity: "running",
+					model: undefined,
+					thinkingLevel: undefined,
+					isBlocked: true,
+					canStop,
+				}),
+			);
+			expect(html).toContain("send is-stop");
+			expect(/class="send is-stop"[^>]*disabled/.test(html)).toBe(!canStop);
+		}
+	});
+
 	it("受阻时只禁用发送，不显示说明", () => {
 		const html = renderToStaticMarkup(
 			createElement(Composer, {

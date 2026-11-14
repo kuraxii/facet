@@ -92,6 +92,9 @@ class FakeTransport implements SessionTransport {
 	/** 为真时订阅按主机不认识这个会话报错,模拟主机重启过 */
 	unknownSession = false;
 	entriesAfterGate: Promise<void> | undefined;
+	respondUiGate: Promise<void> | undefined;
+	snapshotGate: Promise<void> | undefined;
+	uiAccepted = true;
 
 	constructor(entryCount: number) {
 		this.entries = Array.from({ length: entryCount }, (_, index) => ({
@@ -118,6 +121,8 @@ class FakeTransport implements SessionTransport {
 				}
 				case "forkSession":
 					return { ...snapshot(), id: "s2", file: "/tmp/s2.jsonl" };
+				case "respondUi":
+					return { accepted: this.uiAccepted };
 				case "snapshot":
 					return snapshot();
 				case "availableModels":
@@ -194,6 +199,8 @@ class FakeTransport implements SessionTransport {
 		if (method === "entriesAfter") {
 			await this.entriesAfterGate;
 		}
+		if (method === "respondUi") await this.respondUiGate;
+		if (method === "snapshot") await this.snapshotGate;
 		return result as RequestResults[M];
 	}
 
@@ -222,6 +229,16 @@ class FakeTransport implements SessionTransport {
 			serverSeq: this.lastSeq.get(channel) ?? 0,
 			origin: { clientId: "c", clientSeq },
 			rejectionReason: reason,
+		});
+	}
+
+	handled(clientSeq: number, clientId = "c"): void {
+		this.listener?.({
+			type: "action",
+			channel: CHAT,
+			action: { type: "chat/inputHandled" },
+			serverSeq: this.lastSeq.get(CHAT) ?? 0,
+			origin: { clientId, clientSeq },
 		});
 	}
 
@@ -1299,6 +1316,110 @@ describe("回退", () => {
 		expect(after).toBeGreaterThan(before);
 		// 清空之后重新装载，条目不会叠加
 		expect(client.chatView()?.items).toHaveLength(25);
+	});
+});
+
+describe("扩展交互状态", () => {
+	it("应答明确定位会话与请求，不提前移除待答状态", async () => {
+		const { client, transport } = createClient(0);
+		await client.openSession("/tmp/s1.jsonl");
+		const ui = { prompts: [{ kind: "input" as const, requestId: "u1", title: "路径" }] };
+		transport.emit(SESSION, { type: "session/uiChanged", ui });
+		expect(await client.respondUi("u1", { kind: "input", value: "  完整内容  " })).toBe(true);
+		expect(transport.calls.at(-1)).toEqual({
+			method: "respondUi",
+			params: { sessionId: "s1", requestId: "u1", response: { kind: "input", value: "  完整内容  " } },
+		});
+		expect(client.sessionView()?.state.extensionUi).toEqual(ui);
+		transport.emit(SESSION, { type: "session/uiChanged", ui: { prompts: [] } });
+		expect(client.sessionView()?.state.extensionUi.prompts).toEqual([]);
+	});
+
+	it("重复 UI 帧不覆盖新状态，初始化与维护动作分别更新", async () => {
+		const { client, transport } = createClient(0);
+		await client.openSession("/tmp/s1.jsonl");
+		transport.emit(SESSION, {
+			type: "session/phase",
+			phase: "running",
+			maintenance: {
+				kind: "compaction",
+				reason: "manual",
+				tokensBefore: undefined,
+				estimatedTokensAfter: undefined,
+			},
+		});
+		transport.emit(
+			SESSION,
+			{
+				type: "session/uiChanged",
+				ui: { prompts: [{ kind: "confirm", requestId: "u1", title: "确认", message: "内容" }] },
+			},
+			2,
+		);
+		transport.emit(SESSION, { type: "session/uiChanged", ui: { prompts: [] } }, 3);
+		transport.emit(
+			SESSION,
+			{ type: "session/uiChanged", ui: { prompts: [{ kind: "input", requestId: "u1", title: "旧请求" }] } },
+			2,
+		);
+		transport.emit(SESSION, { type: "session/initialized", initialization: { kind: "ready" } }, 4);
+		expect(client.sessionView()?.state.extensionUi.prompts).toEqual([]);
+		expect(client.sessionView()?.state.maintenance?.kind).toBe("compaction");
+	});
+
+	it("应答期间切换会话，不用旧响应刷新新会话", async () => {
+		const { client, transport } = createClient(0);
+		await client.openSession("/tmp/s1.jsonl");
+		let resolve!: () => void;
+		transport.respondUiGate = new Promise<void>((done) => {
+			resolve = done;
+		});
+		transport.uiAccepted = false;
+		const response = client.respondUi("u1", { kind: "cancel" }, "s1");
+		await client.switchSession("/tmp/s2.jsonl");
+		const before = transport.calls.length;
+		resolve();
+		expect(await response).toBe(false);
+		expect(transport.calls).toHaveLength(before);
+		expect(client.current?.sessionId).toBe("s2");
+		expect(await client.respondUi("u1", { kind: "cancel" }, "s1")).toBe(false);
+	});
+
+	it("过期应答重新获取快照，快照期间切换会话不恢复旧视图", async () => {
+		const { client, transport } = createClient(0);
+		await client.openSession("/tmp/s1.jsonl");
+		transport.uiAccepted = false;
+		let resolve!: () => void;
+		transport.snapshotGate = new Promise<void>((done) => {
+			resolve = done;
+		});
+		const response = client.respondUi("u1", { kind: "cancel" });
+		await vi.waitFor(() => expect(transport.calls.at(-1)?.method).toBe("snapshot"));
+		await client.switchSession("/tmp/s2.jsonl");
+		resolve();
+		expect(await response).toBe(false);
+		expect(client.sessionView()?.channel).toBe("session:/s2");
+		expect(client.store.sessionView(SESSION)).toBeUndefined();
+	});
+
+	it("扩展消费回执只确认同一端的同一次发送，回执不增加对话条目", async () => {
+		const { client, transport } = createClient(0);
+		await client.openSession("/tmp/s1.jsonl");
+		const sent = vi.fn();
+		client.onSent(sent);
+		const seq = client.send("/ask", "steer");
+		expect(transport.dispatched.at(-1)?.action).toEqual({
+			type: "chat/turnStarted",
+			text: "/ask",
+			streamingBehavior: "steer",
+		});
+		transport.handled(seq, "other");
+		transport.handled(seq + 1);
+		expect(sent).not.toHaveBeenCalled();
+		transport.handled(seq);
+		transport.handled(seq);
+		expect(sent).toHaveBeenCalledExactlyOnceWith("/ask");
+		expect(client.chatView()?.items).toEqual([]);
 	});
 });
 

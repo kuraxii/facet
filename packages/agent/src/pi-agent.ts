@@ -18,15 +18,18 @@ import type {
 	QueuedInput,
 	SessionEvent,
 	SessionEventListener,
+	SessionInitialization,
 	SessionSnapshot,
 	SessionStats,
 	SlashCommand,
 	ThinkingLevel,
 	ToolInfo,
 	TurnPhase,
+	UiResponse,
 } from "@facet/protocol";
 import { toMessage, toMessages, toModelInfo } from "./convert.ts";
 import { nextTurnState, type TurnState, toSessionEvents } from "./events.ts";
+import type { ExtensionUi } from "./extension-ui.ts";
 import { pageOf } from "./paging.ts";
 import type { ModelMutationOptions, PromptOptions } from "./types.ts";
 
@@ -42,6 +45,10 @@ export interface PiAgentContext {
 	extensionIssues?: string[];
 	/** 内部错误上报，主要是事件监听器抛出的错误 */
 	onError?: (error: unknown) => void;
+	/** 当前会话的交互请求所有者。 */
+	ui?: ExtensionUi;
+	/** 扩展初始化入口，登记之后才启动。 */
+	initialize?: () => Promise<void>;
 }
 
 /** 把持久化条目转成对外条目，只保留界面需要的字段。 */
@@ -118,6 +125,11 @@ export class PiAgent {
 	/** 与本轮并行的维护动作 */
 	private maintenance: Maintenance | undefined;
 	private disposed = false;
+	private readonly ui: ExtensionUi | undefined;
+	private readonly initializeExtensions: (() => Promise<void>) | undefined;
+	private initialization: SessionInitialization;
+	private initializationPromise: Promise<void> | undefined;
+	private readonly stopUi: (() => void) | undefined;
 
 	/** 构造后立即订阅，保证首次 prompt 之前的运行不会漏事件。 */
 	constructor(context: PiAgentContext) {
@@ -126,6 +138,10 @@ export class PiAgent {
 		this.modelFallbackMessage = context.modelFallbackMessage;
 		this.extensionIssues = context.extensionIssues ?? [];
 		this.onError = context.onError;
+		this.ui = context.ui;
+		this.initializeExtensions = context.initialize;
+		this.initialization = context.initialize === undefined ? { kind: "ready" } : { kind: "starting" };
+		this.stopUi = this.ui?.subscribe((ui) => this.emit({ type: "ui", ui }));
 		this.id = this.session.sessionId;
 		this.cwd = this.session.sessionManager.getCwd();
 		this.unsubscribeSession = this.session.subscribe((event) => {
@@ -179,7 +195,49 @@ export class PiAgent {
 
 	/** 会话仍在推进:本轮未回到 idle,或有维护动作在跑。 */
 	get isBusy(): boolean {
-		return this.phase !== "idle" || this.maintenance !== undefined;
+		return (
+			this.initialization.kind === "starting" ||
+			this.phase !== "idle" ||
+			this.maintenance !== undefined ||
+			(this.ui?.snapshot().prompts.length ?? 0) > 0
+		);
+	}
+
+	/** 初始化扩展；可在等待交互时继续订阅与应答，多次调用共用一次执行。 */
+	initialize(): Promise<void> {
+		this.assertAlive();
+		if (this.initializeExtensions === undefined) return Promise.resolve();
+		this.initializationPromise ??= this.runInitialization();
+		return this.initializationPromise;
+	}
+
+	private async runInitialization(): Promise<void> {
+		try {
+			await this.initializeExtensions?.();
+			this.assertAlive();
+			this.initialization = { kind: "ready" };
+		} catch (error) {
+			if (this.disposed) return;
+			this.initialization = {
+				kind: "failed",
+				message: error instanceof Error ? error.message : String(error),
+			};
+			this.ui?.cancel();
+			this.emit({ type: "initialized", initialization: this.initialization });
+			throw error;
+		}
+		this.emit({ type: "initialized", initialization: this.initialization });
+	}
+
+	/** 独立于常规操作队列消费应答，防止等待交互的操作阻塞自身。 */
+	respondUi(requestId: string, response: UiResponse): boolean {
+		this.assertAlive();
+		return this.ui?.respond(requestId, response) ?? false;
+	}
+
+	/** 取消当前操作留下的全部交互。 */
+	cancelUi(): void {
+		this.ui?.cancel();
 	}
 
 	/** 订阅事件，返回取消订阅函数。多个订阅方互不影响。 */
@@ -201,7 +259,9 @@ export class PiAgent {
 	 * 也能落在运行期而不必排在回合之后。
 	 */
 	async prompt(text: string, options: PromptOptions = {}): Promise<PromptDisposition> {
+		await this.initialize();
 		this.assertAlive();
+		this.ui?.resume();
 		if (this.session.isStreaming && !options.streamingBehavior) {
 			throw new Error("prompt rejected: the session is streaming and no streamingBehavior was given");
 		}
@@ -218,6 +278,10 @@ export class PiAgent {
 			images: options.images,
 			streamingBehavior: options.streamingBehavior,
 			preflightResult: (value) => {
+				if (value === "started" && this.ui?.isCancelled) {
+					// input hook 等待期间尚无模型运行；启动回执处再次传递停止信号。
+					void this.session.abort();
+				}
 				disposition = value;
 				acceptRun(value);
 			},
@@ -233,13 +297,13 @@ export class PiAgent {
 		]);
 		if (first.kind === "failed") {
 			// 没能进入运行,阶段退回空闲
-			this.applyTurnState({ phase: "idle", maintenance: this.maintenance });
+			if (!this.session.isStreaming) this.applyTurnState({ phase: "idle", maintenance: this.maintenance });
 			if (first.error === undefined) {
 				return disposition ?? "started";
 			}
 			throw first.error;
 		}
-		if (first.value !== "started") {
+		if (first.value !== "started" && !this.session.isStreaming) {
 			// 被扩展消费或排队,这一轮没有开始
 			this.applyTurnState({ phase: "idle", maintenance: this.maintenance });
 		}
@@ -253,11 +317,13 @@ export class PiAgent {
 
 	/** 排队一条消息，在当前助手回合的工具调用执行完后插入。 */
 	async steer(text: string, images?: ImageBlock[]): Promise<QueueDisposition> {
+		this.ui?.resume();
 		return await this.session.steer(text, images);
 	}
 
 	/** 排队一条消息，在本轮全部工作完成后插入。 */
 	async followUp(text: string, images?: ImageBlock[]): Promise<QueueDisposition> {
+		this.ui?.resume();
 		return await this.session.followUp(text, images);
 	}
 
@@ -267,6 +333,7 @@ export class PiAgent {
 	 * 请求发出后先进入 stopping,等 pi 的 settled 把阶段收回 idle;没有可中止的运行时不改动阶段。
 	 */
 	async abort(): Promise<void> {
+		this.cancelUi();
 		const wasActive = this.phase === "running" || this.phase === "starting";
 		if (wasActive) {
 			this.applyTurnState({ phase: "stopping", maintenance: this.maintenance });
@@ -364,6 +431,8 @@ export class PiAgent {
 
 	/** 手动压缩上下文，可附带摘要指令。 */
 	async compact(customInstructions?: string): Promise<void> {
+		await this.initialize();
+		this.ui?.resume();
 		await this.session.compact(customInstructions);
 	}
 
@@ -390,6 +459,7 @@ export class PiAgent {
 	 * 分支。返回这条消息的文本，供界面放回输入框。
 	 */
 	async revertTo(entryId: string): Promise<string | undefined> {
+		this.ui?.resume();
 		const result = await this.session.navigateTree(entryId);
 		if (result.cancelled) {
 			throw new Error("回退被取消");
@@ -522,6 +592,8 @@ export class PiAgent {
 	snapshot(): SessionSnapshot {
 		return {
 			id: this.id,
+			initialization: this.initialization,
+			extensionUi: this.ui?.snapshot(),
 			file: this.file,
 			cwd: this.cwd,
 			name: this.name,
@@ -552,6 +624,8 @@ export class PiAgent {
 			return;
 		}
 		this.disposed = true;
+		this.ui?.dispose();
+		this.stopUi?.();
 		this.unsubscribeSession();
 		this.listeners.clear();
 		this.session.dispose();

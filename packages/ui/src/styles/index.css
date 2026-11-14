@@ -39,6 +39,21 @@
 	--context-divider-padding: 4px;
 	--context-divider-line-height: 1px;
 	--context-summary-gap: 8px;
+	/* 扩展弹窗边缘到视口边缘的最小距离。 */
+	--extension-window-inset: 24px;
+	/* 弹窗边框到内容的距离，以及弹窗外侧宽度。 */
+	--extension-dialog-padding: 24px;
+	--extension-dialog-width: 560px;
+	/* 相邻表单区域之间的距离。 */
+	--extension-dialog-gap: 12px;
+	/* 输入框边缘到文本的距离，以及输入框与弹窗的圆角半径。 */
+	--extension-input-inset: 10px;
+	--extension-input-radius: 8px;
+	--extension-dialog-radius: 12px;
+	/* 多行输入框上下边缘之间的最小距离。 */
+	--extension-editor-height: 240px;
+	/* 控件与预览卡片的边框宽度。 */
+	--extension-border-width: 1px;
 	--status-dot: 6px;
 	--status-dot-failed: 8px;
 	--status-ring-stroke: 1.5px;
@@ -3376,6 +3391,83 @@ svg.fl {
 	border-radius: 20px;
 	background: var(--card);
 	box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+}
+
+.extension-dialog {
+	margin: auto;
+	width: min(var(--extension-dialog-width), calc(100vw - var(--extension-window-inset) * 2));
+	max-height: calc(100dvh - var(--extension-window-inset) * 2);
+	padding: var(--extension-dialog-padding);
+	border-width: var(--extension-border-width);
+	border-radius: var(--extension-dialog-radius);
+	color: var(--t1);
+	overflow: auto;
+}
+
+.extension-dialog::backdrop {
+	background: rgba(0, 0, 0, 0.55);
+}
+
+.extension-dialog form,
+.extension-preview {
+	display: grid;
+	gap: var(--extension-dialog-gap);
+}
+
+:where(.extension-dialog .dialog-head, .extension-dialog .dialog-actions),
+:where(.extension-preview h3, .extension-preview p),
+.extension-message {
+	margin: 0;
+}
+
+:where(.extension-dialog .dialog-title, .extension-preview h3) {
+	overflow-wrap: anywhere;
+}
+
+.extension-message {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.extension-fields {
+	display: grid;
+	gap: var(--extension-dialog-gap);
+}
+
+.extension-input,
+.extension-options {
+	width: 100%;
+	min-width: 0;
+	padding: var(--extension-input-inset);
+	border: var(--extension-border-width) solid var(--line2);
+	border-radius: var(--extension-input-radius);
+	background: var(--card2);
+	color: var(--t1);
+	font: inherit;
+}
+
+.extension-options option {
+	padding: var(--extension-input-inset);
+}
+
+.extension-editor {
+	min-height: var(--extension-editor-height);
+	resize: vertical;
+}
+
+.extension-preview {
+	position: fixed;
+	right: var(--extension-window-inset);
+	bottom: var(--extension-window-inset);
+	z-index: 100;
+	max-width: calc(100vw - var(--extension-window-inset) * 2);
+	max-height: calc(100dvh - var(--extension-window-inset) * 2);
+	padding: var(--extension-dialog-padding);
+	border: var(--extension-border-width) solid var(--line2);
+	border-radius: var(--extension-dialog-radius);
+	background: var(--card);
+	color: var(--t1);
+	overflow: auto;
 }
 
 .dialog-head {

@@ -2,9 +2,9 @@
 
 本文件记录 `packages/agent` 与 pi SDK 之间还没接上的部分,逐项的任务口径在 `todo.md`。
 
-已经接上的有:会话创建与分叉、`subscribe` 全量事件、`steer` / `followUp` 排队、`compact` 与按需压缩、模型与思考档位、扩展命令与提示词模板与技能（`commands()`）、项目信任、`navigateTree`（回退即挪分支指针）、`getContextUsage`、`setActiveToolsByName`。
+已经接上的有:会话创建与分叉、`subscribe` 全量事件、`steer` / `followUp` 排队、`compact` 与按需压缩、模型与思考档位、扩展命令与提示词模板与技能（`commands()`）、项目信任、`navigateTree`（回退即挪分支指针）、`getContextUsage`、`setActiveToolsByName`、`bindExtensions({ uiContext })` 的选择与确认与输入与多行编辑、通知与输入框写入。
 
-对应关系:扩展交互桥→「pi 扩展交互」,图片附件→「图片附件与预览」,工具清单与加载错误→「工具清单与开关」,OAuth→「OAuth 登录」,MCP 配置管理→同名那条。
+对应关系:图片附件→「图片附件与预览」,工具清单与加载错误→「工具清单与开关」,OAuth→「OAuth 登录」,MCP 配置管理→同名那条。
 
 ## 一、SDK 有能力,界面没有入口
 
@@ -17,8 +17,8 @@
 
 | 项 | 说明 | 对应需求 |
 |---|---|---|
-| 扩展交互桥 | `bindExtensions({ uiContext })` 的 `uiContext` 全仓库没有一处赋值,SDK 回落到 `noOpUIContext`,扩展调 `ctx.ui.select / confirm / input / editor / custom` 静默拿到空值。SDK 已经抛出 `ui_prompt_start` / `ui_prompt_end` 扩展事件,接上就能做浮层 | FR-EXT-01、FR-EXT-04 |
 | 扩展的命令上下文 | `commandContextActions`（`waitForIdle` / `newSession` / `fork` / `navigateTree` / `reload`）与 `shutdownHandler` 都没提供,扩展发不起这些动作 | FR-EXT-01 |
+| 组件式扩展界面 | `custom()`、组件式 `setWidget()`、`setHeader()`、`setFooter()` 与终端输入需要 TUI 组件,当前按 rpc 降级返回空值 | FR-EXT-04 |
 | 扩展与 MCP 的加载错误 | `PiAgent.issues` 收集 `extensionsResult.errors/warnings`,没有任何消费者,只进服务器日志;MCP 服务器起不来时界面看不出异常 | FR-EXT-16、FR-EXT-17 |
 | OAuth 登录 | `credential-store` 认识 `type: "oauth"`,但唯一写入路径固定写 `{ type: "api_key" }`;`resetApiProviders` 未用 | FR-SET-03 |
 | MCP 配置管理 | 只从 `~/.pi/agent-dev/mcp.json` 读,没有界面,也没有服务器与工具状态 | FR-EXT-14 |
@@ -43,7 +43,6 @@ facet 只读写自己的 `~/.local/share/facet-dev/settings.json`,从不碰 `~/.
 
 ## 建议顺序
 
-1. **扩展交互桥**(FR-EXT-01):`uiContext` 接上选择、输入、多行编辑与确认,支持取消与中止;`ui_prompt_start/end` 事件已经现成。
-2. **图片附件**(FR-COMPOSE-09):协议与 agent 都通,只差输入区的读文件、转 base64、带上 `images`。
-3. **加载错误与工具清单**(FR-EXT-16、FR-EXT-17):把 `issues` 与 `tools()` 挂进会话快照,出错时在会话里给一行事实内容,设置里给工具清单与开关。
-4. **OAuth**(FR-SET-03)与 **MCP 配置管理**(FR-EXT-14):体量较大,排在后面。
+1. **图片附件**(FR-COMPOSE-09):协议与 agent 都通,只差输入区的读文件、转 base64、带上 `images`。
+2. **加载错误与工具清单**(FR-EXT-16、FR-EXT-17):把 `issues` 与 `tools()` 挂进会话快照,出错时在会话里给一行事实内容,设置里给工具清单与开关。
+3. **OAuth**(FR-SET-03)与 **MCP 配置管理**(FR-EXT-14):体量较大,排在后面。

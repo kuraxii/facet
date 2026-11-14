@@ -31,6 +31,7 @@ import {
 	clampSidebarWidth,
 	DEFAULT_DARK_THEME,
 	EmptyState,
+	ExtensionDialog,
 	endpointLabel,
 	FilesPane,
 	HostSwitcher,
@@ -998,15 +999,27 @@ export function App() {
 	 * 依次看连接、阶段与凭证：任何一条不满足都不该把消息送出去，草稿留在输入框里。界面上只
 	 * 禁用发送按钮，不写一行说明。
 	 */
+	const draftKey = activeFile ?? NEW_DRAFT_KEY;
+	const draft = drafts[draftKey] ?? "";
+	const draftCommand = parseCommand(draft.trim());
+	const isExtensionCommand =
+		draftCommand !== undefined &&
+		commands.some((item) => item.source === "extension" && item.name === draftCommand.name);
 	const isBlocked =
 		!isOnline ||
 		host?.role === "viewer" ||
 		activity === "compacting" ||
 		activity === "stopping" ||
-		(session !== undefined && session.state.model === undefined) ||
-		(session !== undefined && providerAuth[session.state.model?.provider ?? ""] === false);
+		(session !== undefined && session.state.initialization.kind !== "ready") ||
+		(session?.state.extensionUi.prompts.length ?? 0) > 0 ||
+		(!isExtensionCommand &&
+			(session?.state.model === undefined || providerAuth[session.state.model.provider] === false));
 	const queued = session?.state.queued ?? { steering: [], followUp: [] };
-	const canFork = activity === "idle" && session?.state.maintenance === undefined;
+	const canFork =
+		activity === "idle" &&
+		session?.state.maintenance === undefined &&
+		session?.state.initialization.kind === "ready" &&
+		session.state.extensionUi.prompts.length === 0;
 
 	/**
 	 * 跑一次会话切换类操作。
@@ -1157,10 +1170,6 @@ export function App() {
 		});
 	}, [hostList.activeEndpoint, openSession, refreshCatalog, refreshProjects, refreshSessions, attachHost]);
 
-	/** 当前草稿落在哪个键：打开的会话按文件路径分开存，没有会话时存到新会话页面。 */
-	const draftKey = activeFile ?? NEW_DRAFT_KEY;
-	const draft = drafts[draftKey] ?? "";
-
 	/** 改当前草稿。延迟写入本地保存，切换会话时不丢。 */
 	const updateDraft = useCallback(
 		(change: string | ((current: string) => string)) => {
@@ -1177,6 +1186,25 @@ export function App() {
 		},
 		[draftKey],
 	);
+
+	const editorUpdate = session?.state.extensionUi.editor;
+	const editorSource =
+		host === undefined || session === undefined
+			? undefined
+			: `facet.extensionEditor.${host.hostId}.${session.channel}`;
+	const editorDraftKey = session?.state.file;
+	useEffect(() => {
+		if (
+			editorUpdate === undefined ||
+			editorSource === undefined ||
+			editorDraftKey === undefined ||
+			host?.role === "viewer"
+		)
+			return;
+		if (localStorage.getItem(editorSource) === editorUpdate.id) return;
+		setDrafts((current) => ({ ...current, [editorDraftKey]: editorUpdate.text }));
+		localStorage.setItem(editorSource, editorUpdate.id);
+	}, [editorUpdate, editorSource, editorDraftKey, host?.role]);
 
 	// 草稿写进本地保存，重启之后还在
 	useEffect(() => {
@@ -1254,7 +1282,14 @@ export function App() {
 		}
 		// 草稿留到主机确认再收,发送被拒时不用重打
 		if (activity === "running") {
-			client.enqueue(text);
+			if (
+				command !== undefined &&
+				commands.some((item) => item.source === "extension" && item.name === command.name)
+			) {
+				client.send(text, "steer");
+			} else {
+				client.enqueue(text);
+			}
 			return;
 		}
 		client.send(text);
@@ -1421,7 +1456,7 @@ export function App() {
 	// 换会话时重取命令清单：扩展、模板与技能都跟着会话走
 	const openedSessionId = session === undefined ? undefined : client.current?.snapshot.id;
 	useEffect(() => {
-		if (openedSessionId === undefined) {
+		if (openedSessionId === undefined || session?.state.initialization.kind !== "ready") {
 			setCommands([]);
 			return;
 		}
@@ -1441,8 +1476,16 @@ export function App() {
 		return () => {
 			cancelled = true;
 		};
-	}, [openedSessionId]);
+	}, [openedSessionId, session?.state.initialization.kind]);
 
+	const notices = [
+		...new Map(
+			[...(chat?.notices ?? []), ...(session?.state.extensionUi.notices ?? [])].map((notice) => [
+				`${notice.level}:${notice.message}`,
+				notice,
+			]),
+		).values(),
+	];
 	const transcript = useMemo(() => (chat ? toTranscript(chat) : []), [chat]);
 	const {
 		scrollRef,
@@ -1693,6 +1736,9 @@ export function App() {
 									)}
 									<div className="footer-column">
 										{errorBar}
+										{session.state.initialization.kind === "failed" ? (
+											<p className="dialog-error">{session.state.initialization.message}</p>
+										) : null}
 										<QueueStrip queued={queued} onClear={takeBackQueue} />
 										<Composer
 											value={draft}
@@ -1709,6 +1755,7 @@ export function App() {
 											onThinkingLevelChange={(level) => client.setThinkingLevel(level)}
 											shiftEnterToSend={settings.input.sendKey === "shiftEnter"}
 											isBlocked={isBlocked}
+											canStop={isOnline && host?.role !== "viewer"}
 											contextUsage={session.state.contextUsage}
 											isCompacting={activity === "compacting"}
 											canCompact={activity === "idle"}
@@ -1719,12 +1766,18 @@ export function App() {
 											}}
 										/>
 
-										{chat && chat.notices.length > 0 ? (
+										{notices.length > 0 ? (
 											<div className="notices">
-												{chat.notices.map((notice) => (
+												{notices.map((notice) => (
 													<span
 														key={`${notice.level}:${notice.message}`}
-														className={notice.level === "error" ? "chip is-error" : "chip"}
+														className={
+															notice.level === "error"
+																? "chip is-error"
+																: notice.level === "warning"
+																	? "chip is-warn"
+																	: "chip"
+														}
 													>
 														{notice.message}
 													</span>
@@ -1859,6 +1912,21 @@ export function App() {
 						onCreate={createProject}
 						onClose={() => setIsProjectDialogOpen(false)}
 					/>
+
+					{session?.state.extensionUi.prompts[0] === undefined ? null : (
+						<ExtensionDialog
+							key={`${host?.hostId}:${session.channel}:${session.state.extensionUi.prompts[0].requestId}`}
+							prompt={session.state.extensionUi.prompts[0]}
+							canRespond={isOnline && host?.role !== "viewer"}
+							onRespond={async (response) => {
+								await client.respondUi(
+									session.state.extensionUi.prompts[0]?.requestId ?? "",
+									response,
+									openedSessionId,
+								);
+							}}
+						/>
+					)}
 
 					{trustPrompt ? (
 						<TrustDialog

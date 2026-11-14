@@ -25,12 +25,14 @@ import {
 	type FacetSettings,
 	FrameDecoder,
 	type HelloFrame,
+	makeChannel,
 	PROTOCOL_VERSION,
 	parseChannel,
 	type RequestParams,
 	type ResponseFrame,
 	type ServerFrame,
 	type SessionSnapshot,
+	type UiResponse,
 } from "@facet/protocol";
 import { WebSocket, WebSocketServer } from "ws";
 import { AuditLog } from "./audit.ts";
@@ -84,6 +86,7 @@ const ADMIN_ONLY_REQUESTS = new Set<string>([
 
 /** 只读连接不能做的请求：会改会话或文件。 */
 const WRITE_REQUESTS = new Set<string>([
+	"respondUi",
 	"createSession",
 	"forkSession",
 	"renameSession",
@@ -96,7 +99,7 @@ const WRITE_REQUESTS = new Set<string>([
 ]);
 
 /** 当前主机已实现的能力。未列入的入口由端点隐藏。 */
-const BASE_CAPABILITIES: Capability[] = ["dispatch", "tools", "compaction"];
+const BASE_CAPABILITIES: Capability[] = ["dispatch", "tools", "compaction", "extensionUi"];
 
 /**
  * 本次连接能用的能力。
@@ -330,16 +333,31 @@ async function openSession(context: EndpointContext, params: unknown): Promise<S
 }
 
 /** 应用一条端点派发的动作。返回即表示已受理,主机产生的动作随后从通道推出。 */
-async function applyAction(context: EndpointContext, channel: Channel, action: Action): Promise<void> {
+async function applyAction(
+	context: EndpointContext,
+	channel: Channel,
+	action: Action,
+): Promise<"handled" | undefined> {
 	const parsed = parseChannel(channel);
 	if (!parsed) {
 		throw new RequestError("unknown_channel", `unsupported channel: ${channel}`);
+	}
+	// UI 等待可能占用串行队列，停止入口必须直接解除等待。
+	if (action.type === "chat/turnCancelled") {
+		const lease = context.hub.hold(parsed.id);
+		try {
+			await context.hub.agent(parsed.id).abort();
+		} finally {
+			lease.release();
+		}
+		return;
 	}
 	// 回退要挪分支指针,还得往外广播,自己持有会话,不走下面那段串行执行
 	if (action.type === "chat/revertTo") {
 		await context.hub.revertTo(parsed.id, action.entryId);
 		return;
 	}
+	let handled = false;
 	// 同一会话的动作串行执行,执行期间持有会话,不会被空闲回收
 	await context.hub.withSession(parsed.id, async (agent) => {
 		switch (action.type) {
@@ -348,13 +366,11 @@ async function applyAction(context: EndpointContext, channel: Channel, action: A
 					throw new RequestError("rejected", "session is running, streamingBehavior is required");
 				}
 				// prompt 在运行开始后返回,这里不会挂到整轮结束
-				await agent.prompt(action.text, {
-					images: action.images,
-					streamingBehavior: action.streamingBehavior,
-				});
-				return;
-			case "chat/turnCancelled":
-				await agent.abort();
+				handled =
+					(await agent.prompt(action.text, {
+						images: action.images,
+						streamingBehavior: action.streamingBehavior,
+					})) === "handled";
 				return;
 			case "session/compact":
 				// 压缩要读整条分支写摘要，与运行中的回合不能同时进行
@@ -365,9 +381,9 @@ async function applyAction(context: EndpointContext, channel: Channel, action: A
 				return;
 			case "session/pendingMessageSet":
 				if (action.kind === "steering") {
-					await agent.steer(action.text);
+					handled = (await agent.steer(action.text)) === "handled";
 				} else {
-					await agent.followUp(action.text);
+					handled = (await agent.followUp(action.text)) === "handled";
 				}
 				return;
 			case "session/queueCleared":
@@ -391,6 +407,7 @@ async function applyAction(context: EndpointContext, channel: Channel, action: A
 				throw new RequestError("unknown_method", `action is produced by the host: ${action.type}`);
 		}
 	});
+	return handled ? "handled" : undefined;
 }
 
 /**
@@ -435,6 +452,26 @@ function auditRemote(context: EndpointContext, connection: Connection, name: str
 	});
 }
 
+function parseUiResponse(value: unknown): UiResponse {
+	const source = asObject(value);
+	switch (source.kind) {
+		case "cancel":
+			return { kind: "cancel" };
+		case "confirm":
+			if (typeof source.confirmed !== "boolean")
+				throw new RequestError("bad_params", "confirmed must be a boolean");
+			return { kind: "confirm", confirmed: source.confirmed };
+		case "select":
+		case "input":
+		case "editor": {
+			if (typeof source.value !== "string") throw new RequestError("bad_params", "value must be a string");
+			return { kind: source.kind, value: source.value };
+		}
+		default:
+			throw new RequestError("bad_params", "unsupported UI response");
+	}
+}
+
 async function handleRequest(
 	context: EndpointContext,
 	connection: Connection,
@@ -451,6 +488,13 @@ async function handleRequest(
 		auditRemote(context, connection, method);
 	}
 	switch (method) {
+		// 不经过 withSession，正在等待这份应答的初始化或命令才能继续。
+		case "respondUi": {
+			const source = asObject(params);
+			const response = parseUiResponse(source.response);
+			const agent = context.hub.agent(requiredString(source, "sessionId"));
+			return { accepted: agent.respondUi(requiredString(source, "requestId"), response) };
+		}
 		case "listCommands": {
 			const source = asObject(params);
 			return { commands: await context.hub.commands(requiredString(source, "sessionId")) };
@@ -834,17 +878,31 @@ async function handleDispatch(context: EndpointContext, connection: Connection, 
 	}
 	// 受理后立即返回:动作的执行结果由通道上的动作反映,拒绝才回一个带原因的帧。
 	// 不等待执行完成,否则同一端连续发出的动作会被前一条阻塞。
-	void applyAction(context, channel, action).catch((error) => {
-		const failure = toProtocolError(error);
-		connection.send({
-			type: "action",
-			channel,
-			action,
-			serverSeq: context.hub.lastSeq(channel),
-			origin: { clientId: connection.clientId, clientSeq },
-			rejectionReason: failure.message,
-		} satisfies ActionFrame);
-	});
+	void applyAction(context, channel, action)
+		.then((result) => {
+			if (result !== "handled") return;
+			const parsed = parseChannel(channel);
+			if (parsed === undefined) return;
+			const chatChannel = makeChannel("chat", parsed.id);
+			connection.send({
+				type: "action",
+				channel: chatChannel,
+				action: { type: "chat/inputHandled" },
+				serverSeq: context.hub.lastSeq(chatChannel),
+				origin: { clientId: connection.clientId, clientSeq },
+			});
+		})
+		.catch((error) => {
+			const failure = toProtocolError(error);
+			connection.send({
+				type: "action",
+				channel,
+				action,
+				serverSeq: context.hub.lastSeq(channel),
+				origin: { clientId: connection.clientId, clientSeq },
+				rejectionReason: failure.message,
+			} satisfies ActionFrame);
+		});
 }
 
 /**

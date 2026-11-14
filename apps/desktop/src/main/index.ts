@@ -389,19 +389,19 @@ ipcMain.on("facet:host-close", (_event, id: number) => {
 /**
  * 主机的启动方式。
  *
- * 打包后优先用独立产物：`resources/host/bin/node` 是随包带的官方 Node，`lib/host.mjs` 是主机
- * 入口，跟桌面那份 Electron 运行时互不相干。没有产物时退回开发态的做法——用 Electron 自己的
- * 可执行文件以 Node 模式跑 `out/main/host.js`。
+ * 打包后优先用独立产物：`resources/server/bin/node` 是随包带的官方 Node，`lib/server.mjs` 是
+ * server 入口，跟桌面那份 Electron 运行时互不相干。没有产物时退回开发态的做法——用 Electron
+ * 自己的可执行文件以 Node 模式跑 `out/main/server.js`。
  */
 function resolveHostLaunch(): { command: string; args: string[]; env: NodeJS.ProcessEnv } {
-	const bundled = join(process.resourcesPath, "host");
+	const bundled = join(process.resourcesPath, "server");
 	const node = join(bundled, "bin", "node");
 	if (existsSync(node)) {
-		return { command: node, args: [join(bundled, "lib", "host.mjs")], env: {} };
+		return { command: node, args: [join(bundled, "lib", "server.mjs")], env: {} };
 	}
 	return {
 		command: process.execPath,
-		args: [join(app.getAppPath(), "out/main/host.js")],
+		args: [join(app.getAppPath(), "out/main/server.js")],
 		env: { ELECTRON_RUN_AS_NODE: "1" },
 	};
 }

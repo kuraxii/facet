@@ -40,7 +40,7 @@ import { FileAccessError, listDirectory, readTextFile, writeTextFile } from "./f
 import { gitDiff, gitStatus } from "./git.ts";
 import type { HostSource } from "./host-identity.ts";
 import { ProjectExistsError, ProjectNotFoundError, type ProjectStore } from "./project-store.ts";
-import { DisabledPtyBackend } from "./pty-host.ts";
+import { DisabledPtyBackend } from "./pty-server.ts";
 import { RevealFailedError, revealInFileManager } from "./reveal.ts";
 import {
 	type ActionSink,

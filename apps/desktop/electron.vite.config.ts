@@ -12,13 +12,13 @@ const PACKAGE = JSON.parse(readFileSync(fileURLToPath(new URL("package.json", im
 /**
  * 主进程入口：桌面本体与嵌入主机的独立入口各一个。
  *
- * `pty-host` 是主机再往下起的终端子进程，必须单独产出一个文件：它在自己的进程里加载
+ * `pty-server` 是主机再往下起的终端子进程，必须单独产出一个文件：它在自己的进程里加载
  * node-pty，崩溃与大量输出都关在里面。
  */
 const MAIN_ENTRIES = {
 	index: fileURLToPath(new URL("src/main/index.ts", import.meta.url)),
-	host: fileURLToPath(new URL("../../apps/server/src/main.ts", import.meta.url)),
-	"pty-host": fileURLToPath(new URL("../../apps/server/src/pty-host-child.ts", import.meta.url)),
+	server: fileURLToPath(new URL("../../apps/server/src/main.ts", import.meta.url)),
+	"pty-server": fileURLToPath(new URL("../../apps/server/src/pty-server-child.ts", import.meta.url)),
 };
 
 /**

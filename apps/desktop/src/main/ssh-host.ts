@@ -184,14 +184,14 @@ done
 /**
  * 在远端把没在跑的主机拉起来。
  *
- * 只在已经装了 facet 的机器上成立：位置就是包安装目录 `/opt/Facet/resources/host`（rpm 与
- * deb 都装在这里），里面有独立主机产物（`bin/node` + `lib/host.mjs`）。找不到就打 `none`，
- * 客户端据此报「这台机器上没有安装 facet」，不做任何上传与安装。起来之后日志写进数据目录的
- * host.log，进程 detached，SSH 断开也不带走它。
+ * 只在已经装了 facet 的机器上成立：位置就是包安装目录 `/opt/Facet/resources/server`（rpm 与
+ * deb 都装在这里），里面有独立 server 产物（`bin/node` + `lib/server.mjs`）。找不到就打
+ * `none`，客户端据此报「这台机器上没有安装 facet」，不做任何上传与安装。起来之后日志写进
+ * 数据目录的 server.log，进程 detached，SSH 断开也不带走它。
  */
 export const REMOTE_START_SCRIPT = `set -u
-install=/opt/Facet/resources/host
-if [ ! -x "$install/bin/node" ] || [ ! -f "$install/lib/host.mjs" ]; then
+install=/opt/Facet/resources/server
+if [ ! -x "$install/bin/node" ] || [ ! -f "$install/lib/server.mjs" ]; then
   install=""
 fi
 if [ "\${install:-}" = "" ]; then
@@ -201,9 +201,9 @@ fi
 data="\${FACET_DATA_DIR:-$HOME/.local/share/facet}"
 mkdir -p "$data" 2>/dev/null || true
 if command -v setsid >/dev/null 2>&1; then
-  setsid "$install/bin/node" "$install/lib/host.mjs" >>"$data/host.log" 2>&1 </dev/null &
+  setsid "$install/bin/node" "$install/lib/server.mjs" >>"$data/server.log" 2>&1 </dev/null &
 else
-  nohup "$install/bin/node" "$install/lib/host.mjs" >>"$data/host.log" 2>&1 </dev/null &
+  nohup "$install/bin/node" "$install/lib/server.mjs" >>"$data/server.log" 2>&1 </dev/null &
 fi
 printf 'started\n'
 `;

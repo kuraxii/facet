@@ -12,7 +12,7 @@ import { type HostIdentity, loadOrCreateHostId } from "./host-identity.ts";
 import { debugLog, setDebugLog } from "./log.ts";
 import { ProjectCatalog } from "./project-catalog.ts";
 import { ProjectStore } from "./project-store.ts";
-import { ChildPtyBackend } from "./pty-host.ts";
+import { ChildPtyBackend } from "./pty-server.ts";
 import { SessionHub } from "./session-hub.ts";
 import { SessionIndex } from "./session-index.ts";
 import { SessionsChannel } from "./sessions-channel.ts";
@@ -162,8 +162,8 @@ export type { ProjectSource } from "./project-catalog.ts";
 export { ProjectCatalog } from "./project-catalog.ts";
 export type { ProjectStoreOptions, StoredProject } from "./project-store.ts";
 export { ProjectExistsError, ProjectNotFoundError, ProjectStore } from "./project-store.ts";
-export type { PtyBackend, PtyHandle, PtySink, PtySpawnOptions } from "./pty-host.ts";
-export { ChildPtyBackend, DisabledPtyBackend } from "./pty-host.ts";
+export type { PtyBackend, PtyHandle, PtySink, PtySpawnOptions } from "./pty-server.ts";
+export { ChildPtyBackend, DisabledPtyBackend } from "./pty-server.ts";
 export type { ActionSink, HubAgent, Subscription } from "./session-hub.ts";
 export {
 	ChannelNotFoundError,

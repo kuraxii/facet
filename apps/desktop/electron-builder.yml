@@ -1,7 +1,7 @@
 # 发行包配置。只出 Linux 的 rpm 与 deb 两种，macOS、Windows、AppImage 不做。
 #
-# 三个入口都要进包：桌面本体、嵌入主机、以及主机再往下起的 pty 子进程，三者在 out/main
-# 下同级，`pty-host.js` 按同目录解析。
+# 三个入口都要进包：桌面本体、嵌入 server、以及 server 再往下起的 pty 子进程，三者在 out/main
+# 下同级，`pty-server.js` 按同目录解析。
 appId: app.facet.desktop
 productName: Facet
 copyright: Facet
@@ -19,10 +19,10 @@ files:
   - "!node_modules/node-pty/{src,deps,third_party,scripts,typings}/**"
   - "!node_modules/node-pty/prebuilds/{win32-x64,win32-arm64,darwin-x64,darwin-arm64}/**"
 
-# 独立主机产物：自带的官方 Node 运行时 + 打好的主机入口，放在 resources/host 下
+# 独立 server 产物：自带的官方 Node 运行时 + 打好的 server 入口，放在 resources/server 下
 extraResources:
-  - from: dist-host
-    to: host
+  - from: dist-server
+    to: server
 
 asar: true
 

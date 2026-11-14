@@ -23,24 +23,25 @@ npm install
 
 ```bash
 npm run dist            # 先打独立主机产物，再打 rpm 与 deb
-npm run build:host      # 只打独立主机产物
+npm run build:server    # 只打独立 server 产物
 ```
 
-主机是一个自带运行时的独立产物：
+server 是一个自带运行时的独立产物（用户看到的「主机」是抽象，落地的进程是 server）：
 
 ```
-apps/desktop/dist-host/
-  bin/node            官方 Node（scripts/build-host.mjs 里固定版本，缓存在 ~/.cache/facet-node）
-  lib/host.mjs        主机入口，esbuild 打成单个 ES 模块
-  lib/pty-host.mjs    终端子进程入口
+apps/desktop/dist-server/
+  bin/node            官方 Node（scripts/build-server.mjs 里固定版本，缓存在 ~/.cache/facet-node）
+  lib/server.mjs      server 入口，esbuild 打成单个 ES 模块
+  lib/pty-server.mjs  终端子进程入口
   lib/node_modules/node-pty/   唯一的原生模块
 ```
 
-打包时整个目录进 `resources/host`，桌面启动主机用的就是 `resources/host/bin/node resources/host/lib/host.mjs`，
-与桌面那份 Electron 运行时互不相干。开发时不打这个产物，桌面按老办法用 Electron 本身当 Node 跑
-`out/main/host.js`（`resolveHostLaunch` 里按 `resources/host/bin/node` 是否存在切换）。
+打包时整个目录进 `resources/server`，桌面启动 server 用的就是
+`resources/server/bin/node resources/server/lib/server.mjs`，与桌面那份 Electron 运行时互不相干。
+开发时不打这个产物，桌面按老办法用 Electron 本身当 Node 跑 `out/main/server.js`
+（`resolveHostLaunch` 里按 `resources/server/bin/node` 是否存在切换）。
 
-远程主机把这个目录拷过去，用 `bin/node lib/host.mjs` 起即可。
+远程那台机器装上包（rpm/deb 都装到 `/opt/Facet`），桌面通过 SSH 就能把它拉起来，不需要拷贝目录。
 
 ## 运行
 
@@ -68,7 +69,7 @@ FACET_ENDPOINT=ws://192.168.1.20:4319/endpoint npm run dev:desktop
 主机只跑一套按行编码的协议，跑在哪条字节流上都一样：
 
 - **本机**：连接位置是固定契约——优先 `$XDG_RUNTIME_DIR/facet.sock`（开发实例 `facet-dev.sock`），没有运行目录时退回 `<数据目录>/facet.sock`。只监听这个 unix socket，不开任何端口；`FACET_PORT` 或 `FACET_HOST` 给出时改成监听 TCP，`FACET_SOCKET` 可以换路径（换了两端得自己对齐）。数据目录里的 `endpoint.json` 只留作排障，不参与连接。
-- **远程**：主机清单里填 `user@host`（或 `ssh://user@host:端口`），桌面用进程内的 SSH 库连过去，远端先跑一小段脚本找出实际在跑的 socket（顺序：`/run/user/<uid>/facet.sock`、`facet-dev.sock`、`~/.local/share/facet/facet.sock`、`~/.local/share/facet-dev/facet.sock`），再在那个 socket 上开一条通道。没在跑就再跑一段脚本把它拉起来：脚本只在**已经装了 facet** 的机器上成立，位置就认包安装目录 `/opt/Facet/resources/host`（rpm 与 deb 都装在这里），找不到就直接报「没有安装 facet」，不上传、不安装。脚本作为文本流从标准输入喂给 `/bin/sh`（只用 POSIX 语法，极简容器里也能跑），命令行里只有解释器本身，不拼引号也不受行长限制；远端不开端口、本地也不开端口，也不在远端跑任何命令。认证先用 `~/.ssh/config` 里的私钥、`~/.ssh` 下的私钥与 ssh-agent；没有可用的私钥、或服务器拒绝这把密钥时问一次登录密码，密码留在桌面主进程内存里供重连使用，不写进清单。主机公钥不做校验，`known_hosts` 不参与：能连上那台机器就已经拿到那台机器的账户权限。Windows 远端只监听命名管道时无法用 SSH 通道，退回走远端的 TCP 回环地址。
+- **远程**：主机清单里填 `user@host`（或 `ssh://user@host:端口`），桌面用进程内的 SSH 库连过去，远端先跑一小段脚本找出实际在跑的 socket（顺序：`/run/user/<uid>/facet.sock`、`facet-dev.sock`、`~/.local/share/facet/facet.sock`、`~/.local/share/facet-dev/facet.sock`），再在那个 socket 上开一条通道。没在跑就再跑一段脚本把它拉起来：脚本只在**已经装了 facet** 的机器上成立，位置就认包安装目录 `/opt/Facet/resources/server`（rpm 与 deb 都装在这里），找不到就直接报「没有安装 facet」，不上传、不安装。脚本作为文本流从标准输入喂给 `/bin/sh`（只用 POSIX 语法，极简容器里也能跑），命令行里只有解释器本身，不拼引号也不受行长限制；远端不开端口、本地也不开端口，也不在远端跑任何命令。认证先用 `~/.ssh/config` 里的私钥、`~/.ssh` 下的私钥与 ssh-agent；没有可用的私钥、或服务器拒绝这把密钥时问一次登录密码，密码留在桌面主进程内存里供重连使用，不写进清单。主机公钥不做校验，`known_hosts` 不参与：能连上那台机器就已经拿到那台机器的账户权限。Windows 远端只监听命名管道时无法用 SSH 通道，退回走远端的 TCP 回环地址。
 - **远程端不需要开关**：能拿到这台机器的 SSH 登录权，就等于那台机器的使用者，SSH 通道送进来的连接按本机档处理（管理档），不受 `FACET_REMOTE_PERMISSION` 约束。那条开关收窄的是会自己声明权限档的远程端：Web 端声明操作档，主机缺省把它收成只读，`FACET_REMOTE_PERMISSION=operate` 才放行。
 - **权限档**：本机连接与 SSH 通道是管理档；自己声明档位的远程连接（Web）按 `FACET_REMOTE_PERMISSION` 给操作档或只读档。设置与凭证、提供方、项目增删与信任、诊断按入口放行：桌面设备开的通道可以（本机 socket 与 SSH 隧道都算），浏览器入口不行；只读档连会话与文件都不能改，输入区只是发送按钮不可用。远程的写操作记进 `$FACET_DATA_DIR/audit.log`（时间、连接标识、权限档、操作与结果，不含参数与内容）。
 - **身份**：unix socket 是 `0600`、所在目录 `0700`，能连上的只可能是同一个用户（和 root），所以本机与 SSH 通道**不再校验应用层令牌**，连上就是自己人。TCP 与 Web 入口拿不到对端身份，仍然要令牌：主机会生成一个随机令牌写进发现文件（`FACET_TOKEN` 可指定，`FACET_NO_TOKEN=1` 关闭校验），连接第一帧是 `{type:"auth",token}`，不匹配直接断开。
@@ -120,12 +121,12 @@ FACET_WEB_ROOT=apps/desktop/out/renderer \
 
 终端跑在主机上，桌面与 Web 都只是它的端：界面里敲的字经通道送到主机，主机再把输出按帧推回来。本机与远程走的是同一条路径，桌面自己不起任何 shell。
 
-- **pty 子进程**：`node-pty` 在主机再往下起的 `pty-host` 子进程里加载，崩溃与突发输出都关在这个进程里，会话与推理轮次不受影响
+- **pty 子进程**：`node-pty` 在 server 再往下起的 `pty-server` 子进程里加载，崩溃与突发输出都关在这个进程里，会话与推理轮次不受影响
 - **通道**：每个终端一条 `terminal:/<id>`，输出带通道序号，多个端同时看同一个 shell
 - **流控**：未确认字符数超过 100_000 让 pty 暂停读，端确认回来降到 5_000 以下再恢复；单帧上限 64KB 字符
 - **回滚**：每个终端保留最近 200_000 字符，端挂载或断线重连时先取这份再收增量
 - **登记**：`$FACET_DATA_DIR/terminals.json` 记下开过的终端，主机重启后把它们列成已结束，进程已经不在
-- **运行时**：`node-pty` 是 N-API 模块，一份构建在 Node 与 Electron 自带的 Node 里都能用，不需要 `electron-rebuild`；打包时把 `pty-host.js` 作为独立入口产物，`.node` 文件放在 asar 外
+- **运行时**：`node-pty` 是 N-API 模块，一份构建在 Node 与 Electron 自带的 Node 里都能用，不需要 `electron-rebuild`；打包时把 `pty-server.js` 作为独立入口产物，`.node` 文件放在 asar 外
 - **不可用时**：原生模块加载不起来（版本不匹配、缺编译产物）主机在握手里不报 `terminal` 能力，界面隐藏终端入口
 
 界面这边（`packages/ui-terminal`）：
@@ -251,7 +252,7 @@ npm run dist -w @facet/desktop
 - 构建 deb/rpm 用的 `fpm` 由 electron-builder 自己下载到 `~/.cache/electron-builder`，不需要系统装 fpm
 - 渲染产物约 45 MB，主要是随包打的字体（Inter、Noto Sans SC、Maple Mono）；Electron 本身约 100 MB
 
-包里的主机与开发时是同一个入口：桌面用 `process.execPath` 加 `ELECTRON_RUN_AS_NODE=1` 拉起 `out/main/host.js`，主机再起同目录的 `pty-host.js`。
+开发时桌面用 `process.execPath` 加 `ELECTRON_RUN_AS_NODE=1` 拉起 `out/main/server.js`，server 再起同目录的 `pty-server.js`；打包后桌面改为拉起独立产物 `resources/server/bin/node resources/server/lib/server.mjs`。
 
 ## 环境变量
 
@@ -269,7 +270,7 @@ npm run dist -w @facet/desktop
 | `FACET_SOCKET` | 指定 unix socket 的路径，缺省 `$XDG_RUNTIME_DIR/facet.sock`（无运行目录时 `<数据目录>/facet.sock`） |
 | `FACET_REMOTE_PERMISSION` | 远程连接申请档位的上限：`view`（只读，缺省）或 `operate`（可申请操作档） |
 | `FACET_WEB_PORT` | Web 端接入端口，缺省关闭；同一个端口发页面也接 WebSocket |
-| `FACET_PTY_HOST` | pty 子进程入口，缺省与主机入口同目录（`pty-host.js` 或 `pty-host-child.ts`） |
+| `FACET_PTY_SERVER` | pty 子进程入口，缺省与 server 入口同目录（`pty-server.mjs`、`pty-server.js` 或 `pty-server-child.ts`） |
 | `FACET_WEB_ROOT` | Web 页面的构建产物目录，缺省不提供页面 |
 | `FACET_TOKEN` | 连接令牌，缺省随机生成并写进发现文件 |
 | `FACET_NO_TOKEN` | 设为 `1` 时不校验令牌，只用于本机调试 |

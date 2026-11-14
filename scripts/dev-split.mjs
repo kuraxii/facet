@@ -1,8 +1,8 @@
 /**
  * 分开启动主机与桌面。
  *
- * 先把主机单独跑起来（改主机代码只重启它，桌面界面不受影响），等端点可用之后再启动桌面并
- * 指向那个端点。两边输出各加前缀，Ctrl+C 一起结束。
+ * 先把主机单独跑起来（改主机代码只重启它，桌面界面不受影响），等它写下发现文件之后再启动
+ * 桌面，桌面按发现文件自己连过去（本机是 unix socket）。两边输出各加前缀，Ctrl+C 一起结束。
  */
 
 import { spawn } from "node:child_process";
@@ -14,9 +14,6 @@ import { fileURLToPath } from "node:url";
 /** 仓库根目录 */
 const root = fileURLToPath(new URL("..", import.meta.url));
 
-/** 主机端口，可用 FACET_PORT 覆盖 */
-const port = process.env.FACET_PORT?.trim() || "4319";
-const endpoint = `ws://127.0.0.1:${port}/endpoint`;
 /**
  * 开发实例的数据目录：带 -dev 后缀，与装好的包分开。
  *
@@ -102,11 +99,10 @@ process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
 run("host", ["run", "dev", "-w", "@facet/server"], {
-	FACET_PORT: port,
 	FACET_DATA_DIR: devDataDir(process.env),
 });
-console.log(`[split] 等主机就绪 ${endpoint}`);
+console.log(`[split] 等主机写下发现文件`);
 if (!(await waitForHost())) {
 	console.log(`[split] 主机 ${READY_WAIT_MS} 毫秒内没响应，仍然启动桌面`);
 }
-run("desktop", ["run", "dev", "-w", "@facet/desktop"], { FACET_ENDPOINT: endpoint });
+run("desktop", ["run", "dev", "-w", "@facet/desktop"], {});

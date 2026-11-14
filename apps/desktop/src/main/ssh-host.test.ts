@@ -134,7 +134,7 @@ describe("SshHosts", () => {
 			home: "/home/u",
 			env: { SSH_AUTH_SOCK: "/tmp/agent.sock" },
 			readLocalFile: read,
-			connect: fakeClient({ socket: new Error("/bin/bash: not found") }, {}),
+			connect: fakeClient({ socket: new Error("/bin/sh: not found") }, {}),
 		});
 		await expect(hosts.open("ssh://dev@laptop")).rejects.toMatchObject({
 			code: "no_socket",

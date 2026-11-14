@@ -10,7 +10,7 @@
  *
  * 主机的位置是固定契约：优先 `$XDG_RUNTIME_DIR/facet.sock`（开发实例 `facet-dev.sock`），
  * 没有运行目录时是 `<家目录>/.local/share/facet/facet.sock`。远端用一小段 shell 脚本按同一
- * 顺序找出实际在跑的那条，脚本从标准输入喂给 `/bin/bash`，不拼进命令行。
+ * 顺序找出实际在跑的那条，脚本从标准输入喂给 `/bin/sh`，不拼进命令行。
  */
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -162,9 +162,9 @@ const SOCKET_FILE = "facet.sock";
 /**
  * 在远端找出实际在跑的主机 socket。
  *
- * 脚本从标准输入喂给 `/bin/bash`，不参与命令行拼装，所以可以随便写长、写多行。顺序与
- * 桌面本机的推导一致：运行目录里的两条优先（发布实例在前），其次家目录下的两条。命中就
- * 打印那一行，没有就什么都不打印。
+ * 脚本从标准输入喂给 `/bin/sh`，不参与命令行拼装，所以可以随便写长、写多行；只用 POSIX
+ * 语法，极简容器里也能跑。顺序与桌面本机的推导一致：运行目录里的两条优先（发布实例在前），
+ * 其次家目录下的两条。命中就打印那一行，没有就什么都不打印。
  */
 export const REMOTE_SOCKET_SCRIPT = `set -u
 runtime=\${XDG_RUNTIME_DIR:-}
@@ -192,7 +192,7 @@ export function parseSocketPath(text: string): string | undefined {
 
 /** 一条 SSH 连接上用到的两件事。 */
 export interface SshClientLike {
-	/** 在远端把一段脚本喂给 `/bin/bash`，返回标准输出 */
+	/** 在远端把一段脚本喂给 `/bin/sh`，返回标准输出 */
 	run(script: string): Promise<string>;
 	/** 连接到远端的一个 unix socket */
 	openStreamLocal(path: string): Promise<StreamLike>;
@@ -376,12 +376,12 @@ const defaultConnector: SshConnector = async (config) => {
 		client.connect(config);
 	});
 	return {
-		// 脚本从标准输入喂进去：命令行只有一个 /bin/bash，没有引号转义的坑，
+		// 脚本从标准输入喂进去：命令行只有一个 /bin/sh，没有引号转义的坑，
 		// 脚本里要加多少步都行
 		run: (script) =>
 			new Promise<string>((resolve, reject) => {
 				const timer = setTimeout(() => reject(new Error("远端脚本超时")), RUN_TIMEOUT_MS);
-				client.exec("/bin/bash", (error, channel) => {
+				client.exec("/bin/sh", (error, channel) => {
 					if (error !== undefined) {
 						clearTimeout(timer);
 						reject(error);

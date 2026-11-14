@@ -7,11 +7,13 @@
  *
  * 认证复用系统的 SSH 配置、ssh-agent 与 ~/.ssh 下的私钥，没有可用凭据时问一次密码。
  * 主机公钥不做校验：能连上这台机器就等于拿到那台机器的账户权限，再叠一层主机制约没有意义。
+ *
+ * 主机的位置是固定契约：`<家目录>/.local/share/facet/facet.sock`（开发实例是同级的
+ * `facet-dev`）。客户端按它直接开通道，不再跑命令读发现文件；连得上就是主机在跑。
  */
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { type DiscoveryRecord, parseDiscovery } from "@facet/server";
 import type { StreamLike } from "@facet/transport";
 import { Client, type ConnectConfig } from "ssh2";
 
@@ -150,25 +152,25 @@ export function matchSshConfig(config: Map<string, SshHostConfig>, host: string)
 	return undefined;
 }
 
+/** 主机 socket 的文件名，两端共用的约定。 */
+const SOCKET_FILE = "facet.sock";
+
 /**
- * 读远端发现文件用的命令。
+ * 远端主机的候选 socket 路径。
  *
- * 数据目录按与主机相同的规则取（FACET_DATA_DIR，其次 XDG_DATA_HOME，最后家目录），
- * 打印整份 endpoint.json；文件不在时 cat 报错，调用方按「没有主机」处理。
+ * 先按发布实例（`facet`）再按开发实例（`facet-dev`）试；两个都在家目录的
+ * `.local/share` 之下，客户端只要知道对方家目录就能拼出来，不必跑命令。
  */
-export function remoteDiscoveryCommand(): string {
-	// biome-ignore lint/suspicious/noTemplateCurlyInString: 这是远端 shell 的变量展开，不是模板串
-	return 'd="${FACET_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/facet}"; cat "$d/endpoint.json"';
+export function remoteSocketPaths(home: string): string[] {
+	return [`${home}/.local/share/facet/${SOCKET_FILE}`, `${home}/.local/share/facet-dev/${SOCKET_FILE}`];
 }
 
-/** 一条 SSH 连接上能做的三件事。 */
+/** 一条 SSH 连接上用到的两件事。 */
 export interface SshClientLike {
-	/** 在远端执行一条命令并取回输出 */
-	exec(command: string): Promise<string>;
+	/** 远端登录用户的家目录，取不到时返回 undefined */
+	home(): Promise<string | undefined>;
 	/** 连接到远端的一个 unix socket */
 	openStreamLocal(path: string): Promise<StreamLike>;
-	/** 连接到远端的一个 TCP 地址 */
-	openTcp(host: string, port: number): Promise<StreamLike>;
 	/** 断开 */
 	close(): void;
 }
@@ -198,7 +200,10 @@ export class SshHostError extends Error {
 		| "no_known_host"
 		/** 缺登录凭据或凭据被拒，界面据此问密码 */
 		| "need_password"
-		| "no_discovery"
+		/** 拿不到远端家目录，拼不出固定 socket 路径 */
+		| "no_home"
+		/** 家目录下没有在跑的 socket */
+		| "no_socket"
 		| "connect_failed"
 		| "forward_failed";
 
@@ -234,18 +239,17 @@ export class SshHosts {
 		password?: string,
 	): Promise<{
 		stream: StreamLike;
-		token: string | undefined;
 		address: string;
 	}> {
 		const target = parseSshTarget(targetText);
 		if (target === undefined) {
 			throw new SshHostError("no_target", `主机地址看不懂:${targetText}`);
 		}
-		const home = this.options.home ?? homedir();
+		const localHome = this.options.home ?? homedir();
 		const env = this.options.env ?? process.env;
 		const readLocal = this.options.readLocalFile ?? readOptionalFile;
 		const config = matchSshConfig(
-			parseSshConfig((await readLocal(join(home, ".ssh", "config"))) ?? ""),
+			parseSshConfig((await readLocal(join(localHome, ".ssh", "config"))) ?? ""),
 			target.host,
 		);
 		const host = config?.hostName ?? target.host;
@@ -253,9 +257,9 @@ export class SshHosts {
 		const user = target.user ?? config?.user ?? env.USER ?? env.LOGNAME;
 		const identityFiles = [
 			...(config?.identityFiles ?? []),
-			join(home, ".ssh", "id_ed25519"),
-			join(home, ".ssh", "id_ecdsa"),
-			join(home, ".ssh", "id_rsa"),
+			join(localHome, ".ssh", "id_ed25519"),
+			join(localHome, ".ssh", "id_ecdsa"),
+			join(localHome, ".ssh", "id_rsa"),
 		];
 
 		const build = async (): Promise<ConnectConfig> => {
@@ -307,31 +311,31 @@ export class SshHosts {
 			throw new SshHostError("connect_failed", `连不上 ${sshTargetLabel(target)}:${messageOf(error)}`);
 		}
 
+		const label = sshTargetLabel(target);
+		let home: string | undefined;
 		try {
-			const text = await client.exec(remoteDiscoveryCommand());
-			const discovery: DiscoveryRecord | undefined = parseDiscovery(text);
-			if (discovery === undefined) {
-				throw new SshHostError("no_discovery", `${sshTargetLabel(target)} 上没有运行中的 facet 主机`);
-			}
-			const stream =
-				discovery.endpoint.transport === "unix"
-					? await client.openStreamLocal(discovery.endpoint.path)
-					: await client.openTcp(
-							new URL(discovery.endpoint.url).hostname,
-							Number(new URL(discovery.endpoint.url).port),
-						);
-			return {
-				stream,
-				token: discovery.token,
-				address: discovery.endpoint.transport === "unix" ? discovery.endpoint.path : discovery.endpoint.url,
-			};
+			home = await client.home();
 		} catch (error) {
 			client.close();
-			if (error instanceof SshHostError) {
-				throw error;
-			}
-			throw new SshHostError("forward_failed", `打开通道失败:${messageOf(error)}`);
+			throw new SshHostError("no_home", `取不到 ${label} 的家目录:${messageOf(error)}`);
 		}
+		if (home === undefined || home.length === 0) {
+			client.close();
+			throw new SshHostError("no_home", `取不到 ${label} 的家目录`);
+		}
+
+		// 固定路径直接开通道：连得上就是主机在跑，连不上就是没开
+		let reason = "";
+		for (const path of remoteSocketPaths(home)) {
+			try {
+				const stream = await client.openStreamLocal(path);
+				return { stream, address: path };
+			} catch (error) {
+				reason = messageOf(error);
+			}
+		}
+		client.close();
+		throw new SshHostError("no_socket", `${label} 上没有运行中的 facet 主机:${reason}`);
 	}
 }
 
@@ -353,44 +357,23 @@ const defaultConnector: SshConnector = async (config) => {
 		client.connect(config);
 	});
 	return {
-		exec: (command) =>
-			new Promise<string>((resolve, reject) => {
-				client.exec(command, (error, channel) => {
+		// 用 SFTP 的 realpath 问家目录：一次协议请求，不经过 shell
+		home: () =>
+			new Promise<string | undefined>((resolve) => {
+				client.sftp((error, sftp) => {
 					if (error !== undefined) {
-						reject(error);
+						resolve(undefined);
 						return;
 					}
-					let text = "";
-					let stderr = "";
-					channel.setEncoding("utf8");
-					channel.on("data", (chunk: string) => {
-						text += chunk;
-					});
-					channel.stderr.on("data", (chunk: Buffer) => {
-						stderr += chunk.toString("utf8");
-					});
-					channel.once("close", () => {
-						if (text.length === 0) {
-							reject(new Error(stderr.trim() || "远端命令没有输出"));
-							return;
-						}
-						resolve(text);
+					sftp.realpath(".", (realpathError, absolutePath) => {
+						sftp.end();
+						resolve(realpathError !== undefined ? undefined : absolutePath);
 					});
 				});
 			}),
 		openStreamLocal: (path) =>
 			new Promise<StreamLike>((resolve, reject) => {
 				client.openssh_forwardOutStreamLocal(path, (error, stream) => {
-					if (error !== undefined) {
-						reject(error);
-						return;
-					}
-					resolve(toStreamLike(stream));
-				});
-			}),
-		openTcp: (host, port) =>
-			new Promise<StreamLike>((resolve, reject) => {
-				client.forwardOut("127.0.0.1", 0, host, port, (error, stream) => {
 					if (error !== undefined) {
 						reject(error);
 						return;

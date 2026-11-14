@@ -2,23 +2,26 @@
  * 本机主机的拉起与接管。
  *
  * 主机是能独立于桌面运行的进程：桌面拉起它时让它自己成一组进程，日志写进数据目录的
- * host.log，就绪信息通过数据目录里的 endpoint.json 交接。桌面退出后主机继续跑，下次启动
- * 按发现文件重新接上，会话与运行中的任务都还在。
+ * host.log。连接位置是固定契约——数据目录下的 `facet.sock`——桌面上来就连，连得上说明主机
+ * 在跑，连不上就自己拉起一个。数据目录里的 `endpoint.json` 只留作排障用，不参与连接。
  *
  * 桌面运行期间仍然看着它：进程退出后按退避间隔重新拉起；主动结束时不再拉起。
  */
 
 import { spawn } from "node:child_process";
 import { closeSync, openSync } from "node:fs";
-import { readFile, rm } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { connect as connectSocket } from "node:net";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { type DiscoveryRecord, parseDiscovery } from "@facet/server";
 import { StreamTransport } from "@facet/transport";
 
-/** 发现文件名，与主机侧独立入口的约定一致。 */
+/** 发现文件名，与主机侧独立入口的约定一致；只用于排障，不参与连接。 */
 const DISCOVERY_FILE = "endpoint.json";
+
+/** 主机 socket 文件名，与主机侧的固定路径契约一致。 */
+const SOCKET_FILE = "facet.sock";
 
 /** 就绪等待的上限，超时按启动失败处理。 */
 const READY_TIMEOUT_MS = 20_000;
@@ -29,8 +32,20 @@ const PROBE_TIMEOUT_MS = 800;
 /** 重启退避：首次很快，连续失败时放慢到上限。 */
 const RESTART_DELAYS_MS = [200, 500, 1000, 2000, 5000, 10_000];
 
-/** endpoint.json 里的内容，格式由主机侧定义。 */
-export type HostDiscovery = DiscoveryRecord;
+/**
+ * 本机主机的连接信息。
+ *
+ * 只有 socket 路径：没有端口也没有令牌，身份由 socket 的 `0600` 与目录的 `0700` 保证。
+ */
+export interface LocalHost {
+	/** unix socket 路径 */
+	readonly path: string;
+}
+
+/** 本机主机 socket 的固定路径，与主机侧按同一规则推导。 */
+export function hostSocketPath(dataDir: string): string {
+	return join(dataDir, SOCKET_FILE);
+}
 
 /**
  * 按 XDG 规范取应用数据目录，与主机侧的规则保持一致。
@@ -52,32 +67,15 @@ export function resolveDataDir(
 }
 
 /** 解析发现文件的内容，缺字段或读不懂时返回 undefined。 */
-export function readDiscoveryFile(text: string): HostDiscovery | undefined {
+export function readDiscoveryFile(text: string): DiscoveryRecord | undefined {
 	return parseDiscovery(text);
 }
 
-/** 这条发现记录对应的连接地址，日志与界面里显示它。 */
-export function discoveryAddress(discovery: HostDiscovery): string {
-	return discovery.endpoint.transport === "unix" ? discovery.endpoint.path : discovery.endpoint.url;
-}
-
-/**
- * 按发现记录建一个已连好的传输，连不上时抛错。
- *
- * unix socket 走字节流，TCP 走 WebSocket；两者都要带连接令牌。
- */
-export function connectToDiscovery(discovery: HostDiscovery, timeoutMs = PROBE_TIMEOUT_MS) {
-	const target =
-		discovery.endpoint.transport === "unix"
-			? { path: discovery.endpoint.path }
-			: {
-					host: new URL(discovery.endpoint.url).hostname,
-					port: Number(new URL(discovery.endpoint.url).port),
-				};
+/** 连到本机主机：unix socket，不带令牌，身份由内核按文件权限判定。 */
+export function connectLocalHost(host: LocalHost, timeoutMs = PROBE_TIMEOUT_MS) {
 	return new StreamTransport({
-		token: discovery.token,
 		handshakeTimeoutMs: timeoutMs,
-		createStream: async () => openStream(target),
+		createStream: async () => openStream({ path: host.path }),
 	});
 }
 
@@ -120,8 +118,8 @@ export function isProcessAlive(pid: number): boolean {
 }
 
 /** 握手一次，连不上或超时返回 false。 */
-async function defaultProbe(discovery: HostDiscovery): Promise<boolean> {
-	const transport = connectToDiscovery(discovery);
+async function defaultProbe(host: LocalHost): Promise<boolean> {
+	const transport = connectLocalHost(host);
 	try {
 		await transport.connect();
 		return true;
@@ -133,40 +131,25 @@ async function defaultProbe(discovery: HostDiscovery): Promise<boolean> {
 }
 
 export interface RunningHostOptions {
-	/** 数据目录，发现文件在这里 */
+	/** 数据目录，socket 在这里 */
 	dataDir: string;
 	/** 握手探测，测试里换成本地实现 */
-	probe?: (discovery: HostDiscovery) => Promise<boolean>;
+	probe?: (host: LocalHost) => Promise<boolean>;
 }
 
 /**
  * 找一台已经在跑的主机。
  *
- * 发现文件指向的进程已经不在、或握手不通时删掉发现文件，按没有主机处理。
+ * 判断只看一件事：固定路径上的 socket 能不能握手。连不上就当作没开。
  */
-export async function findRunningHost(options: RunningHostOptions): Promise<HostDiscovery | undefined> {
-	const file = join(options.dataDir, DISCOVERY_FILE);
-	let text: string;
-	try {
-		text = await readFile(file, "utf8");
-	} catch {
-		return undefined;
-	}
-	const discovery = readDiscoveryFile(text);
-	if (discovery === undefined || !isProcessAlive(discovery.pid)) {
-		await rm(file, { force: true }).catch(() => undefined);
-		return undefined;
-	}
+export async function findRunningHost(options: RunningHostOptions): Promise<LocalHost | undefined> {
+	const host: LocalHost = { path: hostSocketPath(options.dataDir) };
 	const probe = options.probe ?? defaultProbe;
-	if (!(await probe(discovery))) {
-		await rm(file, { force: true }).catch(() => undefined);
-		return undefined;
-	}
-	return discovery;
+	return (await probe(host)) ? host : undefined;
 }
 
-/** 读发现文件，不问进程是否还在，测试用来断言写入结果。 */
-export async function readDiscovery(dataDir: string): Promise<HostDiscovery | undefined> {
+/** 读发现文件，只用于日志与排障，不参与连接。 */
+export async function readDiscovery(dataDir: string): Promise<DiscoveryRecord | undefined> {
 	try {
 		return readDiscoveryFile(await readFile(join(dataDir, DISCOVERY_FILE), "utf8"));
 	} catch {
@@ -182,13 +165,13 @@ export interface HostDaemonOptions {
 	/** 追加给主机进程的环境变量 */
 	env?: NodeJS.ProcessEnv;
 	/** 主机就绪，参数是发现文件里的内容 */
-	onReady(info: HostDiscovery): void;
+	onReady(info: LocalHost): void;
 	/** 主机退出；restarting 为 true 表示随后会自动重启 */
 	onExit(code: number | null, restarting: boolean): void;
 	/** 日志行，来自 host.log 之外的主进程 */
 	log(line: string): void;
-	/** 找已存在的主机与判断就绪，测试里换成本地实现 */
-	probe?: (discovery: HostDiscovery) => Promise<boolean>;
+	/** 判断就绪，测试里换成本地实现 */
+	probe?: (host: LocalHost) => Promise<boolean>;
 }
 
 export class HostDaemon {
@@ -206,11 +189,6 @@ export class HostDaemon {
 	/** 主机进程是否由本进程拉起且还在运行。 */
 	get isRunning(): boolean {
 		return this.child !== undefined;
-	}
-
-	/** 发现文件路径。 */
-	get discoveryFile(): string {
-		return join(this.options.dataDir, DISCOVERY_FILE);
 	}
 
 	/** 拉起主机。已在运行时什么都不做。 */
@@ -250,15 +228,15 @@ export class HostDaemon {
 		});
 	}
 
-	/** 等发现文件出现并与主机握手，就绪后回调一次。 */
+	/** 等固定路径上的 socket 能握手，就绪后回调一次。 */
 	private async watch(): Promise<void> {
 		const probe = this.options.probe ?? defaultProbe;
+		const host: LocalHost = { path: hostSocketPath(this.options.dataDir) };
 		while (this.child !== undefined && this.readyTimer !== undefined) {
-			const discovery = await readDiscovery(this.options.dataDir);
-			if (discovery !== undefined && discovery.pid !== undefined && (await probe(discovery))) {
+			if (await probe(host)) {
 				this.clearTimers();
 				this.restartCount = 0;
-				this.options.onReady(discovery);
+				this.options.onReady(host);
 				return;
 			}
 			await new Promise((resolve) => setTimeout(resolve, 150));

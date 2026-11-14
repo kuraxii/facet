@@ -175,6 +175,7 @@ export class TransportCore {
 			role: frame.role,
 			canManage: frame.canManage === true,
 			capabilities: frame.capabilities,
+			agentDir: frame.agentDir,
 		};
 	}
 

@@ -2,7 +2,7 @@
  * SSH 连接的测试。
  *
  * 只测能离线验的部分：目标写法、ssh_config 解析、密码与私钥两条认证路径，以及用假连接
- * 跑一遍「读远端发现文件 → 打开 socket 通道」的流程。
+ * 跑一遍「按家目录拼固定 socket 路径 → 开通道」的流程。
  */
 import type { ConnectConfig } from "ssh2";
 import { describe, expect, it } from "vitest";
@@ -11,7 +11,6 @@ import {
 	matchSshConfig,
 	parseSshConfig,
 	parseSshTarget,
-	remoteDiscoveryCommand,
 	type SshClientLike,
 	SshHosts,
 	sshTargetLabel,
@@ -69,18 +68,21 @@ Host *
 });
 
 describe("SshHosts", () => {
-	/** 一条假的 SSH 连接：exec 返回给定文本，打开通道时记下参数。 */
-	function fakeClient(discovery: string, opened: { path?: string; tcp?: string; config?: ConnectConfig }) {
+	/** 一条假的 SSH 连接：家目录可给，打开 socket 时记下走过的路径。 */
+	function fakeClient(
+		options: { home?: string; openable?: string[] },
+		opened: { paths?: string[]; config?: ConnectConfig },
+	) {
 		return async (config: ConnectConfig): Promise<SshClientLike> => {
 			opened.config = config;
+			opened.paths = [];
 			return {
-				exec: async () => discovery,
+				home: async () => options.home,
 				openStreamLocal: async (path) => {
-					opened.path = path;
-					return emptyStream();
-				},
-				openTcp: async (host, port) => {
-					opened.tcp = `${host}:${port}`;
+					opened.paths?.push(path);
+					if (options.openable !== undefined && !options.openable.includes(path)) {
+						throw new Error(`connect ENOENT ${path}`);
+					}
 					return emptyStream();
 				},
 				close: () => {},
@@ -88,70 +90,72 @@ describe("SshHosts", () => {
 		};
 	}
 
-	const discovery = JSON.stringify({
-		schemaVersion: 2,
-		endpoint: { transport: "unix", path: "/home/u/.local/share/facet/host.sock" },
-		token: "远端令牌",
-		pid: 1,
-	});
-
 	const read = async (path: string): Promise<string | undefined> => {
 		if (path.endsWith(".ssh/config")) {
 			return "Host laptop\n  User dev\n  HostName 10.0.0.9\n";
 		}
-		if (path.endsWith("known_hosts")) {
-			return "10.0.0.9 ssh-ed25519 KEY";
-		}
 		return undefined;
 	};
 
-	it("连上之后按远端发现文件打开 socket，带回令牌", async () => {
-		const opened: { path?: string } = {};
+	it("按远端家目录拼出固定 socket 路径，直接开通道", async () => {
+		const opened: { paths?: string[] } = {};
 		const hosts = new SshHosts({
 			home: "/home/u",
 			env: { SSH_AUTH_SOCK: "/tmp/agent.sock" },
 			readLocalFile: read,
 			connect: fakeClient(
-				JSON.stringify({
-					schemaVersion: 2,
-					endpoint: { transport: "unix", path: "/home/u/.local/share/facet/host.sock" },
-					token: "远端令牌",
-					pid: 1,
-				}),
+				{ home: "/home/dev", openable: ["/home/dev/.local/share/facet/facet.sock"] },
 				opened,
 			),
 		});
 		const result = await hosts.open("ssh://dev@laptop");
-		expect(opened.path).toBe("/home/u/.local/share/facet/host.sock");
-		expect(result.token).toBe("远端令牌");
+		expect(result.address).toBe("/home/dev/.local/share/facet/facet.sock");
+		// 发布实例先试，命中就不再试开发实例
+		expect(opened.paths).toEqual(["/home/dev/.local/share/facet/facet.sock"]);
 	});
 
-	it("远端只监听 TCP 时退回 direct-tcpip", async () => {
-		const opened: { tcp?: string } = {};
+	it("发布实例没开时退到开发实例的 socket", async () => {
+		const opened: { paths?: string[] } = {};
 		const hosts = new SshHosts({
 			home: "/home/u",
 			env: { SSH_AUTH_SOCK: "/tmp/agent.sock" },
 			readLocalFile: read,
 			connect: fakeClient(
-				JSON.stringify({
-					schemaVersion: 2,
-					endpoint: { transport: "tcp", url: "ws://127.0.0.1:4319/endpoint" },
-					token: "t",
-					pid: 1,
-				}),
+				{ home: "/home/dev", openable: ["/home/dev/.local/share/facet-dev/facet.sock"] },
 				opened,
 			),
 		});
-		await hosts.open("ssh://dev@laptop");
-		expect(opened.tcp).toBe("127.0.0.1:4319");
+		const result = await hosts.open("ssh://dev@laptop");
+		expect(result.address).toBe("/home/dev/.local/share/facet-dev/facet.sock");
+		expect(opened.paths).toHaveLength(2);
+	});
+
+	it("两个路径都连不上时报「没有在跑的主机」", async () => {
+		const hosts = new SshHosts({
+			home: "/home/u",
+			env: { SSH_AUTH_SOCK: "/tmp/agent.sock" },
+			readLocalFile: read,
+			connect: fakeClient({ home: "/home/dev", openable: [] }, {}),
+		});
+		await expect(hosts.open("ssh://dev@laptop")).rejects.toMatchObject({ code: "no_socket" });
+	});
+
+	it("拿不到远端家目录时说明原因", async () => {
+		const hosts = new SshHosts({
+			home: "/home/u",
+			env: { SSH_AUTH_SOCK: "/tmp/agent.sock" },
+			readLocalFile: read,
+			connect: fakeClient({}, {}),
+		});
+		await expect(hosts.open("ssh://dev@laptop")).rejects.toMatchObject({ code: "no_home" });
 	});
 
 	it("没有 ssh-agent 也没有私钥时要求输密码", async () => {
 		const hosts = new SshHosts({
 			home: "/home/u",
 			env: {},
-			readLocalFile: async (path) => (path.endsWith("config") ? undefined : undefined),
-			connect: fakeClient("{}", {}),
+			readLocalFile: async () => undefined,
+			connect: fakeClient({ home: "/home/dev" }, {}),
 		});
 		await expect(hosts.open("ssh://dev@laptop")).rejects.toMatchObject({ code: "need_password" });
 	});
@@ -161,8 +165,8 @@ describe("SshHosts", () => {
 		const hosts = new SshHosts({
 			home: "/home/u",
 			env: {},
-			readLocalFile: async (path) => (path.endsWith("config") ? undefined : undefined),
-			connect: fakeClient(discovery, opened),
+			readLocalFile: async () => undefined,
+			connect: fakeClient({ home: "/root" }, opened),
 		});
 		await hosts.open("ssh://root@10.1.10.152", "root");
 		expect(opened.config?.password).toBe("root");
@@ -175,7 +179,7 @@ describe("SshHosts", () => {
 		const hosts = new SshHosts({
 			home: "/home/u",
 			env: {},
-			readLocalFile: async (path) => (path.endsWith("config") ? undefined : undefined),
+			readLocalFile: async () => undefined,
 			connect: async () => {
 				throw Object.assign(new Error("All configured authentication methods failed"), {
 					level: "client-authentication",
@@ -200,10 +204,6 @@ describe("SshHosts", () => {
 			},
 		});
 		await expect(hosts.open("ssh://dev@laptop")).rejects.toMatchObject({ code: "need_password" });
-	});
-
-	it("读远端发现文件的命令按主机相同的规则取数据目录", () => {
-		expect(remoteDiscoveryCommand()).toContain("XDG_DATA_HOME:-$HOME/.local/share");
 	});
 });
 

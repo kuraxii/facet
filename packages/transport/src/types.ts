@@ -34,6 +34,8 @@ export interface Handshake {
 	canManage: boolean;
 	/** 主机已实现的能力 */
 	capabilities: readonly Capability[];
+	/** 主机实际生效的 pi 数据目录，远端排查时看它 */
+	agentDir: string;
 }
 
 /** 底层 WebSocket 的最小形状。 */

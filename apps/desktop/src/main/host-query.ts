@@ -5,15 +5,14 @@
  * 断开。查不到时按没有运行中的会话处理，免得网络问题挡住退出。
  */
 
-import type { DiscoveryRecord } from "@facet/server";
-import { connectToDiscovery } from "./host-daemon.ts";
+import { connectLocalHost, type LocalHost } from "./host-daemon.ts";
 
 /** 查询超时，毫秒。超过就当没查到。 */
 const QUERY_TIMEOUT_MS = 1500;
 
 /** 正在运行的会话数。查询失败时给 0。 */
-export async function countBusySessions(host: DiscoveryRecord): Promise<number> {
-	const transport = connectToDiscovery(host, QUERY_TIMEOUT_MS);
+export async function countBusySessions(host: LocalHost): Promise<number> {
+	const transport = connectLocalHost(host, QUERY_TIMEOUT_MS);
 	try {
 		await withTimeout(transport.connect(), QUERY_TIMEOUT_MS);
 		const { files } = await withTimeout(transport.request("busySessions", {}), QUERY_TIMEOUT_MS);

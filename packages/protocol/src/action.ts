@@ -56,7 +56,7 @@ export type ChatAction =
 	/** 主机侧:流式增量,partIndex 对应消息内容块的下标 */
 	| { type: "chat/delta"; messageId: string; partIndex: number; kind: DeltaKind; delta: string }
 	/** 主机侧:工具开始执行 */
-	| { type: "chat/toolCallStarted"; callId: string; toolName: string; input: unknown; parentCallId?: string }
+	| { type: "chat/toolCallStarted"; callId: string; toolName: string; input: unknown }
 	/** 主机侧:工具的流式中间输出 */
 	| { type: "chat/toolCallUpdated"; callId: string; toolName: string; output: ToolOutput }
 	/** 主机侧:工具执行结束 */

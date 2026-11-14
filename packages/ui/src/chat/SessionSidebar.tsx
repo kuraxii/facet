@@ -10,6 +10,8 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import { PaneResizer } from "../panel/pane-resizer.tsx";
 import { ChevronIcon } from "../transcript/chevron.tsx";
 import { FolderIcon, MoonIcon, SunIcon } from "../transcript/icons.tsx";
+import { statusBucketOfDot } from "./session-status.ts";
+import { SessionStatusMark } from "./session-status-mark.tsx";
 import { SidebarHeader } from "./sidebar-header.tsx";
 import {
 	baseName,
@@ -92,14 +94,6 @@ export interface SessionSidebarProps {
 	isOpen?: boolean;
 	/** 窄屏抽屉里选完会话后收起 */
 	onNavigate?: () => void;
-}
-
-/** 会话行状态点的样式类。运行中与压缩中都走运行色，前者呼吸，后者常亮。 */
-function dotClass(dot: SessionDot): string {
-	if (dot === "running") {
-		return "dot is-run pulse";
-	}
-	return dot === "compacting" ? "dot is-run" : "dot is-off";
 }
 
 /** 点击组件外部时关闭浮层，点击触发器本身不算外部。 */
@@ -632,7 +626,7 @@ export function SessionSidebar({
 											disabled={session.isPlaceholder === true}
 											title={session.title}
 										>
-											<i className={dotClass(session.dot)} />
+											<SessionStatusMark bucket={statusBucketOfDot(session.dot)} />
 											<span className="sb-row-title ell">{session.title}</span>
 											{scopeCwd === undefined && session.host === undefined ? (
 												<span className="sb-row-proj ell">{session.project}</span>

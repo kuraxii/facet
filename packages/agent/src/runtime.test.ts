@@ -68,3 +68,17 @@ describe("新建会话的思考档位", () => {
 		expect(thinkingLevelForModel(undefined, "low")).toBe("low");
 	});
 });
+
+describe("内置扩展", () => {
+	it("codemode 与 tool_search 会注册，但按 pi 的缺省不激活", async () => {
+		const cwd = join(root, "tools");
+		await mkdir(cwd);
+		const agent = await factory.create({ cwd });
+		const tools = agent.tools();
+		const codemode = tools.find((tool) => tool.name === "codemode");
+		expect(codemode).toBeDefined();
+		// 注册不等于激活：要用 defaultTools 里的 +codemode 或 setActiveTools 打开
+		expect(codemode?.active).toBe(false);
+		expect(tools.some((tool) => tool.name === "tool_search")).toBe(true);
+	});
+});

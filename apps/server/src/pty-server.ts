@@ -2,8 +2,8 @@
  * pty 子进程的父侧代理。
  *
  * 上层只认 `PtyBackend`：开一个终端、写、调尺寸、暂停恢复、挂断。真实实现把消息转给
- * `pty-host-child`（同一份代码在打包产物里是 `pty-host.js`，直接跑源码时是
- * `pty-host-child.ts`），测试里换成内存实现。
+ * `pty-server-child`（同一份代码在打包产物里是 `pty-server.js`，直接跑源码时是
+ * `pty-server-child.ts`），测试里换成内存实现。
  *
  * 输出在这里按 5ms 窗口合并：`cat` 一个大文件时 node-pty 每几 KB 触发一次，直接往
  * 通道里塞会让帧数暴涨。
@@ -12,9 +12,9 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { TerminalExit } from "@facet/protocol";
-import type { PtyChildMessage, PtyParentMessage, PtySpawnOptions } from "./pty-host-child.ts";
+import type { PtyChildMessage, PtyParentMessage, PtySpawnOptions } from "./pty-server-child.ts";
 
-export type { PtySpawnOptions } from "./pty-host-child.ts";
+export type { PtySpawnOptions } from "./pty-server-child.ts";
 
 /** 合批窗口。与 percho 的终端实现取同一个值。 */
 const BATCH_MS = 5;
@@ -309,23 +309,23 @@ export class DisabledPtyBackend implements PtyBackend {
 /**
  * 找 pty 子进程的入口文件。
  *
- * 与主机入口放在同一个目录：打包后是 `out/main/pty-host.js`，直接跑源码时是同目录的
- * `pty-host-child.ts`（Node 24 默认能执行 TypeScript）。目录取自 `process.argv[1]`，两种
- * 运行方式都对得上。用 `FACET_PTY_HOST` 可以直接指定。
+ * 与 server 入口放在同一个目录：打包后是 `out/main/pty-server.js`，直接跑源码时是同目录的
+ * `pty-server-child.ts`（Node 24 默认能执行 TypeScript）。目录取自 `process.argv[1]`，两种
+ * 运行方式都对得上。用 `FACET_PTY_SERVER` 可以直接指定。
  */
 function resolveEntry(): string {
-	const override = process.env.FACET_PTY_HOST?.trim();
+	const override = process.env.FACET_PTY_SERVER?.trim();
 	if (override !== undefined && override.length > 0) {
 		return override;
 	}
 	const hostEntry = process.argv[1];
 	const directory = hostEntry === undefined ? process.cwd() : dirname(hostEntry);
-	// 独立产物里是 pty-host.mjs，桌面那份 Electron 产物里是 pty-host.js
-	for (const name of ["pty-host.mjs", "pty-host.js"]) {
+	// 独立产物里是 pty-server.mjs，桌面那份 Electron 产物里是 pty-server.js
+	for (const name of ["pty-server.mjs", "pty-server.js"]) {
 		const bundled = join(directory, name);
 		if (existsSync(bundled)) {
 			return bundled;
 		}
 	}
-	return join(directory, "pty-host-child.ts");
+	return join(directory, "pty-server-child.ts");
 }

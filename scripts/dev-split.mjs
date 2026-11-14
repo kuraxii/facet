@@ -1,11 +1,11 @@
 /**
- * 分开启动主机与桌面。
+ * 分开启动 server 与桌面。
  *
- * 先把主机单独跑起来（改主机代码只重启它，桌面界面不受影响），等它建出 socket 之后再启动
- * 桌面，桌面按固定路径自己连过去。两边输出各加前缀，Ctrl+C 一起结束。
+ * 先打一份 server 产物，再用它自带的 Node 跑起来；等 socket 建出来之后启动桌面，桌面按固定
+ * 路径自己连过去。两边输出各加前缀，Ctrl+C 一起结束。
  */
 
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { access } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
@@ -37,9 +37,10 @@ const children = [];
 
 /** 主机的数据目录：开发实例带 -dev 后缀 */
 
-/** 起一个子进程并把输出加上前缀转出来。 */
+/** 起一个子进程并把输出加上前缀转出来。args 第一项以路径分隔符开头时按命令直接跑。 */
 function run(label, args, env) {
-	const child = spawn("npm", args, {
+	const direct = args[0]?.includes("/") === true;
+	const child = spawn(direct ? args[0] : "npm", direct ? args.slice(1) : args, {
 		cwd: root,
 		env: { ...process.env, ...env },
 		stdio: ["ignore", "pipe", "pipe"],
@@ -68,10 +69,15 @@ function run(label, args, env) {
 	return child;
 }
 
-/** 轮询固定 socket，主机起来之前桌面就连会一直失败。 */
+/** 轮询固定 socket，server 起来之前桌面就连会一直失败。 */
 async function waitForHost() {
-	// 主机的连接位置是固定契约：数据目录下的 facet.sock。文件出现就说明在监听
-	const socket = join(devDataDir(process.env), "facet.sock");
+	// 连接位置是固定契约：优先运行目录里的 <数据目录名>.sock，没有运行目录时在数据目录下
+	const runtime = process.env.XDG_RUNTIME_DIR?.trim();
+	const dataDir = devDataDir(process.env);
+	const socket =
+		runtime !== undefined && runtime.length > 0 && isAbsolute(runtime)
+			? join(runtime, `${dataDir.split("/").pop()}.sock`)
+			: join(dataDir, "facet.sock");
 	const deadline = Date.now() + READY_WAIT_MS;
 	while (Date.now() < deadline) {
 		try {
@@ -96,11 +102,32 @@ function shutdown() {
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
-run("host", ["run", "dev", "-w", "@facet/server"], {
+// 产物要与打包后完全一致，所以每次启动都重新打一遍（esbuild 一两百毫秒）
+execFileSync("node", ["scripts/build-server.mjs"], { cwd: root, stdio: "inherit" });
+const artifact = join(root, "apps", "desktop", "dist-server");
+const server = run("server", [join(artifact, "bin", "node"), join(artifact, "lib", "server.mjs")], {
 	FACET_DATA_DIR: devDataDir(process.env),
+	// 桌面意外消失时 server 也自己收尾，不留孤儿进程
+	FACET_PARENT_PID: String(process.pid),
 });
-console.log(`[split] 等主机写下发现文件`);
+console.log(`[split] 等 server 建出 socket`);
 if (!(await waitForHost())) {
-	console.log(`[split] 主机 ${READY_WAIT_MS} 毫秒内没响应，仍然启动桌面`);
+	console.log(`[split] server ${READY_WAIT_MS} 毫秒内没就绪，仍然启动桌面`);
 }
-run("desktop", ["run", "dev", "-w", "@facet/desktop"], {});
+const desktop = run("desktop", ["run", "dev", "-w", "@facet/desktop"], {});
+
+/** 开发时两边绑在一起：桌面退出就把 server 一起收掉。 */
+let stopping = false;
+function stop(reason) {
+	if (stopping) {
+		return;
+	}
+	stopping = true;
+	console.log(`[split] ${reason}，收掉 server 与桌面`);
+	server.kill("SIGTERM");
+	desktop.kill("SIGTERM");
+	process.exit(0);
+}
+
+desktop.on("exit", (code) => stop(`桌面退出（${code ?? "未知"}）`));
+server.on("exit", (code) => stop(`server 退出（${code ?? "未知"}）`));

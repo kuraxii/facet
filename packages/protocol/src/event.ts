@@ -35,9 +35,9 @@ export type SessionEvent =
 	/** 消息完成，这里是权威内容，写盘发生在这一步 */
 	| { type: "message_end"; message: Message }
 	/** 工具开始执行 */
-	| { type: "tool_start"; callId: string; toolName: string; input: unknown; parentCallId?: string }
+	| { type: "tool_start"; callId: string; toolName: string; input: unknown }
 	/** 工具的流式中间输出 */
-	| { type: "tool_update"; callId: string; toolName: string; output: ToolOutput; parentCallId?: string }
+	| { type: "tool_update"; callId: string; toolName: string; output: ToolOutput }
 	/** 工具执行结束，durationMs 为单调时钟测得的耗时 */
 	| {
 			type: "tool_end";
@@ -46,7 +46,6 @@ export type SessionEvent =
 			output: ToolOutput;
 			isError: boolean;
 			durationMs?: number;
-			parentCallId?: string;
 	  }
 	/** 队列内容变化，用于界面展示排队条 */
 	| { type: "queue"; steering: string[]; followUp: string[] }

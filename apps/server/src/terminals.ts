@@ -22,7 +22,7 @@ import type {
 } from "@facet/protocol";
 import { terminalChannelFor } from "@facet/protocol";
 import { EventLog } from "./event-log.ts";
-import type { PtyBackend, PtyHandle, PtySpawnOptions } from "./pty-host.ts";
+import type { PtyBackend, PtyHandle, PtySpawnOptions } from "./pty-server.ts";
 
 /** 单帧最大字符数，超出就切开，避免一帧撑爆对端的解析缓冲。 */
 const MAX_FRAME_CHARS = 64 * 1024;

@@ -1,11 +1,11 @@
 /**
- * 只启动主机。
+ * 只启动 server。
  *
- * 主机在本机只开 unix socket（`$XDG_RUNTIME_DIR/facet-dev/host.sock`），桌面按数据目录里
- * 的发现文件连它，两边都不用填端口。
+ * 先打一份 server 产物（`apps/desktop/dist-server`），再用它自带的 Node 跑起来，与打包后的
+ * 启动方式一致；原生模块因此只需要针对 Node ABI 构建一次。
  */
 
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -27,9 +27,13 @@ function devDataDir(env) {
 	return join(base, "facet-dev");
 }
 
-console.log(`[host] 数据目录 ${devDataDir(process.env)}`);
+console.log(`[server] 数据目录 ${devDataDir(process.env)}`);
 
-const child = spawn("npm", ["run", "dev", "-w", "@facet/server"], {
+// 每次启动都重新打一遍：esbuild 只要一两百毫秒，换来「跑的就是打包后的东西」
+execFileSync("node", [join(root, "scripts", "build-server.mjs")], { cwd: root, stdio: "inherit" });
+
+const artifact = join(root, "apps", "desktop", "dist-server");
+const child = spawn(join(artifact, "bin", "node"), [join(artifact, "lib", "server.mjs")], {
 	cwd: root,
 	stdio: "inherit",
 	env: { ...process.env, FACET_DATA_DIR: devDataDir(process.env) },

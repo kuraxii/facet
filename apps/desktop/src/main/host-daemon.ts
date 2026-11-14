@@ -2,7 +2,7 @@
  * 本机主机的拉起与接管。
  *
  * 主机是能独立于桌面运行的进程：桌面拉起它时让它自己成一组进程，日志写进数据目录的
- * host.log。连接位置是固定契约——数据目录下的 `facet.sock`——桌面上来就连，连得上说明主机
+ * server.log。连接位置是固定契约——数据目录下的 `facet.sock`——桌面上来就连，连得上说明主机
  * 在跑，连不上就自己拉起一个。数据目录里的 `endpoint.json` 只留作排障用，不参与连接。
  *
  * 桌面运行期间仍然看着它：进程退出后按退避间隔重新拉起；主动结束时不再拉起。
@@ -169,7 +169,7 @@ export async function readDiscovery(dataDir: string): Promise<DiscoveryRecord | 
 }
 
 export interface HostDaemonOptions {
-	/** 启动命令：打包后是自己带的 node，开发时是 Electron 以 Node 模式运行 */
+	/** 启动命令：指向 server 产物里自带的 node */
 	command: string;
 	/** 启动参数 */
 	args: readonly string[];
@@ -181,7 +181,7 @@ export interface HostDaemonOptions {
 	onReady(info: LocalHost): void;
 	/** 主机退出；restarting 为 true 表示随后会自动重启 */
 	onExit(code: number | null, restarting: boolean): void;
-	/** 日志行，来自 host.log 之外的主进程 */
+	/** 日志行，来自 server.log 之外的主进程 */
 	log(line: string): void;
 	/** 判断就绪，测试里换成本地实现 */
 	probe?: (host: LocalHost) => Promise<boolean>;
@@ -210,15 +210,11 @@ export class HostDaemon {
 			return;
 		}
 		// 日志写文件：主机要能脱离桌面继续跑，桌面的管道关掉之后不该再有写入
-		const logFile = openSync(join(this.options.dataDir, "host.log"), "a");
-		// 用 Electron 自己的可执行文件当 Node 跑，打包后不需要额外的 node 安装
+		const logFile = openSync(join(this.options.dataDir, "server.log"), "a");
+		// 启动命令与其中要带的变量都由调用方给定：打包后是自带的 node，开发时是 Electron
 		const child = spawn(this.options.command, [...this.options.args], {
 			cwd: this.options.dataDir,
-			env: {
-				...process.env,
-				...this.options.env,
-				ELECTRON_RUN_AS_NODE: "1",
-			},
+			env: { ...process.env, ...this.options.env },
 			// 自成一组：桌面退出不会把它一起带走
 			detached: true,
 			stdio: ["ignore", logFile, logFile],

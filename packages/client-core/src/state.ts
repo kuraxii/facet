@@ -29,8 +29,6 @@ export interface ToolCallView {
 	toolName: string;
 	/** 调用参数 */
 	input: unknown;
-	/** 父调用 id,子代理或嵌套调用时为上层调用 */
-	parentCallId: string | undefined;
 	/** 最近一次输出,执行中也可能有中间结果 */
 	output: ToolOutput | undefined;
 	/** 结果是否为失败 */

@@ -153,7 +153,6 @@ export function reduceChat(view: ChatView, action: Action): ChatView {
 						callId: action.callId,
 						toolName: action.toolName,
 						input: action.input,
-						parentCallId: action.parentCallId ?? existing?.parentCallId,
 						output: existing?.output,
 						isError: false,
 						isRunning: true,

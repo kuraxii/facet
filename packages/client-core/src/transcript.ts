@@ -42,6 +42,16 @@ export interface ToolCallPart {
 	durationMs: number | undefined;
 	/** 工具的结构化结果,例如编辑工具带的补丁,由渲染侧决定怎么用 */
 	details: unknown;
+	/** 结果里的图片块,按原始顺序排列;文本在 output 里,图片在这里 */
+	images: readonly ToolImage[];
+}
+
+/** 工具结果里的一张图片。 */
+export interface ToolImage {
+	/** base64 编码的图片数据 */
+	data: string;
+	/** 媒体类型,例如 image/png */
+	mimeType: string;
 }
 
 /** 渲染单元里的一段内容。 */
@@ -84,6 +94,16 @@ export function toolOutputText(output: ToolOutput | undefined): string | undefin
 	return text.length > 0 ? text : undefined;
 }
 
+/** 取工具结果里的图片块,文本块不在这里。 */
+function toolOutputImages(output: ToolOutput | undefined): ToolImage[] {
+	if (!output) {
+		return [];
+	}
+	return output.content
+		.filter((block): block is Extract<InputBlock, { type: "image" }> => block.type === "image")
+		.map((block) => ({ data: block.data, mimeType: block.mimeType }));
+}
+
 /** 内容块转成渲染段。 */
 function blockPart(block: ContentBlock | InputBlock, index: number): Part | undefined {
 	if (block.type === "text") {
@@ -107,20 +127,26 @@ function toolPart(call: ToolCallView): ToolCallPart {
 		output: toolOutputText(call.output),
 		durationMs: call.durationMs,
 		details: call.output?.details,
+		images: toolOutputImages(call.output),
 	};
 }
 
 /** 流式片段转成渲染段,按内容块下标排序。 */
 function streamParts(streaming: Readonly<Record<number, StreamedPart>>): Part[] {
-	return Object.keys(streaming)
-		.map(Number)
-		.sort((left, right) => left - right)
-		.map((index) => streaming[index])
-		.filter((part): part is StreamedPart => part !== undefined)
-		.map((part, index) => {
-			const kind = part.kind === "thinking" ? "thinking" : "text";
-			return { kind, partId: `${kind}:${index}`, text: part.text } as Part;
-		});
+	return (
+		Object.keys(streaming)
+			.map(Number)
+			.sort((left, right) => left - right)
+			.map((index) => streaming[index])
+			.filter((part): part is StreamedPart => part !== undefined)
+			// 工具调用的增量是参数 JSON 片段，工具行在调用开始时才出现；这类增量不能当正文渲染，
+			// 否则输入框里没写完的 `{"command": …` 会漏到 Markdown 里
+			.filter((part) => part.kind !== "toolCall")
+			.map((part, index) => {
+				const kind = part.kind === "thinking" ? "thinking" : "text";
+				return { kind, partId: `${kind}:${index}`, text: part.text } as Part;
+			})
+	);
 }
 
 /** 用户消息的正文段。图片没有可读文本,占一个标记。 */
@@ -151,6 +177,7 @@ function bareToolPart(
 		output: undefined,
 		durationMs: undefined,
 		details: undefined,
+		images: [],
 	};
 }
 
@@ -203,6 +230,8 @@ function mergeToolResult(item: TranscriptItem, message: Message): TranscriptItem
 		status: message.isError ? "failed" : "done",
 		output: toolOutputText({ content: message.content, details: message.details, isError: message.isError }),
 		details: message.details,
+		images: toolOutputImages({ content: message.content, details: message.details }),
+
 		// 历史记录里带工具耗时,补进来才能在卡片上显示
 		durationMs: message.durationMs ?? part.durationMs,
 	};
@@ -363,6 +392,7 @@ function orphanToolPart(message: Message & { role: "toolResult" }): ToolCallPart
 		output: toolOutputText({ content: message.content, details: message.details, isError: message.isError }),
 		durationMs: message.durationMs,
 		details: message.details,
+		images: toolOutputImages({ content: message.content, details: message.details }),
 	};
 }
 

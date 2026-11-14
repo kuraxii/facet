@@ -1,18 +1,20 @@
 /**
- * 打包独立的主机产物。
+ * 打包独立的 server 产物。
  *
  * 产物是一个自带官方 Node 运行时的目录：
  *
- *   dist-host/
- *     bin/node          官方 Node（与 engines 要求一致的 LTS）
- *     lib/host.mjs      主机入口，esbuild 打成单个 ES 模块（源码里有顶层 await）
- *     lib/pty-host.mjs  终端子进程入口
- *     lib/node_modules/node-pty/   唯一的原生模块
+ *   dist-server/
+ *     bin/node            官方 Node（与 engines 要求一致的 LTS）
+ *     lib/server.mjs      server 入口，esbuild 打成单个 ES 模块（源码里有顶层 await）
+ *     lib/pty-server.mjs  终端子进程入口
+ *     lib/worker.js       codemode 脚本的沙箱 worker（pi 的沙箱在自己的线程里跑脚本）
+ *     lib/node_modules/node-pty/   原生模块（终端）
+ *     lib/node_modules/quickjs-wasi/quickjs.wasm   codemode 用的 wasm 虚拟机
  *
- * 桌面打包后把整个目录放进 `resources/host`，远程主机也把这个目录拷过去就行。
- * 主机进程用 `bin/node lib/host.js` 启动，与桌面那份 Electron 运行时互不相干。
+ * 桌面打包后把整个目录放进 `resources/server`；server 用 `bin/node lib/server.mjs` 启动，
+ * 与桌面那份 Electron 运行时互不相干。
  *
- * 用法：node scripts/build-host.mjs [--node 22.21.0]
+ * 用法：node scripts/build-server.mjs [--node 22.21.0]
  */
 
 import { execFileSync } from "node:child_process";
@@ -24,7 +26,7 @@ import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-const outDir = join(root, "apps/desktop/dist-host");
+const outDir = join(root, "apps/desktop/dist-server");
 const cacheDir = join(homedir(), ".cache", "facet-node");
 
 /** 自带的 Node 版本。要换版本改这里，或传 `--node <版本>`。 */
@@ -48,7 +50,7 @@ async function ensureNodeBinary() {
 	await mkdir(cacheDir, { recursive: true });
 	if (!existsSync(tar)) {
 		const url = `https://nodejs.org/dist/v${nodeVersion}/${tag}.tar.xz`;
-		console.log(`[host] 下载 ${url}`);
+		console.log(`[server] 下载 ${url}`);
 		await download(url, tar);
 	}
 	execFileSync("tar", ["xJf", tar, "-C", cacheDir], { stdio: "inherit" });
@@ -90,6 +92,20 @@ async function bundle(entry, outfile) {
 	});
 }
 
+/**
+ * 拷 pi-codemode 的 QuickJS 沙箱 worker 到产物里。
+ *
+ * server.mjs 单文件打包时，pi-codemode 的 `runtime/host.js` 里 `new Worker("./worker.js")`
+ * 是相对 `import.meta.url` 解析的，而 worker 本身是个独立线程入口，不会被 esbuild 内联，
+ * 因此必须把这些文件原样放到 `lib/` 下，否则 codemode 工具会报「Cannot find module worker.js」。
+ */
+async function copyCodemodeRuntime(target) {
+	const source = join(root, "node_modules", "@earendil-works", "pi-codemode", "dist", "runtime");
+	for (const item of ["worker.js", "protocol.js", "vm.js", "prelude-source.js"]) {
+		await copyFile(join(source, item), join(target, item));
+	}
+}
+
 /** 只拷 node-pty 跑起来需要的那部分。 */
 async function copyNodePty(target) {
 	const source = join(root, "node_modules", "node-pty");
@@ -101,8 +117,17 @@ async function copyNodePty(target) {
 	await rm(join(target, "build", "Release", "obj.target"), { recursive: true, force: true });
 }
 
+/** 拷 wasm 虚拟机、它的 JS 封装与 package.json；类型声明与扩展模块的 .so 用不上。 */
+async function copyQuickJs(target) {
+	const source = join(root, "node_modules", "quickjs-wasi");
+	await mkdir(target, { recursive: true });
+	for (const item of ["package.json", "quickjs.wasm", "LICENSE", "dist"]) {
+		await cp(join(source, item), join(target, item), { recursive: true });
+	}
+}
+
 async function main() {
-	console.log(`[host] 目标目录 ${outDir}`);
+	console.log(`[server] 目标目录 ${outDir}`);
 	await rm(outDir, { recursive: true, force: true });
 	await mkdir(join(outDir, "bin"), { recursive: true });
 	await mkdir(join(outDir, "lib"), { recursive: true });
@@ -110,20 +135,27 @@ async function main() {
 	const node = await ensureNodeBinary();
 	await copyFile(node, join(outDir, "bin", "node"));
 	await chmod(join(outDir, "bin", "node"), 0o755);
-	console.log(`[host] 自带 Node ${nodeVersion}`);
+	console.log(`[server] 自带 Node ${nodeVersion}`);
 
-	await bundle(join(root, "apps/server/src/main.ts"), join(outDir, "lib/host.mjs"));
-	await bundle(join(root, "apps/server/src/pty-host-child.ts"), join(outDir, "lib/pty-host.mjs"));
+	await bundle(join(root, "apps/server/src/main.ts"), join(outDir, "lib/server.mjs"));
+	await bundle(join(root, "apps/server/src/pty-server-child.ts"), join(outDir, "lib/pty-server.mjs"));
 	await copyNodePty(join(outDir, "lib", "node_modules", "node-pty"));
+
+	// codemode 在自己的 worker 线程里跑脚本，worker 与 wasm 都要跟着产物走：
+	// 沙箱按 server.mjs 的位置找 `lib/worker.js`，再按包名解析 `quickjs-wasi/quickjs.wasm`
+	const piCodemode = join(root, "node_modules", "@earendil-works", "pi-codemode", "dist", "runtime");
+	await bundle(join(piCodemode, "worker.js"), join(outDir, "lib", "worker.js"));
+	await copyQuickJs(join(outDir, "lib", "node_modules", "quickjs-wasi"));
+	await copyCodemodeRuntime(join(outDir, "lib"));
 
 	const version = JSON.parse(await readFile(join(root, "package.json"), "utf8")).version;
 	await writeFile(
 		join(outDir, "package.json"),
-		`${JSON.stringify({ name: "facet-host", version, private: true, main: "lib/host.mjs" }, null, 2)}\n`,
+		`${JSON.stringify({ name: "facet-server", version, private: true, main: "lib/server.mjs" }, null, 2)}\n`,
 	);
 
 	const listing = execFileSync("du", ["-sh", outDir], { encoding: "utf8" }).trim();
-	console.log(`[host] 完成：${listing}`);
+	console.log(`[server] 完成：${listing}`);
 }
 
 function readNodeVersion() {

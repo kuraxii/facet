@@ -29,6 +29,18 @@ function shorten(value: string): string {
 	return flat.length > MAX_TARGET ? `${flat.slice(0, MAX_TARGET)}…` : flat;
 }
 
+/** 脚本类工具的正文摘要：取第一行有内容、且不是注释的行。 */
+function codeSummary(code: string): string {
+	for (const line of code.split("\n")) {
+		const trimmed = line.trim();
+		if (trimmed.length === 0 || trimmed.startsWith("//")) {
+			continue;
+		}
+		return shorten(trimmed);
+	}
+	return "";
+}
+
 /** 取工具调用的参数摘要。 */
 export function toolTarget(input: unknown): string {
 	if (typeof input === "string") {
@@ -38,10 +50,46 @@ export function toolTarget(input: unknown): string {
 		return "";
 	}
 	const record = input as Record<string, unknown>;
+	// 脚本类工具的参数整段是代码，取第一行有内容的当摘要
+	if (typeof record.code === "string") {
+		const summary = codeSummary(record.code);
+		if (summary.length > 0) {
+			return summary;
+		}
+	}
 	for (const key of TARGET_KEYS) {
 		const value = record[key];
 		if (typeof value === "string" && value.trim().length > 0) {
 			return shorten(value);
+		}
+	}
+	return "";
+}
+
+/**
+ * 参数摘要对应的完整内容。
+ *
+ * 行上一行放不下,所以摘要会截断;鼠标停在摘要上时用弹窗给出没截断的那份,
+ * 脚本类工具给整段代码。
+ */
+export function toolDetail(input: unknown): string {
+	if (typeof input === "string") {
+		return input.trim();
+	}
+	if (typeof input !== "object" || input === null) {
+		return "";
+	}
+	const record = input as Record<string, unknown>;
+	if (typeof record.code === "string") {
+		const code = scriptCode(record);
+		if (code !== undefined) {
+			return code;
+		}
+	}
+	for (const key of TARGET_KEYS) {
+		const value = record[key];
+		if (typeof value === "string" && value.trim().length > 0) {
+			return value.trim();
 		}
 	}
 	return "";
@@ -96,6 +144,23 @@ export function foldOutput(
 	return { preview: output, hiddenLines: 0 };
 }
 
+/**
+ * 脚本类工具的完整代码。
+ *
+ * `codemode` 的参数是一个 `code` 字段,展开时要看整段脚本,行上的摘要只取第一行。
+ */
+export function scriptCode(input: unknown): string | undefined {
+	if (typeof input !== "object" || input === null) {
+		return undefined;
+	}
+	const code = (input as { code?: unknown }).code;
+	if (typeof code !== "string" || code.trim().length === 0) {
+		return undefined;
+	}
+	// 只去掉首尾的空行，代码自身的缩进保留
+	return code.replace(/^(?:[ \t]*\r?\n)+/, "").trimEnd();
+}
+
 /** 工具的归类,决定行首图标与过程行标题里算进哪一项。 */
 export type ToolCategory = "command" | "read" | "edit" | "search" | "other";
 
@@ -122,6 +187,8 @@ const KINDS: Readonly<Record<string, { label: string; category: ToolCategory }>>
 	fetch_content: { label: "Fetch", category: "other" },
 	source_check: { label: "Check", category: "other" },
 	get_search_content: { label: "Search", category: "search" },
+	// 脚本类工具：一行的参数就是整段代码，摘要取第一行有内容的
+	codemode: { label: "Codemode", category: "command" },
 };
 
 /** 取工具的短名与归类；认不出的工具原样显示名字。 */

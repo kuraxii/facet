@@ -140,7 +140,7 @@ describe("SshHosts", () => {
 		// 第一条是找 socket，第二条是启动，第三条又是找 socket
 		expect(opened.scripts).toHaveLength(3);
 		// 只从包安装目录起，不从用户目录里找
-		expect(opened.scripts?.[1]).toContain("install=/opt/Facet/resources/host");
+		expect(opened.scripts?.[1]).toContain("install=/opt/Facet/resources/server");
 	});
 
 	it("远端没装 facet 时直接失败并说明原因", async () => {

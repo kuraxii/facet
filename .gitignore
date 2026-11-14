@@ -2,7 +2,7 @@ node_modules/
 
 out/
 dist/
-dist-host/
+dist-server/
 release/
 *.tsbuildinfo
 

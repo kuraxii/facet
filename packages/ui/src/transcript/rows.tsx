@@ -4,7 +4,7 @@
  * 行由渲染单元聚合而来,收起状态按行标识保存,所以流式追加内容时不会把用户收起过的行重新展开。
  * 默认只有过程行与文件改动行收起,其余行展开。
  */
-import type { Part, ToolCallPart, TranscriptItem } from "@facet/client-core";
+import type { Part, ToolCallPart, ToolImage, TranscriptItem } from "@facet/client-core";
 import {
 	Brain,
 	Check,
@@ -18,12 +18,13 @@ import {
 	Undo2,
 	Wrench,
 } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Markdown } from "../markdown/Markdown.tsx";
 import { ChevronIcon, TreeChevron } from "./chevron.tsx";
 import { lineClass, patchLines } from "./diff-lines.ts";
 import { type DiffChunk, type DisplayRow, groupLabel, groupRows, turnDurationText } from "./group.ts";
-import { foldOutput, type ToolCategory, toolKind, toolTarget } from "./tool-text.ts";
+import { foldOutput, type ToolCategory, toolDetail, toolKind, toolTarget } from "./tool-text.ts";
 
 /** 面板参数。 */
 export interface ChatTranscriptProps {
@@ -157,14 +158,60 @@ function shortPath(path: string): string {
  *
  * 一行里只有图标、短名与参数摘要，点开才看输出；输出没有边框与底色，直接跟在下面。
  */
+/** 工具结果里的一张图片。默认按行宽缩、限高，点一下回到原始尺寸。 */
+function ToolImageThumb({ image, label }: { image: ToolImage; label: string }) {
+	const [isActual, setActual] = useState(false);
+	return (
+		<button
+			type="button"
+			className="tr-image"
+			onClick={() => setActual((actual) => !actual)}
+			aria-label={label}
+			aria-pressed={isActual}
+			style={{ cursor: isActual ? "zoom-out" : "zoom-in", overflowX: isActual ? "auto" : undefined }}
+		>
+			<img
+				src={`data:${image.mimeType};base64,${image.data}`}
+				alt={label}
+				style={{ maxWidth: isActual ? "none" : undefined, maxHeight: isActual ? "none" : undefined }}
+			/>
+		</button>
+	);
+}
+
+/** 参数弹窗的延时：指针在摘要上停留这么久才弹，扫过去不打扰 */
+const TIP_DELAY_MS = 500;
+/** 弹窗要能滚起来，指针从摘要挪到弹窗上这段时间先不收；挪出去超过它才关 */
+const TIP_HIDE_DELAY_MS = 300;
+
 function ToolRow({ part }: { part: ToolCallPart }) {
 	const [isOpen, setOpen] = useState(false);
 	const [isExpanded, setExpanded] = useState(false);
+	/** 参数完整内容弹窗的落点，未悬停时为空 */
+	const [tip, setTip] = useState<{ left: number; top: number } | undefined>(undefined);
+	const tipTimer = useRef<number | undefined>(undefined);
+	const showTipSoon = useCallback((rect: DOMRect) => {
+		window.clearTimeout(tipTimer.current);
+		tipTimer.current = window.setTimeout(() => setTip({ left: rect.left, top: rect.bottom }), TIP_DELAY_MS);
+	}, []);
+	// 弹窗里可以滚动查看长参数，所以离开摘要后不立刻关，留给指针挪过去的时间
+	const hideTipSoon = useCallback(() => {
+		window.clearTimeout(tipTimer.current);
+		tipTimer.current = window.setTimeout(() => setTip(undefined), TIP_HIDE_DELAY_MS);
+	}, []);
+	const keepTip = useCallback(() => window.clearTimeout(tipTimer.current), []);
+	// 行被收起或整行消失时，未到点的定时器不能再弹
+	useEffect(() => () => window.clearTimeout(tipTimer.current), []);
 	const output = part.output ?? "";
-	const folded = foldOutput(output);
+	// 展开给的就是工具结果原文：模型看到的那份，界面上不再删改任何一行
+	const body = output;
+	const folded = foldOutput(body);
 	const isLong = folded.hiddenLines > 0;
-	const shown = isLong && !isExpanded ? folded.preview : output;
+	const shown = isLong && !isExpanded ? folded.preview : body;
 	const target = toolTarget(part.input);
+	// 摘要被截断时才有弹窗可看，没截断的话悬停不弹东西
+	const detail = toolDetail(part.input);
+	const hasDetail = detail.length > 0 && detail !== target;
 	const kind = toolKind(part.name);
 	const isRunning = part.status === "running";
 
@@ -175,14 +222,35 @@ function ToolRow({ part }: { part: ToolCallPart }) {
 				className="tr-head"
 				onClick={() => setOpen((open) => !open)}
 				aria-expanded={isOpen}
-				title={part.name}
 			>
 				<span className="tr-icon">{categoryIcon(kind.category)}</span>
 				{/* 运行中由短名与参数上的扫光表示，行尾不加状态标记 */}
 				<span className={`tr-name${isRunning ? " is-live" : ""}`}>{kind.label}</span>
-				{target.length > 0 ? <span className={`tr-arg${isRunning ? " is-live" : ""}`}>{target}</span> : null}
+				{target.length === 0 ? null : (
+					<span
+						className={`tr-arg${isRunning ? " is-live" : ""}`}
+						onPointerEnter={
+							hasDetail ? (event) => showTipSoon(event.currentTarget.getBoundingClientRect()) : undefined
+						}
+						onPointerLeave={hasDetail ? hideTipSoon : undefined}
+					>
+						{target}
+					</span>
+				)}
 			</button>
-			{isOpen && output.length > 0 ? (
+			{/* 图片是结果的主体，不折在展开区里，点一下看原始大小 */}
+			{part.images.length === 0 ? null : (
+				<div className="tr-images">
+					{part.images.map((image, index) => (
+						<ToolImageThumb
+							key={`${part.callId}-${image.mimeType}-${image.data.slice(0, 32)}`}
+							image={image}
+							label={`${kind.label} 结果里的第 ${index + 1} 张图片`}
+						/>
+					))}
+				</div>
+			)}
+			{isOpen && body.length > 0 ? (
 				<div className="tr-out">
 					<pre>{shown}</pre>
 					{isLong && !isExpanded ? (
@@ -192,6 +260,19 @@ function ToolRow({ part }: { part: ToolCallPart }) {
 					) : null}
 				</div>
 			) : null}
+			{tip === undefined
+				? null
+				: createPortal(
+						<div
+							className="tr-tip"
+							style={{ left: tip.left, top: tip.top }}
+							onPointerEnter={keepTip}
+							onPointerLeave={hideTipSoon}
+						>
+							<pre>{detail}</pre>
+						</div>,
+						document.body,
+					)}
 		</div>
 	);
 }
@@ -201,12 +282,7 @@ function ThinkingRow({ text }: { text: string }) {
 	const [isOpen, setOpen] = useState(false);
 	return (
 		<div className="tr is-think">
-			<button
-				type="button"
-				className="tr-head"
-				onClick={() => setOpen((open) => !open)}
-				aria-expanded={isOpen}
-			>
+			<button type="button" className="tr-head" onClick={() => setOpen(!isOpen)} aria-expanded={isOpen}>
 				<span className="tr-icon">
 					<Brain size={14} strokeWidth={1.5} />
 				</span>

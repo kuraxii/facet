@@ -91,6 +91,15 @@ function deltaFor(
 
 /** 转换一条会话事件，返回零到多条对外事件。 */
 export function toSessionEvents(event: AgentSessionEvent): SessionEvent[] {
+	// 脚本类工具在自己的执行里再调别的工具，这些子调用带 parentToolCallId。
+	// 脚本本身与汇总结果都在父调用里，子调用发出去只会在对话里多出几行噪音
+	const isNestedToolEvent =
+		event.type === "tool_execution_start" ||
+		event.type === "tool_execution_update" ||
+		event.type === "tool_execution_end";
+	if (isNestedToolEvent && event.parentToolCallId !== undefined) {
+		return [];
+	}
 	switch (event.type) {
 		case "agent_start":
 			return [{ type: "run_start" }];
@@ -133,7 +142,6 @@ export function toSessionEvents(event: AgentSessionEvent): SessionEvent[] {
 					callId: event.toolCallId,
 					toolName: event.toolName,
 					input: event.args,
-					parentCallId: event.parentToolCallId,
 				},
 			];
 		case "tool_execution_update":
@@ -143,7 +151,6 @@ export function toSessionEvents(event: AgentSessionEvent): SessionEvent[] {
 					callId: event.toolCallId,
 					toolName: event.toolName,
 					output: toToolOutput(event.partialResult),
-					parentCallId: event.parentToolCallId,
 				},
 			];
 		case "tool_execution_end":
@@ -155,7 +162,6 @@ export function toSessionEvents(event: AgentSessionEvent): SessionEvent[] {
 					output: toToolOutput(event.result),
 					isError: event.isError,
 					durationMs: event.durationMs,
-					parentCallId: event.parentToolCallId,
 				},
 			];
 		case "queue_update":

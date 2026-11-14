@@ -100,6 +100,7 @@ describe("被中止的一轮", () => {
 					output: undefined,
 					durationMs: undefined,
 					details: undefined,
+					images: [],
 				},
 			],
 			isStreaming: false,
@@ -187,5 +188,96 @@ describe("复制原文", () => {
 		expect((html.match(/turn-actions/g) ?? []).length).toBe(2);
 		const actions = html.indexOf("turn-actions");
 		expect(html.indexOf("copy-btn", actions)).toBeLessThan(html.indexOf("fork-btn", actions));
+	});
+});
+
+describe("脚本里的子调用", () => {
+	it("脚本调用的工具不再单独成行", () => {
+		const html = render(
+			[
+				{
+					kind: "message",
+					id: "e:a3",
+					entryId: "a3",
+					role: "assistant",
+					stopReason: "stop",
+					parts: [
+						{ kind: "text", partId: "text:0", text: "一次跑完" },
+						{
+							kind: "toolCall",
+							partId: "tool:c1",
+							callId: "c1",
+							name: "codemode",
+							input: {
+								code: "const [a, b] = await Promise.allSettled([\n  tools.bash({ command: 'uname -r' }),\n]);",
+							},
+							status: "done",
+							output: "Script completed\nWall time 0.1 seconds\nOutput:\n7.2.13",
+							durationMs: 40,
+							// 会话记录在父调用的结果里带一份子调用清单，行上不再展开它
+							details: {
+								calls: [
+									{ id: "c1/1", name: "bash", args: '{"command":"uname -r"}', status: "ok", durationMs: 12 },
+								],
+							},
+							images: [],
+						},
+					],
+					isStreaming: false,
+					startedAt: 1,
+					endedAt: 2,
+				},
+			],
+			true,
+		);
+		// 一段脚本一行，脚本里调用的工具不参与渲染
+		expect(html.match(/class="tr /g)?.length).toBe(1);
+		expect(html).toContain(">Codemode<");
+		expect(html).not.toContain(">Shell<");
+		expect(html).not.toContain("tr-nested");
+		// 展开只给返回内容，行上没有 input / output 这类标题
+		expect(html).not.toContain("tr-label");
+		expect(html).not.toContain(">input<");
+		expect(html).not.toContain(">output<");
+	});
+});
+
+describe("工具结果里的图片", () => {
+	it("图片不进折叠区，直接给 data URL", () => {
+		const html = render(
+			[
+				{
+					kind: "message",
+					id: "e:a9",
+					entryId: "a9",
+					role: "assistant",
+					stopReason: "stop",
+					parts: [
+						{ kind: "text", partId: "text:0", text: "截好了" },
+						{
+							kind: "toolCall",
+							partId: "tool:c9",
+							callId: "c9",
+							name: "codemode",
+							input: { code: "return await tools.screenshot();" },
+							status: "done",
+							output: "Script completed\nWall time 0.2 seconds\nOutput:\nok",
+							durationMs: 30,
+							details: undefined,
+							images: [{ data: "iVBORw0KGgo=", mimeType: "image/png" }],
+						},
+					],
+					isStreaming: false,
+					startedAt: 1,
+					endedAt: 2,
+				},
+			],
+			true,
+		);
+		expect(html).toContain("tr-images");
+		expect(html).toContain('src="data:image/png;base64,iVBORw0KGgo="');
+		// 没有图片的工具行不带空容器
+		const withoutImage = render([assistantItem("e:a10", "只有文字")], true);
+		expect(withoutImage).not.toContain("tr-images");
 	});
 });

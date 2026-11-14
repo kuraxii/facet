@@ -25,6 +25,21 @@
 	--window-button-width: 44px;
 	/* 侧栏里图标按钮的边长，以及按钮到侧栏左右边缘的距离；顶带的开关用同一组数 */
 	--icon-button-size: 28px;
+	/* 会话行首状态标记：槽位尺寸固定，环由 6 的点加内外各一圈描边与留白算出来 */
+	--status-slot: 12px;
+	/* 工具结果里的图片：收起时的最大高度，与多张之间的间距 */
+	--tool-image-height: 320px;
+	--tool-image-gap: 8px;
+	--tool-image-radius: 8px;
+	/* 参数摘要弹窗：离摘要的间距、最大宽度与最大高度 */
+	--tool-tip-gap: 6px;
+	--tool-tip-width: 560px;
+	--tool-tip-height: 320px;
+	--status-dot: 6px;
+	--status-dot-failed: 8px;
+	--status-ring-stroke: 1.5px;
+	--status-ring-gap: 1.5px;
+	--status-ring-size: calc(var(--status-dot) + (var(--status-ring-stroke) + var(--status-ring-gap)) * 2);
 	--sidebar-edge: 10px;
 	/* 三栏宽度：顶带的格子与下面的正文共用，由界面按当前状态写入 */
 	--sidebar-width: 272px;
@@ -1884,6 +1899,87 @@ svg.fl {
 	background: var(--err);
 }
 
+/*
+ * 会话行首的状态标记。
+ *
+ * 槽位尺寸固定，只有里面的画法随状态变：运行中是环，等待输入是图标，失败是带描边的点，
+ * 已完成的点是弱化的。尺寸都在这里定，行内不再各写一遍。
+ */
+.status-mark {
+	display: grid;
+	place-items: center;
+	flex: none;
+	width: var(--status-slot);
+	height: var(--status-slot);
+	color: var(--t3);
+}
+
+.status-dot {
+	display: block;
+	width: var(--status-dot);
+	height: var(--status-dot);
+	border-radius: 50%;
+}
+
+.status-mark.is-attention {
+	color: var(--dot-ok);
+}
+
+.status-mark.is-attention .status-dot {
+	background: var(--dot-ok);
+}
+
+.status-mark.is-done .status-dot {
+	background: var(--t3);
+	opacity: 0.3;
+}
+
+/* 失败：点大一圈，用行底色描一圈边，压在背景上不糊边 */
+.status-mark.is-failed .status-dot {
+	width: var(--status-dot-failed);
+	height: var(--status-dot-failed);
+	background: var(--dot-err);
+	box-shadow: 0 0 0 1px var(--sb);
+}
+
+.status-mark.is-needs_input {
+	color: var(--dot-warn);
+}
+
+.status-ring {
+	position: relative;
+	display: grid;
+	place-items: center;
+	width: var(--status-ring-size);
+	height: var(--status-ring-size);
+}
+
+.status-ring-track,
+.status-ring-arc {
+	position: absolute;
+	inset: 0;
+	border: var(--status-ring-stroke) solid transparent;
+	border-radius: 50%;
+}
+
+.status-ring-track {
+	border-color: var(--dot-run);
+	opacity: 0.3;
+}
+
+/* 只留上边框：圆角盒子上看起来就是一段 90° 弧 */
+.status-ring-arc {
+	border-top-color: var(--dot-run);
+	opacity: 0.9;
+}
+
+.status-ring-dot {
+	width: var(--status-dot);
+	height: var(--status-dot);
+	border-radius: 50%;
+	background: var(--dot-run);
+}
+
 .pulse {
 	animation: blink 1.4s ease-in-out infinite;
 }
@@ -2025,6 +2121,7 @@ svg.fl {
 	min-width: 0;
 }
 
+/* 脚本里再调用的工具：缩进一档挂在父行下面，左侧一条细线标出属于哪次调用 */
 .tr-head {
 	display: flex;
 	align-items: center;
@@ -2092,6 +2189,57 @@ svg.fl {
 /* 输出：没有边框与底色，直接缩进在行下面 */
 .tr-out {
 	padding: 0 0 4px var(--indent-rail-label);
+}
+
+/* 工具结果里的图片：默认按行宽缩、限高，点一下回到原始尺寸，超出就在行内滚 */
+.tr-images {
+	display: grid;
+	gap: var(--tool-image-gap);
+	padding: 2px 0 4px var(--indent-rail-label);
+}
+
+.tr-image {
+	display: block;
+	width: fit-content;
+	max-width: 100%;
+	padding: 0;
+	border: 1px solid var(--line2);
+	border-radius: var(--tool-image-radius);
+	background: transparent;
+}
+
+.tr-image img {
+	display: block;
+	max-width: 100%;
+	max-height: var(--tool-image-height);
+	border-radius: calc(var(--tool-image-radius) - 1px);
+	object-fit: contain;
+}
+
+/* 参数摘要的完整内容：停留才出现，铺在窗口上，不参与行内排版；指针可以移进来滚动查看 */
+.tr-tip {
+	position: fixed;
+	z-index: 45;
+	max-width: var(--tool-tip-width);
+	margin-top: var(--tool-tip-gap);
+	max-height: var(--tool-tip-height);
+	overflow: auto;
+	padding: 8px 10px;
+	border: 1px solid var(--line2);
+	border-radius: 10px;
+	background: var(--card);
+	box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+	overscroll-behavior: contain;
+}
+
+.tr-tip pre {
+	margin: 0;
+	color: var(--t2);
+	font-family: var(--font-mono);
+	font-size: 11.5px;
+	line-height: 1.55;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
 }
 
 .tr-out pre {

@@ -9,7 +9,7 @@ import { join } from "node:path";
 import type { Action, ActionFrame, Channel, TerminalExit } from "@facet/protocol";
 import { terminalChannelFor } from "@facet/protocol";
 import { afterEach, describe, expect, it } from "vitest";
-import type { PtyBackend, PtyHandle, PtySink, PtySpawnOptions } from "./pty-host.ts";
+import type { PtyBackend, PtyHandle, PtySink, PtySpawnOptions } from "./pty-server.ts";
 import { TerminalService } from "./terminals.ts";
 
 /** 内存终端：记下写进来的按键与尺寸变化，也能把输出与退出推回去。 */

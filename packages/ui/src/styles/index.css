@@ -29,6 +29,7 @@
 	--status-slot: 12px;
 	/* 工具行里嵌一层子调用：缩进与左侧竖线到内容的距离 */
 	--tool-nest-indent: 22px;
+	--tool-section-gap: 8px;
 	--tool-nest-pad: 10px;
 	--tool-nest-gap: 2px;
 	--status-dot: 6px;
@@ -2193,6 +2194,14 @@ svg.fl {
 /* 输出：没有边框与底色，直接缩进在行下面 */
 .tr-out {
 	padding: 0 0 4px var(--indent-rail-label);
+}
+
+.tr-label {
+	display: block;
+	margin-top: var(--tool-section-gap);
+	color: var(--t3);
+	font-size: 11px;
+	line-height: 1.4;
 }
 
 .tr-out pre {

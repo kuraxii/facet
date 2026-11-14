@@ -115,6 +115,43 @@ export function foldOutput(
 	return { preview: output, hiddenLines: 0 };
 }
 
+/**
+ * 脚本类工具的完整代码。
+ *
+ * `codemode` 的参数是一个 `code` 字段,展开时要看整段脚本,行上的摘要只取第一行。
+ */
+export function scriptCode(input: unknown): string | undefined {
+	if (typeof input !== "object" || input === null) {
+		return undefined;
+	}
+	const code = (input as { code?: unknown }).code;
+	if (typeof code !== "string" || code.trim().length === 0) {
+		return undefined;
+	}
+	// 只去掉首尾的空行，代码自身的缩进保留
+	return code.replace(/^(?:[ \t]*\r?\n)+/, "").trimEnd();
+}
+
+/**
+ * 脚本类工具的返回正文。
+ *
+ * 结果文本由运行器包了一层前置信息(`Script completed` / `Wall time …` / `Output:`),
+ * 展开后先给代码再给返回内容,这层前置信息没有信息量,一并去掉。
+ */
+export function scriptBody(output: string): string {
+	const lines = output.split("\n");
+	const head = lines[0]?.trim() ?? "";
+	if (head !== "Script completed" && head !== "Script failed") {
+		return output;
+	}
+	const marker = lines.findIndex((line) => line.trim() === "Output:");
+	const body = marker < 0 ? lines.slice(1) : lines.slice(marker + 1);
+	while (body.length > 0 && (body[0] ?? "").trim() === "") {
+		body.shift();
+	}
+	return body.join("\n");
+}
+
 /** 工具的归类,决定行首图标与过程行标题里算进哪一项。 */
 export type ToolCategory = "command" | "read" | "edit" | "search" | "other";
 

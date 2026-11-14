@@ -23,7 +23,7 @@ import { Markdown } from "../markdown/Markdown.tsx";
 import { ChevronIcon, TreeChevron } from "./chevron.tsx";
 import { lineClass, patchLines } from "./diff-lines.ts";
 import { type DiffChunk, type DisplayRow, groupLabel, groupRows, turnDurationText } from "./group.ts";
-import { foldOutput, type ToolCategory, toolKind, toolTarget } from "./tool-text.ts";
+import { foldOutput, scriptBody, scriptCode, type ToolCategory, toolKind, toolTarget } from "./tool-text.ts";
 
 /** 面板参数。 */
 export interface ChatTranscriptProps {
@@ -247,9 +247,13 @@ function ToolRow({ part, nested }: { part: ToolCallPart; nested?: readonly ToolC
 			children.push(restored);
 		}
 	}
-	const folded = foldOutput(output);
+	// 脚本类工具展开后先给代码再给返回内容；返回内容前面那层运行信息没有信息量
+	const code = scriptCode(part.input);
+	const body = code === undefined ? output : scriptBody(output);
+	const folded = foldOutput(body);
 	const isLong = folded.hiddenLines > 0;
-	const shown = isLong && !isExpanded ? folded.preview : output;
+	const shown = isLong && !isExpanded ? folded.preview : body;
+	const canOpen = code !== undefined || body.length > 0;
 	const target = toolTarget(part.input);
 	const kind = toolKind(part.name);
 	const isRunning = part.status === "running";
@@ -268,9 +272,20 @@ function ToolRow({ part, nested }: { part: ToolCallPart; nested?: readonly ToolC
 				<span className={`tr-name${isRunning ? " is-live" : ""}`}>{kind.label}</span>
 				{target.length > 0 ? <span className={`tr-arg${isRunning ? " is-live" : ""}`}>{target}</span> : null}
 			</button>
-			{isOpen && output.length > 0 ? (
-				<div className="tr-out">
-					<pre>{shown}</pre>
+			{isOpen && canOpen ? (
+				<div className={`tr-out${code === undefined ? "" : " is-script"}`}>
+					{code === undefined ? null : (
+						<>
+							<span className="tr-label">input</span>
+							<pre>{code}</pre>
+						</>
+					)}
+					{body.length === 0 ? null : (
+						<>
+							{code === undefined ? null : <span className="tr-label">output</span>}
+							<pre>{shown}</pre>
+						</>
+					)}
 					{isLong && !isExpanded ? (
 						<button type="button" className="tr-more" onClick={() => setExpanded(true)}>
 							已折叠 {folded.hiddenLines} 行 · 显示全部
@@ -295,12 +310,7 @@ function ThinkingRow({ text }: { text: string }) {
 	const [isOpen, setOpen] = useState(false);
 	return (
 		<div className="tr is-think">
-			<button
-				type="button"
-				className="tr-head"
-				onClick={() => setOpen((open) => !open)}
-				aria-expanded={isOpen}
-			>
+			<button type="button" className="tr-head" onClick={() => setOpen(!isOpen)} aria-expanded={isOpen}>
 				<span className="tr-icon">
 					<Brain size={14} strokeWidth={1.5} />
 				</span>

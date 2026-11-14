@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { foldOutput, toolKind, toolStatusText, toolTarget } from "./tool-text.ts";
+import { foldOutput, scriptBody, scriptCode, toolKind, toolStatusText, toolTarget } from "./tool-text.ts";
 
 describe("工具状态文字", () => {
 	it("成功与失败不写字,只留耗时", () => {
@@ -70,5 +70,36 @@ describe("脚本类工具", () => {
 
 	it("整段只有注释时摘要为空", () => {
 		expect(toolTarget({ code: "// 什么都没做" })).toBe("");
+	});
+});
+
+describe("脚本类工具的展开内容", () => {
+	it("取整段代码，行上摘要只取第一行", () => {
+		const code = "const a = 1;\nconst b = 2;";
+		expect(scriptCode({ code })).toBe(code);
+		expect(toolTarget({ code })).toBe("const a = 1;");
+	});
+
+	it("去掉首尾空行，代码缩进照原样保留", () => {
+		expect(scriptCode({ code: "\n\n  if (a) {\n    b();\n  }\n\n" })).toBe("  if (a) {\n    b();\n  }");
+	});
+
+	it("返回正文去掉运行器加的前置信息", () => {
+		const output = "Script completed\nWall time 0.1 seconds\nOutput:\n\n==> uname -r <==\n7.2.13";
+		expect(scriptBody(output)).toBe("==> uname -r <==\n7.2.13");
+	});
+
+	it("失败的脚本同样去掉前置信息，保留报错正文", () => {
+		const output = "Script failed\nWall time 0.0 seconds\nOutput:\nScript error:\nboom";
+		expect(scriptBody(output)).toBe("Script error:\nboom");
+	});
+
+	it("没有这层前置信息时原样返回", () => {
+		expect(scriptBody("普通输出")).toBe("普通输出");
+	});
+
+	it("没有代码字段时不当脚本", () => {
+		expect(scriptCode({ command: "ls" })).toBeUndefined();
+		expect(scriptCode("ls")).toBeUndefined();
 	});
 });

@@ -167,7 +167,7 @@ function shortPath(path: string): string {
  * 一行里只有图标、短名与参数摘要，点开才看输出；输出没有边框与底色，直接跟在下面。
  */
 /** 参数弹窗的延时：指针在摘要上停留这么久才弹，扫过去不打扰 */
-const TIP_DELAY_MS = 1000;
+const TIP_DELAY_MS = 500;
 
 function ToolRow({ part }: { part: ToolCallPart }) {
 	const [isOpen, setOpen] = useState(false);

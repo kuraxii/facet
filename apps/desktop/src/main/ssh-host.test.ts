@@ -1,24 +1,20 @@
 /**
  * SSH 连接的测试。
  *
- * 只测能离线验的部分：目标写法、known_hosts 校验（含哈希条目）、ssh_config 解析，以及
- * 用假连接跑一遍「读远端发现文件 → 打开 socket 通道」的流程。
+ * 只测能离线验的部分：目标写法、ssh_config 解析、密码与私钥两条认证路径，以及用假连接
+ * 跑一遍「读远端发现文件 → 打开 socket 通道」的流程。
  */
-import { createHmac } from "node:crypto";
 import type { ConnectConfig } from "ssh2";
 import { describe, expect, it } from "vitest";
 import {
 	isSshTarget,
 	matchSshConfig,
-	parseHostKeyBlob,
-	parseKnownHosts,
 	parseSshConfig,
 	parseSshTarget,
 	remoteDiscoveryCommand,
 	type SshClientLike,
 	SshHosts,
 	sshTargetLabel,
-	verifyHostKey,
 } from "./ssh-host.ts";
 
 describe("parseSshTarget", () => {
@@ -42,71 +38,6 @@ describe("parseSshTarget", () => {
 		expect(isSshTarget("laptop:6767")).toBe(false);
 		expect(sshTargetLabel({ user: "dev", host: "laptop", port: 2222 })).toBe("dev@laptop:2222");
 		expect(sshTargetLabel({ user: undefined, host: "laptop", port: 22 })).toBe("laptop");
-	});
-});
-
-describe("known_hosts", () => {
-	const keyType = "ssh-ed25519";
-	const key = "AAAAC3NzaC1lZDI1NTE5AAAAIExampleKey";
-
-	it("明文条目按主机与端口匹配", () => {
-		const entries = parseKnownHosts(`laptop ${keyType} ${key}\n[other]:2222 ${keyType} ${key}\n`);
-		expect(verifyHostKey(entries, "laptop", 22, keyType, key)).toBe(true);
-		expect(verifyHostKey(entries, "other", 2222, keyType, key)).toBe(true);
-		expect(verifyHostKey(entries, "other", 22, keyType, key)).toBe(false);
-	});
-
-	it("密钥不同、类型不同都不算匹配", () => {
-		const entries = parseKnownHosts(`laptop ${keyType} ${key}`);
-		expect(verifyHostKey(entries, "laptop", 22, keyType, "别的公钥")).toBe(false);
-		expect(verifyHostKey(entries, "laptop", 22, "ssh-rsa", key)).toBe(false);
-	});
-
-	it("Fedora 缺省的哈希条目也能匹配", () => {
-		const salt = Buffer.from("0123456789abcdef");
-		const digest = createHmac("sha1", salt).update("laptop").digest("base64");
-		const entries = parseKnownHosts(`|1|${salt.toString("base64")}|${digest} ${keyType} ${key}`);
-		expect(verifyHostKey(entries, "laptop", 22, keyType, key)).toBe(true);
-		expect(verifyHostKey(entries, "别的机器", 22, keyType, key)).toBe(false);
-	});
-
-	it("注释与空行跳过", () => {
-		expect(parseKnownHosts("# 注释\n\nlaptop ssh-ed25519 abc\n")).toHaveLength(1);
-	});
-});
-
-describe("parseHostKeyBlob", () => {
-	/** 照 SSH 线上的写法拼一个公钥 blob：4 字节长度 + 算法名 + 密钥数据。 */
-	const blob = (keyType: string, keyData: Buffer): Buffer => {
-		const name = Buffer.from(keyType, "utf8");
-		const length = Buffer.alloc(4);
-		length.writeUInt32BE(name.length, 0);
-		return Buffer.concat([length, name, keyData]);
-	};
-
-	it("从二进制 blob 里取出算法名与 base64", () => {
-		const raw = Buffer.from("密钥数据", "utf8");
-		const parsed = parseHostKeyBlob(blob("ssh-ed25519", raw));
-		expect(parsed?.keyType).toBe("ssh-ed25519");
-		// known_hosts 存的是整段 blob 的 base64，和握手给的字节一致
-		expect(parsed?.key).toBe(blob("ssh-ed25519", raw).toString("base64"));
-	});
-
-	it("解析结果能直接和 known_hosts 对上", () => {
-		const raw = Buffer.from("密钥数据", "utf8");
-		const key = blob("ssh-ed25519", raw);
-		const entries = parseKnownHosts(`10.1.10.152 ssh-ed25519 ${key.toString("base64")}`);
-		const parsed = parseHostKeyBlob(key);
-		expect(parsed).toBeDefined();
-		expect(verifyHostKey(entries, "10.1.10.152", 22, parsed?.keyType ?? "", parsed?.key ?? "")).toBe(true);
-	});
-
-	it("长度越界或算法名不像公钥类型时给 undefined", () => {
-		const truncated = Buffer.from([0, 0, 0, 40, 0x61]);
-		expect(parseHostKeyBlob(truncated)).toBeUndefined();
-		expect(parseHostKeyBlob(Buffer.alloc(0))).toBeUndefined();
-		const weird = Buffer.from([0, 0, 0, 3, 0x41, 0x42, 0x43]);
-		expect(parseHostKeyBlob(weird)).toBeUndefined();
 	});
 });
 

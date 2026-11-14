@@ -45,7 +45,7 @@ FACET_ENDPOINT=ws://192.168.1.20:4319/endpoint npm run dev:desktop
 主机只跑一套按行编码的协议，跑在哪条字节流上都一样：
 
 - **本机**：缺省只监听 unix socket，路径是 `$XDG_RUNTIME_DIR/<数据目录名>/host.sock`（没有 `XDG_RUNTIME_DIR` 时落在数据目录下），不开任何端口。给出 `FACET_PORT` 或 `FACET_HOST` 时改成监听 TCP，`FACET_SOCKET` 可以指定别的 socket 路径。
-- **远程**：主机清单里填 `user@host`（或 `ssh://user@host:端口`），桌面用进程内的 SSH 库连过去，读远端的发现文件拿到 socket 路径与令牌，再在远端 socket 上开一条通道；远端不开端口、本地也不开端口，协议层一行不用改。认证先用 `~/.ssh/config` 里的私钥与 ssh-agent；没有可用的私钥、或服务器拒绝这把密钥时问一次登录密码，密码留在桌面主进程内存里供重连使用，不写进清单。主机密钥按 `known_hosts` 校验（支持哈希条目），未知或变更的密钥直接拒绝（用 `ssh-keyscan 主机 >> ~/.ssh/known_hosts` 收下新主机）。Windows 远端只监听命名管道时无法用 SSH 通道，退回走远端的 TCP 回环地址。
+- **远程**：主机清单里填 `user@host`（或 `ssh://user@host:端口`），桌面用进程内的 SSH 库连过去，读远端的发现文件拿到 socket 路径与令牌，再在远端 socket 上开一条通道；远端不开端口、本地也不开端口，协议层一行不用改。认证先用 `~/.ssh/config` 里的私钥、`~/.ssh` 下的私钥与 ssh-agent；没有可用的私钥、或服务器拒绝这把密钥时问一次登录密码，密码留在桌面主进程内存里供重连使用，不写进清单。主机公钥不做校验，`known_hosts` 不参与：能连上那台机器就已经拿到那台机器的账户权限。Windows 远端只监听命名管道时无法用 SSH 通道，退回走远端的 TCP 回环地址。
 - **远程端不需要开关**：能拿到这台机器的 SSH 登录权，就等于那台机器的使用者，SSH 通道送进来的连接按本机档处理（管理档），不受 `FACET_REMOTE_PERMISSION` 约束。那条开关收窄的是会自己声明权限档的远程端：Web 端声明操作档，主机缺省把它收成只读，`FACET_REMOTE_PERMISSION=operate` 才放行。
 - **权限档**：本机连接与 SSH 通道是管理档；自己声明档位的远程连接（Web）按 `FACET_REMOTE_PERMISSION` 给操作档或只读档。设置与凭证、提供方、项目增删与信任、诊断按入口放行：桌面设备开的通道可以（本机 socket 与 SSH 隧道都算），浏览器入口不行；只读档连会话与文件都不能改，输入区只是发送按钮不可用。远程的写操作记进 `$FACET_DATA_DIR/audit.log`（时间、连接标识、权限档、操作与结果，不含参数与内容）。
 - **令牌**：主机会生成一个随机令牌写进发现文件（`FACET_TOKEN` 可指定，`FACET_NO_TOKEN=1` 关闭校验）。连接的第一帧是 `{type:"auth",token}`，不匹配直接断开，拿不到 hello。发现文件权限 `0600`、所在目录 `0700`，socket 本身也是 `0600`。

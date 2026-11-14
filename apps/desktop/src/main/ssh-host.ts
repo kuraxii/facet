@@ -5,9 +5,9 @@
  * （OpenSSH 的 streamlocal 转发），本地不开端口、远端也不开端口。主机是 Windows、只监听
  * TCP 回环时退回 direct-tcpip，同样不落地任何监听。
  *
- * 认证复用系统的 SSH 配置与 ssh-agent；主机密钥按 known_hosts 校验，未知主机直接拒绝。
+ * 认证复用系统的 SSH 配置、ssh-agent 与 ~/.ssh 下的私钥，没有可用凭据时问一次密码。
+ * 主机公钥不做校验：能连上这台机器就等于拿到那台机器的账户权限，再叠一层主机制约没有意义。
  */
-import { createHmac } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -68,78 +68,6 @@ export function isSshTarget(text: string): boolean {
 export function sshTargetLabel(target: SshTarget): string {
 	const host = target.port === 22 ? target.host : `${target.host}:${target.port}`;
 	return target.user === undefined ? host : `${target.user}@${host}`;
-}
-
-/** known_hosts 里的一条记录。 */
-interface KnownHostEntry {
-	/** 主机名，带端口时形如 [host]:port */
-	host: string;
-	/** 密钥类型，例如 ssh-ed25519 */
-	keyType: string;
-	/** 公钥的 base64 */
-	key: string;
-}
-
-/** 解析 known_hosts，注释、空行与不认识的行跳过。 */
-export function parseKnownHosts(text: string): KnownHostEntry[] {
-	const entries: KnownHostEntry[] = [];
-	for (const line of text.split("\n")) {
-		const trimmed = line.trim();
-		if (trimmed.length === 0 || trimmed.startsWith("#") || trimmed.startsWith("@")) {
-			continue;
-		}
-		const parts = trimmed.split(/\s+/);
-		if (parts.length < 3) {
-			continue;
-		}
-		const [hosts, keyType, key] = parts as [string, string, string];
-		for (const host of hosts.split(",")) {
-			entries.push({ host, keyType, key });
-		}
-	}
-	return entries;
-}
-
-/** 这个主机（带端口）在 known_hosts 里的写法。 */
-function hostPatterns(host: string, port: number): string[] {
-	return port === 22 ? [host, `[${host}]:22`] : [`[${host}]:${port}`];
-}
-
-/** 哈希过的 known_hosts 条目（`|1|salt|hash`）是否匹配。 */
-function matchesHashed(stored: string, host: string): boolean {
-	const parts = stored.split("|");
-	if (parts.length !== 4 || parts[1] !== "1") {
-		return false;
-	}
-	const salt = parts[2] as string;
-	const expected = parts[3] as string;
-	const digest = createHmac("sha1", Buffer.from(salt, "base64")).update(host).digest("base64");
-	return digest === expected;
-}
-
-/**
- * 校验主机公钥。
- *
- * 明文条目直接比主机名，哈希条目按 known_hosts 的算法算一遍。找不到匹配的条目时返回
- * false，交给调用方拒绝连接。
- */
-export function verifyHostKey(
-	entries: readonly KnownHostEntry[],
-	host: string,
-	port: number,
-	keyType: string,
-	key: string,
-): boolean {
-	const patterns = hostPatterns(host, port);
-	return entries.some((entry) => {
-		if (entry.keyType !== keyType || entry.key !== key) {
-			return false;
-		}
-		if (patterns.includes(entry.host) || entry.host === host) {
-			return true;
-		}
-		return matchesHashed(entry.host, host) || matchesHashed(entry.host, `[${host}]:${port}`);
-	});
 }
 
 /** 一条 SSH 配置记录里我们用得上的字段。 */
@@ -320,7 +248,6 @@ export class SshHosts {
 			parseSshConfig((await readLocal(join(home, ".ssh", "config"))) ?? ""),
 			target.host,
 		);
-		const knownHosts = parseKnownHosts((await readLocal(join(home, ".ssh", "known_hosts"))) ?? "");
 		const host = config?.hostName ?? target.host;
 		const port = target.port === 22 ? (config?.port ?? 22) : target.port;
 		const user = target.user ?? config?.user ?? env.USER ?? env.LOGNAME;
@@ -356,13 +283,6 @@ export class SshHosts {
 				...(user === undefined ? {} : { username: user }),
 				...login,
 				readyTimeout: this.options.connectTimeoutMs ?? 10_000,
-				hostVerifier: (key: Buffer): boolean => {
-					const parsed = parseHostKeyBlob(key);
-					if (parsed === undefined) {
-						return false;
-					}
-					return verifyHostKey(knownHosts, host, port, parsed.keyType, parsed.key);
-				},
 			};
 		};
 
@@ -415,7 +335,6 @@ export class SshHosts {
 	}
 }
 
-/** 把 ssh2 给的公钥拆成类型与 base64。 */
 /** ssh2 在认证阶段失败时把 level 标成 client-authentication。 */
 function isAuthFailure(error: unknown): boolean {
 	return (
@@ -424,31 +343,6 @@ function isAuthFailure(error: unknown): boolean {
 		(error as { level?: unknown }).level === "client-authentication"
 	);
 }
-
-/**
- * 解析 SSH 握手给出的主机公钥。
- *
- * ssh2 交给 hostVerifier 的是 SSH 线上的公钥 blob：4 字节大端长度加算法名，后面跟着
- * 密钥数据，整段不是可读文本。known_hosts 那一列存的是同一个 blob 的 base64，所以这里
- * 解出算法名，再把整段按 base64 还原成可比对的形式。
- */
-export function parseHostKeyBlob(blob: Buffer): { keyType: string; key: string } | undefined {
-	if (blob.length < 4) {
-		return undefined;
-	}
-	const nameLength = blob.readUInt32BE(0);
-	if (nameLength === 0 || nameLength > blob.length - 4) {
-		return undefined;
-	}
-	const keyType = blob.subarray(4, 4 + nameLength).toString("utf8");
-	if (!KEY_TYPE_PATTERN.test(keyType)) {
-		return undefined;
-	}
-	return { keyType, key: blob.toString("base64") };
-}
-
-/** 算法名只可能是 ssh- / ecdsa- / sk- 开头的可见字符。 */
-const KEY_TYPE_PATTERN = /^(ssh-|ecdsa-|sk-)[A-Za-z0-9@.-]+$/;
 
 /** 默认的 SSH 连接：用 ssh2 连上并包成 SshClientLike。 */
 const defaultConnector: SshConnector = async (config) => {

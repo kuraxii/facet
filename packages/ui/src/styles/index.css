@@ -27,6 +27,10 @@
 	--icon-button-size: 28px;
 	/* 会话行首状态标记：槽位尺寸固定，环由 6 的点加内外各一圈描边与留白算出来 */
 	--status-slot: 12px;
+	/* 工具结果里的图片：收起时的最大高度，与多张之间的间距 */
+	--tool-image-height: 320px;
+	--tool-image-gap: 8px;
+	--tool-image-radius: 8px;
 	/* 参数摘要弹窗：离摘要的间距、最大宽度与最大高度 */
 	--tool-tip-gap: 6px;
 	--tool-tip-width: 560px;
@@ -2185,6 +2189,31 @@ svg.fl {
 /* 输出：没有边框与底色，直接缩进在行下面 */
 .tr-out {
 	padding: 0 0 4px var(--indent-rail-label);
+}
+
+/* 工具结果里的图片：默认按行宽缩、限高，点一下回到原始尺寸，超出就在行内滚 */
+.tr-images {
+	display: grid;
+	gap: var(--tool-image-gap);
+	padding: 2px 0 4px var(--indent-rail-label);
+}
+
+.tr-image {
+	display: block;
+	width: fit-content;
+	max-width: 100%;
+	padding: 0;
+	border: 1px solid var(--line2);
+	border-radius: var(--tool-image-radius);
+	background: transparent;
+}
+
+.tr-image img {
+	display: block;
+	max-width: 100%;
+	max-height: var(--tool-image-height);
+	border-radius: calc(var(--tool-image-radius) - 1px);
+	object-fit: contain;
 }
 
 /* 参数摘要的完整内容：停留才出现，铺在窗口上，不参与行内排版；指针可以移进来滚动查看 */

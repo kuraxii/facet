@@ -95,9 +95,39 @@ describe("toTranscript", () => {
 				status: "done",
 				output: "a.txt",
 				durationMs: undefined,
+				details: undefined,
+				images: [],
 			},
 			{ kind: "text", partId: "text:2", text: "看完了" },
 		]);
+	});
+
+	it("工具结果里的图片单独取出来，文本照旧", () => {
+		const items = toTranscript(
+			viewWith([
+				historyItem("u1", { role: "user", content: [{ type: "text", text: "截个图" }], timestamp: 1 }),
+				historyItem(
+					"a1",
+					assistant([{ type: "toolCall", id: "c1", name: "codemode", arguments: {} }], "stop"),
+				),
+				historyItem("r1", {
+					role: "toolResult",
+					callId: "c1",
+					toolName: "codemode",
+					content: [
+						{ type: "text", text: "画好了" },
+						{ type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" },
+					],
+					isError: false,
+					timestamp: 2,
+				}),
+			]),
+		);
+		const part = items.flatMap((item) => item.parts).find((candidate) => candidate.kind === "toolCall");
+		expect(part).toMatchObject({
+			output: "画好了",
+			images: [{ data: "iVBORw0KGgo=", mimeType: "image/png" }],
+		});
 	});
 
 	it("工具结果里的结构化信息透传到工具段", () => {
@@ -169,6 +199,7 @@ describe("toTranscript", () => {
 				output: undefined,
 				durationMs: undefined,
 				details: undefined,
+				images: [],
 			},
 		]);
 	});

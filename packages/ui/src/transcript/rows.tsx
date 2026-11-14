@@ -4,7 +4,7 @@
  * 行由渲染单元聚合而来,收起状态按行标识保存,所以流式追加内容时不会把用户收起过的行重新展开。
  * 默认只有过程行与文件改动行收起,其余行展开。
  */
-import type { Part, ToolCallPart, TranscriptItem } from "@facet/client-core";
+import type { Part, ToolCallPart, ToolImage, TranscriptItem } from "@facet/client-core";
 import {
 	Brain,
 	Check,
@@ -158,6 +158,27 @@ function shortPath(path: string): string {
  *
  * 一行里只有图标、短名与参数摘要，点开才看输出；输出没有边框与底色，直接跟在下面。
  */
+/** 工具结果里的一张图片。默认按行宽缩、限高，点一下回到原始尺寸。 */
+function ToolImageThumb({ image, label }: { image: ToolImage; label: string }) {
+	const [isActual, setActual] = useState(false);
+	return (
+		<button
+			type="button"
+			className="tr-image"
+			onClick={() => setActual((actual) => !actual)}
+			aria-label={label}
+			aria-pressed={isActual}
+			style={{ cursor: isActual ? "zoom-out" : "zoom-in", overflowX: isActual ? "auto" : undefined }}
+		>
+			<img
+				src={`data:${image.mimeType};base64,${image.data}`}
+				alt={label}
+				style={{ maxWidth: isActual ? "none" : undefined, maxHeight: isActual ? "none" : undefined }}
+			/>
+		</button>
+	);
+}
+
 /** 参数弹窗的延时：指针在摘要上停留这么久才弹，扫过去不打扰 */
 const TIP_DELAY_MS = 500;
 /** 弹窗要能滚起来，指针从摘要挪到弹窗上这段时间先不收；挪出去超过它才关 */
@@ -217,6 +238,18 @@ function ToolRow({ part }: { part: ToolCallPart }) {
 					</span>
 				)}
 			</button>
+			{/* 图片是结果的主体，不折在展开区里，点一下看原始大小 */}
+			{part.images.length === 0 ? null : (
+				<div className="tr-images">
+					{part.images.map((image, index) => (
+						<ToolImageThumb
+							key={`${part.callId}-${image.mimeType}-${image.data.slice(0, 32)}`}
+							image={image}
+							label={`${kind.label} 结果里的第 ${index + 1} 张图片`}
+						/>
+					))}
+				</div>
+			)}
 			{isOpen && body.length > 0 ? (
 				<div className="tr-out">
 					<pre>{shown}</pre>

@@ -100,6 +100,7 @@ describe("被中止的一轮", () => {
 					output: undefined,
 					durationMs: undefined,
 					details: undefined,
+					images: [],
 				},
 			],
 			isStreaming: false,
@@ -219,6 +220,7 @@ describe("脚本里的子调用", () => {
 									{ id: "c1/1", name: "bash", args: '{"command":"uname -r"}', status: "ok", durationMs: 12 },
 								],
 							},
+							images: [],
 						},
 					],
 					isStreaming: false,
@@ -237,5 +239,45 @@ describe("脚本里的子调用", () => {
 		expect(html).not.toContain("tr-label");
 		expect(html).not.toContain(">input<");
 		expect(html).not.toContain(">output<");
+	});
+});
+
+describe("工具结果里的图片", () => {
+	it("图片不进折叠区，直接给 data URL", () => {
+		const html = render(
+			[
+				{
+					kind: "message",
+					id: "e:a9",
+					entryId: "a9",
+					role: "assistant",
+					stopReason: "stop",
+					parts: [
+						{ kind: "text", partId: "text:0", text: "截好了" },
+						{
+							kind: "toolCall",
+							partId: "tool:c9",
+							callId: "c9",
+							name: "codemode",
+							input: { code: "return await tools.screenshot();" },
+							status: "done",
+							output: "Script completed\nWall time 0.2 seconds\nOutput:\nok",
+							durationMs: 30,
+							details: undefined,
+							images: [{ data: "iVBORw0KGgo=", mimeType: "image/png" }],
+						},
+					],
+					isStreaming: false,
+					startedAt: 1,
+					endedAt: 2,
+				},
+			],
+			true,
+		);
+		expect(html).toContain("tr-images");
+		expect(html).toContain('src="data:image/png;base64,iVBORw0KGgo="');
+		// 没有图片的工具行不带空容器
+		const withoutImage = render([assistantItem("e:a10", "只有文字")], true);
+		expect(withoutImage).not.toContain("tr-images");
 	});
 });

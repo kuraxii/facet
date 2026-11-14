@@ -28,6 +28,7 @@ export type {
 	TextPart,
 	ThinkingPart,
 	ToolCallPart,
+	ToolImage,
 	ToolPartStatus,
 	TranscriptItem,
 } from "./transcript.ts";

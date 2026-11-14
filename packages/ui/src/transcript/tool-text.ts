@@ -67,6 +67,35 @@ export function toolTarget(input: unknown): string {
 }
 
 /**
+ * 参数摘要对应的完整内容。
+ *
+ * 行上一行放不下,所以摘要会截断;鼠标停在摘要上时用弹窗给出没截断的那份,
+ * 脚本类工具给整段代码。
+ */
+export function toolDetail(input: unknown): string {
+	if (typeof input === "string") {
+		return input.trim();
+	}
+	if (typeof input !== "object" || input === null) {
+		return "";
+	}
+	const record = input as Record<string, unknown>;
+	if (typeof record.code === "string") {
+		const code = scriptCode(record);
+		if (code !== undefined) {
+			return code;
+		}
+	}
+	for (const key of TARGET_KEYS) {
+		const value = record[key];
+		if (typeof value === "string" && value.trim().length > 0) {
+			return value.trim();
+		}
+	}
+	return "";
+}
+
+/**
  * 工具卡片右侧的状态文字。
  *
  * 成功与失败只靠颜色和边框区分,不再写字;文字位置留给耗时。执行中仍写出「执行中」,
@@ -137,6 +166,9 @@ export function scriptCode(input: unknown): string | undefined {
  *
  * 结果文本由运行器包了一层前置信息(`Script completed` / `Wall time …` / `Output:`),
  * 展开后先给代码再给返回内容,这层前置信息没有信息量,一并去掉。
+ *
+ * 脚本给出多段文字时,运行器会给每段加一行 `==> text N/M <==` 分隔,控制台输出再包一层
+ * `<console_output>`。这些是给它上下文的模型看的,界面上只留文字本身。
  */
 export function scriptBody(output: string): string {
 	const lines = output.split("\n");
@@ -145,11 +177,18 @@ export function scriptBody(output: string): string {
 		return output;
 	}
 	const marker = lines.findIndex((line) => line.trim() === "Output:");
-	const body = marker < 0 ? lines.slice(1) : lines.slice(marker + 1);
+	const raw = marker < 0 ? lines.slice(1) : lines.slice(marker + 1);
+	const body = raw.filter((line) => {
+		const trimmed = line.trim();
+		if (trimmed === "<console_output>" || trimmed === "</console_output>") {
+			return false;
+		}
+		return !/^==> text \d+\/\d+ <==$/.test(trimmed);
+	});
 	while (body.length > 0 && (body[0] ?? "").trim() === "") {
 		body.shift();
 	}
-	return body.join("\n");
+	return body.join("\n").trimEnd();
 }
 
 /** 工具的归类,决定行首图标与过程行标题里算进哪一项。 */

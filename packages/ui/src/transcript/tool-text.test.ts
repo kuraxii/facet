@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { foldOutput, scriptBody, scriptCode, toolKind, toolStatusText, toolTarget } from "./tool-text.ts";
+import {
+	foldOutput,
+	scriptBody,
+	scriptCode,
+	toolDetail,
+	toolKind,
+	toolStatusText,
+	toolTarget,
+} from "./tool-text.ts";
 
 describe("工具状态文字", () => {
 	it("成功与失败不写字,只留耗时", () => {
@@ -84,6 +92,22 @@ describe("脚本类工具的展开内容", () => {
 		expect(scriptCode({ code: "\n\n  if (a) {\n    b();\n  }\n\n" })).toBe("  if (a) {\n    b();\n  }");
 	});
 
+	it("多段文字之间的分隔行与控制台包裹行不显示", () => {
+		const output = [
+			"Script completed",
+			"Wall time 0.1 seconds",
+			"Output:",
+			"==> text 1/2 <==",
+			"uname -r: 7.2.13",
+			"==> text 2/2 <==",
+			"pwd: /home/zjzhu",
+			"<console_output>",
+			"开始跑",
+			"</console_output>",
+		].join("\n");
+		expect(scriptBody(output)).toBe("uname -r: 7.2.13\npwd: /home/zjzhu\n开始跑");
+	});
+
 	it("返回正文去掉运行器加的前置信息", () => {
 		const output = "Script completed\nWall time 0.1 seconds\nOutput:\n\n==> uname -r <==\n7.2.13";
 		expect(scriptBody(output)).toBe("==> uname -r <==\n7.2.13");
@@ -101,5 +125,24 @@ describe("脚本类工具的展开内容", () => {
 	it("没有代码字段时不当脚本", () => {
 		expect(scriptCode({ command: "ls" })).toBeUndefined();
 		expect(scriptCode("ls")).toBeUndefined();
+	});
+});
+
+describe("参数摘要对应的完整内容", () => {
+	it("脚本类工具给整段代码，摘要只给第一行", () => {
+		const code = "const a = 1;\nawait tools.bash({ command: 'ls' });";
+		expect(toolDetail({ code })).toBe(code);
+		expect(toolTarget({ code })).toBe("const a = 1;");
+	});
+
+	it("普通工具给没截断的原值", () => {
+		const command = `ls ${"a/".repeat(80)}`;
+		expect(toolDetail({ command })).toBe(command);
+		expect(toolTarget({ command }).endsWith("…")).toBe(true);
+	});
+
+	it("没有可展示的参数时为空", () => {
+		expect(toolDetail({})).toBe("");
+		expect(toolDetail(undefined)).toBe("");
 	});
 });

@@ -100,7 +100,6 @@ describe("被中止的一轮", () => {
 					output: undefined,
 					durationMs: undefined,
 					details: undefined,
-					parentCallId: undefined,
 				},
 			],
 			isStreaming: false,
@@ -192,94 +191,7 @@ describe("复制原文", () => {
 });
 
 describe("脚本里的子调用", () => {
-	it("子调用缩进折进父行，不再单独平铺", () => {
-		const html = render(
-			[
-				{
-					kind: "message",
-					id: "e:a1",
-					entryId: "a1",
-					role: "assistant",
-					stopReason: "stop",
-					parts: [
-						{ kind: "text", partId: "text:0", text: "跑一段脚本" },
-						{
-							kind: "toolCall",
-							partId: "tool:c1",
-							callId: "c1",
-							name: "codemode",
-							input: { code: "await tools.bash({ command: 'ls' })" },
-							status: "done",
-							output: "两个文件",
-							durationMs: 12,
-							details: undefined,
-							parentCallId: undefined,
-						},
-						{
-							kind: "toolCall",
-							partId: "tool:c2",
-							callId: "c2",
-							name: "bash",
-							input: { command: "ls" },
-							status: "done",
-							output: "两个文件",
-							durationMs: 12,
-							details: undefined,
-							parentCallId: "c1",
-						},
-					],
-					isStreaming: false,
-					startedAt: 1,
-					endedAt: 2,
-				},
-			],
-			true,
-		);
-		// 一段脚本一行，子调用裹在里面
-		expect(html).toContain("tr-nested");
-		expect(html.match(/class="tr /g)?.length).toBe(2);
-		expect(html).toContain(">Codemode<");
-		expect(html).toContain("await tools.bash");
-	});
-
-	it("父调用不在这一行时子调用照样显示", () => {
-		const html = render(
-			[
-				{
-					kind: "message",
-					id: "e:a2",
-					entryId: "a2",
-					role: "assistant",
-					stopReason: "stop",
-					parts: [
-						{ kind: "text", partId: "text:0", text: "看下目录" },
-						{
-							kind: "toolCall",
-							partId: "tool:c9",
-							callId: "c9",
-							name: "bash",
-							input: { command: "ls" },
-							status: "done",
-							output: "两个文件",
-							durationMs: 12,
-							details: undefined,
-							parentCallId: "缺席的父调用",
-						},
-					],
-					isStreaming: false,
-					startedAt: 1,
-					endedAt: 2,
-				},
-			],
-			true,
-		);
-		expect(html).not.toContain("tr-nested");
-		expect(html).toContain(">Shell<");
-	});
-});
-
-describe("脚本子调用的历史记录", () => {
-	it("回合结束后从工具结果的清单里把子调用画回来", () => {
+	it("脚本调用的工具不再单独成行", () => {
 		const html = render(
 			[
 				{
@@ -295,23 +207,18 @@ describe("脚本子调用的历史记录", () => {
 							partId: "tool:c1",
 							callId: "c1",
 							name: "codemode",
-							input: { code: "return await tools.bash({ command: 'uname -r' });" },
+							input: {
+								code: "const [a, b] = await Promise.allSettled([\n  tools.bash({ command: 'uname -r' }),\n]);",
+							},
 							status: "done",
-							output: "7.2.13",
+							output: "Script completed\nWall time 0.1 seconds\nOutput:\n7.2.13",
 							durationMs: 40,
-							// 会话记录只保留这份清单
+							// 会话记录在父调用的结果里带一份子调用清单，行上不再展开它
 							details: {
 								calls: [
-									{
-										id: "c1/1",
-										name: "bash",
-										args: '{"command":"uname -r"}',
-										status: "ok",
-										durationMs: 12,
-									},
+									{ id: "c1/1", name: "bash", args: '{"command":"uname -r"}', status: "ok", durationMs: 12 },
 								],
 							},
-							parentCallId: undefined,
 						},
 					],
 					isStreaming: false,
@@ -321,8 +228,14 @@ describe("脚本子调用的历史记录", () => {
 			],
 			true,
 		);
-		expect(html).toContain("tr-nested");
-		expect(html).toContain(">Shell<");
-		expect(html).toContain("uname -r");
+		// 一段脚本一行，脚本里调用的工具不参与渲染
+		expect(html.match(/class="tr /g)?.length).toBe(1);
+		expect(html).toContain(">Codemode<");
+		expect(html).not.toContain(">Shell<");
+		expect(html).not.toContain("tr-nested");
+		// 展开只给返回内容，行上没有 input / output 这类标题
+		expect(html).not.toContain("tr-label");
+		expect(html).not.toContain(">input<");
+		expect(html).not.toContain(">output<");
 	});
 });

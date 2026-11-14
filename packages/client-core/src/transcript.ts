@@ -42,13 +42,6 @@ export interface ToolCallPart {
 	durationMs: number | undefined;
 	/** 工具的结构化结果,例如编辑工具带的补丁,由渲染侧决定怎么用 */
 	details: unknown;
-	/**
-	 * 发起这次调用的上一层调用。
-	 *
-	 * 脚本类工具（codemode）在自己的执行里再调别的工具时，子调用带父调用的 id，渲染时折进
-	 * 父行里，不按时间顺序平铺。
-	 */
-	parentCallId: string | undefined;
 }
 
 /** 渲染单元里的一段内容。 */
@@ -114,7 +107,6 @@ function toolPart(call: ToolCallView): ToolCallPart {
 		output: toolOutputText(call.output),
 		durationMs: call.durationMs,
 		details: call.output?.details,
-		parentCallId: call.parentCallId,
 	};
 }
 
@@ -164,8 +156,6 @@ function bareToolPart(
 		output: undefined,
 		durationMs: undefined,
 		details: undefined,
-		// 这条消息里的调用没有记录父调用，按顶层处理
-		parentCallId: undefined,
 	};
 }
 
@@ -377,7 +367,6 @@ function orphanToolPart(message: Message & { role: "toolResult" }): ToolCallPart
 		status: message.isError ? "failed" : "done",
 		output: toolOutputText({ content: message.content, details: message.details, isError: message.isError }),
 		durationMs: message.durationMs,
-		parentCallId: undefined,
 		details: message.details,
 	};
 }

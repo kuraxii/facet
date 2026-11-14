@@ -89,7 +89,6 @@ export class ActionProjector {
 						callId: event.callId,
 						toolName: event.toolName,
 						input: event.input,
-						parentCallId: event.parentCallId,
 					}),
 				];
 			case "tool_update":

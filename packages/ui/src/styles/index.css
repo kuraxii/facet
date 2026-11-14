@@ -27,11 +27,10 @@
 	--icon-button-size: 28px;
 	/* 会话行首状态标记：槽位尺寸固定，环由 6 的点加内外各一圈描边与留白算出来 */
 	--status-slot: 12px;
-	/* 工具行里嵌一层子调用：缩进与左侧竖线到内容的距离 */
-	--tool-nest-indent: 22px;
-	--tool-section-gap: 8px;
-	--tool-nest-pad: 10px;
-	--tool-nest-gap: 2px;
+	/* 参数摘要弹窗：离摘要的间距、最大宽度与最大高度 */
+	--tool-tip-gap: 6px;
+	--tool-tip-width: 560px;
+	--tool-tip-height: 320px;
 	--status-dot: 6px;
 	--status-dot-failed: 8px;
 	--status-ring-stroke: 1.5px;
@@ -2119,14 +2118,6 @@ svg.fl {
 }
 
 /* 脚本里再调用的工具：缩进一档挂在父行下面，左侧一条细线标出属于哪次调用 */
-.tr-nested {
-	display: grid;
-	gap: 2px;
-	margin: var(--tool-nest-gap) 0 0 var(--tool-nest-indent);
-	padding-left: var(--tool-nest-pad);
-	border-left: 1px solid var(--line);
-}
-
 .tr-head {
 	display: flex;
 	align-items: center;
@@ -2196,12 +2187,30 @@ svg.fl {
 	padding: 0 0 4px var(--indent-rail-label);
 }
 
-.tr-label {
-	display: block;
-	margin-top: var(--tool-section-gap);
-	color: var(--t3);
-	font-size: 11px;
-	line-height: 1.4;
+/* 参数摘要的完整内容：悬停才出现，铺在窗口上，不参与行内排版 */
+.tr-tip {
+	position: fixed;
+	z-index: 45;
+	max-width: var(--tool-tip-width);
+	margin-top: var(--tool-tip-gap);
+	max-height: var(--tool-tip-height);
+	overflow: auto;
+	padding: 8px 10px;
+	border: 1px solid var(--line2);
+	border-radius: 10px;
+	background: var(--card);
+	box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+	pointer-events: none;
+}
+
+.tr-tip pre {
+	margin: 0;
+	color: var(--t2);
+	font-family: var(--font-mono);
+	font-size: 11.5px;
+	line-height: 1.55;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
 }
 
 .tr-out pre {

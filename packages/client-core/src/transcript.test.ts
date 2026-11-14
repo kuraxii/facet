@@ -243,7 +243,6 @@ describe("toTranscript", () => {
 						callId: "c1",
 						toolName: "bash",
 						input: { command: "ls" },
-						parentCallId: undefined,
 						output: undefined,
 						isError: false,
 						isRunning: true,

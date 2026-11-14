@@ -29,6 +29,18 @@ function shorten(value: string): string {
 	return flat.length > MAX_TARGET ? `${flat.slice(0, MAX_TARGET)}…` : flat;
 }
 
+/** 脚本类工具的正文摘要：取第一行有内容、且不是注释的行。 */
+function codeSummary(code: string): string {
+	for (const line of code.split("\n")) {
+		const trimmed = line.trim();
+		if (trimmed.length === 0 || trimmed.startsWith("//")) {
+			continue;
+		}
+		return shorten(trimmed);
+	}
+	return "";
+}
+
 /** 取工具调用的参数摘要。 */
 export function toolTarget(input: unknown): string {
 	if (typeof input === "string") {
@@ -38,6 +50,13 @@ export function toolTarget(input: unknown): string {
 		return "";
 	}
 	const record = input as Record<string, unknown>;
+	// 脚本类工具的参数整段是代码，取第一行有内容的当摘要
+	if (typeof record.code === "string") {
+		const summary = codeSummary(record.code);
+		if (summary.length > 0) {
+			return summary;
+		}
+	}
 	for (const key of TARGET_KEYS) {
 		const value = record[key];
 		if (typeof value === "string" && value.trim().length > 0) {
@@ -122,6 +141,8 @@ const KINDS: Readonly<Record<string, { label: string; category: ToolCategory }>>
 	fetch_content: { label: "Fetch", category: "other" },
 	source_check: { label: "Check", category: "other" },
 	get_search_content: { label: "Search", category: "search" },
+	// 脚本类工具：一行的参数就是整段代码，摘要取第一行有内容的
+	codemode: { label: "Code", category: "command" },
 };
 
 /** 取工具的短名与归类；认不出的工具原样显示名字。 */

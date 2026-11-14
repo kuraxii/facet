@@ -34,6 +34,7 @@ function tool(partId: string, callId: string, durationMs?: number, details?: unk
 		output: undefined,
 		durationMs,
 		details,
+		parentCallId: undefined,
 	};
 }
 

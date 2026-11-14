@@ -153,14 +153,100 @@ function shortPath(path: string): string {
 }
 
 /**
+ * 从工具结果的 details 里还原脚本调用过的工具。
+ *
+ * 子调用只在实时事件里出现；回合结束后会话记录只在父调用的结果上留一份清单
+ * （`details.calls`），所以历史消息要靠它把子调用画回来。
+ */
+function callsFromDetails(part: ToolCallPart): ToolCallPart[] {
+	const calls = (part.details as { calls?: unknown } | undefined)?.calls;
+	if (!Array.isArray(calls)) {
+		return [];
+	}
+	const restored: ToolCallPart[] = [];
+	for (const raw of calls) {
+		if (typeof raw !== "object" || raw === null) {
+			continue;
+		}
+		const record = raw as {
+			id?: unknown;
+			name?: unknown;
+			args?: unknown;
+			status?: unknown;
+			durationMs?: unknown;
+		};
+		if (typeof record.id !== "string" || typeof record.name !== "string") {
+			continue;
+		}
+		let input: unknown;
+		if (typeof record.args === "string") {
+			try {
+				input = JSON.parse(record.args);
+			} catch {
+				input = record.args;
+			}
+		}
+		restored.push({
+			kind: "toolCall",
+			partId: `tool:${record.id}`,
+			callId: record.id,
+			name: record.name,
+			input,
+			status: record.status === "error" ? "failed" : "done",
+			output: undefined,
+			durationMs: typeof record.durationMs === "number" ? record.durationMs : undefined,
+			details: undefined,
+			parentCallId: part.callId,
+		});
+	}
+	return restored;
+}
+
+/**
+ * 这一行里的子调用，按父调用 id 分组。
+ *
+ * codemode 这类工具在自己的执行里再调别的工具，子调用带 `parentCallId`。折进父行之后，
+ * 对话流里只剩「一段脚本」这一行，而不是被它调用的十几个工具平铺下来。
+ */
+function nestedCalls(items: readonly TranscriptItem[]): Map<string, ToolCallPart[]> {
+	const byId = new Map<string, ToolCallPart>();
+	for (const item of items) {
+		for (const part of item.parts) {
+			if (part.kind === "toolCall") {
+				byId.set(part.callId, part);
+			}
+		}
+	}
+	const grouped = new Map<string, ToolCallPart[]>();
+	for (const call of byId.values()) {
+		const parent = call.parentCallId;
+		// 父调用不在一行里时不折，免得子调用整行消失
+		if (parent === undefined || !byId.has(parent)) {
+			continue;
+		}
+		const list = grouped.get(parent) ?? [];
+		list.push(call);
+		grouped.set(parent, list);
+	}
+	return grouped;
+}
+
+/**
  * 一次工具调用。
  *
  * 一行里只有图标、短名与参数摘要，点开才看输出；输出没有边框与底色，直接跟在下面。
  */
-function ToolRow({ part }: { part: ToolCallPart }) {
+function ToolRow({ part, nested }: { part: ToolCallPart; nested?: readonly ToolCallPart[] }) {
 	const [isOpen, setOpen] = useState(false);
 	const [isExpanded, setExpanded] = useState(false);
 	const output = part.output ?? "";
+	// 实时事件带来的子调用与结果里记下的那份合并，按调用 id 去重
+	const children = [...(nested ?? [])];
+	for (const restored of callsFromDetails(part)) {
+		if (!children.some((child) => child.callId === restored.callId)) {
+			children.push(restored);
+		}
+	}
 	const folded = foldOutput(output);
 	const isLong = folded.hiddenLines > 0;
 	const shown = isLong && !isExpanded ? folded.preview : output;
@@ -192,6 +278,14 @@ function ToolRow({ part }: { part: ToolCallPart }) {
 					) : null}
 				</div>
 			) : null}
+			{children.length === 0 ? null : (
+				// 脚本里再调用的工具缩进折进这一行，不再平铺到对话流里
+				<div className="tr-nested">
+					{children.map((child) => (
+						<ToolRow key={child.partId} part={child} />
+					))}
+				</div>
+			)}
 		</div>
 	);
 }
@@ -218,14 +312,22 @@ function ThinkingRow({ text }: { text: string }) {
 }
 
 /** 一段内容。正文走 Markdown,思考与工具各自成块。 */
-function PartView({ part, isStreaming }: { part: Part; isStreaming: boolean }) {
+function PartView({
+	part,
+	isStreaming,
+	nested,
+}: {
+	part: Part;
+	isStreaming: boolean;
+	nested?: readonly ToolCallPart[];
+}) {
 	if (part.kind === "text") {
 		return <Markdown text={part.text} isStreaming={isStreaming} />;
 	}
 	if (part.kind === "thinking") {
 		return <ThinkingRow text={part.text} />;
 	}
-	return <ToolRow part={part} />;
+	return <ToolRow part={part} nested={nested} />;
 }
 
 /** 一轮的文件改动。文件是按钮,点开看这一段补丁。 */
@@ -313,6 +415,7 @@ function bodyOf(row: DisplayRow): ReactNode[] {
 			/>,
 		);
 	};
+	const nested = nestedCalls(row.items);
 	for (const item of row.items) {
 		for (const part of item.parts) {
 			if (part.kind === "text") {
@@ -320,7 +423,18 @@ function bodyOf(row: DisplayRow): ReactNode[] {
 				continue;
 			}
 			flush(item.isStreaming);
-			nodes.push(<PartView key={`${item.id}-${part.partId}`} part={part} isStreaming={item.isStreaming} />);
+			// 子调用已经折进父行，这里跳过
+			if (part.kind === "toolCall" && nested.has(part.parentCallId ?? "")) {
+				continue;
+			}
+			nodes.push(
+				<PartView
+					key={`${item.id}-${part.partId}`}
+					part={part}
+					isStreaming={item.isStreaming}
+					nested={part.kind === "toolCall" ? nested.get(part.callId) : undefined}
+				/>,
+			);
 		}
 		flush(item.isStreaming);
 	}

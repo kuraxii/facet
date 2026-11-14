@@ -27,6 +27,10 @@
 	--icon-button-size: 28px;
 	/* 会话行首状态标记：槽位尺寸固定，环由 6 的点加内外各一圈描边与留白算出来 */
 	--status-slot: 12px;
+	/* 工具行里嵌一层子调用：缩进与左侧竖线到内容的距离 */
+	--tool-nest-indent: 22px;
+	--tool-nest-pad: 10px;
+	--tool-nest-gap: 2px;
 	--status-dot: 6px;
 	--status-dot-failed: 8px;
 	--status-ring-stroke: 1.5px;
@@ -2111,6 +2115,15 @@ svg.fl {
 
 .tr {
 	min-width: 0;
+}
+
+/* 脚本里再调用的工具：缩进一档挂在父行下面，左侧一条细线标出属于哪次调用 */
+.tr-nested {
+	display: grid;
+	gap: 2px;
+	margin: var(--tool-nest-gap) 0 0 var(--tool-nest-indent);
+	padding-left: var(--tool-nest-pad);
+	border-left: 1px solid var(--line);
 }
 
 .tr-head {

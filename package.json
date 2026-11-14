@@ -16,7 +16,9 @@
 		"build": "npm run build --workspaces --if-present",
 		"typecheck": "npm run typecheck --workspaces --if-present",
 		"test": "npm run test --workspaces --if-present",
-		"lint": "biome check ."
+		"lint": "biome check .",
+		"build:host": "node scripts/build-host.mjs",
+		"dist": "npm run build:host && npm run dist -w @facet/desktop"
 	},
 	"engines": {
 		"node": ">=22.19"

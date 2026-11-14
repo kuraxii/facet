@@ -1,11 +1,13 @@
+import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, screen, shell } from "electron";
-import { addressOf, HostChannels, LOCAL_TARGET } from "./host-channel.ts";
+import { HostChannels, LOCAL_TARGET } from "./host-channel.ts";
 import {
 	findRunningHost,
 	HostDaemon,
-	type HostDiscovery,
+	hostSocketPath,
+	type LocalHost,
 	readDiscovery,
 	resolveDataDir,
 } from "./host-daemon.ts";
@@ -48,8 +50,11 @@ const READY_WAIT_MS = 20_000;
 /** 主机数据目录，发现文件与主机日志都在这里；开发实例带 -dev 后缀，与发布实例分开 */
 const dataDir = resolveDataDir(process.env, { isDev });
 
+/** 主机进程怎么起：独立产物优生，没有就退回 Electron 的 Node 模式 */
+const hostLaunch = resolveHostLaunch();
+
 /** 本机当前连着的主机，界面通过主进程的通道访问它 */
-let localHost: HostDiscovery | undefined;
+let localHost: LocalHost | undefined;
 let hostChannels: HostChannels | undefined;
 let host: HostDaemon | undefined;
 let localSettingsFile = "";
@@ -60,7 +65,7 @@ let quitConfirmed = false;
 let quitting = false;
 
 /** 等待主机就绪的兑现函数，就绪或超时时清掉。 */
-let resolveReady: ((info: HostDiscovery | undefined) => void) | undefined;
+let resolveReady: ((info: LocalHost | undefined) => void) | undefined;
 
 /**
  * 由窗口记录得到创建参数。
@@ -267,11 +272,11 @@ function broadcastLocalHost(): void {
 }
 
 /** 等嵌入主机就绪，超时返回 undefined。 */
-async function waitForHostReady(): Promise<HostDiscovery | undefined> {
+async function waitForHostReady(): Promise<LocalHost | undefined> {
 	if (host === undefined) {
 		return undefined;
 	}
-	return new Promise<HostDiscovery | undefined>((resolve) => {
+	return new Promise<LocalHost | undefined>((resolve) => {
 		const timer = setTimeout(() => {
 			resolveReady = undefined;
 			console.log("[main] 等待主机就绪超时，先打开窗口");
@@ -334,16 +339,14 @@ ipcMain.on("facet:window-close", (event) => {
 
 /** 本机主机的连接信息：界面只知道「本机」这个目标与展示地址，具体端口与令牌在主进程。 */
 ipcMain.handle("facet:local-host", () => {
-	const local = localHost;
-	if (local === undefined) {
-		return externalEndpoint === undefined
-			? undefined
-			: { target: externalEndpoint, address: externalEndpoint, token: undefined };
+	if (externalEndpoint !== undefined) {
+		return { target: externalEndpoint, address: externalEndpoint, token: undefined };
 	}
+	// 本机是固定路径上的 unix socket：身份由文件权限保证，界面不需要令牌
 	return {
 		target: LOCAL_TARGET,
-		address: addressOf(local),
-		token: local.token,
+		address: hostSocketPath(dataDir),
+		token: undefined,
 	};
 });
 
@@ -383,6 +386,32 @@ ipcMain.on("facet:host-close", (_event, id: number) => {
 	hostChannels?.close(id);
 });
 
+/**
+ * 主机的启动方式。
+ *
+ * 打包后优先用独立产物：`resources/host/bin/node` 是随包带的官方 Node，`lib/host.mjs` 是主机
+ * 入口，跟桌面那份 Electron 运行时互不相干。没有产物时退回开发态的做法——用 Electron 自己的
+ * 可执行文件以 Node 模式跑 `out/main/host.js`。
+ */
+function resolveHostLaunch(): { command: string; args: string[]; env: NodeJS.ProcessEnv } {
+	const bundled = join(process.resourcesPath, "host");
+	const node = join(bundled, "bin", "node");
+	if (existsSync(node)) {
+		return { command: node, args: [join(bundled, "lib", "host.mjs")], env: {} };
+	}
+	return {
+		command: process.execPath,
+		args: [join(app.getAppPath(), "out/main/host.js")],
+		env: { ELECTRON_RUN_AS_NODE: "1" },
+	};
+}
+
+/** `host:port` 写法拆成 TCP 目标，拆不出来时返回 undefined。 */
+function parseTcpTarget(text: string): { host: string; port: number } | undefined {
+	const matched = /^([^:]+):(\d+)$/.exec(text);
+	return matched === null ? undefined : { host: matched[1] as string, port: Number(matched[2]) };
+}
+
 app.whenReady().then(async () => {
 	// 本地设置放在桌面自己的配置目录（Linux 上是 ~/.config/facet），与主机侧的应用设置分开
 	localSettingsFile = join(app.getPath("userData"), "desktop.json");
@@ -394,18 +423,22 @@ app.whenReady().then(async () => {
 		const running = await findRunningHost({ dataDir });
 		if (running !== undefined) {
 			localHost = running;
-			console.log(`接上已在运行的主机 ${running.hostId} 监听 ${addressOf(running)}`);
+			const info = await readDiscovery(dataDir).catch(() => undefined);
+			console.log(`接上已在运行的主机 ${info?.hostId ?? "?"} 监听 ${running.path}`);
 			resolveReady = undefined;
 		} else {
 			host = new HostDaemon({
-				entry: join(app.getAppPath(), "out/main/host.js"),
+				...hostLaunch,
 				dataDir,
 				// 开发启动打开主机侧调试日志，打包运行留给 FACET_DEBUG 手动开启
-				env: isDev ? { FACET_DEBUG: "1" } : {},
+				env: { ...hostLaunch.env, ...(isDev ? { FACET_DEBUG: "1" } : {}) },
 				onReady: (info) => {
-					console.log(`主机 ${info.hostId} 监听 ${addressOf(info)}`);
-					console.log(`数据目录 ${info.agentDir}`);
 					localHost = info;
+					// 发现文件只用于日志：主机标识与 pi 数据目录在那里，不参与连接
+					void readDiscovery(dataDir).then((record) => {
+						console.log(`主机 ${record?.hostId ?? "?"} 监听 ${info.path}`);
+						console.log(`数据目录 ${record?.agentDir ?? "未知"}`);
+					});
 					if (resolveReady !== undefined) {
 						resolveReady(info);
 						return;
@@ -423,35 +456,16 @@ app.whenReady().then(async () => {
 		}
 	} else {
 		console.log(`连接外部主机 ${externalEndpoint}`);
-		// 开发时主机也写发现文件：地址对上就按它连，能拿到令牌
-		const discovered = await findRunningHost({ dataDir }).catch(() => undefined);
-		if (discovered !== undefined && addressOf(discovered).includes(externalEndpoint)) {
-			localHost = discovered;
-			console.log(`外部主机与发现文件一致，按发现文件连 ${addressOf(discovered)}`);
-		}
 	}
 
-	// 界面不直连主机：主进程按目标建通道，本机按发现记录，远程按 host:port
+	// 界面不直连主机：主进程按目标建通道，本机走固定 socket，远程按 host:port
 	hostChannels = new HostChannels(async (target) => {
 		if (target === LOCAL_TARGET) {
-			// 每次都读最新的发现文件：主机重启后端口与令牌都会变，缓存的那份会连不上
-			const fresh = await readDiscovery(dataDir).catch(() => undefined);
-			if (fresh !== undefined) {
-				return fresh;
-			}
-			if (localHost !== undefined) {
-				return localHost;
-			}
-			const matched = externalEndpoint === undefined ? null : /^([^:]+):(\d+)$/.exec(externalEndpoint);
-			return matched === null || matched === undefined
-				? undefined
-				: { host: matched[1] as string, port: Number(matched[2]) };
+			return externalEndpoint === undefined
+				? { path: hostSocketPath(dataDir) }
+				: parseTcpTarget(externalEndpoint);
 		}
-		const matched = /^([^:]+):(\d+)$/.exec(target);
-		if (matched === null) {
-			return undefined;
-		}
-		return { host: matched[1] as string, port: Number(matched[2]) };
+		return parseTcpTarget(target);
 	});
 
 	console.log(`项目目录 ${projectDir}`);

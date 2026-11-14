@@ -134,6 +134,13 @@ interface Connection {
 	readonly subscriptions: Map<Channel, ActionSink>;
 	/** 令牌是否已校验通过，通过之后才发 hello 并接受请求 */
 	authenticated: boolean;
+	/**
+	 * 这条连接是否已经由内核确认过身份。
+	 *
+	 * unix socket 是 `0600`、所在目录 `0700`，别的用户连不上，能连上就说明是本用户，
+	 * 应用层不再要令牌；TCP 与 Web 入口拿不到对端身份，仍按令牌校验。
+	 */
+	readonly trusted: boolean;
 	/** 这条连接能做什么：认证帧里声明的档位，主机会按配置收窄 */
 	role: ClientRole;
 	/** 这条连接从哪来：桌面主进程的通道，或浏览器页面 */
@@ -886,12 +893,12 @@ async function handleFrame(context: EndpointContext, connection: Connection, tex
 		entry?: unknown;
 	};
 	if (!connection.authenticated) {
-		// 首帧必须是令牌；校验不过直接断开，之后才发 hello
-		if (frame.type !== "auth" || typeof frame.token !== "string") {
+		// 首帧必须是认证帧；TCP 与 Web 入口还要带上正确令牌，unix socket 已由内核确认身份
+		if (frame.type !== "auth") {
 			connection.close(1008, "需要先认证");
 			return;
 		}
-		if (!matchesToken(context, frame.token)) {
+		if (!connection.trusted && (typeof frame.token !== "string" || !matchesToken(context, frame.token))) {
 			connection.close(1008, "令牌不匹配");
 			return;
 		}
@@ -908,6 +915,7 @@ async function handleFrame(context: EndpointContext, connection: Connection, tex
 			role: connection.role,
 			canManage: canManage(connection),
 			capabilities: capabilitiesFor(context),
+			agentDir: context.factory.agentDir,
 		} satisfies HelloFrame);
 		return;
 	}
@@ -990,12 +998,15 @@ export async function startEndpoint(options: {
 		close: (code: number, reason: string) => void,
 		/** 认证帧没声明档位时用的档位：Web 连接缺省只读 */
 		defaultRole: ClientRole = "admin",
+		/** 是否由 unix socket 接入：接入即已通过内核鉴权 */
+		trusted = false,
 	): Connection => {
 		const connection: Connection = {
 			clientId: randomUUID(),
 			remoteAddress,
 			subscriptions: new Map(),
 			authenticated: false,
+			trusted,
 			// 认证帧里声明档位与入口之后才确定
 			role: defaultRole,
 			entry: "desktop",
@@ -1021,6 +1032,8 @@ export async function startEndpoint(options: {
 				socket.end();
 				socket.destroy();
 			},
+			undefined,
+			useUnixSocket,
 		);
 		const decoder = new FrameDecoder();
 		socket.setEncoding("utf8");
@@ -1040,6 +1053,7 @@ export async function startEndpoint(options: {
 		socket.on("error", () => cleanup(connection));
 	};
 
+	// 只有 unix 监听器能由内核证明对端身份，先在这里定好，accept 时带进每条连接
 	const useUnixSocket = options.config.socketPath !== undefined && options.config.socketPath.length > 0;
 	const socketServer = createSocketServer((socket) => accept(socket));
 

@@ -5,13 +5,16 @@
  * （OpenSSH 的 streamlocal 转发），本地不开端口、远端也不开端口。主机是 Windows、只监听
  * TCP 回环时退回 direct-tcpip，同样不落地任何监听。
  *
- * 认证复用系统的 SSH 配置与 ssh-agent；主机密钥按 known_hosts 校验，未知主机直接拒绝。
+ * 认证复用系统的 SSH 配置、ssh-agent 与 ~/.ssh 下的私钥，没有可用凭据时问一次密码。
+ * 主机公钥不做校验：能连上这台机器就等于拿到那台机器的账户权限，再叠一层主机制约没有意义。
+ *
+ * 主机的位置是固定契约：优先 `$XDG_RUNTIME_DIR/facet.sock`（开发实例 `facet-dev.sock`），
+ * 没有运行目录时是 `<家目录>/.local/share/facet/facet.sock`。远端用一小段 shell 脚本按同一
+ * 顺序找出实际在跑的那条，脚本从标准输入喂给 `/bin/sh`，不拼进命令行。
  */
-import { createHmac } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { type DiscoveryRecord, parseDiscovery } from "@facet/server";
 import type { StreamLike } from "@facet/transport";
 import { Client, type ConnectConfig } from "ssh2";
 
@@ -68,78 +71,6 @@ export function isSshTarget(text: string): boolean {
 export function sshTargetLabel(target: SshTarget): string {
 	const host = target.port === 22 ? target.host : `${target.host}:${target.port}`;
 	return target.user === undefined ? host : `${target.user}@${host}`;
-}
-
-/** known_hosts 里的一条记录。 */
-interface KnownHostEntry {
-	/** 主机名，带端口时形如 [host]:port */
-	host: string;
-	/** 密钥类型，例如 ssh-ed25519 */
-	keyType: string;
-	/** 公钥的 base64 */
-	key: string;
-}
-
-/** 解析 known_hosts，注释、空行与不认识的行跳过。 */
-export function parseKnownHosts(text: string): KnownHostEntry[] {
-	const entries: KnownHostEntry[] = [];
-	for (const line of text.split("\n")) {
-		const trimmed = line.trim();
-		if (trimmed.length === 0 || trimmed.startsWith("#") || trimmed.startsWith("@")) {
-			continue;
-		}
-		const parts = trimmed.split(/\s+/);
-		if (parts.length < 3) {
-			continue;
-		}
-		const [hosts, keyType, key] = parts as [string, string, string];
-		for (const host of hosts.split(",")) {
-			entries.push({ host, keyType, key });
-		}
-	}
-	return entries;
-}
-
-/** 这个主机（带端口）在 known_hosts 里的写法。 */
-function hostPatterns(host: string, port: number): string[] {
-	return port === 22 ? [host, `[${host}]:22`] : [`[${host}]:${port}`];
-}
-
-/** 哈希过的 known_hosts 条目（`|1|salt|hash`）是否匹配。 */
-function matchesHashed(stored: string, host: string): boolean {
-	const parts = stored.split("|");
-	if (parts.length !== 4 || parts[1] !== "1") {
-		return false;
-	}
-	const salt = parts[2] as string;
-	const expected = parts[3] as string;
-	const digest = createHmac("sha1", Buffer.from(salt, "base64")).update(host).digest("base64");
-	return digest === expected;
-}
-
-/**
- * 校验主机公钥。
- *
- * 明文条目直接比主机名，哈希条目按 known_hosts 的算法算一遍。找不到匹配的条目时返回
- * false，交给调用方拒绝连接。
- */
-export function verifyHostKey(
-	entries: readonly KnownHostEntry[],
-	host: string,
-	port: number,
-	keyType: string,
-	key: string,
-): boolean {
-	const patterns = hostPatterns(host, port);
-	return entries.some((entry) => {
-		if (entry.keyType !== keyType || entry.key !== key) {
-			return false;
-		}
-		if (patterns.includes(entry.host) || entry.host === host) {
-			return true;
-		}
-		return matchesHashed(entry.host, host) || matchesHashed(entry.host, `[${host}]:${port}`);
-	});
 }
 
 /** 一条 SSH 配置记录里我们用得上的字段。 */
@@ -222,25 +153,76 @@ export function matchSshConfig(config: Map<string, SshHostConfig>, host: string)
 	return undefined;
 }
 
+/** 远端脚本的超时，毫秒。 */
+const RUN_TIMEOUT_MS = 8_000;
+
+/** 主机 socket 的文件名，两端共用的约定。 */
+const SOCKET_FILE = "facet.sock";
+
 /**
- * 读远端发现文件用的命令。
+ * 在远端找出实际在跑的主机 socket。
  *
- * 数据目录按与主机相同的规则取（FACET_DATA_DIR，其次 XDG_DATA_HOME，最后家目录），
- * 打印整份 endpoint.json；文件不在时 cat 报错，调用方按「没有主机」处理。
+ * 脚本从标准输入喂给 `/bin/sh`，不参与命令行拼装，所以可以随便写长、写多行；只用 POSIX
+ * 语法，极简容器里也能跑。顺序与桌面本机的推导一致：运行目录里的两条优先（发布实例在前），
+ * 其次家目录下的两条。命中就打印那一行，没有就什么都不打印。
  */
-export function remoteDiscoveryCommand(): string {
-	// biome-ignore lint/suspicious/noTemplateCurlyInString: 这是远端 shell 的变量展开，不是模板串
-	return 'd="${FACET_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/facet}"; cat "$d/endpoint.json"';
+export const REMOTE_SOCKET_SCRIPT = `set -u
+runtime=\${XDG_RUNTIME_DIR:-}
+home=\${HOME:-}
+for path in \
+  \${runtime:+"$runtime/${SOCKET_FILE}"} \
+  \${runtime:+"$runtime/facet-dev.sock"} \
+  \${home:+"$home/.local/share/facet/${SOCKET_FILE}"} \
+  \${home:+"$home/.local/share/facet-dev/${SOCKET_FILE}"}; do
+  if [ -S "$path" ]; then
+    printf '%s\n' "$path"
+    break
+  fi
+done
+`;
+
+/**
+ * 在远端把没在跑的主机拉起来。
+ *
+ * 只在已经装了 facet 的机器上成立：位置就是包安装目录 `/opt/Facet/resources/host`（rpm 与
+ * deb 都装在这里），里面有独立主机产物（`bin/node` + `lib/host.mjs`）。找不到就打 `none`，
+ * 客户端据此报「这台机器上没有安装 facet」，不做任何上传与安装。起来之后日志写进数据目录的
+ * host.log，进程 detached，SSH 断开也不带走它。
+ */
+export const REMOTE_START_SCRIPT = `set -u
+install=/opt/Facet/resources/host
+if [ ! -x "$install/bin/node" ] || [ ! -f "$install/lib/host.mjs" ]; then
+  install=""
+fi
+if [ "\${install:-}" = "" ]; then
+  printf 'none\n'
+  exit 0
+fi
+data="\${FACET_DATA_DIR:-$HOME/.local/share/facet}"
+mkdir -p "$data" 2>/dev/null || true
+if command -v setsid >/dev/null 2>&1; then
+  setsid "$install/bin/node" "$install/lib/host.mjs" >>"$data/host.log" 2>&1 </dev/null &
+else
+  nohup "$install/bin/node" "$install/lib/host.mjs" >>"$data/host.log" 2>&1 </dev/null &
+fi
+printf 'started\n'
+`;
+
+/** 取脚本输出的第一行非空内容，就是 socket 路径。 */
+export function parseSocketPath(text: string): string | undefined {
+	const line = text
+		.split("\n")
+		.map((item) => item.trim())
+		.find((item) => item.length > 0);
+	return line;
 }
 
-/** 一条 SSH 连接上能做的三件事。 */
+/** 一条 SSH 连接上用到的两件事。 */
 export interface SshClientLike {
-	/** 在远端执行一条命令并取回输出 */
-	exec(command: string): Promise<string>;
+	/** 在远端把一段脚本喂给 `/bin/sh`，返回标准输出 */
+	run(script: string): Promise<string>;
 	/** 连接到远端的一个 unix socket */
 	openStreamLocal(path: string): Promise<StreamLike>;
-	/** 连接到远端的一个 TCP 地址 */
-	openTcp(host: string, port: number): Promise<StreamLike>;
 	/** 断开 */
 	close(): void;
 }
@@ -251,8 +233,8 @@ export type SshConnector = (config: ConnectConfig) => Promise<SshClientLike>;
 export interface SshHostOptions {
 	/** 连接超时，毫秒 */
 	connectTimeoutMs?: number;
-	/** 执行远端命令的超时，毫秒 */
-	execTimeoutMs?: number;
+	/** 拉起远端主机后等 socket 出现的上限，毫秒 */
+	socketWaitMs?: number;
 	/** 建立 SSH 连接，缺省用 ssh2 */
 	connect?: SshConnector;
 	/** 读本地文件，缺省用 fs */
@@ -270,7 +252,10 @@ export class SshHostError extends Error {
 		| "no_known_host"
 		/** 缺登录凭据或凭据被拒，界面据此问密码 */
 		| "need_password"
-		| "no_discovery"
+		/** 这台机器上没有安装 facet，拉不起来 */
+		| "not_installed"
+		/** 装了也拉不起来，或者 socket 一直不出现 */
+		| "no_socket"
 		| "connect_failed"
 		| "forward_failed";
 
@@ -306,29 +291,27 @@ export class SshHosts {
 		password?: string,
 	): Promise<{
 		stream: StreamLike;
-		token: string | undefined;
 		address: string;
 	}> {
 		const target = parseSshTarget(targetText);
 		if (target === undefined) {
 			throw new SshHostError("no_target", `主机地址看不懂:${targetText}`);
 		}
-		const home = this.options.home ?? homedir();
+		const localHome = this.options.home ?? homedir();
 		const env = this.options.env ?? process.env;
 		const readLocal = this.options.readLocalFile ?? readOptionalFile;
 		const config = matchSshConfig(
-			parseSshConfig((await readLocal(join(home, ".ssh", "config"))) ?? ""),
+			parseSshConfig((await readLocal(join(localHome, ".ssh", "config"))) ?? ""),
 			target.host,
 		);
-		const knownHosts = parseKnownHosts((await readLocal(join(home, ".ssh", "known_hosts"))) ?? "");
 		const host = config?.hostName ?? target.host;
 		const port = target.port === 22 ? (config?.port ?? 22) : target.port;
 		const user = target.user ?? config?.user ?? env.USER ?? env.LOGNAME;
 		const identityFiles = [
 			...(config?.identityFiles ?? []),
-			join(home, ".ssh", "id_ed25519"),
-			join(home, ".ssh", "id_ecdsa"),
-			join(home, ".ssh", "id_rsa"),
+			join(localHome, ".ssh", "id_ed25519"),
+			join(localHome, ".ssh", "id_ecdsa"),
+			join(localHome, ".ssh", "id_rsa"),
 		];
 
 		const build = async (): Promise<ConnectConfig> => {
@@ -356,13 +339,6 @@ export class SshHosts {
 				...(user === undefined ? {} : { username: user }),
 				...login,
 				readyTimeout: this.options.connectTimeoutMs ?? 10_000,
-				hostVerifier: (key: Buffer): boolean => {
-					const parsed = parseHostKeyBlob(key);
-					if (parsed === undefined) {
-						return false;
-					}
-					return verifyHostKey(knownHosts, host, port, parsed.keyType, parsed.key);
-				},
 			};
 		};
 
@@ -387,35 +363,81 @@ export class SshHosts {
 			throw new SshHostError("connect_failed", `连不上 ${sshTargetLabel(target)}:${messageOf(error)}`);
 		}
 
+		const label = sshTargetLabel(target);
+		let output: string;
 		try {
-			const text = await client.exec(remoteDiscoveryCommand());
-			const discovery: DiscoveryRecord | undefined = parseDiscovery(text);
-			if (discovery === undefined) {
-				throw new SshHostError("no_discovery", `${sshTargetLabel(target)} 上没有运行中的 facet 主机`);
-			}
-			const stream =
-				discovery.endpoint.transport === "unix"
-					? await client.openStreamLocal(discovery.endpoint.path)
-					: await client.openTcp(
-							new URL(discovery.endpoint.url).hostname,
-							Number(new URL(discovery.endpoint.url).port),
-						);
-			return {
-				stream,
-				token: discovery.token,
-				address: discovery.endpoint.transport === "unix" ? discovery.endpoint.path : discovery.endpoint.url,
-			};
+			output = await client.run(REMOTE_SOCKET_SCRIPT);
 		} catch (error) {
 			client.close();
-			if (error instanceof SshHostError) {
-				throw error;
+			throw new SshHostError("no_socket", `${label} 上查不到主机位置:${messageOf(error)}`);
+		}
+		let path = parseSocketPath(output);
+		if (path === undefined) {
+			// 没在跑就拉起来：本地桌面也是这么做的，远端同样交给已安装的那份主机
+			const started = await startRemoteHost(client, label);
+			if (started !== undefined) {
+				throw started;
 			}
-			throw new SshHostError("forward_failed", `打开通道失败:${messageOf(error)}`);
+			path = await waitForRemoteSocket(client, this.options.socketWaitMs ?? SOCKET_WAIT_MS);
+		}
+		if (path === undefined) {
+			client.close();
+			throw new SshHostError(
+				"no_socket",
+				`${label} 上拉起了 facet 主机，但 ${this.options.socketWaitMs ?? SOCKET_WAIT_MS} 毫秒内没等到 socket`,
+			);
+		}
+
+		try {
+			const stream = await client.openStreamLocal(path);
+			return { stream, address: path };
+		} catch (error) {
+			client.close();
+			throw new SshHostError("no_socket", `${label} 上的 ${path} 连不上:${messageOf(error)}`);
 		}
 	}
 }
 
-/** 把 ssh2 给的公钥拆成类型与 base64。 */
+/** 拉起远端主机后等 socket 出现的上限与轮询间隔。 */
+const SOCKET_WAIT_MS = 12_000;
+const SOCKET_POLL_MS = 400;
+
+/**
+ * 在远端启动主机。
+ *
+ * 返回 SshHostError 表示这一次不该继续等 socket（没装 facet）；返回 undefined 表示已经发出
+ * 启动命令，接下来轮询 socket 即可。
+ */
+async function startRemoteHost(client: SshClientLike, label: string): Promise<SshHostError | undefined> {
+	let output: string;
+	try {
+		output = await client.run(REMOTE_START_SCRIPT);
+	} catch (error) {
+		return new SshHostError("no_socket", `${label} 上启动 facet 主机失败:${messageOf(error)}`);
+	}
+	if (output.includes("none")) {
+		return new SshHostError("not_installed", `${label} 上没有安装 facet，先在那边装好再来添加`);
+	}
+	return undefined;
+}
+
+/** 轮询远端，等主机把 socket 建出来。 */
+async function waitForRemoteSocket(client: SshClientLike, waitMs: number): Promise<string | undefined> {
+	const deadline = Date.now() + waitMs;
+	while (Date.now() < deadline) {
+		await new Promise((done) => setTimeout(done, SOCKET_POLL_MS));
+		try {
+			const found = parseSocketPath(await client.run(REMOTE_SOCKET_SCRIPT));
+			if (found !== undefined) {
+				return found;
+			}
+		} catch {
+			// 主机还没起来，下一次再问
+		}
+	}
+	return undefined;
+}
+
 /** ssh2 在认证阶段失败时把 level 标成 client-authentication。 */
 function isAuthFailure(error: unknown): boolean {
 	return (
@@ -424,31 +446,6 @@ function isAuthFailure(error: unknown): boolean {
 		(error as { level?: unknown }).level === "client-authentication"
 	);
 }
-
-/**
- * 解析 SSH 握手给出的主机公钥。
- *
- * ssh2 交给 hostVerifier 的是 SSH 线上的公钥 blob：4 字节大端长度加算法名，后面跟着
- * 密钥数据，整段不是可读文本。known_hosts 那一列存的是同一个 blob 的 base64，所以这里
- * 解出算法名，再把整段按 base64 还原成可比对的形式。
- */
-export function parseHostKeyBlob(blob: Buffer): { keyType: string; key: string } | undefined {
-	if (blob.length < 4) {
-		return undefined;
-	}
-	const nameLength = blob.readUInt32BE(0);
-	if (nameLength === 0 || nameLength > blob.length - 4) {
-		return undefined;
-	}
-	const keyType = blob.subarray(4, 4 + nameLength).toString("utf8");
-	if (!KEY_TYPE_PATTERN.test(keyType)) {
-		return undefined;
-	}
-	return { keyType, key: blob.toString("base64") };
-}
-
-/** 算法名只可能是 ssh- / ecdsa- / sk- 开头的可见字符。 */
-const KEY_TYPE_PATTERN = /^(ssh-|ecdsa-|sk-)[A-Za-z0-9@.-]+$/;
 
 /** 默认的 SSH 连接：用 ssh2 连上并包成 SshClientLike。 */
 const defaultConnector: SshConnector = async (config) => {
@@ -459,15 +456,20 @@ const defaultConnector: SshConnector = async (config) => {
 		client.connect(config);
 	});
 	return {
-		exec: (command) =>
+		// 脚本从标准输入喂进去：命令行只有一个 /bin/sh，没有引号转义的坑，
+		// 脚本里要加多少步都行
+		run: (script) =>
 			new Promise<string>((resolve, reject) => {
-				client.exec(command, (error, channel) => {
+				const timer = setTimeout(() => reject(new Error("远端脚本超时")), RUN_TIMEOUT_MS);
+				client.exec("/bin/sh", (error, channel) => {
 					if (error !== undefined) {
+						clearTimeout(timer);
 						reject(error);
 						return;
 					}
 					let text = "";
 					let stderr = "";
+					let exitCode: number | undefined;
 					channel.setEncoding("utf8");
 					channel.on("data", (chunk: string) => {
 						text += chunk;
@@ -475,28 +477,24 @@ const defaultConnector: SshConnector = async (config) => {
 					channel.stderr.on("data", (chunk: Buffer) => {
 						stderr += chunk.toString("utf8");
 					});
+					channel.on("exit", (code: number) => {
+						exitCode = code;
+					});
 					channel.once("close", () => {
-						if (text.length === 0) {
-							reject(new Error(stderr.trim() || "远端命令没有输出"));
+						clearTimeout(timer);
+						// 没有输出属于正常结果（比如「现在没有 socket」），只有退出码非 0 才算脚本失败
+						if (text.length === 0 && exitCode !== undefined && exitCode !== 0) {
+							reject(new Error(stderr.trim() || `远端脚本退出码 ${exitCode}`));
 							return;
 						}
 						resolve(text);
 					});
+					channel.end(script);
 				});
 			}),
 		openStreamLocal: (path) =>
 			new Promise<StreamLike>((resolve, reject) => {
 				client.openssh_forwardOutStreamLocal(path, (error, stream) => {
-					if (error !== undefined) {
-						reject(error);
-						return;
-					}
-					resolve(toStreamLike(stream));
-				});
-			}),
-		openTcp: (host, port) =>
-			new Promise<StreamLike>((resolve, reject) => {
-				client.forwardOut("127.0.0.1", 0, host, port, (error, stream) => {
 					if (error !== undefined) {
 						reject(error);
 						return;

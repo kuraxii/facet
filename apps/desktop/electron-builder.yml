@@ -19,6 +19,11 @@ files:
   - "!node_modules/node-pty/{src,deps,third_party,scripts,typings}/**"
   - "!node_modules/node-pty/prebuilds/{win32-x64,win32-arm64,darwin-x64,darwin-arm64}/**"
 
+# 独立主机产物：自带的官方 Node 运行时 + 打好的主机入口，放在 resources/host 下
+extraResources:
+  - from: dist-host
+    to: host
+
 asar: true
 
 # node-pty 是原生模块，.node 与 spawn-helper 必须在 asar 外面才能被加载

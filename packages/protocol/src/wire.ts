@@ -93,6 +93,8 @@ export interface HelloFrame {
 	role: ClientRole;
 	/** 这条连接能不能改设置、凭证与项目清单这类主机配置 */
 	canManage: boolean;
+	/** 主机实际生效的 pi 数据目录，远端排查时看它 */
+	agentDir: string;
 	capabilities: Capability[];
 }
 

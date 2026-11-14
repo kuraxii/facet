@@ -59,6 +59,9 @@ export interface ServerConfig {
 }
 
 const DEFAULT_HOST = "127.0.0.1";
+
+/** 数据目录里固定使用的主机 socket 文件名。 */
+const SOCKET_FILE = "facet.sock";
 const DEFAULT_PORT = 0;
 const DEFAULT_REPLAY_LIMIT = 512;
 const DEFAULT_SESSION_IDLE_MS = 3000;
@@ -75,19 +78,20 @@ function readFlag(value: string | undefined): boolean {
 }
 
 /**
- * 本机缺省的 unix socket 路径。
+ * 本机 unix socket 的固定路径。
  *
- * 优先放到 `XDG_RUNTIME_DIR`（目录 0700，退出登录由系统清理）；没有这个变量时退回数据目录。
- * 目录名取数据目录的叶子名（`facet` / `facet-dev`），开发实例与发布实例不互相覆盖。
- * unix socket 的路径上限约 107 字节，所以只拼叶子名，不拼整条数据目录。
+ * 契约：优先 `$XDG_RUNTIME_DIR/<数据目录名>.sock`（运行目录随登录会话创建、退出即清理），
+ * 没有运行目录时退回 `<数据目录>/facet.sock`。名字里的 `facet` / `facet-dev` 取自数据目录，
+ * 开发实例与发布实例因此不会抢同一个 socket。
+ *
+ * `FACET_DATA_DIR` / `FACET_SOCKET` 可以覆盖，覆盖之后两端得自己对齐。
  */
-function defaultSocketPath(env: Record<string, string | undefined>, dataDir: string): string {
-	const leaf = basename(dataDir);
+export function defaultSocketPath(env: Record<string, string | undefined>, dataDir: string): string {
 	const runtime = env.XDG_RUNTIME_DIR?.trim();
-	if (runtime !== undefined && isAbsolute(runtime)) {
-		return join(runtime, leaf, "host.sock");
+	if (runtime !== undefined && runtime.length > 0 && isAbsolute(runtime)) {
+		return join(runtime, `${basename(dataDir)}.sock`);
 	}
-	return join(dataDir, "host.sock");
+	return join(dataDir, SOCKET_FILE);
 }
 
 /** 按 XDG 规范取应用数据目录，非绝对路径的 XDG_DATA_HOME 按未设置处理。 */

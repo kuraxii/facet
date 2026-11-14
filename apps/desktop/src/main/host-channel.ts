@@ -6,7 +6,6 @@
  * 之后两端只搬运帧：界面写进来的行、主机回来的行。
  */
 import { connect, type Socket } from "node:net";
-import { type DiscoveryRecord, describeDiscovery } from "@facet/server";
 import type { StreamLike } from "@facet/transport";
 import type { WebContents } from "electron";
 import { isSshTarget, SshHosts } from "./ssh-host.ts";
@@ -32,10 +31,10 @@ interface Channel {
 export type TargetResolver = (
 	target: string,
 ) =>
-	| DiscoveryRecord
+	| { path: string }
 	| { host: string; port: number }
 	| undefined
-	| Promise<DiscoveryRecord | { host: string; port: number } | undefined>;
+	| Promise<{ path: string } | { host: string; port: number } | undefined>;
 
 export class HostChannels {
 	private next = 1;
@@ -61,18 +60,20 @@ export class HostChannels {
 	): Promise<{ id: number; token: string | undefined; role: "operator" | "viewer" | undefined }> {
 		if (isSshTarget(target)) {
 			const opened = await this.ssh.open(target, password);
-			// SSH 通道已经是流，直接按行搬运；能登上那台机器就等于本机使用者，不声明权限档
-			return this.attach(webContents, { stream: opened.stream }, opened.token, undefined);
+			// SSH 通道已经是流，直接按行搬运；能登上那台机器就等于本机使用者，不声明权限档，
+			// 也不需要应用层令牌：unix socket 的 0600 + 目录 0700 由内核负责身份
+			return this.attach(webContents, { stream: opened.stream }, undefined, undefined);
 		}
 		const resolved = await this.resolve(target);
 		if (resolved === undefined) {
 			throw new Error(target === LOCAL_TARGET ? "没有发现正在运行的主机" : `主机地址无效:${target}`);
 		}
 		const socket =
-			"endpoint" in resolved
-				? await connectToDiscovery(resolved)
+			"path" in resolved
+				? await connectTcp({ path: resolved.path })
 				: await connectTcp({ host: resolved.host, port: resolved.port });
-		const token = "endpoint" in resolved ? resolved.token : undefined;
+		// 本机走固定 socket，身份由文件权限保证，不带令牌
+		const token = undefined;
 		// 直连的远程主机按操作档申请，主机按自己的配置收窄
 		const role = target === LOCAL_TARGET ? undefined : ("operator" as const);
 		return this.attach(webContents, { socket }, token, role);
@@ -160,13 +161,6 @@ export class HostChannels {
 }
 
 /** 连发现文件记着的主机：unix socket 直接连，TCP 也是同一套按行协议。 */
-async function connectToDiscovery(record: DiscoveryRecord): Promise<Socket> {
-	if (record.endpoint.transport === "unix") {
-		return await connectTcp({ path: record.endpoint.path });
-	}
-	const url = new URL(record.endpoint.url);
-	return await connectTcp({ host: url.hostname, port: Number(url.port) });
-}
 
 /** 建一条 TCP 或 unix 连接。 */
 function connectTcp(target: { host: string; port: number } | { path: string }): Promise<Socket> {
@@ -179,9 +173,4 @@ function connectTcp(target: { host: string; port: number } | { path: string }): 
 		});
 		socket.once("error", reject);
 	});
-}
-
-/** 发现记录的地址，日志里显示用。 */
-export function addressOf(record: DiscoveryRecord): string {
-	return describeDiscovery(record);
 }

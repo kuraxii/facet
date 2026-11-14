@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
 	findRunningHost,
+	hostSocketPath,
 	isProcessAlive,
-	readDiscovery,
 	readDiscoveryFile,
 	resolveDataDir,
 } from "./host-daemon.ts";
@@ -79,6 +79,13 @@ describe("resolveDataDir", () => {
 		expect(resolveDataDir({ XDG_DATA_HOME: "/xdg" })).toBe("/xdg/facet");
 	});
 
+	it("socket 优先落在运行目录，没有时落在数据目录", () => {
+		expect(hostSocketPath("/data/facet-dev", { XDG_RUNTIME_DIR: "/run/user/1000" })).toBe(
+			"/run/user/1000/facet-dev.sock",
+		);
+		expect(hostSocketPath("/data/facet-dev", {})).toBe("/data/facet-dev/facet.sock");
+	});
+
 	it("按 XDG_DATA_HOME 取，没有或不是绝对路径时用家目录", () => {
 		expect(resolveDataDir({ XDG_DATA_HOME: "/xdg" })).toBe("/xdg/facet");
 		expect(resolveDataDir({ XDG_DATA_HOME: "relative" }).endsWith("/.local/share/facet")).toBe(true);
@@ -86,7 +93,18 @@ describe("resolveDataDir", () => {
 });
 
 describe("findRunningHost", () => {
-	it("发现文件的进程还在且握手通过时返回主机", async () => {
+	it("固定路径上的 socket 握手通过时返回主机", async () => {
+		const dataDir = await tempDir();
+		const expected = hostSocketPath(dataDir);
+		const found = await findRunningHost({ dataDir, probe: async (host) => host.path === expected });
+		expect(found?.path).toBe(expected);
+	});
+
+	it("握手不通时按没有主机处理", async () => {
+		expect(await findRunningHost({ dataDir: await tempDir(), probe: async () => false })).toBeUndefined();
+	});
+
+	it("发现文件不影响判断：它是排障用的，连不上就是没开", async () => {
 		const dataDir = await tempDir();
 		await writeFile(
 			join(dataDir, "endpoint.json"),
@@ -96,34 +114,7 @@ describe("findRunningHost", () => {
 				pid: process.pid,
 			}),
 		);
-		const found = await findRunningHost({ dataDir, probe: async () => true });
-		expect(found?.hostId).toBe("h");
-	});
-
-	it("进程已经不在了就删掉发现文件", async () => {
-		const dataDir = await tempDir();
-		const file = join(dataDir, "endpoint.json");
-		await writeFile(
-			file,
-			JSON.stringify({ endpoint: "ws://127.0.0.1:1/endpoint", hostId: "h", pid: 999_999 }),
-		);
-		expect(await findRunningHost({ dataDir, probe: async () => true })).toBeUndefined();
-		await expect(readFile(file, "utf8")).rejects.toThrow();
-	});
-
-	it("握手不通时删掉发现文件", async () => {
-		const dataDir = await tempDir();
-		const file = join(dataDir, "endpoint.json");
-		await writeFile(
-			file,
-			JSON.stringify({ endpoint: "ws://127.0.0.1:1/endpoint", hostId: "h", pid: process.pid }),
-		);
 		expect(await findRunningHost({ dataDir, probe: async () => false })).toBeUndefined();
-		await expect(readDiscovery(dataDir)).resolves.toBeUndefined();
-	});
-
-	it("没有发现文件时按没有主机处理", async () => {
-		expect(await findRunningHost({ dataDir: await tempDir(), probe: async () => true })).toBeUndefined();
 	});
 });
 

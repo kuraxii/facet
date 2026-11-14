@@ -19,37 +19,60 @@ npm install
 
 依赖关系是 workspaces 提升到根的 `node_modules`，界面包 `@facet/ui` 的依赖（`shiki`、`markstream-react`、`@fontsource/*`、`mermaid`、`katex`）也装在这一层。只装某个子包的依赖时，开发服务器会报 `Failed to resolve import "shiki"`、`Unable to resolve "@import "@fontsource/inter/400.css""` 这类错误。
 
+## 打包
+
+```bash
+npm run dist            # 先打独立主机产物，再打 rpm 与 deb
+npm run build:host      # 只打独立主机产物
+```
+
+主机是一个自带运行时的独立产物：
+
+```
+apps/desktop/dist-host/
+  bin/node            官方 Node（scripts/build-host.mjs 里固定版本，缓存在 ~/.cache/facet-node）
+  lib/host.mjs        主机入口，esbuild 打成单个 ES 模块
+  lib/pty-host.mjs    终端子进程入口
+  lib/node_modules/node-pty/   唯一的原生模块
+```
+
+打包时整个目录进 `resources/host`，桌面启动主机用的就是 `resources/host/bin/node resources/host/lib/host.mjs`，
+与桌面那份 Electron 运行时互不相干。开发时不打这个产物，桌面按老办法用 Electron 本身当 Node 跑
+`out/main/host.js`（`resolveHostLaunch` 里按 `resources/host/bin/node` 是否存在切换）。
+
+远程主机把这个目录拷过去，用 `bin/node lib/host.mjs` 起即可。
+
 ## 运行
 
-本机的主机只开 unix socket（`$XDG_RUNTIME_DIR/facet-dev/host.sock`），桌面按数据目录里的
-`endpoint.json` 连过去，两边都不用填端口：
+本机的主机只开一个 unix socket（`$XDG_RUNTIME_DIR/facet-dev.sock`，没有运行目录时是
+`~/.local/share/facet-dev/facet.sock`），桌面按同一套规则拼出路径直接连，两边都不用填端口：
 
 ```bash
 npm run dev            # 主机与桌面一起起，各自热重启
-npm run dev:desktop    # 只起桌面；没有发现文件时自己拉起主机
-npm run dev:host       # 只起主机，桌面起来后按发现文件连上它
+npm run dev:desktop    # 只起桌面；socket 连不上时自己拉起主机
+npm run dev:host       # 只起主机，桌面起来后自己连上它
 npm run dev:split      # 与 dev 相同，保留这个更明确的名字
 ```
 
 要分开看两边日志时用 `npm run dev:host` 加 `npm run dev:desktop` 各起一个终端。
 
 开发与打包走同一条路：不给 `FACET_ENDPOINT` 就是本机主机，差别只在开发实例的数据目录带
-`-dev` 后缀。要连别处的主机（TCP 端点，或 `ssh://` 远程主机）用 `FACET_ENDPOINT`：
+`-dev` 后缀（socket 也就叫 `facet-dev.sock`）。要连别处的主机（TCP 端点，或 `ssh://` 远程主机）用 `FACET_ENDPOINT`：
 
 ```bash
 FACET_ENDPOINT=ws://192.168.1.20:4319/endpoint npm run dev:desktop
 ```
 
-## 连接方式与令牌
+## 连接方式与身份
 
 主机只跑一套按行编码的协议，跑在哪条字节流上都一样：
 
-- **本机**：缺省只监听 unix socket，路径是 `$XDG_RUNTIME_DIR/<数据目录名>/host.sock`（没有 `XDG_RUNTIME_DIR` 时落在数据目录下），不开任何端口。给出 `FACET_PORT` 或 `FACET_HOST` 时改成监听 TCP，`FACET_SOCKET` 可以指定别的 socket 路径。
-- **远程**：主机清单里填 `user@host`（或 `ssh://user@host:端口`），桌面用进程内的 SSH 库连过去，读远端的发现文件拿到 socket 路径与令牌，再在远端 socket 上开一条通道；远端不开端口、本地也不开端口，协议层一行不用改。认证先用 `~/.ssh/config` 里的私钥与 ssh-agent；没有可用的私钥、或服务器拒绝这把密钥时问一次登录密码，密码留在桌面主进程内存里供重连使用，不写进清单。主机密钥按 `known_hosts` 校验（支持哈希条目），未知或变更的密钥直接拒绝（用 `ssh-keyscan 主机 >> ~/.ssh/known_hosts` 收下新主机）。Windows 远端只监听命名管道时无法用 SSH 通道，退回走远端的 TCP 回环地址。
+- **本机**：连接位置是固定契约——优先 `$XDG_RUNTIME_DIR/facet.sock`（开发实例 `facet-dev.sock`），没有运行目录时退回 `<数据目录>/facet.sock`。只监听这个 unix socket，不开任何端口；`FACET_PORT` 或 `FACET_HOST` 给出时改成监听 TCP，`FACET_SOCKET` 可以换路径（换了两端得自己对齐）。数据目录里的 `endpoint.json` 只留作排障，不参与连接。
+- **远程**：主机清单里填 `user@host`（或 `ssh://user@host:端口`），桌面用进程内的 SSH 库连过去，远端先跑一小段脚本找出实际在跑的 socket（顺序：`/run/user/<uid>/facet.sock`、`facet-dev.sock`、`~/.local/share/facet/facet.sock`、`~/.local/share/facet-dev/facet.sock`），再在那个 socket 上开一条通道。没在跑就再跑一段脚本把它拉起来：脚本只在**已经装了 facet** 的机器上成立，位置就认包安装目录 `/opt/Facet/resources/host`（rpm 与 deb 都装在这里），找不到就直接报「没有安装 facet」，不上传、不安装。脚本作为文本流从标准输入喂给 `/bin/sh`（只用 POSIX 语法，极简容器里也能跑），命令行里只有解释器本身，不拼引号也不受行长限制；远端不开端口、本地也不开端口，也不在远端跑任何命令。认证先用 `~/.ssh/config` 里的私钥、`~/.ssh` 下的私钥与 ssh-agent；没有可用的私钥、或服务器拒绝这把密钥时问一次登录密码，密码留在桌面主进程内存里供重连使用，不写进清单。主机公钥不做校验，`known_hosts` 不参与：能连上那台机器就已经拿到那台机器的账户权限。Windows 远端只监听命名管道时无法用 SSH 通道，退回走远端的 TCP 回环地址。
 - **远程端不需要开关**：能拿到这台机器的 SSH 登录权，就等于那台机器的使用者，SSH 通道送进来的连接按本机档处理（管理档），不受 `FACET_REMOTE_PERMISSION` 约束。那条开关收窄的是会自己声明权限档的远程端：Web 端声明操作档，主机缺省把它收成只读，`FACET_REMOTE_PERMISSION=operate` 才放行。
 - **权限档**：本机连接与 SSH 通道是管理档；自己声明档位的远程连接（Web）按 `FACET_REMOTE_PERMISSION` 给操作档或只读档。设置与凭证、提供方、项目增删与信任、诊断按入口放行：桌面设备开的通道可以（本机 socket 与 SSH 隧道都算），浏览器入口不行；只读档连会话与文件都不能改，输入区只是发送按钮不可用。远程的写操作记进 `$FACET_DATA_DIR/audit.log`（时间、连接标识、权限档、操作与结果，不含参数与内容）。
-- **令牌**：主机会生成一个随机令牌写进发现文件（`FACET_TOKEN` 可指定，`FACET_NO_TOKEN=1` 关闭校验）。连接的第一帧是 `{type:"auth",token}`，不匹配直接断开，拿不到 hello。发现文件权限 `0600`、所在目录 `0700`，socket 本身也是 `0600`。
-- **桌面不直连主机**：渲染进程在沙箱里，连接由主进程按目标建通道（本机按发现文件，远程按 `host:port`），界面只搬运帧。
+- **身份**：unix socket 是 `0600`、所在目录 `0700`，能连上的只可能是同一个用户（和 root），所以本机与 SSH 通道**不再校验应用层令牌**，连上就是自己人。TCP 与 Web 入口拿不到对端身份，仍然要令牌：主机会生成一个随机令牌写进发现文件（`FACET_TOKEN` 可指定，`FACET_NO_TOKEN=1` 关闭校验），连接第一帧是 `{type:"auth",token}`，不匹配直接断开。
+- **桌面不直连主机**：渲染进程在沙箱里，连接由主进程按目标建通道（本机走固定 socket，远程按 `host:port`），界面只搬运帧。
 
 ## Web 端
 
@@ -243,7 +266,7 @@ npm run dist -w @facet/desktop
 | `FACET_SESSION_IDLE_MS` | 没人订阅且空闲后多久回收会话 |
 | `FACET_DEBUG` | 打开主机侧调试日志 |
 | `FACET_ENDPOINT` | 桌面连这个主机（`host:port` 或 `ssh://user@host`），不再用本机发现文件 |
-| `FACET_SOCKET` | 指定 unix socket 的路径，缺省 `$XDG_RUNTIME_DIR/<数据目录名>/host.sock` |
+| `FACET_SOCKET` | 指定 unix socket 的路径，缺省 `$XDG_RUNTIME_DIR/facet.sock`（无运行目录时 `<数据目录>/facet.sock`） |
 | `FACET_REMOTE_PERMISSION` | 远程连接申请档位的上限：`view`（只读，缺省）或 `operate`（可申请操作档） |
 | `FACET_WEB_PORT` | Web 端接入端口，缺省关闭；同一个端口发页面也接 WebSocket |
 | `FACET_PTY_HOST` | pty 子进程入口，缺省与主机入口同目录（`pty-host.js` 或 `pty-host-child.ts`） |

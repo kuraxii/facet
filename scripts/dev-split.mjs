@@ -1,12 +1,12 @@
 /**
  * 分开启动主机与桌面。
  *
- * 先把主机单独跑起来（改主机代码只重启它，桌面界面不受影响），等它写下发现文件之后再启动
- * 桌面，桌面按发现文件自己连过去（本机是 unix socket）。两边输出各加前缀，Ctrl+C 一起结束。
+ * 先把主机单独跑起来（改主机代码只重启它，桌面界面不受影响），等它建出 socket 之后再启动
+ * 桌面，桌面按固定路径自己连过去。两边输出各加前缀，Ctrl+C 一起结束。
  */
 
 import { spawn } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { access } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -68,19 +68,17 @@ function run(label, args, env) {
 	return child;
 }
 
-/** 轮询端点，主机起来之前桌面就连会一直失败。 */
+/** 轮询固定 socket，主机起来之前桌面就连会一直失败。 */
 async function waitForHost() {
-	// 主机监听的是按帧收发的字节流，不能用 HTTP 探活；就绪的凭据是它写下的发现文件
-	const discovery = join(devDataDir(process.env), "endpoint.json");
+	// 主机的连接位置是固定契约：数据目录下的 facet.sock。文件出现就说明在监听
+	const socket = join(devDataDir(process.env), "facet.sock");
 	const deadline = Date.now() + READY_WAIT_MS;
 	while (Date.now() < deadline) {
 		try {
-			const record = JSON.parse(await readFile(discovery, "utf8"));
-			if (record?.endpoint !== undefined) {
-				return true;
-			}
+			await access(socket);
+			return true;
 		} catch {
-			// 还没写出来，继续等
+			// 还没建出来，继续等
 		}
 		await new Promise((done) => setTimeout(done, POLL_INTERVAL_MS));
 	}

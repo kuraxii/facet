@@ -156,19 +156,27 @@ export function matchSshConfig(config: Map<string, SshHostConfig>, host: string)
 const SOCKET_FILE = "facet.sock";
 
 /**
- * 远端主机的候选 socket 路径。
+ * 远端主机的候选 socket 路径，按优先级排。
  *
- * 先按发布实例（`facet`）再按开发实例（`facet-dev`）试；两个都在家目录的
- * `.local/share` 之下，客户端只要知道对方家目录就能拼出来，不必跑命令。
+ * 主机侧优先监听 `$XDG_RUNTIME_DIR/<数据目录名>.sock`，没有运行目录时退回
+ * `<数据目录>/facet.sock`；`facet` 是发布实例，`facet-dev` 是开发实例。客户端拿不到对方的
+ * 运行目录，但拿得到 uid 与家目录，几条都试一遍，最先连上的就是。
  */
-export function remoteSocketPaths(home: string): string[] {
-	return [`${home}/.local/share/facet/${SOCKET_FILE}`, `${home}/.local/share/facet-dev/${SOCKET_FILE}`];
+export function remoteSocketPaths(home: string, uid: number | undefined): string[] {
+	const runtime = uid === undefined ? [] : [`/run/user/${uid}/facet.sock`, `/run/user/${uid}/facet-dev.sock`];
+	return [
+		...runtime,
+		`${home}/.local/share/facet/${SOCKET_FILE}`,
+		`${home}/.local/share/facet-dev/${SOCKET_FILE}`,
+	];
 }
 
 /** 一条 SSH 连接上用到的两件事。 */
 export interface SshClientLike {
 	/** 远端登录用户的家目录，取不到时返回 undefined */
 	home(): Promise<string | undefined>;
+	/** 远端登录用户的 uid，取不到时返回 undefined */
+	uid(): Promise<number | undefined>;
 	/** 连接到远端的一个 unix socket */
 	openStreamLocal(path: string): Promise<StreamLike>;
 	/** 断开 */
@@ -324,9 +332,11 @@ export class SshHosts {
 			throw new SshHostError("no_home", `取不到 ${label} 的家目录`);
 		}
 
+		const uid = await client.uid().catch(() => undefined);
+
 		// 固定路径直接开通道：连得上就是主机在跑，连不上就是没开
 		let reason = "";
-		for (const path of remoteSocketPaths(home)) {
+		for (const path of remoteSocketPaths(home, uid)) {
 			try {
 				const stream = await client.openStreamLocal(path);
 				return { stream, address: path };
@@ -368,6 +378,20 @@ const defaultConnector: SshConnector = async (config) => {
 					sftp.realpath(".", (realpathError, absolutePath) => {
 						sftp.end();
 						resolve(realpathError !== undefined ? undefined : absolutePath);
+					});
+				});
+			}),
+		// /proc/<pid> 目录的属主就是该进程的 uid，sftp-server 以登录用户身份运行
+		uid: () =>
+			new Promise<number | undefined>((resolve) => {
+				client.sftp((error, sftp) => {
+					if (error !== undefined) {
+						resolve(undefined);
+						return;
+					}
+					sftp.stat("/proc/self", (statError, stats) => {
+						sftp.end();
+						resolve(statError !== undefined ? undefined : stats.uid);
 					});
 				});
 			}),

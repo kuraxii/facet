@@ -79,8 +79,11 @@ describe("resolveDataDir", () => {
 		expect(resolveDataDir({ XDG_DATA_HOME: "/xdg" })).toBe("/xdg/facet");
 	});
 
-	it("socket 固定落在数据目录下", () => {
-		expect(hostSocketPath("/data/facet-dev")).toBe("/data/facet-dev/facet.sock");
+	it("socket 优先落在运行目录，没有时落在数据目录", () => {
+		expect(hostSocketPath("/data/facet-dev", { XDG_RUNTIME_DIR: "/run/user/1000" })).toBe(
+			"/run/user/1000/facet-dev.sock",
+		);
+		expect(hostSocketPath("/data/facet-dev", {})).toBe("/data/facet-dev/facet.sock");
 	});
 
 	it("按 XDG_DATA_HOME 取，没有或不是绝对路径时用家目录", () => {
@@ -92,11 +95,9 @@ describe("resolveDataDir", () => {
 describe("findRunningHost", () => {
 	it("固定路径上的 socket 握手通过时返回主机", async () => {
 		const dataDir = await tempDir();
-		const found = await findRunningHost({
-			dataDir,
-			probe: async (host) => host.path === join(dataDir, "facet.sock"),
-		});
-		expect(found?.path).toBe(join(dataDir, "facet.sock"));
+		const expected = hostSocketPath(dataDir);
+		const found = await findRunningHost({ dataDir, probe: async (host) => host.path === expected });
+		expect(found?.path).toBe(expected);
 	});
 
 	it("握手不通时按没有主机处理", async () => {

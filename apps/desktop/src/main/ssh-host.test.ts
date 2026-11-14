@@ -70,7 +70,7 @@ Host *
 describe("SshHosts", () => {
 	/** 一条假的 SSH 连接：家目录可给，打开 socket 时记下走过的路径。 */
 	function fakeClient(
-		options: { home?: string; openable?: string[] },
+		options: { home?: string; uid?: number; openable?: string[] },
 		opened: { paths?: string[]; config?: ConnectConfig },
 	) {
 		return async (config: ConnectConfig): Promise<SshClientLike> => {
@@ -78,6 +78,7 @@ describe("SshHosts", () => {
 			opened.paths = [];
 			return {
 				home: async () => options.home,
+				uid: async () => options.uid,
 				openStreamLocal: async (path) => {
 					opened.paths?.push(path);
 					if (options.openable !== undefined && !options.openable.includes(path)) {
@@ -97,7 +98,56 @@ describe("SshHosts", () => {
 		return undefined;
 	};
 
-	it("按远端家目录拼出固定 socket 路径，直接开通道", async () => {
+	it("运行目录优先：先试 /run/user/<uid> 下的 socket", async () => {
+		const opened: { paths?: string[] } = {};
+		const hosts = new SshHosts({
+			home: "/home/u",
+			env: { SSH_AUTH_SOCK: "/tmp/agent.sock" },
+			readLocalFile: read,
+			connect: fakeClient({ home: "/home/dev", uid: 1000, openable: ["/run/user/1000/facet.sock"] }, opened),
+		});
+		const result = await hosts.open("ssh://dev@laptop");
+		expect(result.address).toBe("/run/user/1000/facet.sock");
+		expect(opened.paths).toEqual(["/run/user/1000/facet.sock"]);
+	});
+
+	it("运行目录没有时退到家目录下的固定路径", async () => {
+		const opened: { paths?: string[] } = {};
+		const hosts = new SshHosts({
+			home: "/home/u",
+			env: { SSH_AUTH_SOCK: "/tmp/agent.sock" },
+			readLocalFile: read,
+			connect: fakeClient(
+				{ home: "/home/dev", uid: 1000, openable: ["/home/dev/.local/share/facet/facet.sock"] },
+				opened,
+			),
+		});
+		const result = await hosts.open("ssh://dev@laptop");
+		expect(result.address).toBe("/home/dev/.local/share/facet/facet.sock");
+		// 运行目录两条都没中，才走家目录
+		expect(opened.paths).toEqual([
+			"/run/user/1000/facet.sock",
+			"/run/user/1000/facet-dev.sock",
+			"/home/dev/.local/share/facet/facet.sock",
+		]);
+	});
+
+	it("开发实例的 socket 也能连", async () => {
+		const opened: { paths?: string[] } = {};
+		const hosts = new SshHosts({
+			home: "/home/u",
+			env: { SSH_AUTH_SOCK: "/tmp/agent.sock" },
+			readLocalFile: read,
+			connect: fakeClient(
+				{ home: "/home/dev", uid: 1000, openable: ["/run/user/1000/facet-dev.sock"] },
+				opened,
+			),
+		});
+		const result = await hosts.open("ssh://dev@laptop");
+		expect(result.address).toBe("/run/user/1000/facet-dev.sock");
+	});
+
+	it("取不到 uid 时只试家目录下的路径", async () => {
 		const opened: { paths?: string[] } = {};
 		const hosts = new SshHosts({
 			home: "/home/u",
@@ -108,26 +158,8 @@ describe("SshHosts", () => {
 				opened,
 			),
 		});
-		const result = await hosts.open("ssh://dev@laptop");
-		expect(result.address).toBe("/home/dev/.local/share/facet/facet.sock");
-		// 发布实例先试，命中就不再试开发实例
+		await hosts.open("ssh://dev@laptop");
 		expect(opened.paths).toEqual(["/home/dev/.local/share/facet/facet.sock"]);
-	});
-
-	it("发布实例没开时退到开发实例的 socket", async () => {
-		const opened: { paths?: string[] } = {};
-		const hosts = new SshHosts({
-			home: "/home/u",
-			env: { SSH_AUTH_SOCK: "/tmp/agent.sock" },
-			readLocalFile: read,
-			connect: fakeClient(
-				{ home: "/home/dev", openable: ["/home/dev/.local/share/facet-dev/facet.sock"] },
-				opened,
-			),
-		});
-		const result = await hosts.open("ssh://dev@laptop");
-		expect(result.address).toBe("/home/dev/.local/share/facet-dev/facet.sock");
-		expect(opened.paths).toHaveLength(2);
 	});
 
 	it("两个路径都连不上时报「没有在跑的主机」", async () => {

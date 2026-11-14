@@ -80,14 +80,17 @@ function readFlag(value: string | undefined): boolean {
 /**
  * 本机 unix socket 的固定路径。
  *
- * 契约就是「数据目录下的 facet.sock」：客户端按同一规则拼出路径直接连，不再读发现文件。
- * 数据目录本身已经把开发实例（`facet-dev`）与发布实例（`facet`）分开。放在数据目录而不是
- * `XDG_RUNTIME_DIR` 之下，是因为远端客户端只知道对方家目录（一次 SFTP 询问即可），
- * 算不出运行目录里的 uid，那反而要多跑一条命令。
+ * 契约：优先 `$XDG_RUNTIME_DIR/<数据目录名>.sock`（运行目录随登录会话创建、退出即清理），
+ * 没有运行目录时退回 `<数据目录>/facet.sock`。名字里的 `facet` / `facet-dev` 取自数据目录，
+ * 开发实例与发布实例因此不会抢同一个 socket。
  *
  * `FACET_DATA_DIR` / `FACET_SOCKET` 可以覆盖，覆盖之后两端得自己对齐。
  */
-export function defaultSocketPath(dataDir: string): string {
+export function defaultSocketPath(env: Record<string, string | undefined>, dataDir: string): string {
+	const runtime = env.XDG_RUNTIME_DIR?.trim();
+	if (runtime !== undefined && runtime.length > 0 && isAbsolute(runtime)) {
+		return join(runtime, `${basename(dataDir)}.sock`);
+	}
 	return join(dataDir, SOCKET_FILE);
 }
 
@@ -118,7 +121,7 @@ export function loadServerConfig(env: Record<string, string | undefined> = proce
 		agentDir: env.FACET_AGENT_DIR?.trim() || DEFAULT_AGENT_DIR,
 		sessionDir: env.FACET_SESSION_DIR?.trim() || undefined,
 		dataDir,
-		socketPath: env.FACET_SOCKET?.trim() || (wantsTcp ? undefined : defaultSocketPath(dataDir)),
+		socketPath: env.FACET_SOCKET?.trim() || (wantsTcp ? undefined : defaultSocketPath(env, dataDir)),
 		remotePermission: env.FACET_REMOTE_PERMISSION?.trim() === "operate" ? "operate" : "view",
 		webPort: env.FACET_WEB_PORT === undefined ? undefined : readInt(env.FACET_WEB_PORT, 0) || undefined,
 		webRoot: env.FACET_WEB_ROOT?.trim() || undefined,

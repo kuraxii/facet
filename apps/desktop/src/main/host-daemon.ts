@@ -13,7 +13,7 @@ import { closeSync, openSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { connect as connectSocket } from "node:net";
 import { homedir } from "node:os";
-import { isAbsolute, join } from "node:path";
+import { basename, isAbsolute, join } from "node:path";
 import { type DiscoveryRecord, parseDiscovery } from "@facet/server";
 import { StreamTransport } from "@facet/transport";
 
@@ -42,8 +42,19 @@ export interface LocalHost {
 	readonly path: string;
 }
 
-/** 本机主机 socket 的固定路径，与主机侧按同一规则推导。 */
-export function hostSocketPath(dataDir: string): string {
+/**
+ * 本机主机 socket 的固定路径，与主机侧按同一规则推导。
+ *
+ * 优先运行目录（`$XDG_RUNTIME_DIR/<数据目录名>.sock`），没有时退回数据目录。
+ */
+export function hostSocketPath(
+	dataDir: string,
+	env: Record<string, string | undefined> = process.env,
+): string {
+	const runtime = env.XDG_RUNTIME_DIR?.trim();
+	if (runtime !== undefined && runtime.length > 0 && isAbsolute(runtime)) {
+		return join(runtime, `${basename(dataDir)}.sock`);
+	}
 	return join(dataDir, SOCKET_FILE);
 }
 

@@ -18,7 +18,7 @@ import {
 	Undo2,
 	Wrench,
 } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Markdown } from "../markdown/Markdown.tsx";
 import { ChevronIcon, TreeChevron } from "./chevron.tsx";
@@ -166,11 +166,25 @@ function shortPath(path: string): string {
  *
  * 一行里只有图标、短名与参数摘要，点开才看输出；输出没有边框与底色，直接跟在下面。
  */
+/** 参数弹窗的延时：指针在摘要上停留这么久才弹，扫过去不打扰 */
+const TIP_DELAY_MS = 1000;
+
 function ToolRow({ part }: { part: ToolCallPart }) {
 	const [isOpen, setOpen] = useState(false);
 	const [isExpanded, setExpanded] = useState(false);
 	/** 参数完整内容弹窗的落点，未悬停时为空 */
 	const [tip, setTip] = useState<{ left: number; top: number } | undefined>(undefined);
+	const tipTimer = useRef<number | undefined>(undefined);
+	const showTipSoon = useCallback((rect: DOMRect) => {
+		window.clearTimeout(tipTimer.current);
+		tipTimer.current = window.setTimeout(() => setTip({ left: rect.left, top: rect.bottom }), TIP_DELAY_MS);
+	}, []);
+	const hideTip = useCallback(() => {
+		window.clearTimeout(tipTimer.current);
+		setTip(undefined);
+	}, []);
+	// 行被收起或整行消失时，未到点的定时器不能再弹
+	useEffect(() => () => window.clearTimeout(tipTimer.current), []);
 	const output = part.output ?? "";
 	// 脚本类工具的返回内容前面挂着一层运行信息，展开时只给正文
 	const code = scriptCode(part.input);
@@ -192,7 +206,6 @@ function ToolRow({ part }: { part: ToolCallPart }) {
 				className="tr-head"
 				onClick={() => setOpen((open) => !open)}
 				aria-expanded={isOpen}
-				title={part.name}
 			>
 				<span className="tr-icon">{categoryIcon(kind.category)}</span>
 				{/* 运行中由短名与参数上的扫光表示，行尾不加状态标记 */}
@@ -201,14 +214,9 @@ function ToolRow({ part }: { part: ToolCallPart }) {
 					<span
 						className={`tr-arg${isRunning ? " is-live" : ""}`}
 						onPointerEnter={
-							hasDetail
-								? (event) => {
-										const rect = event.currentTarget.getBoundingClientRect();
-										setTip({ left: rect.left, top: rect.bottom });
-									}
-								: undefined
+							hasDetail ? (event) => showTipSoon(event.currentTarget.getBoundingClientRect()) : undefined
 						}
-						onPointerLeave={hasDetail ? () => setTip(undefined) : undefined}
+						onPointerLeave={hasDetail ? hideTip : undefined}
 					>
 						{target}
 					</span>

@@ -120,15 +120,20 @@ function toolPart(call: ToolCallView): ToolCallPart {
 
 /** 流式片段转成渲染段,按内容块下标排序。 */
 function streamParts(streaming: Readonly<Record<number, StreamedPart>>): Part[] {
-	return Object.keys(streaming)
-		.map(Number)
-		.sort((left, right) => left - right)
-		.map((index) => streaming[index])
-		.filter((part): part is StreamedPart => part !== undefined)
-		.map((part, index) => {
-			const kind = part.kind === "thinking" ? "thinking" : "text";
-			return { kind, partId: `${kind}:${index}`, text: part.text } as Part;
-		});
+	return (
+		Object.keys(streaming)
+			.map(Number)
+			.sort((left, right) => left - right)
+			.map((index) => streaming[index])
+			.filter((part): part is StreamedPart => part !== undefined)
+			// 工具调用的增量是参数 JSON 片段，工具行在调用开始时才出现；这类增量不能当正文渲染，
+			// 否则输入框里没写完的 `{"command": …` 会漏到 Markdown 里
+			.filter((part) => part.kind !== "toolCall")
+			.map((part, index) => {
+				const kind = part.kind === "thinking" ? "thinking" : "text";
+				return { kind, partId: `${kind}:${index}`, text: part.text } as Part;
+			})
+	);
 }
 
 /** 用户消息的正文段。图片没有可读文本,占一个标记。 */

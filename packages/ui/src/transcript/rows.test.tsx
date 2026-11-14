@@ -238,7 +238,7 @@ describe("脚本里的子调用", () => {
 		// 一段脚本一行，子调用裹在里面
 		expect(html).toContain("tr-nested");
 		expect(html.match(/class="tr /g)?.length).toBe(2);
-		expect(html).toContain(">Code<");
+		expect(html).toContain(">Codemode<");
 		expect(html).toContain("await tools.bash");
 	});
 

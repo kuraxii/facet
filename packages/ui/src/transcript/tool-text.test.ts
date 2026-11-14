@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { foldOutput, toolStatusText, toolTarget } from "./tool-text.ts";
+import { foldOutput, toolKind, toolStatusText, toolTarget } from "./tool-text.ts";
 
 describe("工具状态文字", () => {
 	it("成功与失败不写字,只留耗时", () => {
@@ -54,5 +54,21 @@ describe("长输出折叠", () => {
 		const folded = foldOutput("a\nb", 10);
 		expect(folded.hiddenLines).toBe(0);
 		expect(folded.preview).toBe("a\nb");
+	});
+});
+
+describe("脚本类工具", () => {
+	it("短名是 Codemode，按命令类图标显示", () => {
+		expect(toolKind("codemode")).toEqual({ label: "Codemode", category: "command" });
+	});
+
+	it("摘要取脚本第一行有内容的代码，跳过空行与注释", () => {
+		expect(toolTarget({ code: "\n// 先说明\nconst a = await tools.bash({ command: 'ls' });" })).toBe(
+			"const a = await tools.bash({ command: 'ls' });",
+		);
+	});
+
+	it("整段只有注释时摘要为空", () => {
+		expect(toolTarget({ code: "// 什么都没做" })).toBe("");
 	});
 });

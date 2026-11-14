@@ -312,6 +312,25 @@ describe("toTranscript", () => {
 		expect(items[0]?.isStreaming).toBe(true);
 	});
 
+	it("工具调用的参数增量不进正文", () => {
+		const items = toTranscript(
+			viewWith([
+				{
+					id: "m1",
+					entry: undefined,
+					message: assistant([], "pending"),
+					streaming: {
+						0: { kind: "text", text: "先看看" },
+						// 工具参数还在流式输出，形如 {"command": "ls
+						1: { kind: "toolCall", text: '{"command": "ls' },
+					},
+					isStreaming: true,
+				},
+			]),
+		);
+		expect(items[0]?.parts).toEqual([{ kind: "text", partId: "text:0", text: "先看看" }]);
+	});
+
 	it("压缩摘要作为分界项", () => {
 		const [item] = toTranscript(
 			viewWith([

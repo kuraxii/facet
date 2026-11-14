@@ -142,7 +142,7 @@ const KINDS: Readonly<Record<string, { label: string; category: ToolCategory }>>
 	source_check: { label: "Check", category: "other" },
 	get_search_content: { label: "Search", category: "search" },
 	// 脚本类工具：一行的参数就是整段代码，摘要取第一行有内容的
-	codemode: { label: "Code", category: "command" },
+	codemode: { label: "Codemode", category: "command" },
 };
 
 /** 取工具的短名与归类；认不出的工具原样显示名字。 */

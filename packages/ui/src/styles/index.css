@@ -25,6 +25,13 @@
 	--window-button-width: 44px;
 	/* 侧栏里图标按钮的边长，以及按钮到侧栏左右边缘的距离；顶带的开关用同一组数 */
 	--icon-button-size: 28px;
+	/* 会话行首状态标记：槽位尺寸固定，环由 6 的点加内外各一圈描边与留白算出来 */
+	--status-slot: 12px;
+	--status-dot: 6px;
+	--status-dot-failed: 8px;
+	--status-ring-stroke: 1.5px;
+	--status-ring-gap: 1.5px;
+	--status-ring-size: calc(var(--status-dot) + (var(--status-ring-stroke) + var(--status-ring-gap)) * 2);
 	--sidebar-edge: 10px;
 	/* 三栏宽度：顶带的格子与下面的正文共用，由界面按当前状态写入 */
 	--sidebar-width: 272px;
@@ -1882,6 +1889,87 @@ svg.fl {
 
 .dot.is-err {
 	background: var(--err);
+}
+
+/*
+ * 会话行首的状态标记。
+ *
+ * 槽位尺寸固定，只有里面的画法随状态变：运行中是环，等待输入是图标，失败是带描边的点，
+ * 已完成的点是弱化的。尺寸都在这里定，行内不再各写一遍。
+ */
+.status-mark {
+	display: grid;
+	place-items: center;
+	flex: none;
+	width: var(--status-slot);
+	height: var(--status-slot);
+	color: var(--t3);
+}
+
+.status-dot {
+	display: block;
+	width: var(--status-dot);
+	height: var(--status-dot);
+	border-radius: 50%;
+}
+
+.status-mark.is-attention {
+	color: var(--dot-ok);
+}
+
+.status-mark.is-attention .status-dot {
+	background: var(--dot-ok);
+}
+
+.status-mark.is-done .status-dot {
+	background: var(--t3);
+	opacity: 0.3;
+}
+
+/* 失败：点大一圈，用行底色描一圈边，压在背景上不糊边 */
+.status-mark.is-failed .status-dot {
+	width: var(--status-dot-failed);
+	height: var(--status-dot-failed);
+	background: var(--dot-err);
+	box-shadow: 0 0 0 1px var(--sb);
+}
+
+.status-mark.is-needs_input {
+	color: var(--dot-warn);
+}
+
+.status-ring {
+	position: relative;
+	display: grid;
+	place-items: center;
+	width: var(--status-ring-size);
+	height: var(--status-ring-size);
+}
+
+.status-ring-track,
+.status-ring-arc {
+	position: absolute;
+	inset: 0;
+	border: var(--status-ring-stroke) solid transparent;
+	border-radius: 50%;
+}
+
+.status-ring-track {
+	border-color: var(--dot-run);
+	opacity: 0.3;
+}
+
+/* 只留上边框：圆角盒子上看起来就是一段 90° 弧 */
+.status-ring-arc {
+	border-top-color: var(--dot-run);
+	opacity: 0.9;
+}
+
+.status-ring-dot {
+	width: var(--status-dot);
+	height: var(--status-dot);
+	border-radius: 50%;
+	background: var(--dot-run);
 }
 
 .pulse {

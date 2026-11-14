@@ -18,6 +18,7 @@
 | 项 | 说明 | 对应需求 |
 |---|---|---|
 | 扩展的命令上下文 | `commandContextActions`（`waitForIdle` / `newSession` / `fork` / `navigateTree` / `reload`）与 `shutdownHandler` 都没提供,扩展发不起这些动作 | FR-EXT-01 |
+| 扩展导入 pi SDK | server 把 pi SDK 打进单文件后,加载器把 `@earendil-works/pi-coding-agent` 别名算成 `<产物>/../index.js`,该文件不存在;导入 SDK 运行值的扩展（例如 `pi-web-access`）会在加载时报 `Cannot find module` | FR-EXT-16 |
 | 组件式扩展界面 | `custom()`、组件式 `setWidget()`、`setHeader()`、`setFooter()` 与终端输入需要 TUI 组件,当前按 rpc 降级返回空值 | FR-EXT-04 |
 | 扩展与 MCP 的加载错误 | `PiAgent.issues` 收集 `extensionsResult.errors/warnings`,没有任何消费者,只进服务器日志;MCP 服务器起不来时界面看不出异常 | FR-EXT-16、FR-EXT-17 |
 | OAuth 登录 | `credential-store` 认识 `type: "oauth"`,但唯一写入路径固定写 `{ type: "api_key" }`;`resetApiProviders` 未用 | FR-SET-03 |

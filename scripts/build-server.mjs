@@ -106,6 +106,19 @@ async function copyCodemodeRuntime(target) {
 	}
 }
 
+/**
+ * 拷 pi 的扩展转译器。
+ *
+ * pi 的 jiti 加载器用 `createRequire(import.meta.url)("../dist/babel.cjs")` 取转译器；
+ * 打进单文件后 `import.meta.url` 指向 `<产物>/lib/server.mjs`，于是它会去
+ * `<产物>/dist/babel.cjs` 找。缺这个文件时所有文件扩展都加载失败，错误只进扩展 issues。
+ */
+async function copyExtensionTransform(target) {
+	const source = join(root, "node_modules", "jiti", "dist", "babel.cjs");
+	await mkdir(target, { recursive: true });
+	await copyFile(source, join(target, "babel.cjs"));
+}
+
 /** 只拷 node-pty 跑起来需要的那部分。 */
 async function copyNodePty(target) {
 	const source = join(root, "node_modules", "node-pty");
@@ -139,6 +152,7 @@ async function main() {
 
 	await bundle(join(root, "apps/server/src/main.ts"), join(outDir, "lib/server.mjs"));
 	await bundle(join(root, "apps/server/src/pty-server-child.ts"), join(outDir, "lib/pty-server.mjs"));
+	await copyExtensionTransform(join(outDir, "dist"));
 	await copyNodePty(join(outDir, "lib", "node_modules", "node-pty"));
 
 	// codemode 在自己的 worker 线程里跑脚本，worker 与 wasm 都要跟着产物走：

@@ -9,6 +9,8 @@ import { open } from "node:fs/promises";
 import { join } from "node:path";
 import {
 	createAgentSession,
+	createCodemodeExtension,
+	createToolSearchExtension,
 	DefaultResourceLoader,
 	type ExtensionUIContext,
 	hasTrustRequiringProjectResources,
@@ -119,6 +121,18 @@ export function thinkingLevelForModel(
 	}
 	return model.reasoning ? level : undefined;
 }
+
+/**
+ * pi 的内置扩展。
+ *
+ * 命令行入口会自动把它们塞进资源加载器，SDK 这条路要自己加：不加就一个都没有，比如
+ * `codemode` 工具根本不会注册（更谈不上用 `defaultTools` 激活）。MCP 扩展暂不在这里，
+ * 它会按设置拉起外部进程，等主机侧有 MCP 配置入口再加。
+ */
+const BUILTIN_EXTENSIONS: InlineExtension[] = [
+	{ name: "codemode", factory: createCodemodeExtension(), builtin: true, replaceable: true },
+	{ name: "tool-search", factory: createToolSearchExtension(), builtin: true, replaceable: true },
+];
 
 export class PiAgentFactory {
 	/** 全局配置目录 */
@@ -556,7 +570,7 @@ export class PiAgentFactory {
 		const resourceLoader = new DefaultResourceLoader({
 			cwd,
 			agentDir: this.agentDir,
-			extensionFactories: [...(options.extensionFactories ?? [])],
+			extensionFactories: [...BUILTIN_EXTENSIONS, ...(options.extensionFactories ?? [])],
 			noExtensions: options.noExtensions,
 		});
 		// 项目级扩展与 MCP 配置只在目录被信任时加载；没做过决定的一律按不信任处理

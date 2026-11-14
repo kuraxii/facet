@@ -2187,7 +2187,7 @@ svg.fl {
 	padding: 0 0 4px var(--indent-rail-label);
 }
 
-/* 参数摘要的完整内容：悬停才出现，铺在窗口上，不参与行内排版 */
+/* 参数摘要的完整内容：停留才出现，铺在窗口上，不参与行内排版；指针可以移进来滚动查看 */
 .tr-tip {
 	position: fixed;
 	z-index: 45;
@@ -2200,7 +2200,7 @@ svg.fl {
 	border-radius: 10px;
 	background: var(--card);
 	box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
-	pointer-events: none;
+	overscroll-behavior: contain;
 }
 
 .tr-tip pre {

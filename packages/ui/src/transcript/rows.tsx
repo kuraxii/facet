@@ -168,6 +168,8 @@ function shortPath(path: string): string {
  */
 /** 参数弹窗的延时：指针在摘要上停留这么久才弹，扫过去不打扰 */
 const TIP_DELAY_MS = 500;
+/** 弹窗要能滚起来，指针从摘要挪到弹窗上这段时间先不收；挪出去超过它才关 */
+const TIP_HIDE_DELAY_MS = 300;
 
 function ToolRow({ part }: { part: ToolCallPart }) {
 	const [isOpen, setOpen] = useState(false);
@@ -179,10 +181,12 @@ function ToolRow({ part }: { part: ToolCallPart }) {
 		window.clearTimeout(tipTimer.current);
 		tipTimer.current = window.setTimeout(() => setTip({ left: rect.left, top: rect.bottom }), TIP_DELAY_MS);
 	}, []);
-	const hideTip = useCallback(() => {
+	// 弹窗里可以滚动查看长参数，所以离开摘要后不立刻关，留给指针挪过去的时间
+	const hideTipSoon = useCallback(() => {
 		window.clearTimeout(tipTimer.current);
-		setTip(undefined);
+		tipTimer.current = window.setTimeout(() => setTip(undefined), TIP_HIDE_DELAY_MS);
 	}, []);
+	const keepTip = useCallback(() => window.clearTimeout(tipTimer.current), []);
 	// 行被收起或整行消失时，未到点的定时器不能再弹
 	useEffect(() => () => window.clearTimeout(tipTimer.current), []);
 	const output = part.output ?? "";
@@ -216,7 +220,7 @@ function ToolRow({ part }: { part: ToolCallPart }) {
 						onPointerEnter={
 							hasDetail ? (event) => showTipSoon(event.currentTarget.getBoundingClientRect()) : undefined
 						}
-						onPointerLeave={hasDetail ? hideTip : undefined}
+						onPointerLeave={hasDetail ? hideTipSoon : undefined}
 					>
 						{target}
 					</span>
@@ -235,7 +239,12 @@ function ToolRow({ part }: { part: ToolCallPart }) {
 			{tip === undefined
 				? null
 				: createPortal(
-						<div className="tr-tip" style={{ left: tip.left, top: tip.top }}>
+						<div
+							className="tr-tip"
+							style={{ left: tip.left, top: tip.top }}
+							onPointerEnter={keepTip}
+							onPointerLeave={hideTipSoon}
+						>
 							<pre>{detail}</pre>
 						</div>,
 						document.body,

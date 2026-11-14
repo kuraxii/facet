@@ -211,14 +211,10 @@ export class HostDaemon {
 		}
 		// 日志写文件：主机要能脱离桌面继续跑，桌面的管道关掉之后不该再有写入
 		const logFile = openSync(join(this.options.dataDir, "server.log"), "a");
-		// 用 Electron 自己的可执行文件当 Node 跑，打包后不需要额外的 node 安装
+		// 启动命令与其中要带的变量都由调用方给定：打包后是自带的 node，开发时是 Electron
 		const child = spawn(this.options.command, [...this.options.args], {
 			cwd: this.options.dataDir,
-			env: {
-				...process.env,
-				...this.options.env,
-				ELECTRON_RUN_AS_NODE: "1",
-			},
+			env: { ...process.env, ...this.options.env },
 			// 自成一组：桌面退出不会把它一起带走
 			detached: true,
 			stdio: ["ignore", logFile, logFile],

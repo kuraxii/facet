@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, screen, shell } from "electron";
@@ -48,6 +49,9 @@ const READY_WAIT_MS = 20_000;
 
 /** 主机数据目录，发现文件与主机日志都在这里；开发实例带 -dev 后缀，与发布实例分开 */
 const dataDir = resolveDataDir(process.env, { isDev });
+
+/** 主机进程怎么起：独立产物优生，没有就退回 Electron 的 Node 模式 */
+const hostLaunch = resolveHostLaunch();
 
 /** 本机当前连着的主机，界面通过主进程的通道访问它 */
 let localHost: LocalHost | undefined;
@@ -382,6 +386,26 @@ ipcMain.on("facet:host-close", (_event, id: number) => {
 	hostChannels?.close(id);
 });
 
+/**
+ * 主机的启动方式。
+ *
+ * 打包后优先用独立产物：`resources/host/bin/node` 是随包带的官方 Node，`lib/host.mjs` 是主机
+ * 入口，跟桌面那份 Electron 运行时互不相干。没有产物时退回开发态的做法——用 Electron 自己的
+ * 可执行文件以 Node 模式跑 `out/main/host.js`。
+ */
+function resolveHostLaunch(): { command: string; args: string[]; env: NodeJS.ProcessEnv } {
+	const bundled = join(process.resourcesPath, "host");
+	const node = join(bundled, "bin", "node");
+	if (existsSync(node)) {
+		return { command: node, args: [join(bundled, "lib", "host.mjs")], env: {} };
+	}
+	return {
+		command: process.execPath,
+		args: [join(app.getAppPath(), "out/main/host.js")],
+		env: { ELECTRON_RUN_AS_NODE: "1" },
+	};
+}
+
 /** `host:port` 写法拆成 TCP 目标，拆不出来时返回 undefined。 */
 function parseTcpTarget(text: string): { host: string; port: number } | undefined {
 	const matched = /^([^:]+):(\d+)$/.exec(text);
@@ -404,10 +428,10 @@ app.whenReady().then(async () => {
 			resolveReady = undefined;
 		} else {
 			host = new HostDaemon({
-				entry: join(app.getAppPath(), "out/main/host.js"),
+				...hostLaunch,
 				dataDir,
 				// 开发启动打开主机侧调试日志，打包运行留给 FACET_DEBUG 手动开启
-				env: isDev ? { FACET_DEBUG: "1" } : {},
+				env: { ...hostLaunch.env, ...(isDev ? { FACET_DEBUG: "1" } : {}) },
 				onReady: (info) => {
 					localHost = info;
 					// 发现文件只用于日志：主机标识与 pi 数据目录在那里，不参与连接

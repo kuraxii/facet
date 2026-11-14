@@ -19,6 +19,29 @@ npm install
 
 依赖关系是 workspaces 提升到根的 `node_modules`，界面包 `@facet/ui` 的依赖（`shiki`、`markstream-react`、`@fontsource/*`、`mermaid`、`katex`）也装在这一层。只装某个子包的依赖时，开发服务器会报 `Failed to resolve import "shiki"`、`Unable to resolve "@import "@fontsource/inter/400.css""` 这类错误。
 
+## 打包
+
+```bash
+npm run dist            # 先打独立主机产物，再打 rpm 与 deb
+npm run build:host      # 只打独立主机产物
+```
+
+主机是一个自带运行时的独立产物：
+
+```
+apps/desktop/dist-host/
+  bin/node            官方 Node（scripts/build-host.mjs 里固定版本，缓存在 ~/.cache/facet-node）
+  lib/host.mjs        主机入口，esbuild 打成单个 ES 模块
+  lib/pty-host.mjs    终端子进程入口
+  lib/node_modules/node-pty/   唯一的原生模块
+```
+
+打包时整个目录进 `resources/host`，桌面启动主机用的就是 `resources/host/bin/node resources/host/lib/host.mjs`，
+与桌面那份 Electron 运行时互不相干。开发时不打这个产物，桌面按老办法用 Electron 本身当 Node 跑
+`out/main/host.js`（`resolveHostLaunch` 里按 `resources/host/bin/node` 是否存在切换）。
+
+远程主机把这个目录拷过去，用 `bin/node lib/host.mjs` 起即可。
+
 ## 运行
 
 本机的主机只开一个 unix socket（`$XDG_RUNTIME_DIR/facet-dev.sock`，没有运行目录时是

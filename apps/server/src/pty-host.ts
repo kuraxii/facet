@@ -320,9 +320,12 @@ function resolveEntry(): string {
 	}
 	const hostEntry = process.argv[1];
 	const directory = hostEntry === undefined ? process.cwd() : dirname(hostEntry);
-	const bundled = join(directory, "pty-host.js");
-	if (existsSync(bundled)) {
-		return bundled;
+	// 独立产物里是 pty-host.mjs，桌面那份 Electron 产物里是 pty-host.js
+	for (const name of ["pty-host.mjs", "pty-host.js"]) {
+		const bundled = join(directory, name);
+		if (existsSync(bundled)) {
+			return bundled;
+		}
 	}
 	return join(directory, "pty-host-child.ts");
 }

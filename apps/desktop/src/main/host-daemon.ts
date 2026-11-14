@@ -169,8 +169,10 @@ export async function readDiscovery(dataDir: string): Promise<DiscoveryRecord | 
 }
 
 export interface HostDaemonOptions {
-	/** 主机入口脚本，打包前后都是 out/main/host.js */
-	entry: string;
+	/** 启动命令：打包后是自己带的 node，开发时是 Electron 以 Node 模式运行 */
+	command: string;
+	/** 启动参数 */
+	args: readonly string[];
 	/** 数据目录 */
 	dataDir: string;
 	/** 追加给主机进程的环境变量 */
@@ -210,7 +212,7 @@ export class HostDaemon {
 		// 日志写文件：主机要能脱离桌面继续跑，桌面的管道关掉之后不该再有写入
 		const logFile = openSync(join(this.options.dataDir, "host.log"), "a");
 		// 用 Electron 自己的可执行文件当 Node 跑，打包后不需要额外的 node 安装
-		const child = spawn(process.execPath, [this.options.entry], {
+		const child = spawn(this.options.command, [...this.options.args], {
 			cwd: this.options.dataDir,
 			env: {
 				...process.env,

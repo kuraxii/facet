@@ -8,8 +8,9 @@
  * 认证复用系统的 SSH 配置、ssh-agent 与 ~/.ssh 下的私钥，没有可用凭据时问一次密码。
  * 主机公钥不做校验：能连上这台机器就等于拿到那台机器的账户权限，再叠一层主机制约没有意义。
  *
- * 主机的位置是固定契约：`<家目录>/.local/share/facet/facet.sock`（开发实例是同级的
- * `facet-dev`）。客户端按它直接开通道，不再跑命令读发现文件；连得上就是主机在跑。
+ * 主机的位置是固定契约：优先 `$XDG_RUNTIME_DIR/facet.sock`（开发实例 `facet-dev.sock`），
+ * 没有运行目录时是 `<家目录>/.local/share/facet/facet.sock`。远端用一小段 shell 脚本按同一
+ * 顺序找出实际在跑的那条，脚本从标准输入喂给 `/bin/bash`，不拼进命令行。
  */
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -152,31 +153,47 @@ export function matchSshConfig(config: Map<string, SshHostConfig>, host: string)
 	return undefined;
 }
 
+/** 远端脚本的超时，毫秒。 */
+const RUN_TIMEOUT_MS = 8_000;
+
 /** 主机 socket 的文件名，两端共用的约定。 */
 const SOCKET_FILE = "facet.sock";
 
 /**
- * 远端主机的候选 socket 路径，按优先级排。
+ * 在远端找出实际在跑的主机 socket。
  *
- * 主机侧优先监听 `$XDG_RUNTIME_DIR/<数据目录名>.sock`，没有运行目录时退回
- * `<数据目录>/facet.sock`；`facet` 是发布实例，`facet-dev` 是开发实例。客户端拿不到对方的
- * 运行目录，但拿得到 uid 与家目录，几条都试一遍，最先连上的就是。
+ * 脚本从标准输入喂给 `/bin/bash`，不参与命令行拼装，所以可以随便写长、写多行。顺序与
+ * 桌面本机的推导一致：运行目录里的两条优先（发布实例在前），其次家目录下的两条。命中就
+ * 打印那一行，没有就什么都不打印。
  */
-export function remoteSocketPaths(home: string, uid: number | undefined): string[] {
-	const runtime = uid === undefined ? [] : [`/run/user/${uid}/facet.sock`, `/run/user/${uid}/facet-dev.sock`];
-	return [
-		...runtime,
-		`${home}/.local/share/facet/${SOCKET_FILE}`,
-		`${home}/.local/share/facet-dev/${SOCKET_FILE}`,
-	];
+export const REMOTE_SOCKET_SCRIPT = `set -u
+runtime=\${XDG_RUNTIME_DIR:-}
+home=\${HOME:-}
+for path in \
+  \${runtime:+"$runtime/${SOCKET_FILE}"} \
+  \${runtime:+"$runtime/facet-dev.sock"} \
+  \${home:+"$home/.local/share/facet/${SOCKET_FILE}"} \
+  \${home:+"$home/.local/share/facet-dev/${SOCKET_FILE}"}; do
+  if [ -S "$path" ]; then
+    printf '%s\n' "$path"
+    break
+  fi
+done
+`;
+
+/** 取脚本输出的第一行非空内容，就是 socket 路径。 */
+export function parseSocketPath(text: string): string | undefined {
+	const line = text
+		.split("\n")
+		.map((item) => item.trim())
+		.find((item) => item.length > 0);
+	return line;
 }
 
 /** 一条 SSH 连接上用到的两件事。 */
 export interface SshClientLike {
-	/** 远端登录用户的家目录，取不到时返回 undefined */
-	home(): Promise<string | undefined>;
-	/** 远端登录用户的 uid，取不到时返回 undefined */
-	uid(): Promise<number | undefined>;
+	/** 在远端把一段脚本喂给 `/bin/bash`，返回标准输出 */
+	run(script: string): Promise<string>;
 	/** 连接到远端的一个 unix socket */
 	openStreamLocal(path: string): Promise<StreamLike>;
 	/** 断开 */
@@ -208,8 +225,6 @@ export class SshHostError extends Error {
 		| "no_known_host"
 		/** 缺登录凭据或凭据被拒，界面据此问密码 */
 		| "need_password"
-		/** 拿不到远端家目录，拼不出固定 socket 路径 */
-		| "no_home"
 		/** 家目录下没有在跑的 socket */
 		| "no_socket"
 		| "connect_failed"
@@ -320,32 +335,26 @@ export class SshHosts {
 		}
 
 		const label = sshTargetLabel(target);
-		let home: string | undefined;
+		let output: string;
 		try {
-			home = await client.home();
+			output = await client.run(REMOTE_SOCKET_SCRIPT);
 		} catch (error) {
 			client.close();
-			throw new SshHostError("no_home", `取不到 ${label} 的家目录:${messageOf(error)}`);
+			throw new SshHostError("no_socket", `${label} 上查不到主机位置:${messageOf(error)}`);
 		}
-		if (home === undefined || home.length === 0) {
+		const path = parseSocketPath(output);
+		if (path === undefined) {
 			client.close();
-			throw new SshHostError("no_home", `取不到 ${label} 的家目录`);
+			throw new SshHostError("no_socket", `${label} 上没有运行中的 facet 主机`);
 		}
 
-		const uid = await client.uid().catch(() => undefined);
-
-		// 固定路径直接开通道：连得上就是主机在跑，连不上就是没开
-		let reason = "";
-		for (const path of remoteSocketPaths(home, uid)) {
-			try {
-				const stream = await client.openStreamLocal(path);
-				return { stream, address: path };
-			} catch (error) {
-				reason = messageOf(error);
-			}
+		try {
+			const stream = await client.openStreamLocal(path);
+			return { stream, address: path };
+		} catch (error) {
+			client.close();
+			throw new SshHostError("no_socket", `${label} 上的 ${path} 连不上:${messageOf(error)}`);
 		}
-		client.close();
-		throw new SshHostError("no_socket", `${label} 上没有运行中的 facet 主机:${reason}`);
 	}
 }
 
@@ -367,32 +376,35 @@ const defaultConnector: SshConnector = async (config) => {
 		client.connect(config);
 	});
 	return {
-		// 用 SFTP 的 realpath 问家目录：一次协议请求，不经过 shell
-		home: () =>
-			new Promise<string | undefined>((resolve) => {
-				client.sftp((error, sftp) => {
+		// 脚本从标准输入喂进去：命令行只有一个 /bin/bash，没有引号转义的坑，
+		// 脚本里要加多少步都行
+		run: (script) =>
+			new Promise<string>((resolve, reject) => {
+				const timer = setTimeout(() => reject(new Error("远端脚本超时")), RUN_TIMEOUT_MS);
+				client.exec("/bin/bash", (error, channel) => {
 					if (error !== undefined) {
-						resolve(undefined);
+						clearTimeout(timer);
+						reject(error);
 						return;
 					}
-					sftp.realpath(".", (realpathError, absolutePath) => {
-						sftp.end();
-						resolve(realpathError !== undefined ? undefined : absolutePath);
+					let text = "";
+					let stderr = "";
+					channel.setEncoding("utf8");
+					channel.on("data", (chunk: string) => {
+						text += chunk;
 					});
-				});
-			}),
-		// /proc/<pid> 目录的属主就是该进程的 uid，sftp-server 以登录用户身份运行
-		uid: () =>
-			new Promise<number | undefined>((resolve) => {
-				client.sftp((error, sftp) => {
-					if (error !== undefined) {
-						resolve(undefined);
-						return;
-					}
-					sftp.stat("/proc/self", (statError, stats) => {
-						sftp.end();
-						resolve(statError !== undefined ? undefined : stats.uid);
+					channel.stderr.on("data", (chunk: Buffer) => {
+						stderr += chunk.toString("utf8");
 					});
+					channel.once("close", () => {
+						clearTimeout(timer);
+						if (text.length === 0) {
+							reject(new Error(stderr.trim() || "远端脚本没有输出"));
+							return;
+						}
+						resolve(text);
+					});
+					channel.end(script);
 				});
 			}),
 		openStreamLocal: (path) =>

@@ -33,6 +33,7 @@ import type {
 	SessionSummary,
 	SlashCommand,
 	ThinkingLevel,
+	UiResponse,
 } from "@facet/protocol";
 import { makeChannel, parseChannel, sessionsChannelFor } from "@facet/protocol";
 import { debugLog } from "./log.ts";
@@ -207,8 +208,12 @@ export class SessionClient {
 				this.handleRejection(frame, frame.rejectionReason);
 				return;
 			}
+			const isNewFrame = frame.serverSeq > this.state.lastSeq(frame.channel);
+			const wasCompacting = this.sessionView()?.state.maintenance?.kind === "compaction";
 			this.state.apply(frame);
-			this.observe(frame);
+			if (isNewFrame) {
+				this.observe(frame, wasCompacting);
+			}
 			this.confirmSend(frame);
 		});
 		this.stopState ??= this.transport.onStateChange?.((state) => {
@@ -613,7 +618,7 @@ export class SessionClient {
 	async refreshSession(): Promise<void> {
 		const opened = this.requireOpened();
 		const snapshot = await this.transport.request("snapshot", { sessionId: opened.sessionId });
-		this.state.ensureSession(opened.sessionChannel, snapshot);
+		if (this.opened === opened) this.state.ensureSession(opened.sessionChannel, snapshot);
 	}
 
 	/**
@@ -645,6 +650,8 @@ export class SessionClient {
 
 	/** 按最后收到的序号续订两个通道,缓冲补不上时整体重新对齐。 */
 	private async resumeChannels(opened: OpenedSession): Promise<void> {
+		const wasCompacting =
+			this.state.sessionView(opened.sessionChannel)?.state.maintenance?.kind === "compaction";
 		const sessionSub = await this.transport.request("subscribe", {
 			channel: opened.sessionChannel,
 			since: this.state.lastSeq(opened.sessionChannel),
@@ -661,6 +668,12 @@ export class SessionClient {
 		}
 		if (sessionSub.session) {
 			this.state.ensureSession(opened.sessionChannel, sessionSub.session);
+			if (wasCompacting && sessionSub.session.maintenance?.kind !== "compaction") {
+				this.commitChain = this.commitChain
+					.then(() => this.runCommit(opened, "checkpoint"))
+					.catch(() => undefined);
+				await this.commitChain;
+			}
 		}
 	}
 
@@ -670,10 +683,11 @@ export class SessionClient {
 	 * 界面在主机把这条用户消息放进对话之后才算发出:那之前草稿留在输入框,被拒时用户可以
 	 * 直接改或重发。
 	 */
-	send(text: string): number {
+	send(text: string, streamingBehavior?: "steer" | "followUp"): number {
 		const clientSeq = this.transport.dispatch(this.requireOpened().chatChannel, {
 			type: "chat/turnStarted",
 			text,
+			...(streamingBehavior === undefined ? {} : { streamingBehavior }),
 		});
 		this.pendingSend = { clientSeq, text, kind: "turn" };
 		return clientSeq;
@@ -715,14 +729,20 @@ export class SessionClient {
 		if (opened === undefined || pending === undefined) {
 			return;
 		}
+		const handled =
+			frame.action.type === "chat/inputHandled" &&
+			frame.channel === opened.chatChannel &&
+			frame.origin?.clientId === this.handshake?.clientId &&
+			frame.origin?.clientSeq === pending.clientSeq;
 		const accepted =
-			pending.kind === "turn"
+			handled ||
+			(pending.kind === "turn"
 				? frame.channel === opened.chatChannel &&
 					frame.action.type === "chat/messageAppended" &&
 					frame.action.message.role === "user"
 				: frame.channel === opened.sessionChannel &&
 					frame.action.type === "session/queueChanged" &&
-					[...frame.action.steering, ...frame.action.followUp].includes(pending.text);
+					[...frame.action.steering, ...frame.action.followUp].includes(pending.text));
 		if (!accepted) {
 			return;
 		}
@@ -787,6 +807,19 @@ export class SessionClient {
 	 */
 	cancel(): number {
 		return this.transport.dispatch(this.requireOpened().chatChannel, { type: "chat/turnCancelled" });
+	}
+
+	/** 应答绑定发起时的会话；过期应答重取快照，使弹窗及时关闭。 */
+	async respondUi(
+		requestId: string,
+		response: UiResponse,
+		sessionId = this.requireOpened().sessionId,
+	): Promise<boolean> {
+		const opened = this.requireOpened();
+		if (opened.sessionId !== sessionId) return false;
+		const { accepted } = await this.transport.request("respondUi", { sessionId, requestId, response });
+		if (!accepted && this.opened === opened) await this.refreshSession();
+		return accepted;
 	}
 
 	/** 会话里能用的命令：界面自带的几条，加上扩展命令、提示词模板与技能。 */
@@ -949,9 +982,20 @@ export class SessionClient {
 	 * 本轮 settle 之后向主机要一次「边界之后的条目」，把实时消息提升为历史消息：
 	 * 之后界面上的消息都带条目 id，分叉、定位这类操作不再区分历史与实时。
 	 */
-	private observe(frame: ActionFrame): void {
+	private observe(frame: ActionFrame, wasCompacting: boolean): void {
 		const opened = this.opened;
-		if (!opened || frame.channel !== opened.chatChannel) {
+		if (!opened) {
+			return;
+		}
+		if (frame.channel === opened.sessionChannel && frame.action.type === "session/phase") {
+			if (wasCompacting && frame.action.maintenance?.kind !== "compaction") {
+				this.commitChain = this.commitChain
+					.then(() => this.runCommit(opened, "checkpoint"))
+					.catch(() => undefined);
+			}
+			return;
+		}
+		if (frame.channel !== opened.chatChannel) {
 			return;
 		}
 		// 分支指针挪过之后，活动分支换成另一条，已装载的历史整段作废
@@ -971,7 +1015,7 @@ export class SessionClient {
 			return;
 		}
 		debugLog("commit", "本轮结束，准备提升实时消息", { sessionId: opened.sessionId });
-		this.commitChain = this.commitChain.then(() => this.runCommit()).catch(() => undefined);
+		this.commitChain = this.commitChain.then(() => this.runCommit(opened)).catch(() => undefined);
 	}
 
 	/**
@@ -980,9 +1024,8 @@ export class SessionClient {
 	 * 边界是上一次提交到的末条目；主机从叶子沿 parentId 回溯到它为止。条目数量与实时
 	 * 消息对不上（漏了事件）或主机拒绝时，整体重新装载历史。
 	 */
-	private async runCommit(): Promise<void> {
-		const opened = this.opened;
-		if (!opened) {
+	private async runCommit(opened: OpenedSession, mode: "settled" | "checkpoint" = "settled"): Promise<void> {
+		if (this.opened !== opened) {
 			return;
 		}
 		try {
@@ -997,16 +1040,26 @@ export class SessionClient {
 			if (this.opened !== opened) {
 				return;
 			}
-			const promoted = this.state.promote(opened.chatChannel, result.entries);
-			if (result.leafId !== null) {
-				this.lastEntryId = result.leafId;
+			const checkpoint =
+				mode === "checkpoint" ? result.entries.findLastIndex((entry) => entry.kind === "compaction") : -1;
+			if (mode === "checkpoint" && checkpoint < 0) {
+				return;
+			}
+			const entries = mode === "checkpoint" ? result.entries.slice(0, checkpoint + 1) : result.entries;
+			const promoted = this.state.promote(opened.chatChannel, entries, mode);
+			if (!promoted && mode === "checkpoint") {
+				return;
+			}
+			const leafId = mode === "checkpoint" ? entries.at(-1)?.id : result.leafId;
+			if (leafId != null) {
+				this.lastEntryId = leafId;
 			}
 			debugLog(
 				"commit",
 				formatCommitLog(
 					promoted ? "提升成功" : "提升被拒：条目数与实时消息不符",
-					result.entries.length,
-					result.leafId,
+					entries.length,
+					leafId,
 					this.lastEntryId,
 					this.state.chatView(opened.chatChannel)?.items ?? [],
 				),
@@ -1016,8 +1069,10 @@ export class SessionClient {
 				await this.reloadHistory(opened.chatChannel, opened.sessionId);
 			}
 		} catch (error) {
-			debugLog("commit", "提升失败，重新装载历史", { error: String(error) });
-			if (this.opened === opened) {
+			debugLog("commit", mode === "settled" ? "提升失败，重新装载历史" : "检查点同步失败", {
+				error: String(error),
+			});
+			if (this.opened === opened && mode === "settled") {
 				await this.reloadHistory(opened.chatChannel, opened.sessionId);
 			}
 		}

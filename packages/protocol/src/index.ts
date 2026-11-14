@@ -9,6 +9,7 @@ export * from "./channel.ts";
 export type * from "./command.ts";
 export type * from "./content.ts";
 export type * from "./event.ts";
+export type * from "./extension-ui.ts";
 export type * from "./file.ts";
 export * from "./framing.ts";
 export type * from "./git.ts";

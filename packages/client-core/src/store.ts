@@ -278,21 +278,24 @@ export class SessionStore {
 	 * 只留在视图里供以后扩展展示。整段实时视图换成这一段条目，消息内容用写盘后的版本。
 	 * 消息条目数与实时消息数对不上说明漏了事件，返回 false，调用方重新装载历史。
 	 */
-	promote(channel: Channel, entries: readonly Entry[]): boolean {
+	promote(channel: Channel, entries: readonly Entry[], mode: "settled" | "checkpoint" = "settled"): boolean {
 		const slot = this.chats.get(channel);
 		if (!slot) {
 			return false;
 		}
 		const live = slot.view.items.filter((item) => !isHistoryMessageId(item.id));
 		const committed = entries.filter((entry) => entry.kind === "message" && entry.message !== undefined);
-		if (live.length !== committed.length) {
+		if (committed.length > live.length || (mode === "settled" && live.length !== committed.length)) {
+			return false;
+		}
+		if (mode === "checkpoint" && live.slice(0, committed.length).some((item) => item.isStreaming)) {
 			return false;
 		}
 		const renames: Record<string, string> = { ...slot.view.renames };
 		const promoted = entries.map(toEntryView);
 		let liveIndex = 0;
 		for (const view of promoted) {
-			if (view.message === undefined) {
+			if (view.entry?.kind !== "message" || view.message === undefined) {
 				continue;
 			}
 			const source = live[liveIndex];
@@ -304,7 +307,11 @@ export class SessionStore {
 		}
 		slot.view = {
 			...slot.view,
-			items: [...slot.view.items.slice(0, slot.view.items.length - live.length), ...promoted],
+			items: [
+				...slot.view.items.slice(0, slot.view.items.length - live.length),
+				...promoted,
+				...live.slice(committed.length),
+			],
 			renames,
 		};
 		this.markChanged();

@@ -31,6 +31,22 @@ describe("ActionProjector", () => {
 		]);
 	});
 
+	it("扩展初始化与交互状态分别投影到会话通道", () => {
+		const projector = new ActionProjector("s1");
+		expect(projector.project({ type: "initialized", initialization: { kind: "starting" } })).toEqual([
+			{
+				channel: "session:/s1",
+				action: { type: "session/initialized", initialization: { kind: "starting" } },
+			},
+		]);
+		const ui = {
+			prompts: [{ kind: "editor" as const, requestId: "u1", title: "编辑", prefill: "完整内容" }],
+		};
+		expect(projector.project({ type: "ui", ui })).toEqual([
+			{ channel: "session:/s1", action: { type: "session/uiChanged", ui } },
+		]);
+	});
+
 	it("对话级事件投影到对话通道", () => {
 		const projector = new ActionProjector("s1");
 		const projected = projector.project({ type: "settled", aborted: false });

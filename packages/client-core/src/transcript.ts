@@ -252,7 +252,23 @@ export function toTranscript(view: ChatView): TranscriptItem[] {
 	const items: TranscriptItem[] = [];
 	const merged = new Map<string, number>();
 	for (const entryView of view.items) {
-		// 视图接收全部类型的条目，目前只有带 message 的才参与渲染；其余条目留给以后的事件展示
+		const entry = entryView.entry;
+		if (entry?.kind === "compaction" || entry?.kind === "branch_summary") {
+			const timestamp = Date.parse(entry.timestamp);
+			const time = Number.isFinite(timestamp) ? timestamp : undefined;
+			items.push({
+				kind: entry.kind === "compaction" ? "compaction" : "branch",
+				id: entryView.id,
+				entryId: entry.id,
+				role: undefined,
+				stopReason: undefined,
+				parts: [{ kind: "text", partId: "text:0", text: entry.summary ?? "" }],
+				isStreaming: false,
+				startedAt: time,
+				endedAt: time,
+			});
+			continue;
+		}
 		if (entryView.message === undefined) {
 			continue;
 		}

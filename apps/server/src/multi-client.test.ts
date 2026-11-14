@@ -38,6 +38,12 @@ class FakeAgent implements HubAgent {
 	readonly prompts: string[] = [];
 	private readonly listeners = new Set<SessionEventListener>();
 
+	async initialize(): Promise<void> {}
+	respondUi(): boolean {
+		return false;
+	}
+	cancelUi(): void {}
+
 	get isBusy(): boolean {
 		return this.busy;
 	}

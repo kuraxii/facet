@@ -5,6 +5,7 @@
  * 默认只有过程行与文件改动行收起,其余行展开。
  */
 import type { Part, ToolCallPart, ToolImage, TranscriptItem } from "@facet/client-core";
+import type { Maintenance } from "@facet/protocol";
 import {
 	Brain,
 	Check,
@@ -12,6 +13,7 @@ import {
 	Copy,
 	Edit3,
 	FileText,
+	ListCollapse,
 	Search,
 	Split,
 	Terminal,
@@ -38,8 +40,7 @@ export interface ChatTranscriptProps {
 	canRevert: boolean;
 	/** 回退到这条用户消息之前的一轮末尾,连同这条消息的文本一起带出 */
 	onRevert: (entryId: string, text: string) => void;
-	/** 正在进行的自动重试,没有则为空 */
-	retry?: { attempt: number; maxAttempts: number; delayMs: number } | undefined;
+	maintenance?: Maintenance | undefined;
 	/** 重试这一轮:按最后一条用户消息重新发一次,不重复添加用户消息 */
 	onRetryTurn?: ((entryId: string, text: string) => void) | undefined;
 	/** 复制错误详情 */
@@ -124,12 +125,6 @@ function CopyButton({ text, onCopy }: { text: string; onCopy: (text: string) => 
 			{isDone ? <Check size={13} strokeWidth={1.5} /> : <Copy size={13} strokeWidth={1.5} />}
 		</button>
 	);
-}
-
-/** 收起时显示的一行预览。 */
-function preview(text: string, limit = 48): string {
-	const flat = text.replace(/\s+/g, " ").trim();
-	return flat.length > limit ? `${flat.slice(0, limit)}…` : flat;
 }
 
 /** 归类对应的行首图标。 */
@@ -437,7 +432,7 @@ export function ChatTranscript({
 	onFork,
 	canRevert,
 	onRevert,
-	retry,
+	maintenance,
 	onRetryTurn,
 	onCopyDetails,
 	onCopyText,
@@ -445,6 +440,8 @@ export function ChatTranscript({
 	renames,
 }: ChatTranscriptProps) {
 	const rows = useMemo(() => groupRows(items), [items]);
+	const retry = maintenance?.kind === "retry" ? maintenance : undefined;
+	const isCompacting = maintenance?.kind === "compaction";
 	// 第一条用户消息之前没有可回退的轮次
 	const firstUserRowId = rows.find((row) => row.kind === "user")?.id;
 	const [overrides, setOverrides] = useState<ReadonlyMap<string, boolean>>(() => new Map());
@@ -488,7 +485,7 @@ export function ChatTranscript({
 		});
 	}, []);
 
-	if (rows.length === 0) {
+	if (rows.length === 0 && maintenance === undefined) {
 		return <div className="empty">{emptyHint ?? "还没有消息"}</div>;
 	}
 
@@ -549,15 +546,23 @@ export function ChatTranscript({
 						.flatMap((item) => item.parts)
 						.map((part) => (part.kind === "text" ? part.text : ""))
 						.join("");
-					const label = row.items[0]?.kind === "compaction" ? "上下文已压缩" : "分支摘要";
+					const label = row.items[0]?.kind === "compaction" ? "上下文摘要" : "分支摘要";
 					return (
 						<Shell key={row.id} className="is-divider">
-							<div className="divider">
-								<span className="line" />
-								{label}
-								{text.length > 0 ? ` · ${preview(text, 40)}` : ""}
-								<span className="line" />
-							</div>
+							<details className="context-summary">
+								<summary className="divider">
+									<span className="line" />
+									<ListCollapse size={14} strokeWidth={1.5} aria-hidden="true" />
+									<span>{label}</span>
+									<span className="context-summary-chevron" aria-hidden="true">
+										<ChevronIcon isOpen={false} />
+									</span>
+									<span className="line" />
+								</summary>
+								<div className="context-summary-body">
+									<Markdown text={text} isStreaming={false} indexKey={`summary:${row.id}`} />
+								</div>
+							</details>
 						</Shell>
 					);
 				}
@@ -684,6 +689,17 @@ export function ChatTranscript({
 					</Shell>
 				);
 			})}
+
+			{isCompacting ? (
+				<Shell className="is-divider">
+					<div className="divider" role="status" aria-live="polite" aria-busy="true">
+						<span className="line" />
+						<ListCollapse size={14} strokeWidth={1.5} aria-hidden="true" />
+						<span className="group-label is-live">上下文摘要</span>
+						<span className="line" />
+					</div>
+				</Shell>
+			) : null}
 
 			{retry ? (
 				<Shell className="is-retry" key="retry">

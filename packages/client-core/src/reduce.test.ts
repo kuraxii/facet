@@ -1,7 +1,7 @@
 import type { ActionFrame, AssistantMessage, UserMessage } from "@facet/protocol";
 import { describe, expect, it } from "vitest";
 import { reduceChat, reduceSession } from "./reduce.ts";
-import { createChatView, createSessionView } from "./state.ts";
+import { chatActivity, createChatView, createSessionView } from "./state.ts";
 
 function userMessage(text: string): UserMessage {
 	return { role: "user", content: [{ type: "text", text }], timestamp: 1 };
@@ -172,6 +172,36 @@ describe("动作帧与视图的配合", () => {
 			action: { type: "chat/notice", level: "info", message: "已连接" },
 		};
 		expect(reduceChat(chat(), frame.action).notices).toEqual([{ level: "info", message: "已连接" }]);
+	});
+});
+
+describe("扩展交互生命周期", () => {
+	it("初始化与交互均可显示停止入口，维护动作保持自己的状态", () => {
+		let view = reduceSession(session(), {
+			type: "session/initialized",
+			initialization: { kind: "starting" },
+		});
+		expect(chatActivity(view)).toBe("running");
+		view = reduceSession(view, { type: "session/initialized", initialization: { kind: "ready" } });
+		expect(chatActivity(view)).toBe("idle");
+		view = reduceSession(view, {
+			type: "session/uiChanged",
+			ui: { prompts: [{ kind: "input", title: "输入", requestId: "u1" }] },
+		});
+		expect(chatActivity(view)).toBe("running");
+		view = reduceSession(view, {
+			type: "session/phase",
+			phase: "idle",
+			maintenance: {
+				kind: "compaction",
+				reason: "manual",
+				tokensBefore: undefined,
+				estimatedTokensAfter: undefined,
+			},
+		});
+		expect(chatActivity(view)).toBe("compacting");
+		view = reduceSession(view, { type: "session/phase", phase: "stopping", maintenance: undefined });
+		expect(chatActivity(view)).toBe("stopping");
 	});
 });
 

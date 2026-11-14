@@ -25,6 +25,9 @@ export type HubAgent = Pick<
 	| "id"
 	| "file"
 	| "isBusy"
+	| "initialize"
+	| "respondUi"
+	| "cancelUi"
 	| "subscribe"
 	| "entryPage"
 	| "entriesAfter"
@@ -247,7 +250,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 
 	/** 建一个新会话并登记。会话文件立即建立,之后每条完成的消息追加写盘。 */
 	async createSession(options: PiAgentLaunchOptions = {}): Promise<SessionSnapshot> {
-		const agent = await this.factory.create(options);
+		const agent = await this.factory.create({ ...options, deferInitialization: true });
 		this.attach(agent);
 		this.noteSessions(agent.file === undefined ? undefined : normalizeFile(agent.file), "changed");
 		return this.snapshotRow(this.requireRow(agent.id));
@@ -261,7 +264,8 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 	 */
 	async openSession(file: string, cwd?: string): Promise<SessionSnapshot> {
 		const key = normalizeFile(file);
-		const sessionId = await this.factory.peekSessionId(key);
+		// 尚未写入首条消息的会话也有运行内文件路径，可以直接复用。
+		const sessionId = this.sessionIdByFile(key) ?? (await this.factory.peekSessionId(key));
 		const existing = this.table.get(sessionId);
 		if (existing) {
 			if (existing.file !== undefined && existing.file !== key) {
@@ -327,6 +331,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		try {
 			const entryId = this.forkPoint(source, options.beforeEntryId);
 			const agent = await this.factory.fork({
+				deferInitialization: true,
 				sessionFile: options.sessionFile,
 				...(entryId === undefined ? {} : { entryId }),
 				...(options.cwd === undefined ? {} : { cwd: options.cwd }),
@@ -392,6 +397,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		this.ensureChannel(row, makeChannel("chat", sessionId));
 		row.unsubscribe = agent.subscribe((event) => this.onAgentEvent(row, event));
 		this.table.set(sessionId, row);
+		this.startInitialization(row);
 		this.settle(row);
 	}
 
@@ -689,6 +695,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		}
 		if (row.holds > 0) {
 			row.pendingRelease = true;
+			row.agent?.cancelUi();
 			return;
 		}
 		this.drop(row);
@@ -775,19 +782,35 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		if (!row.agent) {
 			throw new SessionNotFoundError(row.sessionId);
 		}
+		await row.agent.initialize();
 		return row.agent;
 	}
 
 	/** 建立会话并填进行里。字段先就位再让 promise 兑现,等待者醒来即可用。 */
 	private async buildOpen(row: SessionState<A>, cwd: string | undefined): Promise<void> {
 		const agent = await this.factory.open({
+			deferInitialization: true,
 			sessionFile: row.file as string,
 			...(cwd === undefined ? {} : { cwd }),
 		});
 		row.agent = agent;
 		row.phase = "open";
 		row.unsubscribe = agent.subscribe((event) => this.onAgentEvent(row, event));
+		this.startInitialization(row);
 		this.settle(row);
+	}
+
+	/** 会话先登记再初始化，session_start 等待交互期间订阅与应答均可访问。 */
+	private startInitialization(row: SessionState<A>): void {
+		void row.agent?.initialize().catch((error: unknown) => {
+			if (this.table.get(row.sessionId) !== row) return;
+			this.publish(row, row.projector.chatChannelFor(), {
+				type: "chat/notice",
+				level: "error",
+				message: error instanceof Error ? error.message : String(error),
+			});
+			this.settle(row);
+		});
 	}
 
 	/** 把 pi 事件转成动作推给订阅者,并按事件重新判断寿命。 */

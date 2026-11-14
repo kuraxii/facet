@@ -1,5 +1,7 @@
+import type { ExtensionUIContext } from "@earendil-works/pi-coding-agent";
 import type { SessionEvent } from "@facet/protocol";
 import { describe, expect, it } from "vitest";
+import { ExtensionUi } from "./extension-ui.ts";
 import { PiAgent, type PiAgentContext } from "./pi-agent.ts";
 
 interface FakeRun {
@@ -9,6 +11,7 @@ interface FakeRun {
 }
 
 interface FakeAgentOptions {
+	context?: Pick<PiAgentContext, "ui" | "initialize">;
 	streaming?: boolean;
 	run?: (run: FakeRun) => Promise<void>;
 	/** 中止的等待,用例自己决定何时结束 */
@@ -35,10 +38,12 @@ function createAgent(options: FakeAgentOptions = {}) {
 		prompt: async (_text: string, run: FakeRun) => {
 			await (options.run?.(run) ?? Promise.resolve());
 		},
+		dispose: () => {},
 		abort: options.abort ?? (async () => {}),
 		navigateTree: options.navigateTree ?? (async () => ({ cancelled: false })),
 	} as unknown as PiAgentContext["session"];
 	const agent = new PiAgent({
+		...options.context,
 		session,
 		modelRuntime: {} as PiAgentContext["modelRuntime"],
 		modelFallbackMessage: undefined,
@@ -121,6 +126,106 @@ describe("PiAgent.prompt", () => {
 	});
 });
 
+describe("扩展初始化", () => {
+	it("初始化只执行一次，等待交互期间会话保持忙碌", async () => {
+		const ui = new ExtensionUi({} as ExtensionUIContext);
+		let calls = 0;
+		const { agent, events } = createAgent({
+			context: {
+				ui,
+				initialize: async () => {
+					calls += 1;
+					await ui.context.input("启动输入");
+				},
+			},
+		});
+		expect(agent.isBusy).toBe(true);
+		const first = agent.initialize();
+		expect(agent.initialize()).toBe(first);
+		const id = ui.snapshot().prompts[0]?.requestId ?? "";
+		expect(agent.respondUi(id, { kind: "input", value: "内容" })).toBe(true);
+		await first;
+		expect(calls).toBe(1);
+		expect(agent.isBusy).toBe(false);
+		expect(events).toContainEqual({ type: "initialized", initialization: { kind: "ready" } });
+		agent.dispose();
+	});
+
+	it("初始化错误发布具体原因并清理未完成的 UI", async () => {
+		const ui = new ExtensionUi({} as ExtensionUIContext);
+		let input: Promise<string | undefined> | undefined;
+		const { agent, events } = createAgent({
+			context: {
+				ui,
+				initialize: async () => {
+					input = ui.context.input("启动输入");
+					throw new Error("资源不可读");
+				},
+			},
+		});
+		await expect(agent.initialize()).rejects.toThrow("资源不可读");
+		await expect(agent.initialize()).rejects.toThrow("资源不可读");
+		await expect(input).resolves.toBeUndefined();
+		expect(ui.snapshot().prompts).toEqual([]);
+		expect(agent.isBusy).toBe(false);
+		expect(events).toContainEqual({
+			type: "initialized",
+			initialization: { kind: "failed", message: "资源不可读" },
+		});
+		agent.dispose();
+	});
+
+	it("释放期间解除启动询问，不再发布就绪事件", async () => {
+		const ui = new ExtensionUi({} as ExtensionUIContext);
+		const { agent, events } = createAgent({
+			context: {
+				ui,
+				initialize: async () => {
+					await ui.context.input("启动输入");
+				},
+			},
+		});
+		const initializing = agent.initialize();
+		agent.dispose();
+		await initializing;
+		expect(events.filter((event) => event.type === "initialized")).toEqual([]);
+		expect(() => agent.respondUi("u1", { kind: "cancel" })).toThrow("disposed");
+	});
+
+	it("运行期间执行扩展命令保留运行阶段", async () => {
+		const { agent, emitToAgent } = createAgent({
+			streaming: true,
+			run: async (run) => {
+				run.preflightResult?.("handled");
+			},
+		});
+		emitToAgent({ type: "agent_start" });
+		await expect(agent.prompt("/ask", { streamingBehavior: "steer" })).resolves.toBe("handled");
+		expect(agent.currentPhase).toBe("running");
+	});
+
+	it("input hook 等待时的停止会在模型运行开始前再次传递", async () => {
+		const ui = new ExtensionUi({} as ExtensionUIContext);
+		let aborts = 0;
+		const { agent } = createAgent({
+			context: { ui },
+			abort: async () => {
+				aborts += 1;
+			},
+			run: async (run) => {
+				await ui.context.input("输入处理");
+				run.preflightResult?.("started");
+			},
+		});
+		const running = agent.prompt("内容");
+		await Promise.resolve();
+		await agent.abort();
+		await running;
+		expect(aborts).toBe(2);
+		agent.dispose();
+	});
+});
+
 describe("阶段与维护动作", () => {
 	it("发出消息即进入 starting,pi 开始运行后转 running,收尾转 idle", async () => {
 		const { agent, events, emitToAgent } = createAgent({
@@ -165,6 +270,32 @@ describe("阶段与维护动作", () => {
 		emitToAgent({ type: "auto_retry_start", attempt: 2, maxAttempts: 3, delayMs: 500 });
 		expect(agent.currentMaintenance).toEqual({ kind: "retry", attempt: 2, maxAttempts: 3, delayMs: 500 });
 		emitToAgent({ type: "auto_retry_end", success: true, attempt: 2 });
+		expect(agent.currentMaintenance).toBeUndefined();
+	});
+
+	it("摘要请求重试期间保持压缩动作，收到结束事件才清除", () => {
+		const { agent, emitToAgent } = createAgent();
+		emitToAgent({ type: "compaction_start", reason: "manual" });
+		emitToAgent({ type: "summarization_retry_scheduled", attempt: 1, maxAttempts: 3, delayMs: 1000 });
+		expect(agent.currentMaintenance?.kind).toBe("compaction");
+		emitToAgent({
+			type: "summarization_retry_attempt_start",
+			source: "compaction",
+			reason: "manual",
+			willRetry: false,
+		});
+		expect(agent.currentMaintenance?.kind).toBe("compaction");
+		emitToAgent({ type: "summarization_retry_finished" });
+		expect(agent.currentMaintenance?.kind).toBe("compaction");
+		emitToAgent({ type: "compaction_end", reason: "manual", aborted: false, willRetry: false });
+		expect(agent.currentMaintenance).toBeUndefined();
+	});
+
+	it("分支摘要重试使用 SDK 给出的等待时长", () => {
+		const { agent, emitToAgent } = createAgent();
+		emitToAgent({ type: "summarization_retry_scheduled", attempt: 2, maxAttempts: 3, delayMs: 1500 });
+		expect(agent.currentMaintenance).toEqual({ kind: "retry", attempt: 2, maxAttempts: 3, delayMs: 1500 });
+		emitToAgent({ type: "summarization_retry_finished" });
 		expect(agent.currentMaintenance).toBeUndefined();
 	});
 

@@ -1,5 +1,6 @@
 import type { ImageBlock, ToolOutput } from "./content.ts";
 import type { DeltaKind, NoticeLevel } from "./event.ts";
+import type { ExtensionUiState, SessionInitialization } from "./extension-ui.ts";
 import type { Message } from "./message.ts";
 import type { ModelInfo, ModelRef, ThinkingLevel } from "./model.ts";
 import type { StreamingBehavior } from "./request.ts";
@@ -15,6 +16,8 @@ export type SessionsAction =
 
 /** 会话动作。 */
 export type SessionAction =
+	| { type: "session/initialized"; initialization: SessionInitialization }
+	| { type: "session/uiChanged"; ui: ExtensionUiState }
 	/** 主机侧:阶段或维护动作变化 */
 	| { type: "session/phase"; phase: TurnPhase; maintenance: Maintenance | undefined }
 	/** 主机侧:当前模型变化，同时给出换模型之后可选的思考档位 */
@@ -49,6 +52,8 @@ export type SessionAction =
 
 /** 对话动作。 */
 export type ChatAction =
+	/** 发起端收到的输入消费回执；origin 对应原始派发，不写入通道历史。 */
+	| { type: "chat/inputHandled" }
 	/** 主机侧:新消息开始,messageId 由主机分配并在该消息生命周期内稳定 */
 	| { type: "chat/messageAppended"; messageId: string; message: Message }
 	/** 主机侧:消息完成或追加新内容,沿用 messageAppended 的 messageId */

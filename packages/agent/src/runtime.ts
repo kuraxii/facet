@@ -23,6 +23,7 @@ import {
 import type { ModelInfo, ModelRef, ProviderInfo, SessionSummary, ThinkingLevel } from "@facet/protocol";
 import { toModelInfo } from "./convert.ts";
 import { FileCredentialStore } from "./credential-store.ts";
+import { ExtensionUi } from "./extension-ui.ts";
 import {
 	type CustomProviderEntry,
 	InvalidProviderError,
@@ -61,8 +62,10 @@ export interface PiAgentLaunchOptions {
 	excludeTools?: string[];
 	/** 会话展示名 */
 	name?: string;
-	/** 扩展交互界面，缺省时扩展的对话框不可用 */
+	/** 调用方提供的交互实现；缺省由 server 会话使用数据桥。 */
 	uiContext?: ExtensionUIContext;
+	/** 先返回会话，由登记方在订阅可用后调用 initialize。 */
+	deferInitialization?: boolean;
 	/** 跳过文件里的扩展，内联扩展仍然加载 */
 	noExtensions?: boolean;
 	/** 追加的内联扩展 */
@@ -77,7 +80,10 @@ export interface OpenPiAgentOptions {
 	/** 覆盖会话记录的工作目录，目录已不存在时使用 */
 	cwd?: string;
 	sessionDir?: string;
+	/** 调用方提供的交互实现。 */
 	uiContext?: ExtensionUIContext;
+	/** 先返回会话，由登记方启动扩展初始化。 */
+	deferInitialization?: boolean;
 	noExtensions?: boolean;
 	extensionFactories?: InlineExtension[];
 	onError?: (error: unknown) => void;
@@ -595,7 +601,11 @@ export class PiAgentFactory {
 		});
 
 		const onError = options.onError ?? this.onError;
-		const agent = new PiAgent({
+		const ui =
+			options.deferInitialization && options.uiContext === undefined
+				? new ExtensionUi(session.extensionRunner.getUIContext())
+				: undefined;
+		const agent: PiAgent = new PiAgent({
 			session,
 			modelRuntime: this.modelRuntime,
 			modelFallbackMessage,
@@ -604,22 +614,30 @@ export class PiAgentFactory {
 				...(extensionsResult.warnings ?? []).map((issue) => `${issue.path}: ${issue.warning}`),
 			],
 			onError,
-		});
-
-		// mode 取 rpc：宿主没有终端，扩展的终端专属界面按不可用处理
-		await session.bindExtensions({
-			uiContext: options.uiContext,
-			mode: "rpc",
-			abortHandler: () => {
-				void agent.abort();
-			},
-			onError: (error) => onError?.(error),
+			ui,
+			initialize: () =>
+				session.bindExtensions({
+					uiContext: ui?.context ?? options.uiContext,
+					mode: "rpc",
+					abortHandler: () => {
+						void agent.abort();
+					},
+					onError: (error) => onError?.(error),
+				}),
 		});
 
 		if (tuning.name) {
 			session.setSessionName(tuning.name);
 		}
 
+		if (!options.deferInitialization) {
+			try {
+				await agent.initialize();
+			} catch (error) {
+				agent.dispose();
+				throw error;
+			}
+		}
 		return agent;
 	}
 }

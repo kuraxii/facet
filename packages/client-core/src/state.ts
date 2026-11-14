@@ -10,11 +10,13 @@ import type {
 	ContextUsage,
 	DeltaKind,
 	Entry,
+	ExtensionUiState,
 	Maintenance,
 	Message,
 	ModelInfo,
 	NoticeLevel,
 	QueuedInput,
+	SessionInitialization,
 	SessionSnapshot,
 	ThinkingLevel,
 	ToolOutput,
@@ -78,6 +80,10 @@ export interface NoticeView {
  * 订阅时由主机快照建立,之后由会话通道的动作就地更新;同一个字段只有这一个来源。
  */
 export interface SessionState {
+	/** 扩展初始化状态，独立于本轮生命周期。 */
+	readonly initialization: SessionInitialization;
+	/** 可重连恢复的扩展交互状态。 */
+	readonly extensionUi: ExtensionUiState;
 	/** 会话文件路径,内存会话为空 */
 	readonly file: string | undefined;
 	/** 会话的工作目录 */
@@ -139,6 +145,9 @@ export function chatActivity(session: SessionView | undefined): ChatActivity {
 	if (state.maintenance?.kind === "compaction") {
 		return "compacting";
 	}
+	if (state.initialization.kind === "starting" || state.extensionUi.prompts.length > 0) {
+		return "running";
+	}
 	if (state.maintenance?.kind === "retry") {
 		return "running";
 	}
@@ -150,6 +159,8 @@ export function createSessionView(channel: Channel, snapshot?: SessionSnapshot):
 	return {
 		channel,
 		state: {
+			initialization: snapshot?.initialization ?? { kind: "ready" },
+			extensionUi: snapshot?.extensionUi ?? { prompts: [] },
 			file: snapshot?.file,
 			cwd: snapshot?.cwd ?? "",
 			title: snapshot?.name,

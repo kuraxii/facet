@@ -46,6 +46,10 @@ export class ActionProjector {
 		const chat = (action: Action): ChannelAction => ({ channel: this.chatChannel, action });
 
 		switch (event.type) {
+			case "initialized":
+				return [session({ type: "session/initialized", initialization: event.initialization })];
+			case "ui":
+				return [session({ type: "session/uiChanged", ui: event.ui })];
 			case "phase":
 				return [session({ type: "session/phase", phase: event.phase, maintenance: event.maintenance })];
 			case "model":

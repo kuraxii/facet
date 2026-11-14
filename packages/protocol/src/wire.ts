@@ -8,6 +8,7 @@
 import type { Action, ActionOrigin } from "./action.ts";
 import type { Channel } from "./channel.ts";
 import type { SlashCommand } from "./command.ts";
+import type { UiResponse } from "./extension-ui.ts";
 import type { FileContent, FileEntry, FileWriteResult } from "./file.ts";
 import type { GitDiff, GitStatus } from "./git.ts";
 import type {
@@ -27,7 +28,7 @@ import type { TerminalInfo } from "./terminal.ts";
 export const PROTOCOL_VERSION = 1;
 
 /** 主机上报的能力标记,端点据此隐藏不可用的入口。 */
-export type Capability = "dispatch" | "tools" | "compaction" | "terminal";
+export type Capability = "dispatch" | "tools" | "compaction" | "terminal" | "extensionUi";
 
 /**
  * 这条连接的权限档。
@@ -180,6 +181,7 @@ export interface SubscribeResult {
 
 /** 每条请求的参数。 */
 export interface RequestParams {
+	respondUi: { sessionId: string; requestId: string; response: UiResponse };
 	/** 列出会话。指定 cwd 时只列该目录。 */
 	listSessions: { cwd?: string };
 	/** 列出某个会话里能用的命令：界面自带的几条，加上扩展命令、提示词模板与技能。 */
@@ -333,6 +335,7 @@ export interface RequestParams {
 
 /** 每条请求的应答数据。 */
 export interface RequestResults {
+	respondUi: { accepted: boolean };
 	listSessions: { sessions: SessionSummary[] };
 	listCommands: { commands: SlashCommand[] };
 	busySessions: { files: string[] };

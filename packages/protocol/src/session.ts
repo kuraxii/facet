@@ -1,6 +1,7 @@
 /**
  * 会话状态、历史条目与统计。
  */
+import type { ExtensionUiState, SessionInitialization } from "./extension-ui.ts";
 import type { Message } from "./message.ts";
 import type { ModelInfo, ThinkingLevel } from "./model.ts";
 
@@ -155,6 +156,10 @@ export interface ToolInfo {
 /** 接入方一次拿到的完整会话状态，用于对齐界面。消息体与历史走条目读取。 */
 export interface SessionSnapshot {
 	id: string;
+	/** 扩展初始化状态；旧 server 缺省时按 ready 处理。 */
+	initialization?: SessionInitialization;
+	/** 待答请求、通知与输入草稿更新。 */
+	extensionUi?: ExtensionUiState;
 	/** 会话文件路径，内存会话为空 */
 	file: string | undefined;
 	/** 会话的工作目录 */

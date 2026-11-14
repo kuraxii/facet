@@ -51,19 +51,22 @@ export function nextTurnState(event: AgentSessionEvent, current: TurnState): Tur
 				},
 			};
 		case "summarization_retry_scheduled":
-			// 摘要重试没有给出等待时长，按零处理，界面只显示次数
+			if (current.maintenance?.kind === "compaction") {
+				return undefined;
+			}
 			return {
 				...current,
 				maintenance: {
 					kind: "retry",
 					attempt: event.attempt,
 					maxAttempts: event.maxAttempts,
-					delayMs: 0,
+					delayMs: event.delayMs,
 				},
 			};
 		case "auto_retry_end":
-		case "summarization_retry_finished":
 			return current.maintenance === undefined ? undefined : { ...current, maintenance: undefined };
+		case "summarization_retry_finished":
+			return current.maintenance?.kind === "retry" ? { ...current, maintenance: undefined } : undefined;
 		default:
 			return undefined;
 	}

@@ -184,17 +184,16 @@ done
 /**
  * 在远端把没在跑的主机拉起来。
  *
- * 只在已经装了 facet 的机器上成立：包安装目录里有独立主机产物（`bin/node` + `lib/host.mjs`）。
- * 找不到安装就打 `none`，客户端据此报「这台机器上没有安装 facet」，不做任何上传与安装。
- * 起来之后日志写进数据目录的 host.log，进程 detached，SSH 断开也不带走它。
+ * 只在已经装了 facet 的机器上成立：位置就是包安装目录 `/opt/Facet/resources/host`（rpm 与
+ * deb 都装在这里），里面有独立主机产物（`bin/node` + `lib/host.mjs`）。找不到就打 `none`，
+ * 客户端据此报「这台机器上没有安装 facet」，不做任何上传与安装。起来之后日志写进数据目录的
+ * host.log，进程 detached，SSH 断开也不带走它。
  */
 export const REMOTE_START_SCRIPT = `set -u
-for dir in /opt/Facet/resources/host "\${XDG_DATA_HOME:-$HOME/.local/share}/facet/host"; do
-  if [ -x "$dir/bin/node" ] && [ -f "$dir/lib/host.mjs" ]; then
-    install="$dir"
-    break
-  fi
-done
+install=/opt/Facet/resources/host
+if [ ! -x "$install/bin/node" ] || [ ! -f "$install/lib/host.mjs" ]; then
+  install=""
+fi
 if [ "\${install:-}" = "" ]; then
   printf 'none\n'
   exit 0

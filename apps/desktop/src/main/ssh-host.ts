@@ -181,6 +181,34 @@ for path in \
 done
 `;
 
+/**
+ * 在远端把没在跑的主机拉起来。
+ *
+ * 只在已经装了 facet 的机器上成立：包安装目录里有独立主机产物（`bin/node` + `lib/host.mjs`）。
+ * 找不到安装就打 `none`，客户端据此报「这台机器上没有安装 facet」，不做任何上传与安装。
+ * 起来之后日志写进数据目录的 host.log，进程 detached，SSH 断开也不带走它。
+ */
+export const REMOTE_START_SCRIPT = `set -u
+for dir in /opt/Facet/resources/host "\${XDG_DATA_HOME:-$HOME/.local/share}/facet/host"; do
+  if [ -x "$dir/bin/node" ] && [ -f "$dir/lib/host.mjs" ]; then
+    install="$dir"
+    break
+  fi
+done
+if [ "\${install:-}" = "" ]; then
+  printf 'none\n'
+  exit 0
+fi
+data="\${FACET_DATA_DIR:-$HOME/.local/share/facet}"
+mkdir -p "$data" 2>/dev/null || true
+if command -v setsid >/dev/null 2>&1; then
+  setsid "$install/bin/node" "$install/lib/host.mjs" >>"$data/host.log" 2>&1 </dev/null &
+else
+  nohup "$install/bin/node" "$install/lib/host.mjs" >>"$data/host.log" 2>&1 </dev/null &
+fi
+printf 'started\n'
+`;
+
 /** 取脚本输出的第一行非空内容，就是 socket 路径。 */
 export function parseSocketPath(text: string): string | undefined {
 	const line = text
@@ -206,8 +234,8 @@ export type SshConnector = (config: ConnectConfig) => Promise<SshClientLike>;
 export interface SshHostOptions {
 	/** 连接超时，毫秒 */
 	connectTimeoutMs?: number;
-	/** 执行远端命令的超时，毫秒 */
-	execTimeoutMs?: number;
+	/** 拉起远端主机后等 socket 出现的上限，毫秒 */
+	socketWaitMs?: number;
 	/** 建立 SSH 连接，缺省用 ssh2 */
 	connect?: SshConnector;
 	/** 读本地文件，缺省用 fs */
@@ -225,7 +253,9 @@ export class SshHostError extends Error {
 		| "no_known_host"
 		/** 缺登录凭据或凭据被拒，界面据此问密码 */
 		| "need_password"
-		/** 家目录下没有在跑的 socket */
+		/** 这台机器上没有安装 facet，拉不起来 */
+		| "not_installed"
+		/** 装了也拉不起来，或者 socket 一直不出现 */
 		| "no_socket"
 		| "connect_failed"
 		| "forward_failed";
@@ -342,10 +372,21 @@ export class SshHosts {
 			client.close();
 			throw new SshHostError("no_socket", `${label} 上查不到主机位置:${messageOf(error)}`);
 		}
-		const path = parseSocketPath(output);
+		let path = parseSocketPath(output);
+		if (path === undefined) {
+			// 没在跑就拉起来：本地桌面也是这么做的，远端同样交给已安装的那份主机
+			const started = await startRemoteHost(client, label);
+			if (started !== undefined) {
+				throw started;
+			}
+			path = await waitForRemoteSocket(client, this.options.socketWaitMs ?? SOCKET_WAIT_MS);
+		}
 		if (path === undefined) {
 			client.close();
-			throw new SshHostError("no_socket", `${label} 上没有运行中的 facet 主机`);
+			throw new SshHostError(
+				"no_socket",
+				`${label} 上拉起了 facet 主机，但 ${this.options.socketWaitMs ?? SOCKET_WAIT_MS} 毫秒内没等到 socket`,
+			);
 		}
 
 		try {
@@ -356,6 +397,46 @@ export class SshHosts {
 			throw new SshHostError("no_socket", `${label} 上的 ${path} 连不上:${messageOf(error)}`);
 		}
 	}
+}
+
+/** 拉起远端主机后等 socket 出现的上限与轮询间隔。 */
+const SOCKET_WAIT_MS = 12_000;
+const SOCKET_POLL_MS = 400;
+
+/**
+ * 在远端启动主机。
+ *
+ * 返回 SshHostError 表示这一次不该继续等 socket（没装 facet）；返回 undefined 表示已经发出
+ * 启动命令，接下来轮询 socket 即可。
+ */
+async function startRemoteHost(client: SshClientLike, label: string): Promise<SshHostError | undefined> {
+	let output: string;
+	try {
+		output = await client.run(REMOTE_START_SCRIPT);
+	} catch (error) {
+		return new SshHostError("no_socket", `${label} 上启动 facet 主机失败:${messageOf(error)}`);
+	}
+	if (output.includes("none")) {
+		return new SshHostError("not_installed", `${label} 上没有安装 facet，先在那边装好再来添加`);
+	}
+	return undefined;
+}
+
+/** 轮询远端，等主机把 socket 建出来。 */
+async function waitForRemoteSocket(client: SshClientLike, waitMs: number): Promise<string | undefined> {
+	const deadline = Date.now() + waitMs;
+	while (Date.now() < deadline) {
+		await new Promise((done) => setTimeout(done, SOCKET_POLL_MS));
+		try {
+			const found = parseSocketPath(await client.run(REMOTE_SOCKET_SCRIPT));
+			if (found !== undefined) {
+				return found;
+			}
+		} catch {
+			// 主机还没起来，下一次再问
+		}
+	}
+	return undefined;
 }
 
 /** ssh2 在认证阶段失败时把 level 标成 client-authentication。 */
@@ -389,6 +470,7 @@ const defaultConnector: SshConnector = async (config) => {
 					}
 					let text = "";
 					let stderr = "";
+					let exitCode: number | undefined;
 					channel.setEncoding("utf8");
 					channel.on("data", (chunk: string) => {
 						text += chunk;
@@ -396,10 +478,14 @@ const defaultConnector: SshConnector = async (config) => {
 					channel.stderr.on("data", (chunk: Buffer) => {
 						stderr += chunk.toString("utf8");
 					});
+					channel.on("exit", (code: number) => {
+						exitCode = code;
+					});
 					channel.once("close", () => {
 						clearTimeout(timer);
-						if (text.length === 0) {
-							reject(new Error(stderr.trim() || "远端脚本没有输出"));
+						// 没有输出属于正常结果（比如「现在没有 socket」），只有退出码非 0 才算脚本失败
+						if (text.length === 0 && exitCode !== undefined && exitCode !== 0) {
+							reject(new Error(stderr.trim() || `远端脚本退出码 ${exitCode}`));
 							return;
 						}
 						resolve(text);

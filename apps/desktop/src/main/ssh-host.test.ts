@@ -70,19 +70,20 @@ Host *
 describe("SshHosts", () => {
 	/** 一条假的 SSH 连接：脚本输出与能否打开 socket 都由用例指定。 */
 	function fakeClient(
-		options: { socket?: string | Error; openable?: string[] },
-		opened: { paths?: string[]; script?: string; config?: ConnectConfig },
+		options: { socket?: string | Error; outputs?: (string | Error)[]; openable?: string[] },
+		opened: { paths?: string[]; scripts?: string[]; config?: ConnectConfig },
 	) {
 		return async (config: ConnectConfig): Promise<SshClientLike> => {
 			opened.config = config;
 			opened.paths = [];
 			return {
 				run: async (script) => {
-					opened.script = script;
-					if (options.socket instanceof Error) {
-						throw options.socket;
+					opened.scripts = [...(opened.scripts ?? []), script];
+					const next = options.outputs?.shift() ?? options.socket;
+					if (next instanceof Error) {
+						throw next;
 					}
-					return options.socket === undefined ? "" : `${options.socket}\n`;
+					return next === undefined ? "" : `${next}\n`;
 				},
 				openStreamLocal: async (path) => {
 					opened.paths?.push(path);
@@ -104,7 +105,7 @@ describe("SshHosts", () => {
 	};
 
 	it("按脚本给出的路径直接开通道，不再逐个试", async () => {
-		const opened: { paths?: string[]; script?: string } = {};
+		const opened: { paths?: string[]; scripts?: string[] } = {};
 		const hosts = new SshHosts({
 			home: "/home/u",
 			env: { SSH_AUTH_SOCK: "/tmp/agent.sock" },
@@ -115,43 +116,71 @@ describe("SshHosts", () => {
 		expect(result.address).toBe("/run/user/1000/facet.sock");
 		expect(opened.paths).toEqual(["/run/user/1000/facet.sock"]);
 		// 脚本走标准输入，命令行只有解释器
-		expect(opened.script).toContain("XDG_RUNTIME_DIR");
-		expect(opened.script).toContain(".local/share/facet/facet.sock");
+		expect(opened.scripts?.[0]).toContain("XDG_RUNTIME_DIR");
+		expect(opened.scripts?.[0]).toContain(".local/share/facet/facet.sock");
 	});
 
-	it("脚本没有输出时报「没有在跑的主机」", async () => {
+	it("没在跑时先拉起主机，等到 socket 出现就连上", async () => {
+		const opened: { paths?: string[]; scripts?: string[] } = {};
 		const hosts = new SshHosts({
 			home: "/home/u",
 			env: { SSH_AUTH_SOCK: "/tmp/agent.sock" },
 			readLocalFile: read,
-			connect: fakeClient({}, {}),
+			socketWaitMs: 2_000,
+			connect: fakeClient(
+				{
+					outputs: ["", "started", "/run/user/1000/facet.sock"],
+					openable: ["/run/user/1000/facet.sock"],
+				},
+				opened,
+			),
 		});
-		await expect(hosts.open("ssh://dev@laptop")).rejects.toMatchObject({ code: "no_socket" });
+		const result = await hosts.open("ssh://dev@laptop");
+		expect(result.address).toBe("/run/user/1000/facet.sock");
+		// 第一条是找 socket，第二条是启动，第三条又是找 socket
+		expect(opened.scripts).toHaveLength(3);
+		expect(opened.scripts?.[1]).toContain("/opt/Facet/resources/host");
 	});
 
-	it("脚本本身跑不起来时说明原因", async () => {
+	it("远端没装 facet 时直接失败并说明原因", async () => {
 		const hosts = new SshHosts({
 			home: "/home/u",
 			env: { SSH_AUTH_SOCK: "/tmp/agent.sock" },
 			readLocalFile: read,
-			connect: fakeClient({ socket: new Error("/bin/sh: not found") }, {}),
+			socketWaitMs: 200,
+			connect: fakeClient({ outputs: ["", "none"] }, {}),
+		});
+		await expect(hosts.open("ssh://dev@laptop")).rejects.toMatchObject({
+			code: "not_installed",
+			message: expect.stringContaining("没有安装 facet"),
+		});
+	});
+
+	it("拉起来但等不到 socket 时说明等了多久", async () => {
+		const hosts = new SshHosts({
+			home: "/home/u",
+			env: { SSH_AUTH_SOCK: "/tmp/agent.sock" },
+			readLocalFile: read,
+			socketWaitMs: 300,
+			connect: fakeClient({ outputs: ["", "started"] }, {}),
+		});
+		await expect(hosts.open("ssh://dev@laptop")).rejects.toMatchObject({
+			code: "no_socket",
+			message: expect.stringContaining("没等到 socket"),
+		});
+	});
+
+	it("查 socket 的脚本本身跑不起来时说明原因", async () => {
+		const hosts = new SshHosts({
+			home: "/home/u",
+			env: { SSH_AUTH_SOCK: "/tmp/agent.sock" },
+			readLocalFile: read,
+			socketWaitMs: 200,
+			connect: fakeClient({ outputs: [new Error("/bin/sh: not found")] }, {}),
 		});
 		await expect(hosts.open("ssh://dev@laptop")).rejects.toMatchObject({
 			code: "no_socket",
 			message: expect.stringContaining("查不到主机位置"),
-		});
-	});
-
-	it("脚本给出路径但连不上时说明是那条路径", async () => {
-		const hosts = new SshHosts({
-			home: "/home/u",
-			env: { SSH_AUTH_SOCK: "/tmp/agent.sock" },
-			readLocalFile: read,
-			connect: fakeClient({ socket: "/run/user/1000/facet.sock", openable: [] }, {}),
-		});
-		await expect(hosts.open("ssh://dev@laptop")).rejects.toMatchObject({
-			code: "no_socket",
-			message: expect.stringContaining("/run/user/1000/facet.sock"),
 		});
 	});
 

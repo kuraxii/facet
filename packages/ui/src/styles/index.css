@@ -39,20 +39,31 @@
 	--context-divider-padding: 4px;
 	--context-divider-line-height: 1px;
 	--context-summary-gap: 8px;
-	/* 扩展弹窗边缘到视口边缘的最小距离。 */
-	--extension-window-inset: 24px;
-	/* 弹窗边框到内容的距离，以及弹窗外侧宽度。 */
-	--extension-dialog-padding: 24px;
-	--extension-dialog-width: 560px;
-	/* 相邻表单区域之间的距离。 */
-	--extension-dialog-gap: 12px;
-	/* 输入框边缘到文本的距离，以及输入框与弹窗的圆角半径。 */
+	/* 扩展交互卡片：边框到内容的距离、圆角、段落之间与选项行之间的距离 */
+	--extension-card-padding: 16px;
+	--extension-card-radius: 12px;
+	--extension-card-gap: 12px;
+	--extension-card-text-gap: 8px;
+	/* 选项行：横纵内边距、圆角与相邻两行的距离 */
+	--extension-option-padding-x: 12px;
+	--extension-option-padding-y: 8px;
+	--extension-option-radius: 8px;
+	--extension-option-gap: 2px;
+	/* 单选圆圈：直径、边框宽度、选中点直径，以及到选项文字的距离 */
+	--extension-radio-size: 18px;
+	--extension-radio-border: 1px;
+	--extension-radio-dot: 8px;
+	--extension-radio-gap: 10px;
+	/* 动作按钮：高度、横向内边距、圆角与两个按钮之间的距离 */
+	--extension-action-height: 32px;
+	--extension-action-padding-x: 12px;
+	--extension-action-radius: 8px;
+	--extension-action-gap: 8px;
+	/* 输入框边缘到文本的距离、圆角，以及多行输入框的最小高度 */
 	--extension-input-inset: 10px;
-	--extension-input-radius: 8px;
-	--extension-dialog-radius: 12px;
-	/* 多行输入框上下边缘之间的最小距离。 */
-	--extension-editor-height: 240px;
-	/* 控件与预览卡片的边框宽度。 */
+	--extension-input-radius: 10px;
+	--extension-editor-height: 160px;
+	/* 控件边框宽度 */
 	--extension-border-width: 1px;
 	--status-dot: 6px;
 	--status-dot-failed: 8px;
@@ -3393,49 +3404,124 @@ svg.fl {
 	box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
 }
 
-.extension-dialog {
-	margin: auto;
-	width: min(var(--extension-dialog-width), calc(100vw - var(--extension-window-inset) * 2));
-	max-height: calc(100dvh - var(--extension-window-inset) * 2);
-	padding: var(--extension-dialog-padding);
-	border-width: var(--extension-border-width);
-	border-radius: var(--extension-dialog-radius);
-	color: var(--t1);
-	overflow: auto;
-}
-
-.extension-dialog::backdrop {
-	background: rgba(0, 0, 0, 0.55);
-}
-
-.extension-dialog form,
-.extension-preview {
+.extension-card {
 	display: grid;
-	gap: var(--extension-dialog-gap);
+	gap: var(--extension-card-gap);
+	padding: var(--extension-card-padding);
+	border: var(--extension-border-width) solid var(--line);
+	border-radius: var(--extension-card-radius);
+	background: var(--card);
+	color: var(--t1);
+	outline: none;
 }
 
-:where(.extension-dialog .dialog-head, .extension-dialog .dialog-actions),
-:where(.extension-preview h3, .extension-preview p),
-.extension-message {
+.extension-card-text {
+	display: grid;
+	gap: var(--extension-card-text-gap);
+}
+
+.extension-card-heading {
 	margin: 0;
-}
-
-:where(.extension-dialog .dialog-title, .extension-preview h3) {
+	font-size: 15px;
+	font-weight: 500;
+	line-height: 1.5;
 	overflow-wrap: anywhere;
 }
 
-.extension-message {
+.extension-card-body {
+	margin: 0;
+	color: var(--t1);
+	line-height: 1.6;
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 }
 
-.extension-fields {
-	display: grid;
-	gap: var(--extension-dialog-gap);
+.extension-card-prefill {
+	max-height: calc(var(--extension-editor-height) * 2);
+	margin: 0;
+	padding: var(--extension-input-inset);
+	border: var(--extension-border-width) solid var(--line2);
+	border-radius: var(--extension-input-radius);
+	background: var(--card2);
+	color: var(--t2);
+	font-family: var(--font-mono);
+	white-space: pre-wrap;
+	overflow: auto;
 }
 
-.extension-input,
 .extension-options {
+	display: grid;
+	gap: var(--extension-option-gap);
+}
+
+.extension-option {
+	display: flex;
+	align-items: flex-start;
+	gap: var(--extension-radio-gap);
+	width: 100%;
+	padding: var(--extension-option-padding-y) var(--extension-option-padding-x);
+	border: 0;
+	border-radius: var(--extension-option-radius);
+	background: transparent;
+	color: var(--t1);
+	font: inherit;
+	text-align: left;
+}
+
+.extension-option:hover,
+.extension-option:has(.extension-radio-input:checked) {
+	background: var(--surface2);
+}
+
+.extension-option:has(.extension-radio-input:focus-visible) {
+	outline: 2px solid var(--acc);
+	outline-offset: 2px;
+}
+
+.extension-option:has(.extension-radio-input:disabled) {
+	cursor: default;
+	opacity: 0.6;
+}
+
+.extension-option.is-preview {
+	list-style: none;
+}
+
+.extension-radio-input {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	opacity: 0;
+	pointer-events: none;
+}
+
+.extension-radio {
+	display: grid;
+	flex: none;
+	place-items: center;
+	width: var(--extension-radio-size);
+	height: var(--extension-radio-size);
+	margin-top: 2px;
+	border: var(--extension-radio-border) solid var(--t3);
+	border-radius: 999px;
+}
+
+.extension-option:has(.extension-radio-input:checked) .extension-radio {
+	border-color: var(--acc);
+}
+
+.extension-radio-dot {
+	width: var(--extension-radio-dot);
+	height: var(--extension-radio-dot);
+	border-radius: 999px;
+	background: var(--acc);
+}
+
+.extension-option-label {
+	overflow-wrap: anywhere;
+}
+
+.extension-input {
 	width: 100%;
 	min-width: 0;
 	padding: var(--extension-input-inset);
@@ -3446,28 +3532,55 @@ svg.fl {
 	font: inherit;
 }
 
-.extension-options option {
-	padding: var(--extension-input-inset);
-}
-
 .extension-editor {
 	min-height: var(--extension-editor-height);
 	resize: vertical;
 }
 
-.extension-preview {
-	position: fixed;
-	right: var(--extension-window-inset);
-	bottom: var(--extension-window-inset);
-	z-index: 100;
-	max-width: calc(100vw - var(--extension-window-inset) * 2);
-	max-height: calc(100dvh - var(--extension-window-inset) * 2);
-	padding: var(--extension-dialog-padding);
+.extension-card-error {
+	margin: 0;
+	color: var(--err);
+	font-size: 13px;
+}
+
+.extension-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: var(--extension-action-gap);
+}
+
+.extension-action {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: var(--extension-action-height);
+	padding: 0 var(--extension-action-padding-x);
 	border: var(--extension-border-width) solid var(--line2);
-	border-radius: var(--extension-dialog-radius);
-	background: var(--card);
+	border-radius: var(--extension-action-radius);
+	background: transparent;
+	color: var(--t2);
+	font: inherit;
+	font-size: 13px;
+}
+
+.extension-action:hover:not(:disabled) {
+	background: var(--surface2);
 	color: var(--t1);
-	overflow: auto;
+}
+
+.extension-action:disabled {
+	cursor: default;
+	opacity: 0.55;
+}
+
+.extension-action.is-primary {
+	border-color: transparent;
+	background: var(--acc-fill);
+	color: var(--on-acc);
+}
+
+.extension-action.is-primary:disabled {
+	opacity: 0.5;
 }
 
 .dialog-head {

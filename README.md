@@ -21,30 +21,30 @@ npm install
 
 ## 运行
 
-开发时主机固定跑在 `ws://127.0.0.1:4319/endpoint`，桌面缺省连这个地址：
+本机的主机只开 unix socket（`$XDG_RUNTIME_DIR/facet-dev/host.sock`），桌面按数据目录里的
+`endpoint.json` 连过去，两边都不用填端口：
 
 ```bash
 npm run dev            # 主机与桌面一起起，各自热重启
-npm run dev:desktop    # 只起桌面，连 4319
-npm run dev:host       # 只起主机，固定 4319 端口（FACET_PORT 可换）
+npm run dev:desktop    # 只起桌面；没有发现文件时自己拉起主机
+npm run dev:host       # 只起主机，桌面起来后按发现文件连上它
 npm run dev:split      # 与 dev 相同，保留这个更明确的名字
 ```
 
 要分开看两边日志时用 `npm run dev:host` 加 `npm run dev:desktop` 各起一个终端。
 
-主机端口由 `FACET_PORT` 决定，缺省 4319；桌面端点由 `FACET_ENDPOINT` 决定，开发时缺省是 `ws://127.0.0.1:4319/endpoint`。要连别处的主机：
+开发与打包走同一条路：不给 `FACET_ENDPOINT` 就是本机主机，差别只在开发实例的数据目录带
+`-dev` 后缀。要连别处的主机（TCP 端点，或 `ssh://` 远程主机）用 `FACET_ENDPOINT`：
 
 ```bash
 FACET_ENDPOINT=ws://192.168.1.20:4319/endpoint npm run dev:desktop
 ```
 
-开发时想跑打包那样的本机模式（桌面自己拉起主机）用 `FACET_EMBEDDED=1 npm run dev:desktop`；打包运行不带 `FACET_ENDPOINT` 时本来就是本机模式。
-
 ## 连接方式与令牌
 
 主机只跑一套按行编码的协议，跑在哪条字节流上都一样：
 
-- **本机**：缺省监听 TCP 回环地址；用 `FACET_SOCKET=/run/user/1000/facet.sock` 之类给出路径时改成监听 unix socket（Windows 上是命名管道），不再开 TCP 端口。
+- **本机**：缺省只监听 unix socket，路径是 `$XDG_RUNTIME_DIR/<数据目录名>/host.sock`（没有 `XDG_RUNTIME_DIR` 时落在数据目录下），不开任何端口。给出 `FACET_PORT` 或 `FACET_HOST` 时改成监听 TCP，`FACET_SOCKET` 可以指定别的 socket 路径。
 - **远程**：主机清单里填 `user@host`（或 `ssh://user@host:端口`），桌面用进程内的 SSH 库连过去，读远端的发现文件拿到 socket 路径与令牌，再在远端 socket 上开一条通道；远端不开端口、本地也不开端口，协议层一行不用改。认证先用 `~/.ssh/config` 里的私钥与 ssh-agent；没有可用的私钥、或服务器拒绝这把密钥时问一次登录密码，密码留在桌面主进程内存里供重连使用，不写进清单。主机密钥按 `known_hosts` 校验（支持哈希条目），未知或变更的密钥直接拒绝（用 `ssh-keyscan 主机 >> ~/.ssh/known_hosts` 收下新主机）。Windows 远端只监听命名管道时无法用 SSH 通道，退回走远端的 TCP 回环地址。
 - **远程端不需要开关**：能拿到这台机器的 SSH 登录权，就等于那台机器的使用者，SSH 通道送进来的连接按本机档处理（管理档），不受 `FACET_REMOTE_PERMISSION` 约束。那条开关收窄的是会自己声明权限档的远程端：Web 端声明操作档，主机缺省把它收成只读，`FACET_REMOTE_PERMISSION=operate` 才放行。
 - **权限档**：本机连接与 SSH 通道是管理档；自己声明档位的远程连接（Web）按 `FACET_REMOTE_PERMISSION` 给操作档或只读档。设置与凭证、提供方、项目增删与信任、诊断按入口放行：桌面设备开的通道可以（本机 socket 与 SSH 隧道都算），浏览器入口不行；只读档连会话与文件都不能改，输入区只是发送按钮不可用。远程的写操作记进 `$FACET_DATA_DIR/audit.log`（时间、连接标识、权限档、操作与结果，不含参数与内容）。
@@ -234,7 +234,7 @@ npm run dist -w @facet/desktop
 
 | 变量 | 含义 |
 |---|---|
-| `FACET_HOST`、`FACET_PORT` | 主机端点监听地址与端口，缺省 `127.0.0.1`、系统分配 |
+| `FACET_HOST`、`FACET_PORT` | 给出任意一个就改成监听 TCP；缺省只开 unix socket |
 | `FACET_HOST_NAME` | 主机展示名 |
 | `FACET_AGENT_DIR` | pi 数据目录 |
 | `FACET_SESSION_DIR` | 会话文件目录，缺省按工作目录分组 |
@@ -242,15 +242,14 @@ npm run dist -w @facet/desktop
 | `FACET_REPLAY_LIMIT` | 每个通道保留的动作条数 |
 | `FACET_SESSION_IDLE_MS` | 没人订阅且空闲后多久回收会话 |
 | `FACET_DEBUG` | 打开主机侧调试日志 |
-| `FACET_ENDPOINT` | 桌面连这个主机（`host:port`），不再拉起本机主机 |
-| `FACET_SOCKET` | 主机监听的 unix socket 路径或命名管道名，给出后不再监听 TCP |
+| `FACET_ENDPOINT` | 桌面连这个主机（`host:port` 或 `ssh://user@host`），不再用本机发现文件 |
+| `FACET_SOCKET` | 指定 unix socket 的路径，缺省 `$XDG_RUNTIME_DIR/<数据目录名>/host.sock` |
 | `FACET_REMOTE_PERMISSION` | 远程连接申请档位的上限：`view`（只读，缺省）或 `operate`（可申请操作档） |
 | `FACET_WEB_PORT` | Web 端接入端口，缺省关闭；同一个端口发页面也接 WebSocket |
 | `FACET_PTY_HOST` | pty 子进程入口，缺省与主机入口同目录（`pty-host.js` 或 `pty-host-child.ts`） |
 | `FACET_WEB_ROOT` | Web 页面的构建产物目录，缺省不提供页面 |
 | `FACET_TOKEN` | 连接令牌，缺省随机生成并写进发现文件 |
 | `FACET_NO_TOKEN` | 设为 `1` 时不校验令牌，只用于本机调试 |
-| `FACET_EMBEDDED` | 开发时设为 `1`，桌面像打包那样自己拉起本机主机 |
 | `FACET_PARENT_PID` | 让主机盯着一个进程，那个进程消失后主机自行结束；不再由桌面设置，调试残留进程时用得上 |
 | `FACET_PROJECT_DIR` | 启动时打开的项目目录 |
 | `FACET_SKIP_ELECTRON_DOWNLOAD` | `1` 表示跳过 Electron 二进制检查 |

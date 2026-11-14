@@ -6,7 +6,7 @@
  */
 import { randomBytes } from "node:crypto";
 import { homedir } from "node:os";
-import { isAbsolute, join } from "node:path";
+import { basename, isAbsolute, join } from "node:path";
 import { DEFAULT_AGENT_DIR } from "@facet/agent";
 
 /** 主机的运行配置。 */
@@ -74,6 +74,22 @@ function readFlag(value: string | undefined): boolean {
 	return normalized === "1" || normalized === "true";
 }
 
+/**
+ * 本机缺省的 unix socket 路径。
+ *
+ * 优先放到 `XDG_RUNTIME_DIR`（目录 0700，退出登录由系统清理）；没有这个变量时退回数据目录。
+ * 目录名取数据目录的叶子名（`facet` / `facet-dev`），开发实例与发布实例不互相覆盖。
+ * unix socket 的路径上限约 107 字节，所以只拼叶子名，不拼整条数据目录。
+ */
+function defaultSocketPath(env: Record<string, string | undefined>, dataDir: string): string {
+	const leaf = basename(dataDir);
+	const runtime = env.XDG_RUNTIME_DIR?.trim();
+	if (runtime !== undefined && isAbsolute(runtime)) {
+		return join(runtime, leaf, "host.sock");
+	}
+	return join(dataDir, "host.sock");
+}
+
 /** 按 XDG 规范取应用数据目录，非绝对路径的 XDG_DATA_HOME 按未设置处理。 */
 function defaultDataDir(env: Record<string, string | undefined>): string {
 	const xdg = env.XDG_DATA_HOME?.trim();
@@ -92,13 +108,16 @@ function readInt(value: string | undefined, fallback: number): number {
 /** 从环境变量读取配置。 */
 export function loadServerConfig(env: Record<string, string | undefined> = process.env): ServerConfig {
 	const hostName = env.FACET_HOST_NAME?.trim();
+	const dataDir = env.FACET_DATA_DIR?.trim() || defaultDataDir(env);
+	// 显式给了监听地址或端口就按 TCP 走；其余情况本机只开 unix socket，不占任何端口
+	const wantsTcp = (env.FACET_HOST?.trim() ?? "") !== "" || (env.FACET_PORT?.trim() ?? "") !== "";
 	return {
 		host: env.FACET_HOST?.trim() || DEFAULT_HOST,
 		port: readInt(env.FACET_PORT, DEFAULT_PORT),
 		agentDir: env.FACET_AGENT_DIR?.trim() || DEFAULT_AGENT_DIR,
 		sessionDir: env.FACET_SESSION_DIR?.trim() || undefined,
-		dataDir: env.FACET_DATA_DIR?.trim() || defaultDataDir(env),
-		socketPath: env.FACET_SOCKET?.trim() || undefined,
+		dataDir,
+		socketPath: env.FACET_SOCKET?.trim() || (wantsTcp ? undefined : defaultSocketPath(env, dataDir)),
 		remotePermission: env.FACET_REMOTE_PERMISSION?.trim() === "operate" ? "operate" : "view",
 		webPort: env.FACET_WEB_PORT === undefined ? undefined : readInt(env.FACET_WEB_PORT, 0) || undefined,
 		webRoot: env.FACET_WEB_ROOT?.trim() || undefined,

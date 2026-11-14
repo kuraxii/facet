@@ -169,7 +169,7 @@ export async function readDiscovery(dataDir: string): Promise<DiscoveryRecord | 
 }
 
 export interface HostDaemonOptions {
-	/** 启动命令：打包后是自己带的 node，开发时是 Electron 以 Node 模式运行 */
+	/** 启动命令：指向 server 产物里自带的 node */
 	command: string;
 	/** 启动参数 */
 	args: readonly string[];

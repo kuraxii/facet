@@ -50,7 +50,7 @@ const READY_WAIT_MS = 20_000;
 /** 主机数据目录，发现文件与主机日志都在这里；开发实例带 -dev 后缀，与发布实例分开 */
 const dataDir = resolveDataDir(process.env, { isDev });
 
-/** 主机进程怎么起：独立产物优生，没有就退回 Electron 的 Node 模式 */
+/** server 怎么起：用独立产物里自带的 Node；没有产物时为空，界面会显示连不上并能重试 */
 const hostLaunch = resolveHostLaunch();
 
 /** 本机当前连着的主机，界面通过主进程的通道访问它 */
@@ -387,23 +387,24 @@ ipcMain.on("facet:host-close", (_event, id: number) => {
 });
 
 /**
- * 主机的启动方式。
+ * server 的启动方式。
  *
- * 打包后优先用独立产物：`resources/server/bin/node` 是随包带的官方 Node，`lib/server.mjs` 是
- * server 入口，跟桌面那份 Electron 运行时互不相干。没有产物时退回开发态的做法——用 Electron
- * 自己的可执行文件以 Node 模式跑 `out/main/server.js`。
+ * 打包后是随包的独立产物 `resources/server`，开发时是同一份产物的构建结果
+ * `apps/desktop/dist-server`。两边都用官方 Node 跑 `lib/server.mjs`：原生模块（`node-pty`）
+ * 只针对 Node ABI 构建一次，不必再为 Electron 的 ABI 编一遍。
+ *
+ * 开发态没打过产物时直接报错，而不是悄悄换成别的运行时——那会把两种 ABI 混在一起。
  */
-function resolveHostLaunch(): { command: string; args: string[]; env: NodeJS.ProcessEnv } {
-	const bundled = join(process.resourcesPath, "server");
+function resolveHostLaunch(): { command: string; args: string[]; env: NodeJS.ProcessEnv } | undefined {
+	const bundled = app.isPackaged
+		? join(process.resourcesPath, "server")
+		: join(app.getAppPath(), "dist-server");
 	const node = join(bundled, "bin", "node");
-	if (existsSync(node)) {
-		return { command: node, args: [join(bundled, "lib", "server.mjs")], env: {} };
+	if (!existsSync(node)) {
+		console.error(`找不到 server 产物：${bundled}，先跑 npm run build:server`);
+		return undefined;
 	}
-	return {
-		command: process.execPath,
-		args: [join(app.getAppPath(), "out/main/server.js")],
-		env: { ELECTRON_RUN_AS_NODE: "1" },
-	};
+	return { command: node, args: [join(bundled, "lib", "server.mjs")], env: {} };
 }
 
 /** `host:port` 写法拆成 TCP 目标，拆不出来时返回 undefined。 */
@@ -426,12 +427,19 @@ app.whenReady().then(async () => {
 			const info = await readDiscovery(dataDir).catch(() => undefined);
 			console.log(`接上已在运行的主机 ${info?.hostId ?? "?"} 监听 ${running.path}`);
 			resolveReady = undefined;
+		} else if (hostLaunch === undefined) {
+			console.error("没有可用的 server 产物，跳过启动");
 		} else {
 			host = new HostDaemon({
 				...hostLaunch,
 				dataDir,
 				// 开发启动打开主机侧调试日志，打包运行留给 FACET_DEBUG 手动开启
-				env: { ...hostLaunch.env, ...(isDev ? { FACET_DEBUG: "1" } : {}) },
+				env: {
+					...hostLaunch.env,
+					...(isDev ? { FACET_DEBUG: "1" } : {}),
+					// 开发态自己拉起的 server 跟着桌面一起退，免得留下一堆进程；打包后由主机自己管生命周期
+					...(isDev ? { FACET_PARENT_PID: String(process.pid) } : {}),
+				},
 				onReady: (info) => {
 					localHost = info;
 					// 发现文件只用于日志：主机标识与 pi 数据目录在那里，不参与连接

@@ -1,7 +1,6 @@
 # 发行包配置。只出 Linux 的 rpm 与 deb 两种，macOS、Windows、AppImage 不做。
 #
-# 三个入口都要进包：桌面本体、嵌入 server、以及 server 再往下起的 pty 子进程，三者在 out/main
-# 下同级，`pty-server.js` 按同目录解析。
+# 桌面本体进 asar；server 与其 pty 子进程在独立产物里（见 extraResources），不占 asar。
 appId: app.facet.desktop
 productName: Facet
 copyright: Facet

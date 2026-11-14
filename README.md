@@ -38,8 +38,11 @@ apps/desktop/dist-server/
 
 打包时整个目录进 `resources/server`，桌面启动 server 用的就是
 `resources/server/bin/node resources/server/lib/server.mjs`，与桌面那份 Electron 运行时互不相干。
-开发时不打这个产物，桌面按老办法用 Electron 本身当 Node 跑 `out/main/server.js`
-（`resolveHostLaunch` 里按 `resources/server/bin/node` 是否存在切换）。
+
+开发态跑的是同一份产物（`apps/desktop/dist-server`），也用自带的 Node 启动，所以原生模块
+（`node-pty`）只需要针对 Node ABI 构建一次，不必再为 Electron 的 ABI 编一遍。
+`npm run dev` 会先打一次产物再起两边；只跑 `dev:desktop` 时要求产物已经存在，否则控制台会提
+示先 `npm run build:server`。
 
 远程那台机器装上包（rpm/deb 都装到 `/opt/Facet`），桌面通过 SSH 就能把它拉起来，不需要拷贝目录。
 
@@ -49,13 +52,16 @@ apps/desktop/dist-server/
 `~/.local/share/facet-dev/facet.sock`），桌面按同一套规则拼出路径直接连，两边都不用填端口：
 
 ```bash
-npm run dev            # 主机与桌面一起起，各自热重启
-npm run dev:desktop    # 只起桌面；socket 连不上时自己拉起主机
-npm run dev:host       # 只起主机，桌面起来后自己连上它
+npm run dev            # 打产物 → 起 server → 起桌面；桌面退出时 server 一起收掉
+npm run dev:desktop    # 只起桌面；socket 连不上时自己拉起 server
+npm run dev:host       # 只起 server，桌面起来后自己连上它
 npm run dev:split      # 与 dev 相同，保留这个更明确的名字
 ```
 
-要分开看两边日志时用 `npm run dev:host` 加 `npm run dev:desktop` 各起一个终端。
+`dev` 的编排在 `scripts/dev-split.mjs`：两边输出各加前缀，桌面退出（或 Ctrl+C）时把 server
+一起收掉；单独跑 `dev:desktop` 时，桌面自己拉起的 server 会带上 `FACET_PARENT_PID`，桌面进程
+消失后 2 秒内自行结束，不留孤儿进程。要分开看两边日志时用 `npm run dev:host` 加
+`npm run dev:desktop` 各起一个终端。
 
 开发与打包走同一条路：不给 `FACET_ENDPOINT` 就是本机主机，差别只在开发实例的数据目录带
 `-dev` 后缀（socket 也就叫 `facet-dev.sock`）。要连别处的主机（TCP 端点，或 `ssh://` 远程主机）用 `FACET_ENDPOINT`：

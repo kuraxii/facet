@@ -17,8 +17,6 @@ const PACKAGE = JSON.parse(readFileSync(fileURLToPath(new URL("package.json", im
  */
 const MAIN_ENTRIES = {
 	index: fileURLToPath(new URL("src/main/index.ts", import.meta.url)),
-	server: fileURLToPath(new URL("../../apps/server/src/main.ts", import.meta.url)),
-	"pty-server": fileURLToPath(new URL("../../apps/server/src/pty-server-child.ts", import.meta.url)),
 };
 
 /**

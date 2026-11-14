@@ -24,15 +24,7 @@ import { Markdown } from "../markdown/Markdown.tsx";
 import { ChevronIcon, TreeChevron } from "./chevron.tsx";
 import { lineClass, patchLines } from "./diff-lines.ts";
 import { type DiffChunk, type DisplayRow, groupLabel, groupRows, turnDurationText } from "./group.ts";
-import {
-	foldOutput,
-	scriptBody,
-	scriptCode,
-	type ToolCategory,
-	toolDetail,
-	toolKind,
-	toolTarget,
-} from "./tool-text.ts";
+import { foldOutput, type ToolCategory, toolDetail, toolKind, toolTarget } from "./tool-text.ts";
 
 /** 面板参数。 */
 export interface ChatTranscriptProps {
@@ -190,9 +182,8 @@ function ToolRow({ part }: { part: ToolCallPart }) {
 	// 行被收起或整行消失时，未到点的定时器不能再弹
 	useEffect(() => () => window.clearTimeout(tipTimer.current), []);
 	const output = part.output ?? "";
-	// 脚本类工具的返回内容前面挂着一层运行信息，展开时只给正文
-	const code = scriptCode(part.input);
-	const body = code === undefined ? output : scriptBody(output);
+	// 展开给的就是工具结果原文：模型看到的那份，界面上不再删改任何一行
+	const body = output;
 	const folded = foldOutput(body);
 	const isLong = folded.hiddenLines > 0;
 	const shown = isLong && !isExpanded ? folded.preview : body;

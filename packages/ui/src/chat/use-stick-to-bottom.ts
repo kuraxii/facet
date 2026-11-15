@@ -11,6 +11,14 @@ const PIN_THRESHOLD = 24;
 /** 平滑回底的动画时长估计，动画期间不按位置判断跟随状态。 */
 const SMOOTH_MS = 500;
 
+/** 切回会话时要恢复的滚动位置。 */
+export interface ScrollRestore {
+	/** 距内容顶部的像素 */
+	readonly top: number;
+	/** 保存时是否贴在底部 */
+	readonly atBottom: boolean;
+}
+
 /** 滚动跟随的句柄。 */
 export interface StickToBottom {
 	/** 挂到滚动容器上 */
@@ -29,8 +37,14 @@ export interface StickToBottom {
  * contentKey 变化时若处于贴底则重新滚到底；resetKey 变化时强制回到贴底，用于切换会话。
  * 容器内容高度变化（图片、代码高亮等异步渲染）时，贴底状态下同样跟到底。
  */
-export function useStickToBottom(contentKey: unknown, resetKey: unknown): StickToBottom {
+export function useStickToBottom(
+	contentKey: unknown,
+	resetKey: unknown,
+	options: { restore?: (key: unknown) => ScrollRestore | undefined } = {},
+): StickToBottom {
 	const [element, setElement] = useState<HTMLDivElement | null>(null);
+	const restoreRef = useRef(options.restore);
+	restoreRef.current = options.restore;
 	const pinnedRef = useRef(true);
 	const animatingRef = useRef(false);
 	const [isPinned, setIsPinned] = useState(true);
@@ -70,12 +84,17 @@ export function useStickToBottom(contentKey: unknown, resetKey: unknown): StickT
 		[element, applyPinned],
 	);
 
-	// 切换会话时回到贴底
-	// biome-ignore lint/correctness/useExhaustiveDependencies: 会话标识只作重置信号,不参与计算
+	// 切换会话时恢复保存的位置；没有记录或原来贴底时回到贴底
 	useLayoutEffect(() => {
+		const saved = restoreRef.current?.(resetKey);
+		if (saved !== undefined && !saved.atBottom && element !== null) {
+			applyPinned(false);
+			element.scrollTop = saved.top;
+			return;
+		}
 		applyPinned(true);
 		jumpToBottom();
-	}, [resetKey, applyPinned, jumpToBottom]);
+	}, [resetKey, element, applyPinned, jumpToBottom]);
 
 	// 内容变化时跟随
 	// biome-ignore lint/correctness/useExhaustiveDependencies: 内容标识只作跟随信号,不参与计算

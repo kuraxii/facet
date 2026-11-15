@@ -177,7 +177,7 @@ export type { EndpointHandle } from "./endpoint.ts";
 export { EventLog } from "./event-log.ts";
 export type { HostIdentity, HostSource } from "./host-identity.ts";
 export { loadOrCreateHostId } from "./host-identity.ts";
-export { debugLog, isDebugLogEnabled, setDebugLog } from "./log.ts";
+export { debugLog, errorLog, isDebugLogEnabled, setDebugLog } from "./log.ts";
 export type { ProjectSource } from "./project-catalog.ts";
 export { ProjectCatalog } from "./project-catalog.ts";
 export type { ProjectStoreOptions, StoredProject } from "./project-store.ts";

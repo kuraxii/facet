@@ -262,7 +262,10 @@ const handshake: HostHandshake = {
 	capabilities: ["dispatch"],
 };
 
-function createClient(entryCount: number, options: { initialPages?: number; pageSize?: number } = {}) {
+function createClient(
+	entryCount: number,
+	options: { initialPages?: number; pageSize?: number; sessionRetentionMs?: number } = {},
+) {
 	const transport = new FakeTransport(entryCount);
 	const client = new SessionClient({ transport, ...options });
 	client.attach(handshake);
@@ -416,6 +419,56 @@ describe("SessionClient", () => {
 		expect(client.current?.sessionId).toBe("c");
 	});
 
+	it("切回已缓存的会话不再重新打开", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/a.jsonl");
+		await client.switchSession("/tmp/b.jsonl");
+		const before = transport.calls.length;
+		const opened = await client.switchSession("/tmp/a.jsonl");
+		expect(opened.file).toBe("/tmp/a.jsonl");
+		expect(transport.calls.slice(before).filter((call) => call.method === "openSession")).toHaveLength(0);
+		expect(transport.calls.slice(before).filter((call) => call.method === "entries")).toHaveLength(0);
+		expect(client.chatView()?.channel).toBe("chat:/a");
+	});
+
+	it("未激活的会话仍然接收动作", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/a.jsonl");
+		await client.switchSession("/tmp/b.jsonl");
+		transport.emit("chat:/a", { type: "chat/notice", level: "info", message: "后台消息" }, 1);
+		expect(client.store.chatView("chat:/a")?.notices).toEqual([{ level: "info", message: "后台消息" }]);
+	});
+
+	it("关闭标签后保留缓存，超时才释放", async () => {
+		vi.useFakeTimers();
+		try {
+			const { client } = createClient(2, { sessionRetentionMs: 1000 });
+			await client.openSession("/tmp/a.jsonl");
+			await client.switchSession("/tmp/b.jsonl");
+			client.closeSession("/tmp/a.jsonl");
+			expect(client.hasSession("/tmp/a.jsonl")).toBe(true);
+			await vi.advanceTimersByTimeAsync(1000);
+			expect(client.hasSession("/tmp/a.jsonl")).toBe(false);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("关闭标签后重新切回会取消释放", async () => {
+		vi.useFakeTimers();
+		try {
+			const { client } = createClient(2, { sessionRetentionMs: 1000 });
+			await client.openSession("/tmp/a.jsonl");
+			await client.switchSession("/tmp/b.jsonl");
+			client.closeSession("/tmp/a.jsonl");
+			await client.switchSession("/tmp/a.jsonl");
+			await vi.advanceTimersByTimeAsync(1000);
+			expect(client.hasSession("/tmp/a.jsonl")).toBe(true);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
 	it("切换失败时退掉半个订阅,原来的会话仍然可用,可以重试", async () => {
 		const { transport, client } = createClient(2);
 		await client.openSession("/tmp/a.jsonl");
@@ -435,6 +488,18 @@ describe("SessionClient", () => {
 		const opened = await client.switchSession("/tmp/b.jsonl");
 		expect(opened.file).toBe("/tmp/b.jsonl");
 		expect(client.sessionView()?.channel).toBe("session:/b");
+	});
+
+	it("删除当前会话后队列继续执行", async () => {
+		const { client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		const timeout = new Promise<never>((_resolve, reject) => {
+			setTimeout(() => reject(new Error("delete deadlocked")), 100);
+		});
+		await expect(Promise.race([client.deleteSession("/tmp/s1.jsonl"), timeout])).resolves.toBeUndefined();
+		expect(client.current).toBeUndefined();
+		const reopened = await client.openSession("/tmp/s1.jsonl");
+		expect(reopened.file).toBe("/tmp/s1.jsonl");
 	});
 
 	it("项目请求带上参数", async () => {
@@ -470,13 +535,13 @@ describe("SessionClient", () => {
 		expect(client.hasMore).toBe(true);
 	});
 
-	it("缺省装载全部历史", async () => {
+	it("缺省装载最近两页", async () => {
 		const { client } = createClient(12, { pageSize: 5 });
 		await client.openSession("/tmp/s1.jsonl");
 		const messages = client.chatView()?.items ?? [];
-		expect(messages).toHaveLength(12);
-		expect(messages[0]?.id).toBe("e:e1");
-		expect(client.hasMore).toBe(false);
+		expect(messages).toHaveLength(10);
+		expect(messages[0]?.id).toBe("e:e3");
+		expect(client.hasMore).toBe(true);
 	});
 
 	it("继续往更早翻页时补在前面且不重复", async () => {
@@ -493,6 +558,17 @@ describe("SessionClient", () => {
 		expect(client.hasMore).toBe(true);
 		await client.loadOlder();
 		expect(client.hasMore).toBe(false);
+	});
+
+	it("同时发起多次向前翻页只请求一页", async () => {
+		const { transport, client } = createClient(25, { initialPages: 1, pageSize: 5 });
+		await client.openSession("/tmp/s1.jsonl");
+		const before = transport.calls.filter((call) => call.method === "entries").length;
+		const first = client.loadOlder();
+		const second = client.loadOlder();
+		await Promise.all([first, second]);
+		expect(transport.calls.filter((call) => call.method === "entries")).toHaveLength(before + 1);
+		expect(client.chatView()?.items).toHaveLength(10);
 	});
 
 	it("订阅返回的序号成为基线,首条动作不误报缺口", async () => {
@@ -521,7 +597,23 @@ describe("SessionClient", () => {
 		await new Promise((resolve) => setTimeout(resolve, 10));
 		const after = transport.calls.filter((call) => call.method === "entries").length;
 		expect(after).toBeGreaterThan(before);
-		expect(client.chatView()?.items.length).toBe(12);
+		expect(client.chatView()?.items.length).toBe(5);
+		expect(client.hasMore).toBe(true);
+	});
+
+	it("重载失败时保留旧视图和游标", async () => {
+		const { transport, client } = createClient(25, { initialPages: 1, pageSize: 5 });
+		await client.openSession("/tmp/s1.jsonl");
+		const before = (client.chatView()?.items ?? []).map((item) => item.id);
+		expect(before).toHaveLength(5);
+		transport.failNext = "entries";
+		transport.emit(CHAT, { type: "chat/notice", level: "info", message: "第一条" }, 1);
+		transport.emit(CHAT, { type: "chat/notice", level: "warning", message: "跳号" }, 9);
+		await new Promise((resolve) => setTimeout(resolve, 10));
+		expect((client.chatView()?.items ?? []).map((item) => item.id)).toEqual(before);
+		expect(client.hasMore).toBe(true);
+		const page = await client.loadOlder();
+		expect(page.loaded).toBe(5);
 	});
 
 	it("settled 之后把实时消息提升为历史消息并记下边界", async () => {
@@ -566,6 +658,33 @@ describe("SessionClient", () => {
 		expect(transport.calls.filter((call) => call.method === "entriesAfter")).toEqual([
 			{ method: "entriesAfter", params: { sessionId: opened.sessionId, afterEntryId: "e2" } },
 		]);
+	});
+
+	it("中止后直接重载最近页，不再请求提升", async () => {
+		const { transport, client } = createClient(25, { initialPages: 1, pageSize: 5 });
+		await client.openSession("/tmp/s1.jsonl");
+		const before = transport.calls.filter((call) => call.method === "entries").length;
+		transport.emit(CHAT, { type: "chat/settled", aborted: true });
+		await vi.waitFor(() => {
+			expect(transport.calls.filter((call) => call.method === "entries")).toHaveLength(before + 1);
+		});
+		expect(transport.calls.filter((call) => call.method === "entriesAfter")).toHaveLength(0);
+		expect(client.chatView()?.items).toHaveLength(5);
+		expect(client.hasMore).toBe(true);
+	});
+
+	it("entriesAfter 失败后只重载最近页", async () => {
+		const { transport, client } = createClient(25, { initialPages: 1, pageSize: 5 });
+		await client.openSession("/tmp/s1.jsonl");
+		const before = transport.calls.filter((call) => call.method === "entries").length;
+		transport.failNext = "entriesAfter";
+		transport.emit(CHAT, { type: "chat/settled", aborted: false });
+		await vi.waitFor(() => {
+			expect(transport.calls.filter((call) => call.method === "entries")).toHaveLength(before + 1);
+		});
+		expect(transport.calls.filter((call) => call.method === "entriesAfter")).toHaveLength(1);
+		expect(client.chatView()?.items).toHaveLength(5);
+		expect(client.hasMore).toBe(true);
 	});
 
 	it("手动压缩结束后同步分界，重新打开仍然保留", async () => {
@@ -1316,8 +1435,9 @@ describe("回退", () => {
 		await new Promise((done) => setTimeout(done, 20));
 		const after = transport.calls.filter((call) => call.method === "entries").length;
 		expect(after).toBeGreaterThan(before);
-		// 清空之后重新装载，条目不会叠加
-		expect(client.chatView()?.items).toHaveLength(25);
+		// 清空之后只重新装载最近两页，更早的历史继续向前翻
+		expect(client.chatView()?.items).toHaveLength(20);
+		expect(client.hasMore).toBe(true);
 	});
 });
 
@@ -1401,7 +1521,8 @@ describe("扩展交互状态", () => {
 		resolve();
 		expect(await response).toBe(false);
 		expect(client.sessionView()?.channel).toBe("session:/s2");
-		expect(client.store.sessionView(SESSION)).toBeUndefined();
+		// 旧会话留在缓存里，但不会被这次过期应答刷新
+		expect(client.store.sessionView(SESSION)?.channel).toBe(SESSION);
 	});
 
 	it("扩展消费回执只确认同一端的同一次发送，回执不增加对话条目", async () => {

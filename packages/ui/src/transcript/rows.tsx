@@ -26,7 +26,14 @@ import { useI18n } from "../i18n/I18nProvider.tsx";
 import { Markdown } from "../markdown/Markdown.tsx";
 import { ChevronIcon, TreeChevron } from "./chevron.tsx";
 import { lineClass, patchLines } from "./diff-lines.ts";
-import { type DiffChunk, type DisplayRow, groupLabel, groupRows, turnDurationText } from "./group.ts";
+import {
+	type DiffChunk,
+	type DisplayRow,
+	groupLabel,
+	groupRows,
+	isTurnTimingLive,
+	turnDurationText,
+} from "./group.ts";
 import { foldOutput, type ToolCategory, toolDetail, toolKind, toolTarget } from "./tool-text.ts";
 
 /** 面板参数。 */
@@ -84,7 +91,8 @@ function useNow(isTicking: boolean): number | undefined {
 		const timer = setInterval(() => setNow(Date.now()), 1000);
 		return () => clearInterval(timer);
 	}, [isTicking]);
-	return now;
+	// 刚进入计时的第一帧还没有定时器时间，先用当前时刻，避免时长闪空
+	return isTicking ? (now ?? Date.now()) : now;
 }
 
 /** 默认收起的行。 */
@@ -478,7 +486,7 @@ export function ChatTranscript({
 	// 第一条用户消息之前没有可回退的轮次
 	const firstUserRowId = rows.find((row) => row.kind === "user")?.id;
 	const [overrides, setOverrides] = useState<ReadonlyMap<string, boolean>>(() => new Map());
-	const isTicking = rows.some((row) => row.isStreaming && row.startedAt !== undefined);
+	const isTicking = isTurnTimingLive(rows);
 	const now = useNow(isTicking);
 	// 重试开始的时刻,倒计时以它为准;重试结束或次数变化时重新计时
 	const retryKey = retry === undefined ? undefined : `${retry.attempt}/${retry.maxAttempts}`;

@@ -65,10 +65,12 @@
 
 /* 右栏那一格：展开时与右栏同宽，窗口按钮压在这一格最右边；收起时收到只剩开关与按钮 */
 .chrome-slot.is-panel {
+	display: flex;
 	flex: none;
 	gap: 4px;
 	width: var(--panel-width);
 	padding-left: 4px;
+	overflow: hidden;
 	-webkit-app-region: no-drag;
 }
 
@@ -106,7 +108,9 @@
 
 .window-controls {
 	display: flex;
-	flex: none;
+	flex: 0 0 auto;
+	min-width: calc(var(--window-button-width) * 3);
+	margin-left: auto;
 	-webkit-app-region: no-drag;
 }
 

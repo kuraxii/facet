@@ -53,8 +53,10 @@
 
 .panel-tabs {
 	display: flex;
-	flex: none;
+	flex: 0 1 auto;
 	gap: 2px;
+	min-width: 0;
+	overflow: hidden;
 	-webkit-app-region: no-drag;
 }
 

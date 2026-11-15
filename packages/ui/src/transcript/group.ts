@@ -489,6 +489,11 @@ export function turnDurationText(row: DisplayRow, now?: number, t: Translate = f
 	return text.length === 0 ? "" : t("transcript.duration", { duration: text });
 }
 
+/** 是否有还在计时的回合；有结束时间或没有开始时间的行不参与。 */
+export function isTurnTimingLive(rows: readonly DisplayRow[]): boolean {
+	return rows.some((row) => row.durationMs === undefined && row.startedAt !== undefined);
+}
+
 /** 毫秒转成 paseo 那种短写法：7s、3m 16s、1h 5m。 */
 export function formatDuration(ms: number): string {
 	if (!Number.isFinite(ms) || ms < 0) {

@@ -38,7 +38,8 @@ import type {
 	UiResponse,
 } from "@facet/protocol";
 import { makeChannel, parseChannel, sessionsChannelFor } from "@facet/protocol";
-import { debugLog } from "./log.ts";
+import { debugLog, errorLog } from "./log.ts";
+import { isHistoryMessageId } from "./message-id.ts";
 import type { ChatView, SessionView } from "./state.ts";
 import type { ChannelGap } from "./store.ts";
 import { SessionStore } from "./store.ts";
@@ -108,10 +109,12 @@ export interface SessionTransport {
 
 export interface SessionClientOptions {
 	transport: SessionTransport;
-	/** 打开会话时装载的页数,缺省取完所有历史 */
+	/** 打开会话时装载的页数,缺省 2 */
 	initialPages?: number;
 	/** 每页条数,缺省 50 */
 	pageSize?: number;
+	/** 关闭标签后保留会话的时间，缺省 3 分钟 */
+	sessionRetentionMs?: number;
 }
 
 /** 打开一个会话后的句柄。 */
@@ -125,6 +128,31 @@ export interface OpenedSession {
 }
 
 const DEFAULT_PAGE_SIZE = 50;
+const DEFAULT_INITIAL_PAGES = 2;
+const DEFAULT_SESSION_RETENTION_MS = 3 * 60 * 1000;
+
+/** 一条已建立订阅的会话，切换标签时保留这些状态。 */
+interface SessionRuntime {
+	readonly opened: OpenedSession;
+	/** 下一页更早历史的游标，为空表示已经到最早 */
+	olderCursor: string | undefined;
+	/** 已提交到视图的末条目 id，提升实时消息时作为边界传给主机 */
+	lastEntryId: string | undefined;
+	/** 串行执行提升，避免连续 settled 时请求交错 */
+	commitChain: Promise<void>;
+	/** 串行执行历史重载，避免同一会话并发请求 */
+	reloadChain: Promise<void>;
+	/** 历史视图的代次，重载或释放后旧响应不再写入 */
+	historyEpoch: number;
+	/** 正在进行的向前翻页请求 */
+	olderTask: Promise<{ loaded: number; hasMore: boolean }> | undefined;
+	/** 缺口补齐进行中的通道 */
+	resyncing: { session: boolean; chat: boolean };
+	/** 等待主机确认的输入 */
+	pendingSend: { clientSeq: number; text: string; kind: "turn" | "steering" } | undefined;
+	/** 关闭标签后的保留定时器 */
+	retainTimer: ReturnType<typeof setTimeout> | undefined;
+}
 
 /**
  * 主机是不是不认识这个会话。
@@ -141,34 +169,107 @@ export class SessionClient {
 	private readonly transport: SessionTransport;
 	private readonly initialPages: number;
 	private readonly pageSize: number;
+	private readonly sessionRetentionMs: number;
 	private readonly state = new SessionStore();
 	private readonly stops: (() => void)[] = [];
 	/** 动作订阅,重连时替换 */
 	private stopActions: (() => void) | undefined;
 	/** 连接状态订阅,只挂一次 */
 	private stopState: (() => void) | undefined;
-	/** 缺口补齐进行中的通道,避免叠加请求 */
-	private readonly resyncing = { session: false, chat: false };
 	private handshake: HostHandshake | undefined;
-	private opened: OpenedSession | undefined;
-	/** 等待主机确认的输入:turn 等消息入对话,steering 等队列里出现这段文字 */
-	private pendingSend: { clientSeq: number; text: string; kind: "turn" | "steering" } | undefined;
+	/** 已订阅的会话，按会话 id 保留视图与分页状态 */
+	private readonly runtimes = new Map<string, SessionRuntime>();
+	/** 当前激活的会话 id */
+	private activeId: string | undefined;
 	private readonly sentListeners = new Set<(text: string) => void>();
 	/** 是否已经挂了缺口监听,避免重复注册 */
 	private isGapWatched = false;
-	/** 下一页更早历史的游标,为空表示已经到最早 */
-	private olderCursor: string | undefined;
-	/** 已提交到视图的末条目 id,提升实时消息时作为边界传给主机 */
-	private lastEntryId: string | undefined;
-	/** 串行执行提升,避免连续 settled 时请求交错 */
-	private commitChain: Promise<void> = Promise.resolve();
+	/** 项目信任查询缓存，切换标签时不重复请求 */
+	private readonly trustCache = new Map<
+		string,
+		{ hasProjectResources: boolean; trusted: boolean | undefined }
+	>();
 	/** 会话级操作排队执行,快速切换时按到达顺序收尾 */
 	private lifecycle: Promise<unknown> = Promise.resolve();
 
 	constructor(options: SessionClientOptions) {
 		this.transport = options.transport;
-		this.initialPages = options.initialPages ?? Number.POSITIVE_INFINITY;
+		const pages = options.initialPages ?? DEFAULT_INITIAL_PAGES;
+		this.initialPages = Number.isFinite(pages) ? Math.max(1, Math.trunc(pages)) : DEFAULT_INITIAL_PAGES;
 		this.pageSize = options.pageSize ?? DEFAULT_PAGE_SIZE;
+		this.sessionRetentionMs = options.sessionRetentionMs ?? DEFAULT_SESSION_RETENTION_MS;
+	}
+
+	/** 为一次新订阅建立运行时状态。 */
+	private createRuntime(opened: OpenedSession): SessionRuntime {
+		return {
+			opened,
+			olderCursor: undefined,
+			lastEntryId: undefined,
+			commitChain: Promise.resolve(),
+			reloadChain: Promise.resolve(),
+			historyEpoch: 0,
+			olderTask: undefined,
+			resyncing: { session: false, chat: false },
+			pendingSend: undefined,
+			retainTimer: undefined,
+		};
+	}
+
+	/** 激活一个已经建立订阅的会话。 */
+	private activate(runtime: SessionRuntime): void {
+		if (runtime.retainTimer !== undefined) {
+			clearTimeout(runtime.retainTimer);
+			runtime.retainTimer = undefined;
+		}
+		this.activeId = runtime.opened.sessionId;
+	}
+
+	/** 按会话文件找已缓存的运行时。 */
+	private runtimeForFile(file: string): SessionRuntime | undefined {
+		for (const runtime of this.runtimes.values()) {
+			if (runtime.opened.file === file) return runtime;
+		}
+		return undefined;
+	}
+
+	/** 按通道找所属会话。 */
+	private runtimeForChannel(channel: Channel): SessionRuntime | undefined {
+		const parsed = parseChannel(channel);
+		return parsed === undefined ? undefined : this.runtimes.get(parsed.id);
+	}
+
+	/** 从登记表移除运行时，不负责退订。 */
+	private removeRuntime(runtime: SessionRuntime): void {
+		if (runtime.retainTimer !== undefined) {
+			clearTimeout(runtime.retainTimer);
+			runtime.retainTimer = undefined;
+		}
+		this.runtimes.delete(runtime.opened.sessionId);
+		if (this.active === runtime) {
+			this.activeId = undefined;
+		}
+	}
+
+	/** 当前激活的会话。 */
+	private get active(): SessionRuntime | undefined {
+		return this.activeId === undefined ? undefined : this.runtimes.get(this.activeId);
+	}
+
+	private get opened(): OpenedSession | undefined {
+		return this.active?.opened;
+	}
+
+	private get olderCursor(): string | undefined {
+		return this.active?.olderCursor;
+	}
+
+	private get pendingSend(): SessionRuntime["pendingSend"] {
+		return this.active?.pendingSend;
+	}
+
+	private set pendingSend(value: SessionRuntime["pendingSend"]) {
+		if (this.active !== undefined) this.active.pendingSend = value;
 	}
 
 	/** 状态持有者,界面从这里读视图并订阅变化。 */
@@ -179,6 +280,38 @@ export class SessionClient {
 	/** 当前打开的会话,未打开时为空。 */
 	get current(): OpenedSession | undefined {
 		return this.opened;
+	}
+
+	/** 指定文件是否已经有缓存会话。 */
+	hasSession(file: string): boolean {
+		return this.runtimeForFile(file) !== undefined;
+	}
+
+	/** 直接激活已缓存的会话；用于标签切换，避免再走一次打开队列。 */
+	activateSession(file: string): OpenedSession | undefined {
+		const runtime = this.runtimeForFile(file);
+		if (runtime === undefined) return undefined;
+		this.activate(runtime);
+		return runtime.opened;
+	}
+
+	/** 标记标签已关闭；会话保留一段时间，期间重新打开仍然命中缓存。 */
+	closeSession(file: string): void {
+		const runtime = this.runtimeForFile(file);
+		if (runtime === undefined) return;
+		if (runtime.retainTimer !== undefined) clearTimeout(runtime.retainTimer);
+		runtime.retainTimer = setTimeout(() => {
+			runtime.retainTimer = undefined;
+			if (this.active === runtime) {
+				this.closeSession(file);
+				return;
+			}
+			void this.exclusive(() => this.releaseRuntime(runtime)).catch(() => undefined);
+		}, this.sessionRetentionMs);
+		const timer: unknown = runtime.retainTimer;
+		if (typeof timer === "object" && timer !== null && "unref" in timer) {
+			(timer as { unref: () => void }).unref();
+		}
 	}
 
 	get host(): HostHandshake | undefined {
@@ -204,6 +337,7 @@ export class SessionClient {
 	 */
 	attach(handshake: HostHandshake): void {
 		this.handshake = handshake;
+		this.trustCache.clear();
 		this.stopActions?.();
 		this.stopActions = this.transport.onAction((frame) => {
 			if (frame.rejectionReason !== undefined) {
@@ -211,10 +345,14 @@ export class SessionClient {
 				return;
 			}
 			const isNewFrame = frame.serverSeq > this.state.lastSeq(frame.channel);
-			const wasCompacting = this.sessionView()?.state.maintenance?.kind === "compaction";
+			const runtime = this.runtimeForChannel(frame.channel);
+			const wasCompacting =
+				runtime === undefined
+					? false
+					: this.state.sessionView(runtime.opened.sessionChannel)?.state.maintenance?.kind === "compaction";
 			this.state.apply(frame);
-			if (isNewFrame) {
-				this.observe(frame, wasCompacting);
+			if (isNewFrame && runtime !== undefined) {
+				this.observe(frame, wasCompacting, runtime);
 			}
 			this.confirmSend(frame);
 		});
@@ -291,12 +429,18 @@ export class SessionClient {
 
 	/** 查目录的项目级资源需不需要信任，以及此前的决定。 */
 	async projectTrust(cwd: string): Promise<{ hasProjectResources: boolean; trusted: boolean | undefined }> {
-		return await this.transport.request("projectTrust", { cwd });
+		const cached = this.trustCache.get(cwd);
+		if (cached !== undefined) return cached;
+		const result = await this.transport.request("projectTrust", { cwd });
+		this.trustCache.set(cwd, result);
+		return result;
 	}
 
 	/** 记下目录的信任决定。 */
 	async setProjectTrust(cwd: string, trusted: boolean): Promise<void> {
 		await this.transport.request("setProjectTrust", { cwd, trusted });
+		const cached = this.trustCache.get(cwd);
+		if (cached !== undefined) this.trustCache.set(cwd, { ...cached, trusted });
 	}
 
 	/** 提供方清单，含是否已配置凭证与模型数量。 */
@@ -471,9 +615,10 @@ export class SessionClient {
 	async deleteSession(sessionFile: string): Promise<void> {
 		await this.exclusive(async () => {
 			await this.transport.request("deleteSession", { sessionFile });
-			const opened = this.opened;
-			if (opened !== undefined && opened.file === sessionFile) {
-				await this.release();
+			const runtime = this.runtimeForFile(sessionFile);
+			if (runtime !== undefined) {
+				// 已经在会话队列里，直接释放；再调 release() 会排到当前任务后面形成死锁
+				await this.releaseRuntime(runtime);
 			}
 		});
 	}
@@ -496,17 +641,17 @@ export class SessionClient {
 	/**
 	 * 切到另一个会话。
 	 *
-	 * 先打开新的,成功之后才放掉旧的:打开失败时原来的会话仍然可用,界面不会变成空白。
-	 * 两步在同一次排队里完成,中途不会有另一个切换插进来。
+	 * 已经在缓存的会话直接激活，不再重新打开；新会话建立订阅后替换当前视图，
+	 * 旧会话保留在缓存里供标签来回切换。
 	 */
 	async switchSession(sessionFile: string): Promise<OpenedSession> {
 		return await this.exclusive(async () => {
-			const previous = this.opened;
-			const opened = await this.openUnlocked(sessionFile);
-			if (previous !== undefined && previous.sessionChannel !== opened.sessionChannel) {
-				await this.releaseChannels(previous);
+			const cached = this.runtimeForFile(sessionFile);
+			if (cached !== undefined) {
+				this.activate(cached);
+				return cached.opened;
 			}
-			return opened;
+			return await this.openUnlocked(sessionFile);
 		});
 	}
 
@@ -517,7 +662,7 @@ export class SessionClient {
 	 * 主机报告缓冲缺口时,快照与最近一页历史会重新装载。
 	 */
 	async openSession(sessionFile: string): Promise<OpenedSession> {
-		return await this.exclusive(() => this.openUnlocked(sessionFile));
+		return await this.switchSession(sessionFile);
 	}
 
 	/**
@@ -533,7 +678,17 @@ export class SessionClient {
 	}
 
 	private async openUnlocked(sessionFile: string): Promise<OpenedSession> {
+		const cached = this.runtimeForFile(sessionFile);
+		if (cached !== undefined) {
+			this.activate(cached);
+			return cached.opened;
+		}
 		const snapshot = await this.transport.request("openSession", { sessionFile });
+		const existing = this.runtimes.get(snapshot.id);
+		if (existing !== undefined) {
+			this.activate(existing);
+			return existing.opened;
+		}
 		return await this.beginSession(snapshot);
 	}
 
@@ -545,16 +700,15 @@ export class SessionClient {
 	private async beginSession(snapshot: SessionSnapshot): Promise<OpenedSession> {
 		// 记下已经订上的通道,失败时逐个退掉,不留半个打开状态
 		const subscribed: Channel[] = [];
-		const previous = this.opened;
+		const previous = this.active;
 		try {
 			return await this.beginSubscribed(snapshot, subscribed);
 		} catch (error) {
 			await this.abandonSession(snapshot.id, subscribed);
+			const failed = this.runtimes.get(snapshot.id);
+			if (failed !== undefined) this.removeRuntime(failed);
 			// 失败不牵连已经打开的会话
-			this.opened = previous;
-			this.olderCursor = undefined;
-			this.lastEntryId = undefined;
-			this.pendingSend = undefined;
+			if (previous !== undefined) this.activate(previous);
 			throw error;
 		}
 	}
@@ -577,8 +731,6 @@ export class SessionClient {
 		const channels = SessionStore.channelsFor(snapshot.id);
 		this.state.ensureSession(channels.session, snapshot);
 		this.state.ensureChat(channels.chat);
-		this.olderCursor = undefined;
-		this.lastEntryId = undefined;
 
 		const sessionSub = await this.transport.request("subscribe", { channel: channels.session });
 		subscribed.push(channels.session);
@@ -590,55 +742,96 @@ export class SessionClient {
 		subscribed.push(channels.chat);
 		this.state.markSeq(channels.chat, chatSub.seq);
 
-		this.opened = {
+		const opened: OpenedSession = {
 			sessionId: snapshot.id,
 			file: snapshot.file,
 			sessionChannel: channels.session,
 			chatChannel: channels.chat,
 			snapshot,
 		};
+		const runtime = this.createRuntime(opened);
+		this.runtimes.set(snapshot.id, runtime);
+		this.activate(runtime);
 
 		if (chatSub.resync) {
-			await this.reloadHistory(channels.chat, snapshot.id);
+			await this.reloadRecent(runtime);
 		} else {
-			await this.loadPages(channels.chat, snapshot.id, this.initialPages, true);
+			const page = await this.fetchPages(snapshot.id, this.initialPages);
+			this.applyHistory(runtime, page);
 		}
 
 		if (!this.isGapWatched) {
 			this.isGapWatched = true;
 			this.stops.push(this.state.onGap((gap) => this.handleGap(gap)));
 		}
-		return this.opened;
+		return opened;
 	}
 
 	/** 往更早的方向再加载一页。 */
 	async loadOlder(): Promise<{ loaded: number; hasMore: boolean }> {
-		const opened = this.opened;
-		if (!opened || this.olderCursor === undefined) {
+		const runtime = this.active;
+		if (runtime === undefined) {
 			return { loaded: 0, hasMore: false };
 		}
-		const page = await this.transport.request("entries", {
-			sessionId: opened.sessionId,
-			cursor: this.olderCursor,
-			limit: this.pageSize,
-		});
-		this.state.prependHistory(opened.chatChannel, page.entries);
-		this.olderCursor = page.nextCursor;
-		return { loaded: page.entries.length, hasMore: this.hasMore };
+		if (runtime.olderTask !== undefined) {
+			return await runtime.olderTask;
+		}
+		const cursor = runtime.olderCursor;
+		if (cursor === undefined) {
+			return { loaded: 0, hasMore: false };
+		}
+		const epoch = runtime.historyEpoch;
+		const task = this.loadOlderPage(runtime, cursor, epoch);
+		runtime.olderTask = task;
+		try {
+			return await task;
+		} finally {
+			if (runtime.olderTask === task) {
+				runtime.olderTask = undefined;
+			}
+		}
 	}
 
-	/** 重取会话状态与最近一页历史。 */
+	private async loadOlderPage(
+		runtime: SessionRuntime,
+		cursor: string,
+		epoch: number,
+	): Promise<{ loaded: number; hasMore: boolean }> {
+		const opened = runtime.opened;
+		const page = await this.transport.request("entries", {
+			sessionId: opened.sessionId,
+			cursor,
+			limit: this.pageSize,
+		});
+		if (
+			this.runtimes.get(opened.sessionId) !== runtime ||
+			runtime.historyEpoch !== epoch ||
+			runtime.olderCursor !== cursor
+		) {
+			return { loaded: 0, hasMore: runtime.olderCursor !== undefined };
+		}
+		this.state.prependHistory(opened.chatChannel, page.entries);
+		runtime.olderCursor = page.nextCursor;
+		return { loaded: page.entries.length, hasMore: runtime.olderCursor !== undefined };
+	}
+
+	/** 重取会话状态与最近的历史。 */
 	async refresh(): Promise<void> {
-		await this.refreshSession();
-		const opened = this.requireOpened();
-		await this.reloadHistory(opened.chatChannel, opened.sessionId);
+		const runtime = this.requireRuntime();
+		await this.refreshRuntime(runtime);
+		await this.reloadRecent(runtime);
 	}
 
 	/** 只重取会话状态,不动已装载的历史。状态通道漏帧后用它对齐。 */
 	async refreshSession(): Promise<void> {
-		const opened = this.requireOpened();
-		const snapshot = await this.transport.request("snapshot", { sessionId: opened.sessionId });
-		if (this.opened === opened) this.state.ensureSession(opened.sessionChannel, snapshot);
+		await this.refreshRuntime(this.requireRuntime());
+	}
+
+	private async refreshRuntime(runtime: SessionRuntime): Promise<void> {
+		const snapshot = await this.transport.request("snapshot", { sessionId: runtime.opened.sessionId });
+		if (this.runtimes.get(runtime.opened.sessionId) === runtime) {
+			this.state.ensureSession(runtime.opened.sessionChannel, snapshot);
+		}
 	}
 
 	/**
@@ -652,16 +845,22 @@ export class SessionClient {
 		await this.followSessionList().catch((error: unknown) => {
 			debugLog("client", "Failed to subscribe to the session list after reconnect", { error: String(error) });
 		});
-		const opened = this.opened;
-		if (!opened) {
+		const runtime = this.active;
+		if (runtime === undefined) {
 			return;
 		}
+		// 新连接没有旧订阅，非当前会话的缓存无法继续接收动作；切回时重新打开
+		for (const inactive of [...this.runtimes.values()]) {
+			if (inactive !== runtime) await this.releaseRuntime(inactive);
+		}
 		try {
-			await this.resumeChannels(opened);
+			await this.resumeChannels(runtime);
 		} catch (error) {
 			// 主机重启过时它已经不记得这个会话,按文件重新打开一次即可接着用
-			if (opened.file !== undefined && isUnknownSession(error)) {
-				await this.switchSession(opened.file);
+			if (runtime.opened.file !== undefined && isUnknownSession(error)) {
+				const file = runtime.opened.file;
+				await this.releaseRuntime(runtime);
+				await this.switchSession(file);
 				return;
 			}
 			throw error;
@@ -669,7 +868,8 @@ export class SessionClient {
 	}
 
 	/** 按最后收到的序号续订两个通道,缓冲补不上时整体重新对齐。 */
-	private async resumeChannels(opened: OpenedSession): Promise<void> {
+	private async resumeChannels(runtime: SessionRuntime): Promise<void> {
+		const opened = runtime.opened;
 		const wasCompacting =
 			this.state.sessionView(opened.sessionChannel)?.state.maintenance?.kind === "compaction";
 		const sessionSub = await this.transport.request("subscribe", {
@@ -683,16 +883,17 @@ export class SessionClient {
 		});
 		this.state.markSeq(opened.chatChannel, chatSub.seq);
 		if (sessionSub.resync || chatSub.resync) {
-			await this.refresh();
+			await this.refreshRuntime(runtime);
+			await this.reloadRecent(runtime);
 			return;
 		}
 		if (sessionSub.session) {
 			this.state.ensureSession(opened.sessionChannel, sessionSub.session);
 			if (wasCompacting && sessionSub.session.maintenance?.kind !== "compaction") {
-				this.commitChain = this.commitChain
-					.then(() => this.runCommit(opened, "checkpoint"))
+				runtime.commitChain = runtime.commitChain
+					.then(() => this.runCommit(runtime, "checkpoint"))
 					.catch(() => undefined);
-				await this.commitChain;
+				await runtime.commitChain;
 			}
 		}
 	}
@@ -890,9 +1091,9 @@ export class SessionClient {
 		});
 	}
 
-	/** 退出当前会话:取消订阅并丢掉视图。 */
+	/** 退出全部会话:取消订阅并丢掉视图。 */
 	async release(): Promise<void> {
-		await this.exclusive(() => this.releaseUnlocked());
+		await this.exclusive(() => this.releaseAllUnlocked());
 	}
 
 	/** 退掉这两个通道的订阅并丢掉它们的视图。 */
@@ -908,20 +1109,23 @@ export class SessionClient {
 		this.state.drop(opened.chatChannel);
 	}
 
-	private async releaseUnlocked(): Promise<void> {
-		const opened = this.opened;
-		this.opened = undefined;
-		this.olderCursor = undefined;
-		this.lastEntryId = undefined;
-		this.pendingSend = undefined;
-		if (!opened) {
-			return;
+	/** 释放一个会话运行时，先从登记表拿掉，避免重入。 */
+	private async releaseRuntime(runtime: SessionRuntime): Promise<void> {
+		this.removeRuntime(runtime);
+		await this.releaseChannels(runtime.opened);
+	}
+
+	private async releaseAllUnlocked(): Promise<void> {
+		for (const runtime of [...this.runtimes.values()]) {
+			await this.releaseRuntime(runtime);
 		}
-		await this.releaseChannels(opened);
 	}
 
 	/** 停掉全部监听。 */
 	dispose(): void {
+		for (const runtime of this.runtimes.values()) {
+			if (runtime.retainTimer !== undefined) clearTimeout(runtime.retainTimer);
+		}
 		for (const stop of this.stops.splice(0)) {
 			stop();
 		}
@@ -934,44 +1138,56 @@ export class SessionClient {
 		return this.opened;
 	}
 
+	private requireRuntime(): SessionRuntime {
+		const runtime = this.active;
+		if (runtime === undefined) {
+			throw new Error("No session is open");
+		}
+		return runtime;
+	}
+
 	/**
 	 * 序号缺口。对话通道补最近一页历史,状态通道重取快照;
 	 * 同一通道正在补齐时不再叠加请求。
 	 */
 	private handleGap(gap: ChannelGap): void {
-		const opened = this.opened;
-		if (!opened) {
+		const runtime = this.runtimeForChannel(gap.channel);
+		if (runtime === undefined) {
 			return;
 		}
+		const opened = runtime.opened;
 		if (gap.channel === opened.sessionChannel) {
-			if (this.resyncing.session) {
+			if (runtime.resyncing.session) {
 				return;
 			}
-			this.resyncing.session = true;
-			void this.refreshSession().finally(() => {
-				this.resyncing.session = false;
-			});
+			runtime.resyncing.session = true;
+			void this.refreshRuntime(runtime)
+				.catch(() => undefined)
+				.finally(() => {
+					runtime.resyncing.session = false;
+				});
 			return;
 		}
 		if (gap.channel === opened.chatChannel) {
-			if (this.resyncing.chat) {
+			if (runtime.resyncing.chat) {
 				return;
 			}
-			this.resyncing.chat = true;
-			void this.reloadHistory(opened.chatChannel, opened.sessionId).finally(() => {
-				this.resyncing.chat = false;
-			});
+			runtime.resyncing.chat = true;
+			void this.reloadRecent(runtime)
+				.catch(() => undefined)
+				.finally(() => {
+					runtime.resyncing.chat = false;
+				});
 		}
 	}
 
-	/** 连续装载若干页,首次装载时整体替换,其余往更早处补。 */
-	private async loadPages(
-		channel: Channel,
+	/** 从最新一页开始往前读取若干页，返回按时间升序排列的条目。 */
+	private async fetchPages(
 		sessionId: string,
 		pages: number,
-		replace: boolean,
-	): Promise<void> {
+	): Promise<{ entries: Entry[]; nextCursor: string | undefined }> {
 		let cursor: string | undefined;
+		let entries: Entry[] = [];
 		for (let index = 0; index < pages; index += 1) {
 			const page: { entries: Entry[]; nextCursor: string | undefined } = await this.transport.request(
 				"entries",
@@ -981,19 +1197,23 @@ export class SessionClient {
 					...(cursor === undefined ? {} : { cursor }),
 				},
 			);
-			if (index === 0 && replace) {
-				this.state.replaceChat(channel, page.entries);
-				const newest = page.entries[page.entries.length - 1];
-				this.lastEntryId = newest?.id;
-			} else {
-				this.state.prependHistory(channel, page.entries);
-			}
+			entries = [...page.entries, ...entries];
 			cursor = page.nextCursor;
 			if (cursor === undefined) {
 				break;
 			}
 		}
-		this.olderCursor = cursor;
+		return { entries, nextCursor: cursor };
+	}
+
+	/** 把读到的一整段历史替换进视图，并更新翻页游标。 */
+	private applyHistory(
+		runtime: SessionRuntime,
+		page: { entries: readonly Entry[]; nextCursor: string | undefined },
+	): void {
+		this.state.replaceChat(runtime.opened.chatChannel, page.entries);
+		runtime.olderCursor = page.nextCursor;
+		runtime.lastEntryId = page.entries[page.entries.length - 1]?.id;
 	}
 
 	/**
@@ -1002,15 +1222,12 @@ export class SessionClient {
 	 * 本轮 settle 之后向主机要一次「边界之后的条目」，把实时消息提升为历史消息：
 	 * 之后界面上的消息都带条目 id，分叉、定位这类操作不再区分历史与实时。
 	 */
-	private observe(frame: ActionFrame, wasCompacting: boolean): void {
-		const opened = this.opened;
-		if (!opened) {
-			return;
-		}
+	private observe(frame: ActionFrame, wasCompacting: boolean, runtime: SessionRuntime): void {
+		const opened = runtime.opened;
 		if (frame.channel === opened.sessionChannel && frame.action.type === "session/phase") {
 			if (wasCompacting && frame.action.maintenance?.kind !== "compaction") {
-				this.commitChain = this.commitChain
-					.then(() => this.runCommit(opened, "checkpoint"))
+				runtime.commitChain = runtime.commitChain
+					.then(() => this.runCommit(runtime, "checkpoint"))
 					.catch(() => undefined);
 			}
 			return;
@@ -1020,12 +1237,10 @@ export class SessionClient {
 		}
 		// 分支指针挪过之后，活动分支换成另一条，已装载的历史整段作废
 		if (frame.action.type === "chat/branchMoved") {
-			this.lastEntryId = frame.action.leafId ?? undefined;
-			this.commitChain = this.commitChain
+			runtime.commitChain = runtime.commitChain
 				.then(async () => {
-					this.state.resetChat(opened.chatChannel);
-					if (this.opened === opened) {
-						await this.reloadHistory(opened.chatChannel, opened.sessionId);
+					if (this.runtimes.get(opened.sessionId) === runtime) {
+						await this.reloadRecent(runtime, true);
 					}
 				})
 				.catch(() => undefined);
@@ -1034,8 +1249,20 @@ export class SessionClient {
 		if (frame.action.type !== "chat/settled") {
 			return;
 		}
+		if (frame.action.aborted) {
+			// 中止时实时消息常与已写入条目对不上，直接取最近页，避免提升失败后重载全部
+			debugLog("commit", "Turn aborted; reloading the recent window", { sessionId: opened.sessionId });
+			runtime.commitChain = runtime.commitChain
+				.then(async () => {
+					if (this.runtimes.get(opened.sessionId) === runtime) {
+						await this.reloadRecent(runtime);
+					}
+				})
+				.catch(() => undefined);
+			return;
+		}
 		debugLog("commit", "Turn ended; preparing to promote live messages", { sessionId: opened.sessionId });
-		this.commitChain = this.commitChain.then(() => this.runCommit(opened)).catch(() => undefined);
+		runtime.commitChain = runtime.commitChain.then(() => this.runCommit(runtime)).catch(() => undefined);
 	}
 
 	/**
@@ -1044,20 +1271,24 @@ export class SessionClient {
 	 * 边界是上一次提交到的末条目；主机从叶子沿 parentId 回溯到它为止。条目数量与实时
 	 * 消息对不上（漏了事件）或主机拒绝时，整体重新装载历史。
 	 */
-	private async runCommit(opened: OpenedSession, mode: "settled" | "checkpoint" = "settled"): Promise<void> {
-		if (this.opened !== opened) {
+	private async runCommit(
+		runtime: SessionRuntime,
+		mode: "settled" | "checkpoint" = "settled",
+	): Promise<void> {
+		const opened = runtime.opened;
+		if (this.runtimes.get(opened.sessionId) !== runtime) {
 			return;
 		}
 		try {
 			debugLog("commit", "Requesting entries after the boundary", {
 				sessionId: opened.sessionId,
-				afterEntryId: this.lastEntryId,
+				afterEntryId: runtime.lastEntryId,
 			});
 			const result = await this.transport.request("entriesAfter", {
 				sessionId: opened.sessionId,
-				...(this.lastEntryId === undefined ? {} : { afterEntryId: this.lastEntryId }),
+				...(runtime.lastEntryId === undefined ? {} : { afterEntryId: runtime.lastEntryId }),
 			});
-			if (this.opened !== opened) {
+			if (this.runtimes.get(opened.sessionId) !== runtime) {
 				return;
 			}
 			const checkpoint =
@@ -1072,7 +1303,7 @@ export class SessionClient {
 			}
 			const leafId = mode === "checkpoint" ? entries.at(-1)?.id : result.leafId;
 			if (leafId != null) {
-				this.lastEntryId = leafId;
+				runtime.lastEntryId = leafId;
 			}
 			debugLog(
 				"commit",
@@ -1080,31 +1311,67 @@ export class SessionClient {
 					promoted ? "Promotion succeeded" : "Promotion rejected: entry count does not match live messages",
 					entries.length,
 					leafId,
-					this.lastEntryId,
+					runtime.lastEntryId,
 					this.state.chatView(opened.chatChannel)?.items ?? [],
 				),
 			);
 			if (!promoted) {
-				debugLog("commit", "Entry count does not match live messages; reloading history");
-				await this.reloadHistory(opened.chatChannel, opened.sessionId);
+				const view = this.state.chatView(opened.chatChannel);
+				errorLog("commit", "Promotion rejected: entry count does not match live messages", {
+					sessionId: opened.sessionId,
+					afterEntryId: runtime.lastEntryId,
+					entryCount: entries.length,
+					messageEntries: entries.filter((entry) => entry.kind === "message" && entry.message !== undefined)
+						.length,
+					liveItems: view?.items.filter((item) => !isHistoryMessageId(item.id)).length ?? 0,
+					leafId,
+				});
+				debugLog("commit", "Entry count does not match live messages; reloading the recent window");
+				await this.reloadRecent(runtime);
 			}
 		} catch (error) {
-			debugLog(
+			errorLog(
 				"commit",
-				mode === "settled" ? "Promotion failed; reloading history" : "Checkpoint sync failed",
+				mode === "settled"
+					? "Entries after the boundary failed; reloading the recent window"
+					: "Checkpoint sync failed",
 				{
+					sessionId: opened.sessionId,
+					afterEntryId: runtime.lastEntryId,
 					error: String(error),
 				},
 			);
-			if (this.opened === opened && mode === "settled") {
-				await this.reloadHistory(opened.chatChannel, opened.sessionId);
+			if (this.runtimes.get(opened.sessionId) === runtime && mode === "settled") {
+				await this.reloadRecent(runtime);
 			}
 		}
 	}
 
-	/** 重新装载全部历史。 */
-	private async reloadHistory(channel: Channel, sessionId: string): Promise<void> {
-		this.olderCursor = undefined;
-		await this.loadPages(channel, sessionId, Number.POSITIVE_INFINITY, true);
+	/**
+	 * 重新装载最近若干页历史。
+	 *
+	 * 自动恢复只覆盖最近一屏，更早的内容仍由 loadOlder 向前翻。先读到临时页集合，成功后再
+	 * 替换视图，失败时旧视图与旧游标都不动。queued 重载按代次丢弃过期结果。
+	 */
+	private reloadRecent(runtime: SessionRuntime, reset = false): Promise<void> {
+		const epoch = ++runtime.historyEpoch;
+		const run = runtime.reloadChain.then(async () => {
+			if (this.runtimes.get(runtime.opened.sessionId) !== runtime || runtime.historyEpoch !== epoch) {
+				return;
+			}
+			const page = await this.fetchPages(runtime.opened.sessionId, this.initialPages);
+			if (this.runtimes.get(runtime.opened.sessionId) !== runtime || runtime.historyEpoch !== epoch) {
+				return;
+			}
+			if (reset) {
+				this.state.resetChat(runtime.opened.chatChannel);
+			}
+			this.applyHistory(runtime, page);
+		});
+		runtime.reloadChain = run.then(
+			() => undefined,
+			() => undefined,
+		);
+		return run;
 	}
 }

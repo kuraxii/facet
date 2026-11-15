@@ -1,11 +1,11 @@
 /**
  * 界面与新建会话的偏好设置。
  *
- * 这些设置存在主机的应用数据目录里，与 pi 的模型配置、凭证分开：pi 管的是运行时怎么调模型，
- * 这里管的是界面怎么显示、新建会话用哪个模型。整份设置作为一个对象读写，避免逐字段合并
- * 带来的半新半旧。
+ * 这些设置存在主机的应用数据目录里，与 pi 的模型配置、凭证分开：pi 管的是运行时怎么调模型、
+ * 新建会话默认用哪个模型，这里管的是界面怎么显示与其它会话偏好。整份设置作为一个对象读写，
+ * 避免逐字段合并带来的半新半旧。
  */
-import type { ModelRef, ThinkingLevel } from "./model.ts";
+import type { ThinkingLevel } from "./model.ts";
 
 /**
  * 具体的界面配色方案。
@@ -84,8 +84,6 @@ export interface LayoutSettings {
 export interface FacetSettings {
 	/** 文件格式版本 */
 	version: 1;
-	/** 新建会话采用的默认模型，缺省时取第一个可用模型 */
-	defaultModel?: ModelRef;
 	/** 新建会话采用的默认思考档位，缺省时由模型能力决定 */
 	defaultThinkingLevel?: ThinkingLevel;
 	/** 外观 */

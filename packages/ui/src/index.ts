@@ -85,7 +85,7 @@ export {
 	stepUiScale,
 	UI_SCALE_STEPS,
 } from "./chat/ui-scale.ts";
-export type { StickToBottom } from "./chat/use-stick-to-bottom.ts";
+export type { ScrollRestore, StickToBottom } from "./chat/use-stick-to-bottom.ts";
 export { useStickToBottom } from "./chat/use-stick-to-bottom.ts";
 export type { I18nProviderProps, I18nValue } from "./i18n/I18nProvider.tsx";
 export { I18nProvider, useI18n } from "./i18n/I18nProvider.tsx";

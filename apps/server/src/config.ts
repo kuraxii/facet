@@ -64,7 +64,7 @@ const DEFAULT_HOST = "127.0.0.1";
 const SOCKET_FILE = "facet.sock";
 const DEFAULT_PORT = 0;
 const DEFAULT_REPLAY_LIMIT = 512;
-const DEFAULT_SESSION_IDLE_MS = 3000;
+const DEFAULT_SESSION_IDLE_MS = 5 * 60 * 1000;
 
 /** 生成连接令牌，独立运行入口与桌面拉起的主机都用它。 */
 export function generateToken(): string {

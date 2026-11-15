@@ -1,4 +1,4 @@
-import type { ExtensionUIContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionUIContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 import type { SessionEvent } from "@facet/protocol";
 import { describe, expect, it } from "vitest";
 import { ExtensionUi } from "./extension-ui.ts";
@@ -18,17 +18,28 @@ interface FakeAgentOptions {
 	abort?: () => Promise<void>;
 	/** 回退时走的分支跳转,用例按需给出结果 */
 	navigateTree?: (entryId: string) => Promise<{ cancelled: boolean; editorText?: string }>;
+	/** 活动分支,用于验证分页缓存 */
+	branch?: { leafId: string | null; entries: SessionEntry[] };
 }
 
 /** 只实现用到的部分,其余字段由构造期的少量调用凑齐。 */
 function createAgent(options: FakeAgentOptions = {}) {
 	let listener: ((event: unknown) => void) | undefined;
+	const branchCalls: number[] = [];
 	const session = {
 		sessionId: "s1",
 		sessionFile: "/tmp/s1.jsonl",
 		isStreaming: options.streaming ?? false,
 		isCompacting: false,
-		sessionManager: { getCwd: () => "/tmp" },
+		sessionManager: {
+			getCwd: () => "/tmp",
+			getLeafId: () => options.branch?.leafId ?? null,
+			getBranch: () => {
+				branchCalls.push(branchCalls.length + 1);
+				return options.branch?.entries ?? [];
+			},
+			getEntry: (id: string) => options.branch?.entries.find((entry) => entry.id === id),
+		},
 		subscribe: (next: (event: unknown) => void) => {
 			listener = next;
 			return () => {
@@ -56,7 +67,7 @@ function createAgent(options: FakeAgentOptions = {}) {
 	const emitToAgent = (event: Record<string, unknown>): void => {
 		listener?.(event);
 	};
-	return { agent, events, emitToAgent };
+	return { agent, events, emitToAgent, branchCalls };
 }
 
 describe("PiAgent.prompt", () => {
@@ -341,5 +352,56 @@ describe("PiAgent.revertTo", () => {
 	it("扩展取消回退时报错", async () => {
 		const { agent } = createAgent({ navigateTree: async () => ({ cancelled: true }) });
 		await expect(agent.revertTo("e3")).rejects.toThrow("Revert was cancelled");
+	});
+});
+
+describe("PiAgent 历史分页缓存", () => {
+	/** 只用到 id、父条目与顺序。 */
+	function entry(id: string, parentId: string | null): SessionEntry {
+		return {
+			type: "model_change",
+			id,
+			parentId,
+			timestamp: "2026-11-08T00:00:00Z",
+			provider: "p",
+			modelId: "m",
+		} as SessionEntry;
+	}
+
+	it("同一叶子的连续翻页只读取一次活动分支", () => {
+		const entries = Array.from({ length: 5 }, (_, index) =>
+			entry(`e${index + 1}`, index === 0 ? null : `e${index}`),
+		);
+		const branch = { leafId: "e5", entries };
+		const { agent, branchCalls } = createAgent({ branch });
+		const first = agent.entryPage(undefined, 2);
+		const second = agent.entryPage(first.nextCursor, 2);
+		expect(first.entries.map((item) => item.id)).toEqual(["e4", "e5"]);
+		expect(second.entries.map((item) => item.id)).toEqual(["e2", "e3"]);
+		expect(branchCalls).toHaveLength(1);
+		branch.leafId = "e3";
+		agent.entryPage(undefined, 2);
+		expect(branchCalls).toHaveLength(2);
+	});
+
+	it("entriesAfter 使用同一份分支索引并保留边界后的条目", () => {
+		const entries = Array.from({ length: 5 }, (_, index) =>
+			entry(`e${index + 1}`, index === 0 ? null : `e${index}`),
+		);
+		const { agent, branchCalls } = createAgent({ branch: { leafId: "e5", entries } });
+		agent.entryPage(undefined, 2);
+		expect(agent.entriesAfter("e2")).toMatchObject({
+			leafId: "e5",
+			entries: [{ id: "e3" }, { id: "e4" }, { id: "e5" }],
+		});
+		expect(branchCalls).toHaveLength(1);
+	});
+
+	it("entriesAfter 超过回溯上限时拒绝整段返回", () => {
+		const entries = Array.from({ length: 2001 }, (_, index) =>
+			entry(`e${index + 1}`, index === 0 ? null : `e${index}`),
+		);
+		const { agent } = createAgent({ branch: { leafId: "e2001", entries } });
+		expect(() => agent.entriesAfter(null)).toThrow("exceed 2000");
 	});
 });

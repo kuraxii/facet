@@ -30,8 +30,11 @@ import type {
 import { toMessage, toMessages, toModelInfo } from "./convert.ts";
 import { nextTurnState, type TurnState, toSessionEvents } from "./events.ts";
 import type { ExtensionUi } from "./extension-ui.ts";
-import { pageOf } from "./paging.ts";
+import { type BranchSnapshot, branchSnapshot, pageOf } from "./paging.ts";
 import type { ModelMutationOptions, PromptOptions } from "./types.ts";
+
+/** entriesAfter 一次允许回溯的最大条目数。 */
+const MAX_ENTRIES_AFTER = 2_000;
 
 /** 构造 PiAgent 所需的会话与共享资源。 */
 export interface PiAgentContext {
@@ -130,6 +133,8 @@ export class PiAgent {
 	private initialization: SessionInitialization;
 	private initializationPromise: Promise<void> | undefined;
 	private readonly stopUi: (() => void) | undefined;
+	/** 活动分支快照，叶子变化时重建 */
+	private branch: BranchSnapshot | undefined;
 
 	/** 构造后立即订阅，保证首次 prompt 之前的运行不会漏事件。 */
 	constructor(context: PiAgentContext) {
@@ -485,11 +490,23 @@ export class PiAgent {
 	 * 条目 id 稳定且只追加，因此游标跨进程重启仍然有效。
 	 */
 	entryPage(cursor: string | undefined, limit: number): { entries: Entry[]; nextCursor: string | undefined } {
-		const page = pageOf(this.session.sessionManager.getBranch(), cursor, limit);
+		const branch = this.branchSnapshot();
+		const page = pageOf(branch.entries, cursor, limit, branch.indexById);
 		if (page.missing) {
 			throw new Error(`unknown session entry: ${cursor}`);
 		}
 		return { entries: page.window.map(toEntry), nextCursor: page.nextCursor };
+	}
+
+	/** 取当前活动分支的快照；叶子没变时复用上一份。 */
+	private branchSnapshot(): BranchSnapshot {
+		const manager = this.session.sessionManager;
+		const leafId = manager.getLeafId();
+		if (this.branch?.leafId === leafId) {
+			return this.branch;
+		}
+		this.branch = branchSnapshot(leafId, manager.getBranch());
+		return this.branch;
 	}
 
 	contextUsage(): ContextUsage | undefined {
@@ -531,26 +548,21 @@ export class PiAgent {
 	/**
 	 * 取 afterEntryId 之后到叶子的条目，按从早到晚排列。
 	 *
-	 * 从叶子沿 parentId 往回走，遇到 afterEntryId 即停，所以只走过活动分支，
-	 * 条目数上限是分支深度。afterEntryId 给 null 表示整条分支。
-	 * 给定了却走不到叶子上时抛错，调用方据此重新装载历史。
+	 * 在活动分支快照里定位边界，只返回它之后的窗口。afterEntryId 给 null 表示整条分支；
+	 * 边界不在活动分支上或超出回溯上限时抛错，调用方据此重新装载最近历史。
 	 */
 	entriesAfter(afterEntryId: string | null): { entries: Entry[]; leafId: string | null } {
-		const manager = this.session.sessionManager;
-		const leafId = manager.getLeafId();
-		const collected: SessionEntry[] = [];
-		let current = manager.getLeafEntry();
-		while (current) {
-			if (current.id === afterEntryId) {
-				return { entries: collected.reverse().map(toEntry), leafId };
-			}
-			collected.push(current);
-			current = current.parentId ? manager.getEntry(current.parentId) : undefined;
-		}
-		if (afterEntryId !== null) {
+		const branch = this.branchSnapshot();
+		const start = afterEntryId === null ? 0 : (branch.indexById.get(afterEntryId) ?? -1);
+		if (start < 0) {
 			throw new Error(`unknown session entry: ${afterEntryId}`);
 		}
-		return { entries: collected.reverse().map(toEntry), leafId };
+		const from = afterEntryId === null ? 0 : start + 1;
+		const count = branch.entries.length - from;
+		if (count > MAX_ENTRIES_AFTER) {
+			throw new Error(`session entries after the boundary exceed ${MAX_ENTRIES_AFTER}: ${count}`);
+		}
+		return { entries: branch.entries.slice(from).map(toEntry), leafId: branch.leafId };
 	}
 
 	/** 活动分支的末条目 id，空会话为空。 */
@@ -563,12 +575,12 @@ export class PiAgent {
 	 * 条目不在分支上或是分支第一条时返回 null。
 	 */
 	entryBefore(entryId: string): string | null {
-		const branch = this.session.sessionManager.getBranch();
-		const index = branch.findIndex((entry) => entry.id === entryId);
-		if (index <= 0) {
+		const branch = this.branchSnapshot();
+		const index = branch.indexById.get(entryId);
+		if (index === undefined || index <= 0) {
 			return null;
 		}
-		return branch[index - 1]?.id ?? null;
+		return branch.entries[index - 1]?.id ?? null;
 	}
 
 	/** 统计覆盖整个会话，含已被压缩掉的历史，因此 token 与成本反映实际计费。 */

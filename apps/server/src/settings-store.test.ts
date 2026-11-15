@@ -27,13 +27,11 @@ describe("设置读取", () => {
 		const store = await SettingsStore.open({ file });
 		const saved = await store.save({
 			...store.get(),
-			defaultModel: { provider: "new api", id: "deepseek-v4-flash" },
 			appearance: { ...store.get().appearance, theme: "light" },
 		});
 		expect(saved.appearance.theme).toBe("light");
 
 		const reopened = await SettingsStore.open({ file });
-		expect(reopened.get().defaultModel).toEqual({ provider: "new api", id: "deepseek-v4-flash" });
 		expect(reopened.get().appearance.theme).toBe("light");
 	});
 
@@ -64,7 +62,7 @@ describe("设置读取", () => {
 			"utf8",
 		);
 		const settings = (await SettingsStore.open({ file })).get();
-		expect(settings.defaultModel).toBeUndefined();
+		expect(settings).not.toHaveProperty("defaultModel");
 		// 模型可见性已经去掉，旧文件里留下的这个字段直接丢掉
 		expect(settings).not.toHaveProperty("hiddenModels");
 		expect(settings.appearance.theme).toBe(DEFAULT_SETTINGS.appearance.theme);

@@ -1,6 +1,6 @@
 import type { TranscriptItem } from "@facet/client-core";
 import { describe, expect, it } from "vitest";
-import { groupLabel, groupRows, turnDurationText } from "./group.ts";
+import { groupLabel, groupRows, isTurnTimingLive, turnDurationText } from "./group.ts";
 
 function item(overrides: Partial<TranscriptItem> & Pick<TranscriptItem, "id" | "role">): TranscriptItem {
 	return {
@@ -293,6 +293,7 @@ describe("工作时长", () => {
 		]);
 		const meta = rows.at(-1) as (typeof rows)[number];
 		expect(meta.startedAt).toBe(1_000);
+		expect(isTurnTimingLive(rows)).toBe(true);
 		expect(turnDurationText(meta, 4_500)).toBe("工作了 3s");
 	});
 
@@ -304,6 +305,7 @@ describe("工作时长", () => {
 		]);
 		const meta = rows.at(-1) as (typeof rows)[number];
 		expect(meta.durationMs).toBe(3_000);
+		expect(isTurnTimingLive(rows)).toBe(false);
 		expect(turnDurationText(meta, 99_000)).toBe("工作了 3s");
 	});
 });

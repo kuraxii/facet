@@ -63,6 +63,7 @@ import {
 	readSidebarWidth,
 	resolveUiTheme,
 	type SavedHost,
+	type ScrollRestore,
 	SessionSearch,
 	SessionSidebar,
 	type SettingsDataSource,
@@ -549,6 +550,8 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 	const [mainTabs, setMainTabs] = useState<MainTab[]>([]);
 	/** 当前主区域标签；为空时显示空状态 */
 	const [activeTabId, setActiveTabId] = useState<string | undefined>(undefined);
+	/** 用户主动关掉的会话标签，避免会话更新时又自动补回来 */
+	const closedSessionTabIds = useRef(new Set<string>());
 	/** 打开的文件内容，按主区域标签标识存 */
 	const [fileContents, setFileContents] = useState<Readonly<Record<string, FileContent>>>({});
 	/** 取文件失败的原因 */
@@ -618,6 +621,9 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 
 	/** 打开或切到一个主区域标签；同一份内容只保留一个标签。 */
 	const focusMainTab = useCallback((tab: MainTab) => {
+		if (tab.kind === "session") {
+			closedSessionTabIds.current.delete(tab.id);
+		}
 		setMainTabs((current) =>
 			current.some((item) => item.id === tab.id)
 				? current.map((item) => (item.id === tab.id ? tab : item))
@@ -674,6 +680,8 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 	const started = useRef(false);
 	/** 会话切换的序号,只有最后一次选择的结果会落到界面上 */
 	const switchSeq = useRef(0);
+	/** 每个会话文件上次的滚动位置，切回标签时恢复 */
+	const scrollPositions = useRef(new Map<string, ScrollRestore>());
 	/** 正在进行的重连,重复触发时共用同一次 */
 	const reconnecting = useRef<Promise<void> | undefined>(undefined);
 
@@ -852,6 +860,9 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 		if (session === undefined || currentSessionTabId === undefined) {
 			return;
 		}
+		if (closedSessionTabIds.current.has(currentSessionTabId)) {
+			return;
+		}
 		setMainTabs((current) =>
 			current.some((item) => item.id === currentSessionTabId)
 				? current
@@ -980,6 +991,10 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 	const closeMainTab = useCallback(
 		(id: string): void => {
 			const tab = mainTabs.find((item) => item.id === id);
+			if (tab?.kind === "session") {
+				closedSessionTabIds.current.add(id);
+				if (tab.file !== undefined) client.closeSession(tab.file);
+			}
 			if (tab?.kind === "terminal") {
 				void closeTerminal(tab.terminalId);
 				return;
@@ -1226,6 +1241,7 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 			setProjects([]);
 			setTerminals([]);
 			closedTerminalIds.current.clear();
+			scrollPositions.current.clear();
 			setChanges({ isLoading: false });
 			await client.release().catch(() => undefined);
 			setMainTabs([]);
@@ -1381,7 +1397,11 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 	 * 失败留下带重试的提示,成功则清掉旧提示并刷新列表。
 	 */
 	const runSessionAction = useCallback(
-		(action: () => Promise<string | undefined>, onDone?: (file: string | undefined) => void) => {
+		(
+			action: () => Promise<string | undefined>,
+			onDone?: (file: string | undefined) => void,
+			options: { refresh?: boolean } = {},
+		) => {
 			switchSeq.current += 1;
 			const seq = switchSeq.current;
 			void (async () => {
@@ -1393,14 +1413,16 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 					onDone?.(file);
 					setActiveFile(file);
 					setSessionError(undefined);
-					await refreshSessions();
+					if (options.refresh !== false) {
+						await refreshSessions();
+					}
 				} catch (error) {
 					if (seq !== switchSeq.current) {
 						return;
 					}
 					setSessionError({
 						message: error instanceof Error ? error.message : String(error),
-						retry: () => runSessionAction(action, onDone),
+						retry: () => runSessionAction(action, onDone, options),
 					});
 				}
 			})();
@@ -1455,8 +1477,8 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 
 	const openSession = useCallback(
 		(path: string, knownCwd?: string) => {
-			const cwd = knownCwd ?? sessions.find((session) => session.path === path)?.cwd;
-			withTrust(cwd, () => {
+			const cached = client.hasSession(path);
+			const run = (): void => {
 				runSessionAction(
 					async () => {
 						await client.switchSession(path);
@@ -1475,22 +1497,39 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 						});
 					},
 				);
-			});
+			};
+			if (cached) {
+				// 取消还在排队的打开结果，并让队列最后落回这个缓存会话
+				switchSeq.current += 1;
+				const opened = client.activateSession(path);
+				if (opened !== undefined) {
+					focusMainTab({
+						id: sessionTabId(path, opened.snapshot.id),
+						kind: "session",
+						file: path,
+						sessionId: opened.snapshot.id,
+					});
+					setActiveFile(path);
+					setSessionError(undefined);
+				}
+				void client.switchSession(path).catch(() => undefined);
+				return;
+			}
+			const cwd = knownCwd ?? sessions.find((session) => session.path === path)?.cwd;
+			withTrust(cwd, run);
 		},
 		[focusMainTab, runSessionAction, sessions, withTrust],
 	);
 
-	/** 新建会话，采用设置里的默认模型与思考档位；没有设置时交给主机决定。 */
+	/** 新建会话，默认模型交给 pi；这里只带界面的默认思考档位。 */
 	const createSession = useCallback(
 		(cwd: string) => {
-			const model = settings.defaultModel;
 			const thinkingLevel = settings.defaultThinkingLevel;
 			withTrust(cwd, () => {
 				runSessionAction(
 					async () => {
 						const opened = await client.createSession({
 							...(cwd.length > 0 ? { cwd } : {}),
-							...(model === undefined ? {} : { model }),
 							...(thinkingLevel === undefined ? {} : { thinkingLevel }),
 						});
 						return opened.file;
@@ -1510,7 +1549,7 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 				);
 			});
 		},
-		[focusMainTab, runSessionAction, settings.defaultModel, settings.defaultThinkingLevel, withTrust],
+		[focusMainTab, runSessionAction, settings.defaultThinkingLevel, withTrust],
 	);
 
 	// 连接状态：断开时输入区说明原因，恢复后自动放开
@@ -1798,6 +1837,7 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 	const deleteSession = useCallback(
 		async (path: string) => {
 			await client.deleteSession(path);
+			scrollPositions.current.delete(path);
 			setMainTabs((current) => current.filter((tab) => !(tab.kind === "session" && tab.file === path)));
 			const pool = (await refreshSessions()) ?? [];
 			if (activeFile !== path) {
@@ -1877,12 +1917,33 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 		).values(),
 	];
 	const transcript = useMemo(() => (chat ? toTranscript(chat) : []), [chat]);
+	const restoreScroll = useCallback(
+		(key: unknown): ScrollRestore | undefined =>
+			typeof key === "string" ? scrollPositions.current.get(key) : undefined,
+		[],
+	);
 	const {
 		scrollRef,
 		element: scrollElement,
 		isPinned,
 		scrollToBottom,
-	} = useStickToBottom(transcript, activeFile);
+	} = useStickToBottom(transcript, activeFile, { restore: restoreScroll });
+
+	// 记住每个会话的滚动位置，切回标签时恢复
+	useEffect(() => {
+		const element = scrollElement;
+		if (element === null || activeFile === undefined) return;
+		const save = (): void => {
+			const distance = element.scrollHeight - element.scrollTop - element.clientHeight;
+			scrollPositions.current.set(activeFile, {
+				top: element.scrollTop,
+				atBottom: distance <= 24,
+			});
+		};
+		save();
+		element.addEventListener("scroll", save, { passive: true });
+		return () => element.removeEventListener("scroll", save);
+	}, [activeFile, scrollElement]);
 
 	// 滚动到顶部时自动补更早的历史；已经在贴底时不触发，避免刚打开就连环加载。
 	const loadingOlder = useRef(false);
@@ -1941,6 +2002,7 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 					kind: tab.kind,
 					label,
 					title: tab.file ?? label,
+					closable: true,
 				};
 			}
 			if (tab.kind === "file") {
@@ -2016,6 +2078,9 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 			if (isCurrent || tab.file === undefined) {
 				setActiveTabId(id);
 				return;
+			}
+			if (client.hasSession(tab.file)) {
+				setActiveTabId(id);
 			}
 			openSession(tab.file);
 		},

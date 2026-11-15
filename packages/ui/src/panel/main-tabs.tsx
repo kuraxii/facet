@@ -136,6 +136,8 @@ export function MainTabs({
 	const [draggedId, setDraggedId] = useState<string | undefined>(undefined);
 	/** 拖动开始时就写进 ref，dragover 与 drop 不依赖尚未提交的 state */
 	const draggedRef = useRef<string | undefined>(undefined);
+	/** 只有左键按下时才允许拖动，右键菜单才能正常弹出 */
+	const [dragArmedId, setDragArmedId] = useState<string | undefined>(undefined);
 	/** 拖动落点：目标标签与放在它前面还是后面 */
 	const [dropTarget, setDropTarget] = useState<{ id: string; after: boolean } | undefined>(undefined);
 	/** 标签右键菜单：标签标识与视口位置 */
@@ -222,6 +224,7 @@ export function MainTabs({
 	const endDrag = useCallback((): void => {
 		draggedRef.current = undefined;
 		setDraggedId(undefined);
+		setDragArmedId(undefined);
 		setDropTarget(undefined);
 	}, []);
 
@@ -313,9 +316,14 @@ export function MainTabs({
 								aria-selected={isActive}
 								aria-controls="main-tab-content"
 								title={item.title ?? item.label}
-								draggable
+								draggable={dragArmedId === item.id}
 								onDragStart={(event) => startDrag(event, item.id)}
 								onDragEnd={endDrag}
+								onPointerDown={(event) => {
+									event.currentTarget.draggable = event.button === 0;
+									setDragArmedId(event.button === 0 ? item.id : undefined);
+								}}
+								onPointerUp={() => setDragArmedId(undefined)}
 								onClick={() => onSelect(item.id)}
 								onContextMenu={(event) => openContextMenu(event, item.id)}
 							>
@@ -329,6 +337,7 @@ export function MainTabs({
 									aria-label={t("mainTabs.closeTab", { name: item.label })}
 									title={t("mainTabs.closeTab", { name: item.label })}
 									onClick={() => onClose(item.id)}
+									onContextMenu={(event) => openContextMenu(event, item.id)}
 								>
 									<X size={11} strokeWidth={1.6} />
 								</button>

@@ -62,14 +62,6 @@ function readString(value: unknown, fallback: string): string {
 	return typeof value === "string" ? value : fallback;
 }
 
-/** 读出模型引用，字段不全时视为未设置。 */
-function readModelRef(value: unknown): FacetSettings["defaultModel"] {
-	if (!isRecord(value) || typeof value.provider !== "string" || typeof value.id !== "string") {
-		return undefined;
-	}
-	return { provider: value.provider, id: value.id };
-}
-
 /** 思考档位。 */
 const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 
@@ -88,9 +80,6 @@ export function parseSettings(value: unknown): FacetSettings {
 	const defaultThinkingLevel = readChoice(value.defaultThinkingLevel, THINKING_LEVELS, "medium");
 	return {
 		version: FILE_VERSION,
-		...(readModelRef(value.defaultModel) === undefined
-			? {}
-			: { defaultModel: readModelRef(value.defaultModel) }),
 		...(typeof value.defaultThinkingLevel === "string" && THINKING_LEVELS.includes(defaultThinkingLevel)
 			? { defaultThinkingLevel }
 			: {}),

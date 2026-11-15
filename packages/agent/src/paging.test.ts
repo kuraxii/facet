@@ -1,6 +1,6 @@
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
-import { pageOf } from "./paging.ts";
+import { branchSnapshot, pageOf } from "./paging.ts";
 
 /** 只用到 id 与顺序，其余字段用最小形状占位。 */
 function entry(id: string): SessionEntry {
@@ -60,5 +60,12 @@ describe("历史分页", () => {
 		expect(page.window).toEqual([]);
 		expect(page.nextCursor).toBeUndefined();
 		expect(page.missing).toBe(false);
+	});
+
+	it("给出索引时按索引定位游标", () => {
+		const branch = branchSnapshot("e5", entries);
+		const page = pageOf(branch.entries, "e4", 2, branch.indexById);
+		expect(page.window.map((item) => item.id)).toEqual(["e2", "e3"]);
+		expect(page.nextCursor).toBe("e2");
 	});
 });

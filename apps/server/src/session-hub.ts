@@ -17,7 +17,7 @@ import type { Action, ActionFrame, Channel, SessionSnapshot, SlashCommand } from
 import { makeChannel, parseChannel } from "@facet/protocol";
 import { ActionProjector } from "./action-projector.ts";
 import { EventLog } from "./event-log.ts";
-import { debugLog } from "./log.ts";
+import { debugLog, errorLog } from "./log.ts";
 
 /** 会话登记表用到的 agent 能力,收窄成结构类型以便测试注入假实现。 */
 export type HubAgent = Pick<
@@ -218,7 +218,7 @@ function normalizeFile(file: string): string {
 
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 500;
-const DEFAULT_IDLE_CLOSE_MS = 3000;
+const DEFAULT_IDLE_CLOSE_MS = 5 * 60 * 1000;
 
 export class SessionHub<A extends HubAgent = PiAgent> {
 	private readonly factory: AgentFactory<A>;
@@ -635,7 +635,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 			});
 			return result;
 		} catch (error) {
-			debugLog("commit", "Boundary entry is not on the active branch", {
+			errorLog("commit", "entriesAfter failed", {
 				sessionId,
 				afterEntryId,
 				error: String(error),

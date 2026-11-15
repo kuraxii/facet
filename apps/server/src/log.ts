@@ -28,3 +28,12 @@ export function debugLog(scope: string, message: string, detail?: unknown): void
 	}
 	console.log(`[facet:${scope}] ${message}`, detail);
 }
+
+/** 输出一条错误日志。打包运行时照样写入 server.log，用于定位历史同步失败。 */
+export function errorLog(scope: string, message: string, detail?: unknown): void {
+	if (detail === undefined) {
+		console.error(`[facet:${scope}] ${message}`);
+		return;
+	}
+	console.error(`[facet:${scope}] ${message}`, detail);
+}

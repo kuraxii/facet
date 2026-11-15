@@ -495,39 +495,10 @@ function ModelsSection({
 					return models.filter((model) => configured.has(model.provider));
 				})();
 
-	const selected = draft.defaultModel;
-	// 选中的模型不支持思考时,只保留「不思考」一档
-	const selectedModel =
-		selected === undefined ? undefined : models.find((model) => modelKey(model) === modelKey(selected));
-	const levelOptions =
-		selectedModel === undefined || selectedModel.reasoning ? THINKING_LEVEL_OPTIONS : (["off"] as const);
-
 	return (
 		<>
 			<h2 className="set-section-title">{t("settings.models")}</h2>
 			<SettingsGroup label={t("settings.modelsPage.defaultSettings")}>
-				<SettingsRow title={t("settings.modelsPage.defaultModel")}>
-					<select
-						className="set-input"
-						value={selected === undefined ? "" : modelKey(selected)}
-						onChange={(event) => {
-							const value = event.target.value;
-							const found = models.find((model) => modelKey(model) === value);
-							patch((current) => ({
-								...current,
-								defaultModel: found === undefined ? undefined : { provider: found.provider, id: found.id },
-							}));
-						}}
-						aria-label={t("settings.modelsPage.defaultModel")}
-					>
-						<option value="">{t("settings.modelsPage.hostDefault")}</option>
-						{usable.map((model) => (
-							<option key={modelKey(model)} value={modelKey(model)}>
-								{model.provider} / {model.name}
-							</option>
-						))}
-					</select>
-				</SettingsRow>
 				<SettingsRow title={t("settings.modelsPage.defaultThinking")}>
 					<select
 						className="set-input"
@@ -544,7 +515,7 @@ function ModelsSection({
 						aria-label={t("settings.modelsPage.defaultThinking")}
 					>
 						<option value="">{t("settings.modelsPage.modelDefault")}</option>
-						{levelOptions.map((level) => (
+						{THINKING_LEVEL_OPTIONS.map((level) => (
 							<option key={level} value={level}>
 								{level}
 							</option>

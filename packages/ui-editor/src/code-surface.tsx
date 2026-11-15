@@ -139,7 +139,12 @@ export function CodeSurface({
 		});
 		view.current = created;
 		readyHandler.current?.(created);
+		const onZoom = (): void => {
+			created.requestMeasure();
+		};
+		window.addEventListener("facet:zoom-changed", onZoom);
 		return () => {
+			window.removeEventListener("facet:zoom-changed", onZoom);
 			created.destroy();
 			view.current = undefined;
 		};

@@ -11,45 +11,43 @@ function read(name: string): string {
 describe("自带字体", () => {
 	const fonts = read("fonts.css");
 	const index = read("index.css");
+	const base = read("base.css");
+	const markdown = read("markdown.css");
 	const pkg = JSON.parse(readFileSync(join(styles, "..", "..", "package.json"), "utf8")) as {
 		dependencies?: Record<string, string>;
 	};
 
-	it("代码字体的拉丁与符号按三个字重声明,并指向打包后的 woff2", () => {
+	it("代码字体按三个字重声明,并指向完整的 CN woff2", () => {
 		const weights = [...fonts.matchAll(/font-weight: (\d+);/g)].map((match) => match[1]);
 		expect(weights).toEqual(["400", "500", "600"]);
-		expect(fonts.match(/url\("\.\.\/assets\/fonts\/maple-mono-\d+\.woff2"\)/g)).toHaveLength(3);
-		expect(fonts).toContain('font-family: "Maple Mono"');
+		expect(fonts.match(/url\("\.\.\/assets\/fonts\/maple-mono-cn-\d+\.woff2"\)/g)).toHaveLength(3);
+		expect(fonts).toContain('font-family: "Maple Mono CN"');
 	});
 
-	it("汉字与中文标点由 maple-mono-cn 的 400 分片补上", () => {
-		const cjkImport = '@import "@automann/maple-mono-cn/400.css";';
-		expect(fonts).toContain(cjkImport);
-		// @import 必须排在同文件的 @font-face 之前,否则浏览器会整条忽略
-		expect(fonts.indexOf(cjkImport)).toBeLessThan(fonts.indexOf("@font-face"));
-		expect(pkg.dependencies?.["@automann/maple-mono-cn"]).toMatch(/^(\^|~)?7\.9\./);
+	it("代码字体直接使用完整 CN 文件,不再依赖外部分片包", () => {
+		expect(fonts).not.toContain("@automann/maple-mono-cn");
+		expect(pkg.dependencies?.["@automann/maple-mono-cn"]).toBeUndefined();
 	});
 
 	it("界面字体的汉字由 noto-sans-sc 可变字体补上", () => {
 		const sansImport = '@import "@fontsource-variable/noto-sans-sc";';
 		expect(fonts).toContain(sansImport);
 		expect(fonts.indexOf(sansImport)).toBeLessThan(fonts.indexOf("@font-face"));
-		expect(index).toMatch(/--font-sans: Inter, "Noto Sans SC Variable",/);
+		expect(base).toMatch(/--font-sans: Inter, "Noto Sans SC Variable",/);
 	});
 
 	it("界面字体与代码字体的变量三处一致", () => {
 		expect(index).toContain('@import "./fonts.css";');
-		expect(index).toMatch(/--font-sans: Inter,/);
-		expect(index).toMatch(/--font-mono: "Maple Mono", "Maple Mono CN",/);
+		expect(base).toMatch(/--font-sans: Inter,/);
+		expect(base).toMatch(/--font-mono: "Maple Mono CN",/);
 		// markstream 的字体走同一个变量,不再单独写一份字体列表
-		expect(index).toContain("--ms-font-sans: var(--font-sans);");
+		expect(markdown).toContain("--ms-font-sans: var(--font-sans);");
 	});
 
-	it("字体包只有 Inter、noto-sans-sc 与 maple-mono-cn", () => {
+	it("字体包只有 Inter 与 noto-sans-sc", () => {
 		const imported = [...(index + fonts).matchAll(/@import\s+"(@[^"]+)"/g)].map((match) => match[1]);
 		expect(new Set(imported)).toEqual(
 			new Set([
-				"@automann/maple-mono-cn/400.css",
 				"@fontsource-variable/noto-sans-sc",
 				"@fontsource/inter/400.css",
 				"@fontsource/inter/500.css",

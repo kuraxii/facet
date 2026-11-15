@@ -1,0 +1,238 @@
+/* 应用外壳：顶带、窗口按钮、拖拽分隔条与启动页的外壳元素。 */
+
+/* 外壳 */
+
+/* 应用外壳：顶带是一行真正的布局行，下面是三栏正文；两处宽度共用变量 */
+.app {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	overflow: hidden;
+}
+
+/* 拖动区盖住整条顶带，格子里的控件自己标 no-drag */
+.app-drag {
+	position: absolute;
+	top: 0;
+	right: 0;
+	left: 0;
+	z-index: 0;
+	height: var(--chrome-height);
+	-webkit-app-region: drag;
+}
+
+.app-chrome {
+	position: relative;
+	z-index: 2;
+	display: flex;
+	flex: none;
+	align-items: center;
+	height: var(--chrome-height);
+}
+
+.chrome-slot {
+	display: flex;
+	flex: none;
+	align-items: center;
+	height: 100%;
+	min-width: 0;
+}
+
+/* 侧栏那一格：宽度与正文的侧栏一致，右边留出与侧栏一致的内边距 */
+.chrome-slot.is-sidebar {
+	width: var(--sidebar-width);
+	padding-right: var(--sidebar-edge);
+	overflow: hidden;
+}
+
+/* 收起时不占位，也不留那段内边距，主区开关才能贴到统一的位置 */
+.chrome-slot.is-sidebar:not(.is-open) {
+	padding-right: 0;
+}
+
+/* 展开时把正文那条分界线与底色续到顶带里，两边在同一个 x 上 */
+.chrome-slot.is-sidebar.is-open {
+	border-right: 1px solid var(--line);
+	background: var(--sb);
+}
+
+/* 主区那一格：占满剩下的宽度，左栏开关贴在它的左边 */
+.chrome-slot.is-main {
+	flex: 1;
+	padding-left: var(--sidebar-edge);
+}
+
+/* 右栏那一格：展开时与右栏同宽，窗口按钮压在这一格最右边；收起时收到只剩开关与按钮 */
+.chrome-slot.is-panel {
+	flex: none;
+	gap: 4px;
+	width: var(--panel-width);
+	padding-left: 4px;
+	-webkit-app-region: no-drag;
+}
+
+.chrome-slot.is-panel.is-open {
+	border-left: 1px solid var(--line);
+}
+
+.chrome-slot.is-panel.is-compact {
+	width: auto;
+	padding-left: 0;
+}
+
+.chrome-spacer {
+	flex: 1;
+}
+
+/* 顶带里的图标按钮：开与关同一个亮度，展开与否由面板本身看得出来 */
+.chrome-toggle {
+	display: grid;
+	flex: none;
+	place-items: center;
+	width: var(--icon-button-size);
+	height: var(--icon-button-size);
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--t2);
+	-webkit-app-region: no-drag;
+}
+
+.chrome-toggle:hover {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+.window-controls {
+	display: flex;
+	flex: none;
+	-webkit-app-region: no-drag;
+}
+
+.window-controls-group {
+	display: flex;
+}
+
+.window-btn {
+	display: grid;
+	place-items: center;
+	width: var(--window-button-width);
+	height: var(--chrome-height);
+	border: 0;
+	background: transparent;
+	color: var(--t3);
+}
+
+.window-btn:hover {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+.window-btn.is-close:hover {
+	background: var(--errbg);
+	color: var(--err);
+}
+
+.shell {
+	position: relative;
+	display: flex;
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
+}
+
+/* 连不上主机那一屏上的主机按钮 */
+.boot-hosts {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	justify-content: center;
+	margin-top: 14px;
+}
+
+.boot-host {
+	padding: 5px 10px;
+	border: 1px solid var(--line2);
+	border-radius: 7px;
+	background: transparent;
+	color: var(--t2);
+	font-size: 12px;
+}
+
+.boot-host:hover:not(:disabled) {
+	border-color: var(--acc);
+	color: var(--t1);
+}
+
+.boot-host:disabled {
+	color: var(--t3);
+	cursor: default;
+}
+
+/* 启动页 */
+.boot {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	min-height: 0;
+}
+
+.boot h1 {
+	margin: 0;
+	font-size: 20px;
+	font-weight: 600;
+}
+
+.boot p {
+	margin: 0;
+	color: var(--t3);
+	font-size: 12.5px;
+	font-family: var(--font-mono);
+}
+
+.boot-retry {
+	margin-top: 6px;
+	height: 30px;
+	padding: 0 16px;
+	border: 1px solid var(--line2);
+	border-radius: 7px;
+	background: var(--surface2);
+	color: var(--t1);
+	font-size: 12.5px;
+}
+
+.boot-retry:hover {
+	background: var(--surface3);
+}
+
+/* 缩放反馈 */
+.zoom-badge {
+	position: fixed;
+	top: calc(var(--chrome-height) + 12px);
+	right: 16px;
+	z-index: 200;
+	padding: 6px 10px;
+	border: 1px solid var(--line2);
+	border-radius: 8px;
+	background: var(--card);
+	color: var(--t1);
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+	font-family: var(--font-mono);
+	font-size: 12px;
+	pointer-events: none;
+}
+
+/* 窄屏：主区域占满 */
+@media (max-width: 880px) {
+	.shell {
+		position: relative;
+	}
+
+	.main {
+		width: 100%;
+	}
+}

@@ -115,6 +115,10 @@ const api = {
 	platform: readArgument("facet-platform") || process.platform,
 	/** 应用版本，关于页展示用 */
 	appVersion: readArgument("facet-version"),
+	/** 当前窗口的界面缩放百分比，由主进程在创建窗口时写入 */
+	uiScale: Number.parseInt(readArgument("facet-ui-scale"), 10) || 100,
+	/** 设置界面缩放；主进程同步窗口 zoom 并写入本机设置 */
+	setUiScale: (scale: number): void => ipcRenderer.send("facet:ui-scale", scale),
 	/** 打开系统的目录选择窗口,取消时返回空 */
 	pickDirectory: (): Promise<string | undefined> => ipcRenderer.invoke("facet:pick-directory"),
 	/** 用系统的保存窗口把一段文本写到文件,取消时返回 false */

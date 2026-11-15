@@ -19,6 +19,7 @@ import { ProvidersSection } from "./ProvidersSection.tsx";
 import { providerRows } from "./provider-rows.ts";
 import type { SettingsDataSource } from "./settings-data-source.ts";
 import { SettingsGroup, SettingsRow } from "./settings-layout.tsx";
+import { UI_SCALE_STEPS } from "./ui-scale.ts";
 
 /** 设置分类。 */
 export type SettingsSection = "models" | "appearance" | "input" | "about";
@@ -53,6 +54,10 @@ export interface SettingsPageProps {
 	onAppearancePreview?: (appearance: FacetSettings["appearance"]) => void;
 	/** 应用版本等只读信息 */
 	about: { appVersion: string; runtime: string; endpoint: string };
+	/** 本机界面缩放百分比；不传时不显示这一项 */
+	uiScale?: number;
+	/** 修改本机界面缩放 */
+	onUiScaleChange?: (scale: number) => void;
 	/**
 	 * 这条连接能不能改设置。
 	 *
@@ -91,6 +96,8 @@ export function SettingsPage({
 	onAppearancePreview,
 	about,
 	canEdit = true,
+	uiScale,
+	onUiScaleChange,
 }: SettingsPageProps) {
 	/** 已加载的设置；为空表示还没读到 */
 	const [settings, setSettings] = useState<FacetSettings | undefined>(undefined);
@@ -269,6 +276,27 @@ export function SettingsPage({
 					</nav>
 
 					<div className="set-content">
+						{section === "appearance" && uiScale !== undefined && onUiScaleChange !== undefined ? (
+							<section className="set-section">
+								<SettingsGroup label="本机">
+									<SettingsRow title="界面缩放">
+										<select
+											className="set-input"
+											value={uiScale}
+											onChange={(event) => onUiScaleChange(Number(event.target.value))}
+											aria-label="界面缩放"
+										>
+											{UI_SCALE_STEPS.map((step) => (
+												<option key={step} value={step}>
+													{step}%
+												</option>
+											))}
+										</select>
+									</SettingsRow>
+								</SettingsGroup>
+							</section>
+						) : null}
+
 						{section === "about" ? <AboutSection about={about} data={data} /> : null}
 
 						{section === "models" || section === "appearance" || section === "input" ? (
@@ -567,6 +595,7 @@ function AppearanceSection({
 			type="number"
 			min={11}
 			max={20}
+			step={0.5}
 			value={value}
 			onChange={(event) => {
 				const next = Number(event.target.value);
@@ -653,22 +682,12 @@ function AppearanceSection({
 			</SettingsGroup>
 
 			<SettingsGroup label="字体">
-				<SettingsRow title="界面字体">
-					<input
-						className="set-input"
-						value={appearance.uiFont}
-						onChange={(event) => patchAppearance({ uiFont: event.target.value })}
-						placeholder="Inter"
-						aria-label="界面字体"
-					/>
-				</SettingsRow>
-				<SettingsRow title="界面字号">{sizeInput(appearance.uiFontSize, "uiFontSize")}</SettingsRow>
 				<SettingsRow title="代码字体">
 					<input
 						className="set-input"
 						value={appearance.codeFont}
 						onChange={(event) => patchAppearance({ codeFont: event.target.value })}
-						placeholder="Maple Mono"
+						placeholder="Maple Mono CN"
 						aria-label="代码字体"
 					/>
 				</SettingsRow>
@@ -805,15 +824,15 @@ function AboutSection({ about, data }: { about: SettingsPageProps["about"]; data
 			<ul className="set-list">
 				<li className="set-row">
 					<span className="set-row-name">应用版本</span>
-					<span className="set-row-meta mono">{about.appVersion}</span>
+					<span className="set-row-meta mono selectable">{about.appVersion}</span>
 				</li>
 				<li className="set-row">
 					<span className="set-row-name">运行时</span>
-					<span className="set-row-meta mono">{about.runtime}</span>
+					<span className="set-row-meta mono selectable">{about.runtime}</span>
 				</li>
 				<li className="set-row">
 					<span className="set-row-name">主机端点</span>
-					<span className="set-row-meta mono">{about.endpoint}</span>
+					<span className="set-row-meta mono selectable">{about.endpoint}</span>
 				</li>
 			</ul>
 			<div className="set-actions">

@@ -23,12 +23,12 @@ describe("扩展交互卡片", () => {
 		expect(html).toContain("接下来怎么处理？");
 		expect(html).toContain("已核实的内容。");
 		expect(html).not.toContain('type="search"');
-		expect(html).toMatch(/class="extension-action is-primary"[^>]*disabled/);
+		expect(html).toMatch(/data-extension-submit[^>]*disabled/);
 	});
 
 	it("关闭与提交按钮都在卡片底部，确认请求给正文", () => {
 		const html = render({ kind: "confirm", requestId: "u2", title: "确认操作", message: "写入文件。" });
-		expect(html).toContain("extension-actions");
+		expect(html).toContain("data-extension-actions");
 		expect(html).toContain("关闭");
 		expect(html).toContain("提交");
 		expect(html).toContain("写入文件。");
@@ -62,7 +62,7 @@ describe("扩展交互卡片", () => {
 			],
 		});
 		expect(html.match(/role="tab"/g)).toHaveLength(2);
-		expect(html.match(/extension-tab-dot/g)).toHaveLength(2);
+		expect(html.match(/data-extension-tab-dot/g)).toHaveLength(2);
 		expect(html).toContain('type="radio"');
 		expect(html).not.toContain('type="checkbox"');
 		expect(html).toContain("写入报告");
@@ -89,10 +89,10 @@ describe("扩展交互卡片", () => {
 			],
 		});
 		expect(html).toContain("模板");
-		expect(html).toContain("extension-preview");
+		expect(html).toContain("data-extension-preview");
 		expect(html).toContain("目录树");
 		expect(html).toContain("Type something.");
-		expect(html).not.toContain("extension-custom-input");
+		expect(html).not.toContain("data-extension-custom-input");
 	});
 
 	it("多选题目使用复选框", () => {
@@ -108,7 +108,7 @@ describe("扩展交互卡片", () => {
 
 	it("只读端显示预览，没有提交入口", () => {
 		const html = render({ kind: "select", requestId: "u5", title: "选择", options: ["A", "B"] }, false);
-		expect(html).toContain("is-preview");
+		expect(html).toContain("data-extension-preview-card");
 		expect(html).not.toContain("<button");
 		expect(html).toContain("A");
 	});

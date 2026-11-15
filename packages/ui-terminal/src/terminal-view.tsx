@@ -173,5 +173,21 @@ export function TerminalView({
 		}
 	}, [appearance]);
 
+	// 窗口 zoom 改变时字符网格的物理宽度会变，显式再 fit 一次并同步主机的行列数
+	useEffect(() => {
+		const onZoom = (): void => {
+			const terminal = termRef.current;
+			if (terminal === null) return;
+			try {
+				fitRef.current?.fit();
+				client.resize(terminalId, terminal.cols, terminal.rows);
+			} catch {
+				// 容器暂时没有尺寸时等下一次事件或 ResizeObserver
+			}
+		};
+		window.addEventListener("facet:zoom-changed", onZoom);
+		return () => window.removeEventListener("facet:zoom-changed", onZoom);
+	}, [client, terminalId]);
+
 	return <div className="term-surface" ref={containerRef} />;
 }

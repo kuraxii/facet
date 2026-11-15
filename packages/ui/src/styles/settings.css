@@ -1,0 +1,491 @@
+/* 设置窗口、设置分组与提供方表单。 */
+
+/* 设置是浮在应用上的一层窗：遮罩复用对话框那一套，窗口自己定尺寸 */
+.set-page {
+	display: flex;
+	flex-direction: column;
+	width: min(920px, 100%);
+	height: min(660px, 100%);
+	min-width: 0;
+	min-height: 0;
+	overflow: hidden;
+	border: 1px solid var(--line2);
+	border-radius: 16px;
+	background: var(--card);
+	box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+	outline: none;
+}
+
+.set-head {
+	display: flex;
+	flex: none;
+	align-items: center;
+	justify-content: space-between;
+	padding: 16px 20px 12px;
+	border-bottom: 1px solid var(--line);
+}
+
+.set-title {
+	margin: 0;
+	color: var(--t1);
+	font-size: 15px;
+	font-weight: 600;
+}
+
+.set-close {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 26px;
+	height: 26px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--t3);
+}
+
+.set-close:hover {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+.set-body {
+	display: flex;
+	flex: 1;
+	min-height: 0;
+}
+
+.set-nav {
+	display: flex;
+	flex: none;
+	flex-direction: column;
+	gap: 2px;
+	width: 148px;
+	padding: 12px 10px;
+	border-right: 1px solid var(--line);
+	background: var(--bg);
+}
+
+/* 添加提供商：列表下面一整条虚线按钮，点开可搜索的挑选弹窗 */
+.set-add-provider {
+	width: 100%;
+	height: 36px;
+	margin-top: 10px;
+	border: 1px dashed var(--line2);
+	border-radius: 9px;
+	background: transparent;
+	color: var(--t2);
+	font-size: 12.5px;
+}
+
+.set-add-provider:hover {
+	border-color: var(--t3);
+	color: var(--t1);
+}
+
+.set-lock {
+	min-width: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.set-lock:disabled {
+	opacity: 0.6;
+}
+
+.set-group {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin: 0 0 22px;
+}
+
+.set-group-title {
+	margin: 0;
+	padding: 0 2px;
+	color: var(--t3);
+	font-size: 11.5px;
+	font-weight: 400;
+}
+
+.set-group-title-lg {
+	margin-top: 18px;
+}
+
+.set-card {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	padding: 14px 14px;
+	border: 1px solid var(--line2);
+	border-radius: 12px;
+	background: var(--card);
+}
+
+.set-item {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+}
+
+.set-item.is-stacked {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 10px;
+}
+
+.set-item-text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.set-item-title {
+	color: var(--t1);
+	font-size: 13px;
+}
+
+.set-item-control {
+	display: flex;
+	flex: none;
+	align-items: center;
+	gap: 8px;
+}
+
+.set-item.is-stacked .set-item-control {
+	flex: 1;
+}
+
+.set-item-key {
+	color: var(--t2);
+	font-size: 12px;
+	white-space: nowrap;
+}
+
+.set-nav-item {
+	height: 28px;
+	padding: 0 10px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--t2);
+	font-size: 12.5px;
+	text-align: left;
+}
+
+.set-nav-item:hover {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+.set-nav-item.is-on {
+	background: var(--surface3);
+	color: var(--t1);
+}
+
+.set-content {
+	flex: 1;
+	min-width: 0;
+	overflow-y: auto;
+	padding: 18px 24px 28px;
+}
+
+.set-section {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	max-width: 620px;
+}
+
+.set-section-title {
+	margin: 0;
+	color: var(--t1);
+	font-size: 13.5px;
+	font-weight: 600;
+}
+
+.set-hint {
+	margin: 0;
+	color: var(--t3);
+	font-size: 12px;
+	line-height: 1.6;
+}
+
+.set-section-subtitle {
+	margin: 10px 0 0;
+	color: var(--t1);
+	font-size: 12.5px;
+	font-weight: 600;
+}
+
+.set-list-scroll {
+	max-height: 320px;
+	overflow-y: auto;
+}
+
+.set-toggle {
+	display: flex;
+	flex: none;
+	align-items: center;
+	gap: 6px;
+	color: var(--t3);
+	font-size: 11.5px;
+}
+
+.set-field {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	/* 主题那一组用 fieldset 承载，去掉它自带的边框与缩进 */
+	margin: 0;
+	padding: 0;
+	border: 0;
+	min-width: 0;
+}
+
+.set-label {
+	color: var(--t2);
+	font-size: 12px;
+}
+
+.set-input {
+	height: 30px;
+	padding: 0 10px;
+	border: 1px solid var(--line2);
+	border-radius: 7px;
+	background: var(--card2);
+	color: var(--t1);
+	font-size: 12.5px;
+}
+
+.set-check {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	color: var(--t2);
+	font-size: 12.5px;
+}
+
+/* 主题色板：一排放得下，选中时描边用强调色 */
+.set-swatches {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.set-swatch {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 28px;
+	padding: 0 9px 0 6px;
+	border: 1px solid var(--line2);
+	border-radius: 7px;
+	background: var(--card2);
+	color: var(--t2);
+	font-size: 12px;
+}
+
+.set-swatch:hover {
+	border-color: var(--t3);
+	color: var(--t1);
+}
+
+.set-swatch.is-active {
+	border-color: var(--acc);
+	color: var(--t1);
+}
+
+.set-swatch-chip {
+	width: 14px;
+	height: 14px;
+	border: 1px solid var(--line2);
+	border-radius: 4px;
+}
+
+/* 跟随系统没有单一颜色，用深浅各一半表示 */
+.set-swatch-chip.is-system {
+	background: linear-gradient(135deg, #f4f4f5 0 50%, #272a29 50% 100%);
+}
+
+.set-swatch-name {
+	white-space: nowrap;
+}
+
+.set-list {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.set-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-height: 34px;
+	padding: 0 10px;
+	border-radius: 7px;
+	background: var(--surface2);
+	color: var(--t2);
+	font-size: 12.5px;
+}
+
+.set-row-name {
+	flex: 1;
+	min-width: 0;
+	color: var(--t1);
+}
+
+.set-row.is-block {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 6px;
+	padding: 8px 10px;
+}
+
+.set-row-head {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+}
+
+.set-row-action {
+	flex: none;
+	height: 24px;
+	padding: 0 10px;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	background: transparent;
+	color: var(--t2);
+	font-size: 11.5px;
+}
+
+.set-row-action:hover:not(:disabled) {
+	background: var(--surface3);
+	color: var(--t1);
+}
+
+.set-row-action.is-danger:hover:not(:disabled) {
+	border-color: var(--err);
+	color: var(--err);
+}
+
+.set-row-edit {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.set-row-edit .set-input {
+	flex: 1;
+	min-width: 0;
+}
+
+.set-row-error {
+	margin: 0;
+	color: var(--err);
+	font-size: 11.5px;
+}
+
+.set-row-meta {
+	flex: none;
+	color: var(--t3);
+	font-size: 11.5px;
+}
+
+.set-row-empty {
+	color: var(--t3);
+}
+
+.set-badge {
+	flex: none;
+	padding: 1px 7px;
+	border: 1px solid var(--line2);
+	border-radius: 999px;
+	color: var(--t3);
+	font-size: 11px;
+}
+
+.set-badge.is-custom {
+	border-color: var(--line2);
+	background: var(--surface3);
+	color: var(--t2);
+}
+
+.set-badge.is-off {
+	border-color: var(--err);
+	color: var(--err);
+}
+
+.set-badge.is-on {
+	border-color: var(--acc);
+	color: var(--acc);
+}
+
+.set-note {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 8px 10px;
+	border: 1px solid var(--line2);
+	border-radius: 7px;
+	color: var(--t2);
+	font-size: 12px;
+}
+
+.set-note.is-error {
+	border-color: var(--err);
+	color: var(--err);
+}
+
+.set-note-action {
+	flex: none;
+	height: 24px;
+	padding: 0 10px;
+	border: 1px solid currentColor;
+	border-radius: 6px;
+	background: transparent;
+	color: inherit;
+	font-size: 11.5px;
+}
+
+.set-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 4px;
+}
+
+.set-save {
+	height: 30px;
+	padding: 0 16px;
+	border: 0;
+	border-radius: 7px;
+	background: var(--acc-fill);
+	color: var(--on-acc);
+	font-size: 12.5px;
+}
+
+.set-save:disabled {
+	background: var(--surface3);
+	color: var(--t3);
+	cursor: default;
+}
+
+.prov-form {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	margin-top: 8px;
+	padding: 12px;
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	background: var(--surface2);
+}

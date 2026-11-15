@@ -1,0 +1,252 @@
+/* 基础样式：与配色无关的根变量、滚动条、重置与通用文字工具。 */
+
+:root {
+	/* 界面字体与代码字体，两者都随构建产物一起打进应用 */
+	--font-sans: Inter, "Noto Sans SC Variable", "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
+	--font-mono: "Maple Mono CN", ui-monospace, SFMono-Regular, Menlo, monospace;
+	/* 编辑器与终端的字体默认跟代码字体，各自可以在设置里单列 */
+	--font-editor: var(--font-mono);
+	--font-terminal: var(--font-mono);
+	/* 正文字号固定；整体大小由窗口缩放控制 */
+	--text-size: 15px;
+	/* 交互动效：极快反馈 120ms，展开折叠 180ms */
+	--ease: cubic-bezier(0.2, 0.6, 0.3, 1);
+	--dur-fast: 120ms;
+	--dur-slow: 180ms;
+	/* 代码字号乘数,由设置里的字号档位写入 */
+	--fs-code-scale: 1;
+	/* 顶部那条带的高度与每个窗口按钮的宽度 */
+	--chrome-height: 36px;
+	--window-button-width: 44px;
+	/* 侧栏里图标按钮的边长，以及按钮到侧栏左右边缘的距离；顶带的开关用同一组数 */
+	--icon-button-size: 28px;
+	/* 会话行首状态标记：槽位尺寸固定，环由 6 的点加内外各一圈描边与留白算出来 */
+	--status-slot: 12px;
+	/* 工具结果里的图片：收起时的最大高度，与多张之间的间距 */
+	--tool-image-height: 320px;
+	--tool-image-gap: 8px;
+	--tool-image-radius: 8px;
+	/* 参数摘要弹窗：离摘要的间距、最大宽度与最大高度 */
+	--tool-tip-gap: 6px;
+	--tool-tip-width: 560px;
+	--tool-tip-height: 320px;
+	--context-divider-gap: 12px;
+	--context-divider-padding: 4px;
+	--context-divider-line-height: 1px;
+	--context-summary-gap: 8px;
+	/* 扩展交互卡片：边框到内容的距离、圆角、段落之间与选项行之间的距离 */
+	--extension-card-padding: 16px;
+	--extension-card-radius: 12px;
+	--extension-card-gap: 12px;
+	--extension-card-text-gap: 8px;
+	/* 选项行：横纵内边距、圆角与相邻两行的距离 */
+	--extension-option-padding-x: 12px;
+	--extension-option-padding-y: 8px;
+	--extension-option-radius: 8px;
+	--extension-option-gap: 2px;
+	/* 单选圆圈：直径、边框宽度、选中点直径，以及到选项文字的距离 */
+	--extension-radio-size: 18px;
+	--extension-radio-border: 1px;
+	--extension-radio-dot: 8px;
+	--extension-radio-gap: 10px;
+	/* 动作按钮：高度、横向内边距、圆角与两个按钮之间的距离 */
+	--extension-action-height: 32px;
+	--extension-action-padding-x: 12px;
+	--extension-action-radius: 8px;
+	--extension-action-gap: 8px;
+	/* 题目标签页：高度、横向内边距与圆角 */
+	--extension-tab-height: 28px;
+	--extension-tab-padding-x: 10px;
+	--extension-tab-radius: 8px;
+	/* 输入框边缘到文本的距离、圆角，以及多行输入框的最小高度 */
+	--extension-input-inset: 10px;
+	--extension-input-radius: 10px;
+	--extension-editor-height: 160px;
+	/* 控件边框宽度 */
+	--extension-border-width: 1px;
+	/* 侧栏两行会话行：纵向内边距、最小高度、标题与元信息间距、状态标记下移量 */
+	--sb-row-padding-y: 6px;
+	--sb-row-two-line-height: 44px;
+	--sb-row-meta-gap: 2px;
+	--sb-row-mark-offset: 3px;
+	/* 侧栏会话行：悬停 4%、选中 8% 的文字色叠加 */
+	--sb-row-hover: color-mix(in srgb, var(--t1) 4%, transparent);
+	--sb-row-selected: color-mix(in srgb, var(--t1) 8%, transparent);
+	--status-dot: 6px;
+	--status-dot-failed: 8px;
+	--status-ring-stroke: 1.5px;
+	--status-ring-gap: 1.5px;
+	--status-ring-size: calc(var(--status-dot) + (var(--status-ring-stroke) + var(--status-ring-gap)) * 2);
+	--sidebar-edge: 10px;
+	/* 三栏宽度：顶带的格子与下面的正文共用，由界面按当前状态写入 */
+	--sidebar-width: 272px;
+	--panel-width: 0px;
+	/* 滚动条占的宽度，以及其中拇指的宽度；轨道其余部分是透明的 */
+	--scrollbar-width: 8px;
+	--scrollbar-thumb: 4px;
+	/* 两个面板分隔条的命中区宽度，以及悬停时那条高亮的颜色 */
+	--divider-hit-width: 6px;
+	--divider-highlight: color-mix(in srgb, var(--acc) 55%, transparent);
+	/* 对话导航的缩放倍数，由设置里的百分比写入；下面每个尺寸都是它的倍数 */
+	--outline-scale: 1;
+	/* 对话导航竖轨：离主区左缘的间距、轨宽、轨内边距、短条静止尺寸、当前轮次的加宽倍数
+	   （黄金比例）、指针附近的额外放大，基准值都是 px，实际值再乘缩放 */
+	/* 竖轨到主区左缘的间距是固定的，不随缩放变 */
+	--outline-inset: 8px;
+	--outline-rail-width: calc(36px * var(--outline-scale));
+	--outline-rail-inset: 0px;
+	--outline-slot-size: calc(8px * var(--outline-scale));
+	--outline-pill-width: calc(10px * var(--outline-scale));
+	--outline-pill-height: calc(2px * var(--outline-scale));
+	--outline-pill-active-scale: 1.618;
+	--outline-pill-grow-width: calc(12px * var(--outline-scale));
+	--outline-pill-grow-height: calc(2px * var(--outline-scale));
+	/* 过程组的缩进：竖线到行内容的距离，以及竖线本身相对正文列的位置
+	   （后者来自展开箭头字形在图标盒子里的内缩，改箭头图标时跟着调） */
+	--indent-rail-offset: 16px;
+	--indent-rail-inset: 4px;
+	/* 行首图标的边长，以及图标到短名的间距；短名列与输出、思考正文都用两者之和 */
+	--indent-rail-icon: 14px;
+	--indent-rail-gap: 8px;
+	--indent-rail-label: calc(var(--indent-rail-icon) + var(--indent-rail-gap));
+}
+
+/*
+ * 滚动条统一成细的悬浮条：没有外框、轨道与两端的箭头，只剩一条半透明的拇指，指针落上去
+ * 才提亮。Chromium 一旦给了 `scrollbar-width` 或 `scrollbar-color` 就按标准画，会带箭头，
+ * 所以这里只走 webkit 伪元素；下面再用 `@supports` 给没有伪元素的引擎一份等效的细条。
+ */
+*::-webkit-scrollbar {
+	width: var(--scrollbar-width);
+	height: var(--scrollbar-width);
+	background: transparent;
+}
+
+*::-webkit-scrollbar-button {
+	display: none;
+	width: 0;
+	height: 0;
+}
+
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+	background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+	border: calc((var(--scrollbar-width) - var(--scrollbar-thumb)) / 2) solid transparent;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--t3) 40%, transparent);
+	background-clip: content-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+	background: var(--t2);
+	background-clip: content-box;
+}
+
+@supports (-moz-appearance: none) {
+	* {
+		scrollbar-width: thin;
+		scrollbar-color: color-mix(in srgb, var(--t3) 40%, transparent) transparent;
+	}
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+	height: 100%;
+	margin: 0;
+}
+
+body {
+	background: var(--bg);
+	color: var(--t1);
+	font-family: var(--font-sans);
+	font-size: 14px;
+	line-height: 1.6;
+	-webkit-font-smoothing: antialiased;
+	user-select: none;
+	cursor: default;
+}
+
+::selection {
+	background: color-mix(in srgb, var(--t1) 22%, transparent);
+}
+
+button {
+	font: inherit;
+	color: inherit;
+	cursor: pointer;
+}
+
+:focus-visible {
+	outline: 2px solid var(--acc);
+	outline-offset: 2px;
+}
+
+svg {
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.8;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+svg.fl {
+	fill: currentColor;
+	stroke: none;
+}
+
+.mono {
+	font-family: var(--font-mono);
+}
+
+.t2 {
+	color: var(--t2);
+}
+
+.t3 {
+	color: var(--t3);
+}
+
+.ell {
+	overflow: hidden;
+	min-width: 0;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* 界面默认不可选；内容区与输入控件显式放行，并显示文本光标。 */
+.selectable,
+.md,
+.bub,
+.tr-out pre,
+.tr-tip pre,
+.tr-think,
+.code-card-body,
+.mermaid-source,
+.diff-body,
+.error-text,
+.session-error-text,
+.file-path,
+.source-path,
+.fc .path,
+.host-addr,
+input,
+textarea,
+.cm-editor,
+.cm-content {
+	user-select: text;
+	cursor: text;
+}
+
+/* 复选框与单选框保留默认光标，不显示文本插入光标。 */
+input[type="checkbox"],
+input[type="radio"] {
+	cursor: default;
+}

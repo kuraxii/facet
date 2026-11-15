@@ -38,6 +38,7 @@ import {
 	hasEndpoint,
 	isDarkTheme,
 	normalizeEndpoint,
+	normalizeUiScale,
 	PanelTabs,
 	PanelToggle,
 	parseCommand,
@@ -58,6 +59,7 @@ import {
 	SidebarToggle,
 	SshPasswordDialog,
 	samePath,
+	stepUiScale,
 	THEME_MODES,
 	type ThemeName,
 	TrustDialog,
@@ -94,6 +96,10 @@ interface FacetBridge extends HostChannelBridge {
 	platform: string;
 	/** 应用版本 */
 	appVersion: string;
+	/** 当前窗口的界面缩放百分比 */
+	uiScale: number;
+	/** 设置本机界面缩放 */
+	setUiScale?: (scale: number) => void;
 	/** 主机是本机管的（local），还是外面给的（external） */
 	hostMode: string;
 	/** 打开系统的目录选择窗口,取消时返回空 */
@@ -229,7 +235,7 @@ const transport = makeTransport(
 	() => hostTarget,
 	() => sshPassword,
 );
-const client = new SessionClient({ transport, pageSize: 200 });
+const client = new SessionClient({ transport, pageSize: 200, initialPages: 2 });
 const terminalClient = new TerminalClient({ transport });
 
 type Phase = "connecting" | "ready" | "failed";
@@ -282,6 +288,7 @@ function applyAppearance(appearance: FacetSettings["appearance"]): void {
 	root.dataset.liveMotion = appearance.liveMotion;
 	// 对话导航的所有尺寸都是 `--outline-scale` 的倍数，百分比在这里换算成倍数
 	root.style.setProperty("--outline-scale", String(appearance.outlineScale / 100));
+	// 界面字体与正文字号固定；整体大小由窗口缩放控制。
 	// 空串表示用样式表里的缺省栈：这里把内联值去掉，`:root` 的默认值就生效；
 	// 编辑器与终端的字体在样式表里默认跟着代码字体走
 	const applyFont = (name: string, value: string): void => {
@@ -292,11 +299,9 @@ function applyAppearance(appearance: FacetSettings["appearance"]): void {
 		}
 		root.style.removeProperty(name);
 	};
-	applyFont("--font-sans", appearance.uiFont);
 	applyFont("--font-mono", appearance.codeFont);
 	applyFont("--font-editor", appearance.editorFont);
 	applyFont("--font-terminal", appearance.terminalFont);
-	root.style.setProperty("--text-size", `${appearance.uiFontSize}px`);
 	root.style.setProperty("--editor-size", `${appearance.editorFontSize}px`);
 	root.style.setProperty("--terminal-size", `${appearance.terminalFontSize}px`);
 	localStorage.setItem(THEME_KEY, appearance.theme);
@@ -365,6 +370,11 @@ export function App() {
 	const [theme, setTheme] = useState<ThemeName>(readTheme);
 	/** 主机上的偏好设置；没读到之前先用缺省值 */
 	const [settings, setSettings] = useState<FacetSettings>(DEFAULT_SETTINGS);
+	/** 本机界面缩放百分比，由主进程在创建窗口时带入 */
+	const [uiScale, setUiScale] = useState(bridge.uiScale);
+	/** 缩放变化后短暂显示的百分比浮层 */
+	const [zoomBadge, setZoomBadge] = useState<number | undefined>(undefined);
+	const zoomBadgeTimer = useRef<number | undefined>(undefined);
 	/** 窄屏时侧栏是抽屉，这个开关控制它展开；宽屏时侧栏常驻，另行记收起的意图 */
 	const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 	/** 侧栏头部那个会话搜索框是否展开；头部在顶带里，状态放在这里 */
@@ -386,6 +396,61 @@ export function App() {
 		const width = clampSidebarWidth(next);
 		setSidebarWidth(width);
 		writeSidebarWidth(window.localStorage, width);
+	}, []);
+
+	/** 应用本机界面缩放并让窗口重新测量。 */
+	const changeUiScale = useCallback((next: number) => {
+		const scale = normalizeUiScale(next);
+		setUiScale(scale);
+		bridge.setUiScale?.(scale);
+		setZoomBadge(scale);
+		if (zoomBadgeTimer.current !== undefined) window.clearTimeout(zoomBadgeTimer.current);
+		zoomBadgeTimer.current = window.setTimeout(() => setZoomBadge(undefined), 1200);
+		window.requestAnimationFrame(() => window.dispatchEvent(new Event("facet:zoom-changed")));
+	}, []);
+
+	// 界面缩放快捷键：Mod+= / Mod+- / Mod+0；0 回到 100%
+	useEffect(() => {
+		if (bridge.platform === "web") return;
+		const onKeyDown = (event: KeyboardEvent) => {
+			if ((!event.ctrlKey && !event.metaKey) || event.altKey) return;
+			if (event.key === "0") {
+				event.preventDefault();
+				changeUiScale(100);
+				return;
+			}
+			const direction =
+				event.key === "=" || event.key === "+" ? 1 : event.key === "-" || event.key === "_" ? -1 : 0;
+			if (direction === 0) return;
+			event.preventDefault();
+			changeUiScale(stepUiScale(uiScale, direction));
+		};
+		window.addEventListener("keydown", onKeyDown, true);
+		return () => window.removeEventListener("keydown", onKeyDown, true);
+	}, [changeUiScale, uiScale]);
+
+	useEffect(() => {
+		return () => {
+			if (zoomBadgeTimer.current !== undefined) window.clearTimeout(zoomBadgeTimer.current);
+		};
+	}, []);
+
+	// Electron zoom 改变时 devicePixelRatio 跟着变；通知 xterm 与 CodeMirror 重新量字符网格
+	useEffect(() => {
+		let query: MediaQueryList | undefined;
+		let dispose: (() => void) | undefined;
+		const watch = (): void => {
+			dispose?.();
+			query = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+			const onChange = (): void => {
+				window.dispatchEvent(new Event("facet:zoom-changed"));
+				watch();
+			};
+			query.addEventListener("change", onChange, { once: true });
+			dispose = () => query?.removeEventListener("change", onChange);
+		};
+		watch();
+		return () => dispose?.();
 	}, []);
 	const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 	/** 880px 以下走抽屉；侧栏开关在两套行为之间切换 */
@@ -1494,6 +1559,40 @@ export function App() {
 		scrollToBottom,
 	} = useStickToBottom(transcript, activeFile);
 
+	// 滚动到顶部时自动补更早的历史；已经在贴底时不触发，避免刚打开就连环加载。
+	const loadingOlder = useRef(false);
+	useEffect(() => {
+		if (openedSessionId !== undefined) loadingOlder.current = false;
+	}, [openedSessionId]);
+	useEffect(() => {
+		const element = scrollElement;
+		if (element === null || isPinned) return;
+		const loadOlder = () => {
+			if (element.scrollTop > 96 || loadingOlder.current || !client.hasMore) return;
+			loadingOlder.current = true;
+			const distanceFromBottom = element.scrollHeight - element.scrollTop;
+			void client.loadOlder().then(
+				({ loaded }) => {
+					if (loaded === 0) {
+						loadingOlder.current = false;
+						return;
+					}
+					requestAnimationFrame(() => {
+						element.scrollTop = element.scrollHeight - distanceFromBottom;
+						loadingOlder.current = false;
+					});
+				},
+				() => {
+					loadingOlder.current = false;
+				},
+			);
+		};
+		element.addEventListener("scroll", loadOlder, { passive: true });
+		// 用户上一帧已经停在顶部时不会再触发 scroll，挂上监听后补一次判断
+		loadOlder();
+		return () => element.removeEventListener("scroll", loadOlder);
+	}, [isPinned, scrollElement]);
+
 	const codeThemeValue = useMemo(
 		() => ({
 			theme: settings.appearance.codeTheme,
@@ -1915,6 +2014,8 @@ export function App() {
 								runtime: `Electron ${bridge.platform}`,
 								endpoint,
 							}}
+							uiScale={bridge.platform === "web" ? undefined : uiScale}
+							onUiScaleChange={bridge.platform === "web" ? undefined : changeUiScale}
 							// 浏览器入口改不了主机配置，桌面与 SSH 通道可以
 							canEdit={host?.canManage === true}
 						/>
@@ -1936,6 +2037,11 @@ export function App() {
 					) : null}
 				</div>
 			</AppFrame>
+			{zoomBadge === undefined ? null : (
+				<div className="zoom-badge" role="status">
+					{zoomBadge}%
+				</div>
+			)}
 		</CodeThemeProvider>
 	);
 }

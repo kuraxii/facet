@@ -33,6 +33,9 @@ export function installWebBridge(): void {
 		projectDir: "",
 		platform: "web",
 		appVersion: "web",
+		// Web 端暂时不做界面缩放，浏览器自身负责页面缩放
+		uiScale: 100,
+		setUiScale: () => {},
 		// Web 端连的就是当前这台主机，没有「本机/远程」之分
 		hostMode: "external",
 		getLocalHost: async () => ({ target: "local", address: location.host, token }),

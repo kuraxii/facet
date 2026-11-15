@@ -1,0 +1,49 @@
+/* 减少动效：系统偏好与应用设置共用同一组时长变量，并停掉循环动画。 */
+
+@media (prefers-reduced-motion: reduce) {
+	.tr-name.is-live,
+	.tr-arg.is-live,
+	.group-label.is-live {
+		animation: none;
+		opacity: 1;
+	}
+
+	[data-live-motion="shimmer"] .tr-name.is-live,
+	[data-live-motion="shimmer"] .tr-arg.is-live,
+	[data-live-motion="shimmer"] .group-label.is-live {
+		color: var(--t1);
+		-webkit-text-fill-color: currentColor;
+		background: none;
+	}
+}
+
+/* 设置里打开减少动效时,把动效时长清零并停掉循环动画 */
+:root[data-motion="reduced"] {
+	--dur-fast: 0ms;
+	--dur-slow: 0ms;
+}
+
+:root[data-motion="reduced"] .pulse,
+:root[data-motion="reduced"] .caret {
+	animation: none;
+}
+
+/* 减少动效时竖轨的短条直接跳到目标尺寸，不做过渡 */
+:root[data-motion="reduced"] .outline-pill {
+	transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.pulse,
+	.caret {
+		animation: none;
+	}
+
+	.md .markstream-react .code-block-container .code-block-header {
+		transition: none;
+	}
+
+	.row-action {
+		transition: none;
+	}
+}

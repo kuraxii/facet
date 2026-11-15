@@ -198,28 +198,27 @@ npm run dist -w @facet/desktop # 出安装包
 |---|---|---|---|
 | 界面 Latin 与数字 | Inter | 400 / 500 / 600 | `@fontsource/inter` |
 | 界面汉字与中文标点 | Noto Sans SC Variable | 100–900（可变字体） | `@fontsource-variable/noto-sans-sc`，按 unicode-range 分片，OFL-1.1 |
-| 代码里中文之外的部分 | Maple Mono | 400 / 500 / 600 | `packages/ui/src/assets/fonts/` 下的 woff2，OFL-1.1，许可文本同目录 |
-| 代码里的汉字与中文标点 | Maple Mono CN | 400 | `@automann/maple-mono-cn`，按 unicode-range 分片，OFL-1.1 |
+| 代码字体 | Maple Mono CN | 400 / 500 / 600 | `packages/ui/src/assets/fonts/` 下的 woff2，完整 CJK，OFL-1.1，许可文本同目录 |
 
-两段汉字都由 `packages/ui/src/styles/fonts.css` 顶部的 `@import` 引入，按 unicode-range 分片，渲染到对应字符才加载，界面上没有中文就不下载任何一片。Noto Sans SC 那一段是可变字体，4.3 MB 分 101 片，字重 100–900 共用同一批文件，覆盖 GB2312 全部汉字的 99.5%、中文标点全中；缺的字由系统字体补上。Maple Mono CN 那一段覆盖整个 CJK 基本区（U+4E00–U+9FA5），13px 字号下每个汉字占两格宽；这个包只发布 400 一个字重，代码正文用的就是 400，600 只出现在 `.tool-name` 的英文工具名上，汉字遇到粗体由浏览器合成。
+两段汉字都由 `packages/ui/src/styles/fonts.css` 引入。Noto Sans SC 那一段是可变字体，4.3 MB 分 101 片，字重 100–900 共用同一批文件，覆盖 GB2312 全部汉字的 99.5%、中文标点全中；缺的字由系统字体补上。Maple Mono CN 使用三个完整 woff2，每个约 6 MB，包含 Latin、符号、制表符与整个 CJK 基本区；浏览器按字重选择文件，不再区分 Latin 子集与中文 fallback。
 
-Latin、符号与制表符那三个 woff2 取自本机的 Maple Mono NL NF CN v7.9，要重新生成：
+代码字体取自本机的 Maple Mono NL NF CN v7.9，要重新生成：
 
 ```bash
 scripts/build-fonts.sh            # 缺省读 ~/.fonts
 scripts/build-fonts.sh <字体目录>
 ```
 
-设置页的外观按「通用 / 字体 / 代码配色」分成三组卡片，字体那组单独列出四处可换的字体：
+设置页的外观按「本机 / 通用 / 字体 / 代码配色」分成几组卡片，字体那组列出代码、编辑器、终端三处可换的字体：
 
-| 设置项 | 作用范围 | 留空时 |
+| 设置项 | 作用范围 | 留空或默认时 |
 |---|---|---|
-| 界面字体 | 侧栏、弹窗、控件与聊天正文 | Inter 栈 |
-| 代码字体 | 聊天里的代码块与补丁 | Maple Mono |
+| 界面缩放 | 整个界面 | 100%，可选 80–150 |
+| 代码字体 | 聊天里的代码块与补丁 | Maple Mono CN |
 | 编辑器字体 | 右栏打开的文件 | 跟代码字体 |
 | 终端字体 | 底部终端 | 跟代码字体 |
 
-字号同样分开：界面字号作用于聊天正文，编辑器字号与终端字号各管一处。界面字号要不要连带控件尺寸一起缩放还在权衡，目前只影响正文。
+界面字体固定为 Inter 与 Noto Sans SC Variable，正文字号固定为 15px；代码块字号固定为 12.5px。整体大小由界面缩放控制，编辑器字号与终端字号各自可调。
 
 配色是一套浅色加五套深色（`zinc` 为缺省），代码高亮另有八套可选，浅深跟随界面主题。全部取值在 `packages/ui/src/styles/theme.css`。
 
@@ -256,7 +255,7 @@ npm run dist -w @facet/desktop
 - 依赖走 electron-builder 的缺省清单（deb：`libgtk-3-0`、`libnss3`、`libxss1`、`libxtst6` 等；rpm：`gtk3`、`nss`、`libXScrnSaver` 等），不手写
 - `node-pty` 的原生模块与 `spawn-helper` 解包在 `resources/app.asar.unpacked`，打包时只留 linux 的构建产物，源码与其它平台的预编译都剔掉
 - 构建 deb/rpm 用的 `fpm` 由 electron-builder 自己下载到 `~/.cache/electron-builder`，不需要系统装 fpm
-- 渲染产物约 45 MB，主要是随包打的字体（Inter、Noto Sans SC、Maple Mono）；Electron 本身约 100 MB
+- 渲染产物约 54 MB，主要是随包打的字体（Inter、Noto Sans SC、Maple Mono CN）；Electron 本身约 100 MB
 
 开发时桌面用 `process.execPath` 加 `ELECTRON_RUN_AS_NODE=1` 拉起 `out/main/server.js`，server 再起同目录的 `pty-server.js`；打包后桌面改为拉起独立产物 `resources/server/bin/node resources/server/lib/server.mjs`。
 

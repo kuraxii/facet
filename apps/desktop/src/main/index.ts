@@ -14,10 +14,12 @@ import {
 } from "./host-daemon.ts";
 import { countBusySessions } from "./host-query.ts";
 import {
+	DEFAULT_UI_SCALE,
 	DEFAULT_WINDOW_HEIGHT,
 	DEFAULT_WINDOW_WIDTH,
 	type LocalSettings,
 	readLocalSettings,
+	readUiScale,
 	type WindowBounds,
 	writeLocalSettings,
 } from "./local-settings.ts";
@@ -114,6 +116,7 @@ function saveWindowBounds(window: BrowserWindow): void {
 	const bounds = isMaximized ? window.getNormalBounds() : window.getBounds();
 	const next: LocalSettings = {
 		version: 1,
+		...(localSettings.uiScale === undefined ? {} : { uiScale: localSettings.uiScale }),
 		window: {
 			width: bounds.width,
 			height: bounds.height,
@@ -169,6 +172,7 @@ async function confirmQuit(window: BrowserWindow | undefined): Promise<boolean> 
 }
 
 function createWindow(): BrowserWindow {
+	const uiScale = localSettings.uiScale ?? DEFAULT_UI_SCALE;
 	const window = new BrowserWindow({
 		...windowOptions(localSettings.window),
 		minWidth: 640,
@@ -184,11 +188,13 @@ function createWindow(): BrowserWindow {
 			preload: join(app.getAppPath(), "out/preload/index.cjs"),
 			contextIsolation: true,
 			sandbox: true,
+			zoomFactor: uiScale / 100,
 			additionalArguments: [
 				`--facet-host-mode=${externalEndpoint === undefined ? "local" : "external"}`,
 				`--facet-project=${projectDir}`,
 				`--facet-platform=${process.platform}`,
 				`--facet-version=${app.getVersion()}`,
+				`--facet-ui-scale=${uiScale}`,
 			],
 		},
 	});
@@ -339,6 +345,20 @@ ipcMain.on("facet:window-toggle-maximize", (event) => {
 
 ipcMain.on("facet:window-close", (event) => {
 	BrowserWindow.fromWebContents(event.sender)?.close();
+});
+
+/** 界面缩放只改当前窗口，同时记进本机桌面设置。 */
+ipcMain.on("facet:ui-scale", (event, value: unknown) => {
+	const window = BrowserWindow.fromWebContents(event.sender);
+	if (window === null || window.isDestroyed()) {
+		return;
+	}
+	const uiScale = readUiScale(value) ?? DEFAULT_UI_SCALE;
+	window.webContents.setZoomFactor(uiScale / 100);
+	localSettings = { ...localSettings, uiScale };
+	void writeLocalSettings(localSettingsFile, localSettings).catch((error: unknown) => {
+		console.log(`[main] 保存界面缩放失败 ${String(error)}`);
+	});
 });
 
 /** 本机主机的连接信息：界面只知道「本机」这个目标与展示地址，具体端口与令牌在主进程。 */

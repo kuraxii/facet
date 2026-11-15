@@ -153,23 +153,48 @@ function shortPath(path: string): string {
  *
  * 一行里只有图标、短名与参数摘要，点开才看输出；输出没有边框与底色，直接跟在下面。
  */
-/** 工具结果里的一张图片。默认按行宽缩、限高，点一下回到原始尺寸。 */
+/** 工具结果里的一张图片。进入视口附近才挂载 data URL，默认按行宽缩、限高，点一下回到原始尺寸。 */
 function ToolImageThumb({ image, label }: { image: ToolImage; label: string }) {
 	const [isActual, setActual] = useState(false);
+	const [isNearViewport, setIsNearViewport] = useState(() => typeof IntersectionObserver === "undefined");
+	const buttonRef = useRef<HTMLButtonElement>(null);
+
+	useEffect(() => {
+		if (isNearViewport) return;
+		const node = buttonRef.current;
+		if (node === null) return;
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (!entries.some((entry) => entry.isIntersecting)) return;
+				setIsNearViewport(true);
+				observer.disconnect();
+			},
+			{ rootMargin: "300px 0px" },
+		);
+		observer.observe(node);
+		return () => observer.disconnect();
+	}, [isNearViewport]);
+
 	return (
 		<button
+			ref={buttonRef}
 			type="button"
-			className="tr-image"
+			className={isNearViewport ? "tr-image" : "tr-image is-pending"}
 			onClick={() => setActual((actual) => !actual)}
 			aria-label={label}
 			aria-pressed={isActual}
 			style={{ cursor: isActual ? "zoom-out" : "zoom-in", overflowX: isActual ? "auto" : undefined }}
 		>
-			<img
-				src={`data:${image.mimeType};base64,${image.data}`}
-				alt={label}
-				style={{ maxWidth: isActual ? "none" : undefined, maxHeight: isActual ? "none" : undefined }}
-			/>
+			{isNearViewport ? (
+				<img
+					src={`data:${image.mimeType};base64,${image.data}`}
+					alt={label}
+					decoding="async"
+					style={{ maxWidth: isActual ? "none" : undefined, maxHeight: isActual ? "none" : undefined }}
+				/>
+			) : (
+				<span className="tr-image-placeholder" aria-hidden="true" />
+			)}
 		</button>
 	);
 }

@@ -1,0 +1,418 @@
+/* 输入区、排队条、模型与上下文浮层。 */
+
+/* 底部区 */
+
+.footer {
+	position: relative;
+	flex: none;
+	padding: 0 24px 18px;
+}
+
+.to-bottom {
+	position: absolute;
+	left: 50%;
+	bottom: calc(100% + 2px);
+	display: grid;
+	place-items: center;
+	width: 32px;
+	height: 32px;
+	transform: translateX(-50%);
+	border: 1px solid var(--line2);
+	border-radius: 50%;
+	background: var(--card2);
+	color: var(--t2);
+	box-shadow: 0 6px 18px rgba(0, 0, 0, 0.32);
+}
+
+.to-bottom:hover {
+	background: var(--line2);
+	color: var(--t1);
+}
+
+.footer-column {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	max-width: 780px;
+	margin: 0 auto;
+}
+
+.composer {
+	position: relative;
+	padding: 12px 12px 10px 16px;
+	border: 1px solid var(--line2);
+	border-radius: 16px;
+	background: var(--card);
+}
+
+.composer textarea {
+	width: 100%;
+	border: 0;
+	outline: 0;
+	resize: none;
+	background: transparent;
+	color: var(--t1);
+	font: inherit;
+	font-size: 14px;
+	line-height: 1.6;
+	/* 内容超过一屏时滚动条出现也不让文字跟着跳 */
+	scrollbar-gutter: stable;
+}
+
+.composer textarea::placeholder {
+	color: var(--t3);
+}
+
+/* 命令列表：贴在输入框上沿，最多八条，超出在列表内滚动 */
+.cmd-pop {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: calc(100% + 6px);
+	z-index: 30;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	max-height: 320px;
+	overflow-y: auto;
+	padding: 6px;
+	border: 1px solid var(--line2);
+	border-radius: 12px;
+	background: var(--card2);
+	box-shadow: 0 10px 28px rgb(0 0 0 / 38%);
+}
+
+.cmd-row {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	padding: 5px 8px;
+	border: 0;
+	border-radius: 7px;
+	background: transparent;
+	color: var(--t1);
+	font-size: 12.5px;
+	text-align: left;
+	cursor: pointer;
+}
+
+.cmd-row.is-on {
+	background: var(--surface3);
+}
+
+.cmd-name {
+	flex: none;
+	color: var(--t1);
+	font-family: var(--font-mono);
+	font-size: 12px;
+}
+
+.cmd-hint {
+	flex: none;
+	color: var(--t3);
+	font-family: var(--font-mono);
+	font-size: 11.5px;
+}
+
+.cmd-desc {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	color: var(--t2);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.cmd-source {
+	flex: none;
+	color: var(--t3);
+	font-size: 11px;
+}
+
+.composer-row {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	margin-top: 4px;
+}
+
+/* 输入区左侧的小图标按钮：默认只有图标，悬停时给一层底色并提亮图标 */
+.ib {
+	display: grid;
+	place-items: center;
+	width: 26px;
+	height: 26px;
+	padding: 0;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--t3);
+	transition:
+		background-color var(--dur-fast) var(--ease),
+		color var(--dur-fast) var(--ease);
+}
+
+.ib:hover:not(:disabled),
+.ib[aria-expanded="true"] {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+.ib:disabled {
+	cursor: default;
+}
+
+/* 错误条上的图标按钮用危险色，不管悬停与否 */
+.session-error .ib {
+	color: var(--err);
+}
+
+/* 模型与档位芯片：默认只有文字，悬停或展开时给一层底色 */
+.composer-row .chip {
+	height: 28px;
+	margin-left: 2px;
+	padding: 0 8px;
+	border: 0;
+	border-radius: 14px;
+	background: transparent;
+	color: var(--t3);
+	transition:
+		background-color var(--dur-fast) var(--ease),
+		color var(--dur-fast) var(--ease);
+}
+
+.composer-row .chip:hover:not(:disabled),
+.composer-row .chip[aria-expanded="true"] {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+.composer-send {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-left: auto;
+}
+
+/* 上下文用量环：无边框无底色，只有一圈进度与悬浮提示 */
+.ctx-chip {
+	display: grid;
+	place-items: center;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	cursor: pointer;
+}
+
+.ctx-chip:hover {
+	background: var(--card2);
+}
+
+.ctx-ring {
+	display: inline-flex;
+	line-height: 0;
+}
+
+.ctx-ring circle:last-child {
+	transition: stroke-dashoffset var(--dur-fast) var(--ease);
+}
+
+/* 用量浮层：一行数值加一个手动压缩入口，向上展开 */
+.chip-pop.is-context {
+	left: auto;
+	right: 0;
+	min-width: 236px;
+}
+
+/* 浮层文字三行：前两行同字号同色，只有底行的已用量收小一号、换成次要色 */
+.ctx-pop-title,
+.ctx-pop-value {
+	margin: 0;
+	padding: 0 6px;
+	color: var(--t1);
+	font-size: 13px;
+	font-weight: 400;
+	line-height: 1.6;
+}
+
+.ctx-pop-title {
+	padding-top: 5px;
+}
+
+.ctx-pop-detail {
+	margin: 0;
+	padding: 1px 6px 6px;
+	color: var(--t3);
+	font-size: 12px;
+	line-height: 1.5;
+	white-space: nowrap;
+}
+
+.ctx-pop-action {
+	margin-top: 2px;
+	padding: 5px 6px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--t1);
+	font-size: 12px;
+	text-align: left;
+	cursor: pointer;
+}
+
+.ctx-pop-action:hover {
+	background: var(--surface3);
+}
+
+.ctx-pop-action:disabled {
+	opacity: 0.45;
+	cursor: default;
+	background: transparent;
+}
+
+.send {
+	display: grid;
+	place-items: center;
+	width: 34px;
+	height: 34px;
+	border: 0;
+	border-radius: 10px;
+	background: var(--acc-fill);
+	color: var(--on-acc);
+}
+
+.send:disabled {
+	background: var(--card2);
+	color: var(--t3);
+	cursor: default;
+}
+
+/* 停止：边界与发送是同一个方框（同尺寸同圆角），中间换成红色方块 */
+.send.is-stop {
+	border: 1px solid color-mix(in srgb, var(--t3) 62%, transparent);
+	background: transparent;
+}
+
+.send.is-stop:hover:not(:disabled) {
+	border-color: var(--t3);
+	background: var(--card2);
+}
+
+.notices {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 8px;
+	padding-top: 2px;
+}
+
+.chip-wrap {
+	position: relative;
+	display: inline-flex;
+}
+
+.chip-pop {
+	position: absolute;
+	bottom: calc(100% + 6px);
+	left: 0;
+	z-index: 30;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 240px;
+	max-height: 320px;
+	overflow-y: auto;
+	padding: 6px;
+	border: 1px solid var(--line2);
+	border-radius: 10px;
+	background: var(--card2);
+	box-shadow: 0 12px 32px rgb(0 0 0 / 35%);
+}
+
+/* 添加菜单只有两项，收窄一点，左图标右文字 */
+.chip-pop.is-attach {
+	min-width: 168px;
+}
+
+.chip-pop-item.is-row {
+	justify-content: flex-start;
+	gap: 8px;
+}
+
+.chip-pop-group {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+
+.chip-pop-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	margin: 4px 0 2px;
+	padding: 0 8px;
+	color: var(--t3);
+	font-size: 11px;
+}
+
+.chip-pop-note {
+	color: var(--warn);
+}
+
+.chip-pop-item {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	height: 26px;
+	padding: 0 8px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--t2);
+	font-size: 12px;
+	text-align: left;
+}
+
+.chip-pop-item:hover:not(:disabled) {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+.chip-pop-item:disabled {
+	opacity: 0.45;
+	color: var(--t3);
+	cursor: default;
+}
+
+.chip-pop-item.is-on {
+	background: var(--surface3);
+	color: var(--t1);
+}
+
+.chip-pop-meta {
+	flex: none;
+	color: var(--t3);
+	font-size: 10.5px;
+}
+
+.chip-pop-empty {
+	margin: 4px 8px;
+	color: var(--t3);
+	font-size: 11.5px;
+}
+
+/* 窄屏：输入区收边 */
+@media (max-width: 880px) {
+	.footer-column {
+		width: min(100%, 760px);
+	}
+
+	.footer {
+		padding: 0 12px 10px;
+	}
+}

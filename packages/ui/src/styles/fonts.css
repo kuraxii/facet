@@ -5,37 +5,33 @@
  * @fontsource-variable/noto-sans-sc，一个可变字体文件按 unicode-range 切成 101 片，字重 100–900
  * 由同一个文件承担，渲染到哪片才加载哪片。
  *
- * 代码字体同样分两段：Latin、符号与制表符来自 src/assets/fonts 下的 woff2（由
- * scripts/build-fonts.sh 切出，400 / 500 / 600），汉字与中文标点来自
- * @automann/maple-mono-cn 的 400.css。
- *
- * Maple Mono CN 只发布 400 一个字重：代码正文继承 400，600 只用在 .tool-name 的英文工具名上，
- * 汉字遇到粗体由浏览器合成。
+ * 代码字体使用完整的 Maple Mono CN：400 / 500 / 600 三个文件各含 Latin、符号、制表符与
+ * 整个 CJK 基本区，不再拆分 Latin 子集与中文 fallback。三个文件由
+ * scripts/build-fonts.sh 从本机 Maple Mono NL NF CN 生成。
  */
 
-@import "@automann/maple-mono-cn/400.css";
 @import "@fontsource-variable/noto-sans-sc";
 
 @font-face {
-	font-family: "Maple Mono";
+	font-family: "Maple Mono CN";
 	font-style: normal;
 	font-weight: 400;
 	font-display: swap;
-	src: url("../assets/fonts/maple-mono-400.woff2") format("woff2");
+	src: url("../assets/fonts/maple-mono-cn-400.woff2") format("woff2");
 }
 
 @font-face {
-	font-family: "Maple Mono";
+	font-family: "Maple Mono CN";
 	font-style: normal;
 	font-weight: 500;
 	font-display: swap;
-	src: url("../assets/fonts/maple-mono-500.woff2") format("woff2");
+	src: url("../assets/fonts/maple-mono-cn-500.woff2") format("woff2");
 }
 
 @font-face {
-	font-family: "Maple Mono";
+	font-family: "Maple Mono CN";
 	font-style: normal;
 	font-weight: 600;
 	font-display: swap;
-	src: url("../assets/fonts/maple-mono-600.woff2") format("woff2");
+	src: url("../assets/fonts/maple-mono-cn-600.woff2") format("woff2");
 }

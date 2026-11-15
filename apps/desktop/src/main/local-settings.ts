@@ -27,6 +27,8 @@ export interface LocalSettings {
 	version: 1;
 	/** 上次退出时的窗口位置与尺寸，缺省时用应用默认值 */
 	window?: WindowBounds;
+	/** 界面缩放百分比，缺省 100 */
+	uiScale?: number;
 }
 
 /** 缺省宽度，没有记录时用。 */
@@ -34,6 +36,16 @@ export const DEFAULT_WINDOW_WIDTH = 1100;
 
 /** 缺省高度，没有记录时用。 */
 export const DEFAULT_WINDOW_HEIGHT = 760;
+
+/** 缺省界面缩放百分比。 */
+export const DEFAULT_UI_SCALE = 100;
+
+/** 界面缩放的允许范围。 */
+export const UI_SCALE_MIN = 80;
+export const UI_SCALE_MAX = 150;
+
+/** 界面缩放的离散档位。 */
+const UI_SCALE_STEPS = [80, 90, 100, 110, 125, 135, 150];
 
 const MIN_WIDTH = 640;
 const MAX_WIDTH = 8000;
@@ -65,11 +77,13 @@ export function parseLocalSettings(text: string): LocalSettings {
 	if (typeof data !== "object" || data === null) {
 		return { version: 1 };
 	}
-	const record = data as { version?: unknown; window?: unknown };
+	const record = data as { version?: unknown; window?: unknown; uiScale?: unknown };
 	const window = readWindowBounds(record.window);
+	const uiScale = readUiScale(record.uiScale);
 	return {
 		version: 1,
 		...(window === undefined ? {} : { window }),
+		...(uiScale === undefined ? {} : { uiScale }),
 	};
 }
 
@@ -92,6 +106,21 @@ export function readWindowBounds(value: unknown): WindowBounds | undefined {
 function clamp(value: unknown, fallback: number, min: number, max: number): number {
 	const number = typeof value === "number" && Number.isFinite(value) ? Math.round(value) : fallback;
 	return Math.min(Math.max(number, min), max);
+}
+
+/** 读界面缩放百分比；没有记录或不是数字时返回 undefined。 */
+export function readUiScale(value: unknown): number | undefined {
+	if (typeof value !== "number" || !Number.isFinite(value)) {
+		return undefined;
+	}
+	return normalizeUiScale(clamp(value, DEFAULT_UI_SCALE, UI_SCALE_MIN, UI_SCALE_MAX));
+}
+
+/** 取最接近的完整档位。 */
+function normalizeUiScale(value: number): number {
+	return UI_SCALE_STEPS.reduce((closest, candidate) =>
+		Math.abs(candidate - value) < Math.abs(closest - value) ? candidate : closest,
+	);
 }
 
 /** 取整数，NaN 与非有限值视为没有记录。 */

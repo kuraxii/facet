@@ -41,11 +41,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** 取一个落在范围内的数字，不合法时用缺省值。 */
-function readNumber(value: unknown, fallback: number, min: number, max: number): number {
-	return typeof value === "number" && Number.isFinite(value)
-		? Math.min(max, Math.max(min, Math.round(value)))
-		: fallback;
+/** 取一个落在范围内的数字，按步长取整，不合法时用缺省值。 */
+function readNumber(value: unknown, fallback: number, min: number, max: number, step = 1): number {
+	if (typeof value !== "number" || !Number.isFinite(value)) {
+		return fallback;
+	}
+	const stepped = Math.round(value / step) * step;
+	return Math.min(max, Math.max(min, stepped));
 }
 
 /** 取一个受限的字符串，不在允许集合里时用缺省值。 */
@@ -103,14 +105,6 @@ export function parseSettings(value: unknown): FacetSettings {
 				CODE_THEMES,
 				DEFAULT_SETTINGS.appearance.codeTheme,
 			),
-			// 老版本把界面字体叫 bodyFont、界面字号叫 fontSize，读的时候兼容过来
-			uiFont: readString(appearance.uiFont ?? appearance.bodyFont, DEFAULT_SETTINGS.appearance.uiFont),
-			uiFontSize: readNumber(
-				appearance.uiFontSize ?? appearance.fontSize,
-				DEFAULT_SETTINGS.appearance.uiFontSize,
-				MIN_FONT_SIZE,
-				MAX_FONT_SIZE,
-			),
 			codeFont: readString(appearance.codeFont, DEFAULT_SETTINGS.appearance.codeFont),
 			editorFont: readString(appearance.editorFont, DEFAULT_SETTINGS.appearance.editorFont),
 			editorFontSize: readNumber(
@@ -118,6 +112,7 @@ export function parseSettings(value: unknown): FacetSettings {
 				DEFAULT_SETTINGS.appearance.editorFontSize,
 				MIN_FONT_SIZE,
 				MAX_FONT_SIZE,
+				0.5,
 			),
 			terminalFont: readString(appearance.terminalFont, DEFAULT_SETTINGS.appearance.terminalFont),
 			terminalFontSize: readNumber(
@@ -125,6 +120,7 @@ export function parseSettings(value: unknown): FacetSettings {
 				DEFAULT_SETTINGS.appearance.terminalFontSize,
 				MIN_FONT_SIZE,
 				MAX_FONT_SIZE,
+				0.5,
 			),
 			reducedMotion:
 				typeof appearance.reducedMotion === "boolean"

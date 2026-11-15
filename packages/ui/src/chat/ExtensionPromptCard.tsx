@@ -2,6 +2,46 @@
 import type { UiFormAnswer, UiFormQuestion, UiPrompt, UiResponse } from "@facet/protocol";
 import { Check, X } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import styles from "./ExtensionPromptCard.module.css";
+
+/** 源类名到模块类名的映射，状态类也在这里集中命名。 */
+const s = {
+	card: styles["extension-card"],
+	cardPreview: styles["is-preview"],
+	cardText: styles["extension-card-text"],
+	heading: styles["extension-card-heading"],
+	body: styles["extension-card-body"],
+	chip: styles["extension-chip"],
+	preview: styles["extension-preview"],
+	prefill: styles["extension-card-prefill"],
+	options: styles["extension-options"],
+	option: styles["extension-option"],
+	optionPreview: styles["is-preview"],
+	radioInput: styles["extension-radio-input"],
+	radio: styles["extension-radio"],
+	radioDot: styles["extension-radio-dot"],
+	optionText: styles["extension-option-text"],
+	optionLabel: styles["extension-option-label"],
+	placeholder: styles["is-placeholder"],
+	custom: styles["is-custom"],
+	editing: styles["is-editing"],
+	customInput: styles["extension-custom-input"],
+	optionNote: styles["extension-option-note"],
+	square: styles["is-square"],
+	tabs: styles["extension-tabs"],
+	tab: styles["extension-tab"],
+	tabActive: styles["is-active"],
+	tabMark: styles["extension-tab-mark"],
+	tabDot: styles["extension-tab-dot"],
+	formPreview: styles["extension-form-preview"],
+	input: styles["extension-input"],
+	editor: styles["extension-editor"],
+	error: styles["extension-card-error"],
+	footer: styles["extension-footer"],
+	actions: styles["extension-actions"],
+	action: styles["extension-action"],
+	actionPrimary: styles["is-primary"],
+};
 
 /** 卡片参数。 */
 export interface ExtensionPromptCardProps {
@@ -95,7 +135,7 @@ export function ExtensionPromptCard({ prompt, canRespond, onRespond }: Extension
 		} else if (prompt.kind === "editor") {
 			editorRef.current?.focus();
 		} else if (prompt.kind === "form") {
-			cardRef.current?.querySelector<HTMLInputElement>(".extension-options input")?.focus();
+			cardRef.current?.querySelector<HTMLInputElement>("input[type=radio], input[type=checkbox]")?.focus();
 		} else {
 			submitRef.current?.focus();
 		}
@@ -179,31 +219,31 @@ export function ExtensionPromptCard({ prompt, canRespond, onRespond }: Extension
 		const bounded = Math.max(0, Math.min(questions.length - 1, next));
 		setTab(bounded);
 		setCustomEditing(undefined);
-		tablistRef.current?.querySelectorAll<HTMLButtonElement>(".extension-tab")[bounded]?.focus();
+		tablistRef.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[bounded]?.focus();
 	}
 
 	if (!canRespond) {
 		return (
-			<section className="extension-card is-preview" aria-label={prompt.title}>
-				<div className="extension-card-text">
+			<section className={`${s.card} ${s.cardPreview}`} aria-label={prompt.title} data-extension-preview-card>
+				<div className={s.cardText}>
 					{prompt.kind === "form" ? (
 						prompt.questions.map((item) => (
-							<div key={item.id} className="extension-form-preview">
-								{item.header === undefined ? null : <span className="extension-chip">{item.header}</span>}
-								<h3 className="extension-card-heading">{item.title}</h3>
-								{item.body === undefined ? null : <p className="extension-card-body">{item.body}</p>}
+							<div key={item.id} className={s.formPreview}>
+								{item.header === undefined ? null : <span className={s.chip}>{item.header}</span>}
+								<h3 className={s.heading}>{item.title}</h3>
+								{item.body === undefined ? null : <p className={s.body}>{item.body}</p>}
 								{item.choices.length === 0 ? null : (
-									<ul className="extension-options">
+									<ul className={s.options} data-extension-options>
 										{item.choices.map((choice) => (
-											<li key={choice.label} className="extension-option is-preview">
-												<span className="extension-radio" aria-hidden="true" />
-												<span className="extension-option-label">{choice.label}</span>
+											<li key={choice.label} className={`${s.option} ${s.optionPreview}`}>
+												<span className={s.radio} aria-hidden="true" />
+												<span className={s.optionLabel}>{choice.label}</span>
 											</li>
 										))}
 										{item.allowCustom === true ? (
-											<li className="extension-option is-preview">
-												<span className="extension-radio" aria-hidden="true" />
-												<span className="extension-option-label is-placeholder">Type something.</span>
+											<li className={`${s.option} ${s.optionPreview}`}>
+												<span className={s.radio} aria-hidden="true" />
+												<span className={`${s.optionLabel} ${s.placeholder}`}>Type something.</span>
 											</li>
 										) : null}
 									</ul>
@@ -212,22 +252,20 @@ export function ExtensionPromptCard({ prompt, canRespond, onRespond }: Extension
 						))
 					) : (
 						<>
-							<h3 className="extension-card-heading">{heading}</h3>
-							{body === undefined ? null : <p className="extension-card-body">{body}</p>}
-							{prompt.kind === "confirm" ? <p className="extension-card-body">{prompt.message}</p> : null}
+							<h3 className={s.heading}>{heading}</h3>
+							{body === undefined ? null : <p className={s.body}>{body}</p>}
+							{prompt.kind === "confirm" ? <p className={s.body}>{prompt.message}</p> : null}
 							{prompt.kind === "select" ? (
-								<ul className="extension-options" aria-label={prompt.title}>
+								<ul className={s.options} aria-label={prompt.title} data-extension-options>
 									{options.map((option) => (
-										<li key={option} className="extension-option is-preview">
-											<span className="extension-radio" aria-hidden="true" />
-											<span className="extension-option-label">{option}</span>
+										<li key={option} className={`${s.option} ${s.optionPreview}`}>
+											<span className={s.radio} aria-hidden="true" />
+											<span className={s.optionLabel}>{option}</span>
 										</li>
 									))}
 								</ul>
 							) : null}
-							{prompt.kind === "editor" ? (
-								<pre className="extension-card-prefill">{prompt.prefill ?? ""}</pre>
-							) : null}
+							{prompt.kind === "editor" ? <pre className={s.prefill}>{prompt.prefill ?? ""}</pre> : null}
 						</>
 					)}
 				</div>
@@ -236,11 +274,11 @@ export function ExtensionPromptCard({ prompt, canRespond, onRespond }: Extension
 	}
 
 	return (
-		<section ref={cardRef} className="extension-card" aria-busy={busy}>
+		<section ref={cardRef} className={s.card} aria-busy={busy}>
 			{prompt.kind === "form" ? (
 				<div
 					ref={tablistRef}
-					className="extension-tabs"
+					className={s.tabs}
 					role="tablist"
 					aria-label="题目"
 					onKeyDown={(event) => {
@@ -262,14 +300,18 @@ export function ExtensionPromptCard({ prompt, canRespond, onRespond }: Extension
 								type="button"
 								role="tab"
 								aria-selected={tab === index}
-								className={`extension-tab${tab === index ? " is-active" : ""}`}
+								className={`${s.tab}${tab === index ? ` ${s.tabActive}` : ""}`}
 								onClick={() => {
 									setTab(index);
 									setCustomEditing(undefined);
 								}}
 							>
-								<span className="extension-tab-mark" aria-hidden="true">
-									{responded ? <Check size={11} strokeWidth={2} /> : <span className="extension-tab-dot" />}
+								<span className={s.tabMark} aria-hidden="true">
+									{responded ? (
+										<Check size={11} strokeWidth={2} />
+									) : (
+										<span className={s.tabDot} data-extension-tab-dot />
+									)}
 								</span>
 								<span>{item.header ?? index + 1}</span>
 							</button>
@@ -277,41 +319,41 @@ export function ExtensionPromptCard({ prompt, canRespond, onRespond }: Extension
 					})}
 				</div>
 			) : null}
-			<div className="extension-card-text">
-				<h3 className="extension-card-heading">{heading}</h3>
-				{body === undefined ? null : <p className="extension-card-body">{body}</p>}
-				{prompt.kind === "confirm" ? <p className="extension-card-body">{prompt.message}</p> : null}
+			<div className={s.cardText}>
+				<h3 className={s.heading}>{heading}</h3>
+				{body === undefined ? null : <p className={s.body}>{body}</p>}
+				{prompt.kind === "confirm" ? <p className={s.body}>{prompt.message}</p> : null}
 			</div>
 			{prompt.kind === "select" ? (
-				<div className="extension-options" role="radiogroup" aria-label={prompt.title}>
+				<div className={s.options} role="radiogroup" aria-label={prompt.title} data-extension-options>
 					{options.map((option, index) => (
-						<label key={option} className="extension-option">
+						<label key={option} className={s.option}>
 							<input
 								ref={index === 0 ? inputRef : undefined}
 								type="radio"
 								name={groupName}
-								className="extension-radio-input"
+								className={s.radioInput}
 								checked={selected === index}
 								disabled={busy}
 								onChange={() => setSelected(index)}
 							/>
-							<span className="extension-radio" aria-hidden="true">
-								{selected === index ? <span className="extension-radio-dot" /> : null}
+							<span className={s.radio} aria-hidden="true">
+								{selected === index ? <span className={s.radioDot} /> : null}
 							</span>
-							<span className="extension-option-label">{option}</span>
+							<span className={s.optionLabel}>{option}</span>
 						</label>
 					))}
 				</div>
 			) : null}
 			{prompt.kind === "form" && question !== undefined ? (
 				<>
-					<div className="extension-options">
+					<div className={s.options} data-extension-options>
 						{question.choices.map((choice) => (
-							<label key={choice.label} className="extension-option">
+							<label key={choice.label} className={s.option}>
 								<input
 									type={question.multiple ? "checkbox" : "radio"}
 									name={question.multiple ? undefined : `${groupName}-${question.id}`}
-									className="extension-radio-input"
+									className={s.radioInput}
 									checked={answer?.selections.includes(choice.label) === true}
 									disabled={busy}
 									onChange={() => choose(choice.label)}
@@ -322,7 +364,7 @@ export function ExtensionPromptCard({ prompt, canRespond, onRespond }: Extension
 											return;
 										}
 										if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-										const group = event.currentTarget.closest(".extension-options");
+										const group = event.currentTarget.closest("[data-extension-options]");
 										if (group === null) return;
 										const inputs = [...group.querySelectorAll<HTMLInputElement>("input")];
 										const current = inputs.indexOf(event.currentTarget);
@@ -335,44 +377,39 @@ export function ExtensionPromptCard({ prompt, canRespond, onRespond }: Extension
 										if (target.type === "radio") target.click();
 									}}
 								/>
-								<span
-									className={`extension-radio${question.multiple ? " is-square" : ""}`}
-									aria-hidden="true"
-								>
+								<span className={`${s.radio}${question.multiple ? ` ${s.square}` : ""}`} aria-hidden="true">
 									{answer?.selections.includes(choice.label) === true ? (
 										question.multiple ? (
 											<Check size={12} strokeWidth={2.5} />
 										) : (
-											<span className="extension-radio-dot" />
+											<span className={s.radioDot} />
 										)
 									) : null}
 								</span>
-								<span className="extension-option-text">
-									<span className="extension-option-label">{choice.label}</span>
+								<span className={s.optionText}>
+									<span className={s.optionLabel}>{choice.label}</span>
 									{choice.description === undefined ? null : (
-										<span className="extension-option-note">{choice.description}</span>
+										<span className={s.optionNote}>{choice.description}</span>
 									)}
 								</span>
 							</label>
 						))}
 						{question.allowCustom === true ? (
 							customActive ? (
-								<div className="extension-option is-custom is-editing">
-									<span
-										className={`extension-radio${question.multiple ? " is-square" : ""}`}
-										aria-hidden="true"
-									>
+								<div className={`${s.option} ${s.custom} ${s.editing}`}>
+									<span className={`${s.radio}${question.multiple ? ` ${s.square}` : ""}`} aria-hidden="true">
 										{hasCustom ? (
 											question.multiple ? (
 												<Check size={12} strokeWidth={2.5} />
 											) : (
-												<span className="extension-radio-dot" />
+												<span className={s.radioDot} />
 											)
 										) : null}
 									</span>
 									<input
 										ref={customRef}
-										className="extension-custom-input"
+										className={s.customInput}
+										data-extension-custom-input
 										aria-label={`${question.title} 自定义答案`}
 										placeholder="Type something."
 										value={answer?.custom ?? ""}
@@ -400,11 +437,11 @@ export function ExtensionPromptCard({ prompt, canRespond, onRespond }: Extension
 									/>
 								</div>
 							) : (
-								<label className="extension-option is-custom">
+								<label className={`${s.option} ${s.custom}`}>
 									<input
 										type={question.multiple ? "checkbox" : "radio"}
 										name={question.multiple ? undefined : `${groupName}-${question.id}`}
-										className="extension-radio-input"
+										className={s.radioInput}
 										checked={false}
 										disabled={busy}
 										onChange={() => setCustomEditing(tab)}
@@ -416,17 +453,21 @@ export function ExtensionPromptCard({ prompt, canRespond, onRespond }: Extension
 										}}
 									/>
 									<span
-										className={`extension-radio${question.multiple ? " is-square" : ""}`}
+										className={`${s.radio}${question.multiple ? ` ${s.square}` : ""}`}
 										aria-hidden="true"
 									/>
-									<span className="extension-option-label is-placeholder">Type something.</span>
+									<span className={`${s.optionLabel} ${s.placeholder}`}>Type something.</span>
 								</label>
 							)
 						) : null}
 					</div>
-					{customActive || preview === undefined ? null : <pre className="extension-preview">{preview}</pre>}
+					{customActive || preview === undefined ? null : (
+						<pre className={s.preview} data-extension-preview>
+							{preview}
+						</pre>
+					)}
 					<input
-						className="extension-input"
+						className={s.input}
 						aria-label={`${question.title} 备注`}
 						placeholder="备注"
 						value={answer?.comment ?? ""}
@@ -443,7 +484,7 @@ export function ExtensionPromptCard({ prompt, canRespond, onRespond }: Extension
 			{prompt.kind === "input" ? (
 				<input
 					ref={inputRef}
-					className="extension-input"
+					className={s.input}
 					aria-label={prompt.title}
 					placeholder={prompt.placeholder}
 					value={value}
@@ -454,7 +495,7 @@ export function ExtensionPromptCard({ prompt, canRespond, onRespond }: Extension
 			{prompt.kind === "editor" ? (
 				<textarea
 					ref={editorRef}
-					className="extension-input extension-editor mono"
+					className={`${s.input} ${s.editor} mono`}
 					aria-label={prompt.title}
 					value={value}
 					disabled={busy}
@@ -462,15 +503,15 @@ export function ExtensionPromptCard({ prompt, canRespond, onRespond }: Extension
 				/>
 			) : null}
 			{error === undefined ? null : (
-				<p className="extension-card-error" role="alert">
+				<p className={s.error} role="alert">
 					{error}
 				</p>
 			)}
-			<div className="extension-footer">
-				<div className="extension-actions">
+			<div className={s.footer}>
+				<div className={s.actions} data-extension-actions>
 					<button
 						type="button"
-						className="extension-action"
+						className={s.action}
 						disabled={busy}
 						onClick={() => {
 							void respond({ kind: "cancel" });
@@ -482,7 +523,8 @@ export function ExtensionPromptCard({ prompt, canRespond, onRespond }: Extension
 					<button
 						ref={submitRef}
 						type="button"
-						className="extension-action is-primary"
+						className={`${s.action} ${s.actionPrimary}`}
+						data-extension-submit
 						disabled={!canSubmit}
 						onClick={submit}
 					>

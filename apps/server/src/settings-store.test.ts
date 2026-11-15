@@ -28,13 +28,13 @@ describe("设置读取", () => {
 		const saved = await store.save({
 			...store.get(),
 			defaultModel: { provider: "new api", id: "deepseek-v4-flash" },
-			appearance: { ...store.get().appearance, theme: "light", uiFontSize: 15 },
+			appearance: { ...store.get().appearance, theme: "light" },
 		});
 		expect(saved.appearance.theme).toBe("light");
 
 		const reopened = await SettingsStore.open({ file });
 		expect(reopened.get().defaultModel).toEqual({ provider: "new api", id: "deepseek-v4-flash" });
-		expect(reopened.get().appearance.uiFontSize).toBe(15);
+		expect(reopened.get().appearance.theme).toBe("light");
 	});
 
 	it("内容读不懂时留档并回到缺省值", async () => {
@@ -54,7 +54,6 @@ describe("设置读取", () => {
 				hiddenModels: ["遗留字段"],
 				appearance: {
 					theme: "紫色",
-					uiFontSize: 999,
 					reducedMotion: true,
 					liveMotion: "旋转",
 					outlineScale: 1000,
@@ -69,7 +68,6 @@ describe("设置读取", () => {
 		// 模型可见性已经去掉，旧文件里留下的这个字段直接丢掉
 		expect(settings).not.toHaveProperty("hiddenModels");
 		expect(settings.appearance.theme).toBe(DEFAULT_SETTINGS.appearance.theme);
-		expect(settings.appearance.uiFontSize).toBe(20);
 		expect(settings.appearance.reducedMotion).toBe(true);
 		expect(settings.input.sendKey).toBe(DEFAULT_SETTINGS.input.sendKey);
 		expect(settings.layout.sidebarWidth).toBe(200);
@@ -78,15 +76,26 @@ describe("设置读取", () => {
 		expect(settings.appearance.outlineScale).toBe(200);
 	});
 
-	it("老版本写下的正文字体与字号迁移到界面字体与界面字号", async () => {
+	it("编辑器与终端字号保留 0.5 步长", async () => {
+		await writeFile(
+			file,
+			JSON.stringify({ version: 1, appearance: { editorFontSize: 13.5, terminalFontSize: 12.5 } }),
+			"utf8",
+		);
+		const settings = (await SettingsStore.open({ file })).get();
+		expect(settings.appearance.editorFontSize).toBe(13.5);
+		expect(settings.appearance.terminalFontSize).toBe(12.5);
+	});
+
+	it("旧版本的界面字体与字号字段被忽略", async () => {
 		await writeFile(
 			file,
 			JSON.stringify({ version: 1, appearance: { bodyFont: "Noto Sans", fontSize: 15 } }),
 			"utf8",
 		);
 		const settings = (await SettingsStore.open({ file })).get();
-		expect(settings.appearance.uiFont).toBe("Noto Sans");
-		expect(settings.appearance.uiFontSize).toBe(15);
+		expect(settings.appearance).not.toHaveProperty("uiFont");
+		expect(settings.appearance).not.toHaveProperty("uiFontSize");
 	});
 
 	it("清单外的主题取值回落到缺省配色", async () => {

@@ -79,6 +79,12 @@ export {
 } from "./chat/sidebar-state.ts";
 export type { TrustDialogProps } from "./chat/TrustDialog.tsx";
 export { TrustDialog } from "./chat/TrustDialog.tsx";
+export {
+	DEFAULT_UI_SCALE,
+	normalizeUiScale,
+	stepUiScale,
+	UI_SCALE_STEPS,
+} from "./chat/ui-scale.ts";
 export type { StickToBottom } from "./chat/use-stick-to-bottom.ts";
 export { useStickToBottom } from "./chat/use-stick-to-bottom.ts";
 export type { CodeBlockShape } from "./markdown/code-block-state.ts";

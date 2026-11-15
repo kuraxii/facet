@@ -12,6 +12,7 @@ import {
 	DEFAULT_WINDOW_WIDTH,
 	parseLocalSettings,
 	readLocalSettings,
+	readUiScale,
 	readWindowBounds,
 	writeLocalSettings,
 } from "./local-settings.ts";
@@ -37,6 +38,26 @@ describe("parseLocalSettings", () => {
 
 	it("没有窗口记录时只有版本", () => {
 		expect(parseLocalSettings(JSON.stringify({ version: 1 }))).toEqual({ version: 1 });
+	});
+
+	it("读取界面缩放并收回允许范围", () => {
+		expect(parseLocalSettings(JSON.stringify({ version: 1, uiScale: 125 }))).toEqual({
+			version: 1,
+			uiScale: 125,
+		});
+		expect(parseLocalSettings(JSON.stringify({ version: 1, uiScale: 999 }))).toEqual({
+			version: 1,
+			uiScale: 150,
+		});
+		expect(parseLocalSettings(JSON.stringify({ version: 1, uiScale: 10 }))).toEqual({
+			version: 1,
+			uiScale: 80,
+		});
+	});
+
+	it("界面缩放不是数字时丢掉", () => {
+		expect(readUiScale("125")).toBeUndefined();
+		expect(readUiScale(Number.NaN)).toBeUndefined();
 	});
 });
 
@@ -70,10 +91,12 @@ describe("读写本地设置", () => {
 		const file = join(root, "nested", "desktop.json");
 		await writeLocalSettings(file, {
 			version: 1,
+			uiScale: 125,
 			window: { width: 1200, height: 800, x: 5, y: 6, maximized: true },
 		});
 		expect(await readLocalSettings(file)).toEqual({
 			version: 1,
+			uiScale: 125,
 			window: { width: 1200, height: 800, x: 5, y: 6, maximized: true },
 		});
 		const written = JSON.parse(await readFile(file, "utf8")) as { version: number };

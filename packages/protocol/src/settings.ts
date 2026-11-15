@@ -50,11 +50,7 @@ export interface AppearanceSettings {
 	theme: ThemeMode;
 	/** 代码块与差异视图的高亮配色 */
 	codeTheme: CodeTheme;
-	/** 界面字体：侧栏、弹窗、控件与聊天正文，空串表示用内置的 Inter 栈 */
-	uiFont: string;
-	/** 界面字号，单位 px */
-	uiFontSize: number;
-	/** 聊天里代码块与补丁用的等宽字体，空串表示用内置的 Maple Mono */
+	/** 聊天里代码块与补丁用的等宽字体，空串表示用内置的 Maple Mono CN */
 	codeFont: string;
 	/** 编辑器字体，空串表示跟代码字体 */
 	editorFont: string;
@@ -106,8 +102,6 @@ export const DEFAULT_SETTINGS: FacetSettings = {
 	appearance: {
 		theme: "zinc",
 		codeTheme: "github",
-		uiFont: "",
-		uiFontSize: 15,
 		codeFont: "",
 		editorFont: "",
 		editorFontSize: 13,

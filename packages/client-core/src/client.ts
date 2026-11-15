@@ -74,10 +74,10 @@ export function formatCommitLog(
 	const raised = items.filter((item) => item.entry !== undefined).length;
 	const head = [
 		title,
-		`本轮 ${promotedCount} 条`,
-		`叶子 ${leafId ?? "无"}`,
-		`边界 ${boundary ?? "无"}`,
-		`视图 ${items.length} 条，其中已提升 ${raised} 条`,
+		`turn ${promotedCount} items`,
+		`leaf ${leafId ?? "none"}`,
+		`boundary ${boundary ?? "none"}`,
+		`view ${items.length} items, ${raised} promoted`,
 	].join(" · ");
 	return lines.length === 0 ? head : `${head}\n${lines.join("\n")}`;
 }
@@ -220,12 +220,12 @@ export class SessionClient {
 			if (state === "ready") {
 				// 续订失败交给宿主处理:会话文件不在盘上时界面要回到没有会话的状态
 				void this.resume().catch((error: unknown) => {
-					debugLog("client", "自动续订失败", { error: String(error) });
+					debugLog("client", "Failed to renew automatically", { error: String(error) });
 				});
 			}
 		});
 		void this.followSessionList().catch((error: unknown) => {
-			debugLog("client", "订阅会话清单失败", { error: String(error) });
+			debugLog("client", "Failed to subscribe to the session list", { error: String(error) });
 		});
 	}
 
@@ -630,7 +630,7 @@ export class SessionClient {
 	async resume(): Promise<void> {
 		// 清单通道与打开的会话无关，重连后总要续订一次
 		await this.followSessionList().catch((error: unknown) => {
-			debugLog("client", "重连后订阅会话清单失败", { error: String(error) });
+			debugLog("client", "Failed to subscribe to the session list after reconnect", { error: String(error) });
 		});
 		const opened = this.opened;
 		if (!opened) {
@@ -765,8 +765,8 @@ export class SessionClient {
 		}
 		const label =
 			frame.action.type === "chat/turnStarted" || frame.action.type === "session/pendingMessageSet"
-				? "发送失败"
-				: "操作被拒绝";
+				? "Send failed"
+				: "Action rejected";
 		// 提示统一挂在同一会话的对话通道上,会话通道的动作被拒也在这里显示
 		const parsed = parseChannel(frame.channel);
 		const target = parsed === undefined ? undefined : makeChannel("chat", parsed.id);
@@ -788,14 +788,14 @@ export class SessionClient {
 	async fork(beforeEntryId?: string): Promise<OpenedSession> {
 		const opened = this.requireOpened();
 		if (opened.file === undefined) {
-			throw new Error("当前会话没有文件,无法分叉");
+			throw new Error("The current session has no file and cannot be forked");
 		}
 		const forked = await this.transport.request("forkSession", {
 			sessionFile: opened.file,
 			...(beforeEntryId === undefined ? {} : { beforeEntryId }),
 		});
 		if (forked.file === undefined) {
-			throw new Error("分叉出的会话没有文件");
+			throw new Error("The forked session has no file");
 		}
 		return await this.switchSession(forked.file);
 	}
@@ -909,7 +909,7 @@ export class SessionClient {
 
 	private requireOpened(): OpenedSession {
 		if (!this.opened) {
-			throw new Error("还没有打开会话");
+			throw new Error("No session is open");
 		}
 		return this.opened;
 	}
@@ -1014,7 +1014,7 @@ export class SessionClient {
 		if (frame.action.type !== "chat/settled") {
 			return;
 		}
-		debugLog("commit", "本轮结束，准备提升实时消息", { sessionId: opened.sessionId });
+		debugLog("commit", "Turn ended; preparing to promote live messages", { sessionId: opened.sessionId });
 		this.commitChain = this.commitChain.then(() => this.runCommit(opened)).catch(() => undefined);
 	}
 
@@ -1029,7 +1029,7 @@ export class SessionClient {
 			return;
 		}
 		try {
-			debugLog("commit", "请求边界之后的条目", {
+			debugLog("commit", "Requesting entries after the boundary", {
 				sessionId: opened.sessionId,
 				afterEntryId: this.lastEntryId,
 			});
@@ -1057,7 +1057,7 @@ export class SessionClient {
 			debugLog(
 				"commit",
 				formatCommitLog(
-					promoted ? "提升成功" : "提升被拒：条目数与实时消息不符",
+					promoted ? "Promotion succeeded" : "Promotion rejected: entry count does not match live messages",
 					entries.length,
 					leafId,
 					this.lastEntryId,
@@ -1065,13 +1065,17 @@ export class SessionClient {
 				),
 			);
 			if (!promoted) {
-				debugLog("commit", "条目数与实时消息不符，重新装载历史");
+				debugLog("commit", "Entry count does not match live messages; reloading history");
 				await this.reloadHistory(opened.chatChannel, opened.sessionId);
 			}
 		} catch (error) {
-			debugLog("commit", mode === "settled" ? "提升失败，重新装载历史" : "检查点同步失败", {
-				error: String(error),
-			});
+			debugLog(
+				"commit",
+				mode === "settled" ? "Promotion failed; reloading history" : "Checkpoint sync failed",
+				{
+					error: String(error),
+				},
+			);
 			if (this.opened === opened && mode === "settled") {
 				await this.reloadHistory(opened.chatChannel, opened.sessionId);
 			}

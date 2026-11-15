@@ -6,6 +6,7 @@
  */
 import type { TerminalClient } from "@facet/client-core";
 import type { TerminalInfo } from "@facet/protocol";
+import { useI18n } from "@facet/ui/i18n";
 import { Plus, SquareTerminal, X } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";
 import { clampDockHeight } from "./dock-state.ts";
@@ -61,6 +62,7 @@ export function TerminalDock({
 	onKill,
 	onClose,
 }: TerminalDockProps): React.JSX.Element | null {
+	const { t } = useI18n();
 	const tabs = openTerminals(terminals);
 	const active = tabs.find((terminal) => terminal.id === activeId) ?? tabs[0];
 
@@ -101,10 +103,10 @@ export function TerminalDock({
 	}
 
 	return (
-		<section className="term-dock" style={{ height }} aria-label="终端面板">
+		<section className="term-dock" style={{ height }} aria-label={t("terminal.panel")}>
 			<hr
 				className="term-dock-grip"
-				aria-label="拖动调整终端高度"
+				aria-label={t("terminal.resize")}
 				onPointerDown={onPointerDown}
 				onPointerMove={onPointerMove}
 				onPointerUp={onPointerUp}
@@ -142,21 +144,23 @@ export function TerminalDock({
 					<button
 						type="button"
 						className="term-tool"
-						aria-label="新建终端"
-						title={disabledReason ?? (cwd === undefined ? "在主机的主目录新建终端" : `在 ${cwd} 新建终端`)}
+						aria-label={t("terminal.newTerminal")}
+						title={
+							disabledReason ?? (cwd === undefined ? t("terminal.newInHome") : t("terminal.newIn", { cwd }))
+						}
 						disabled={disabledReason !== undefined}
 						onClick={onCreate}
 					>
 						<Plus size={14} strokeWidth={1.6} />
 					</button>
-					<button type="button" className="term-tool" aria-label="收起终端" onClick={onClose}>
+					<button type="button" className="term-tool" aria-label={t("terminal.collapse")} onClick={onClose}>
 						<X size={14} strokeWidth={1.6} />
 					</button>
 				</div>
 			</header>
 			<div className="term-dock-body">
 				{active === undefined ? (
-					<p className="term-empty">{disabledReason ?? "还没有终端，点右上角的加号在当前目录开一个。"}</p>
+					<p className="term-empty">{disabledReason ?? t("terminal.empty")}</p>
 				) : (
 					<TerminalView key={active.id} terminalId={active.id} client={client} appearance={appearance} />
 				)}

@@ -41,7 +41,7 @@ export async function serveWebRequest(
 ): Promise<void> {
 	if (root === undefined || root.length === 0) {
 		response.writeHead(503, { "content-type": "text/plain; charset=utf-8" });
-		response.end("这台主机没有配置 Web 界面目录\n");
+		response.end("This host has no web interface directory configured\n");
 		return;
 	}
 	const base = resolve(root);

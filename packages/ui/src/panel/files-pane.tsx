@@ -17,6 +17,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { useI18n } from "../i18n/I18nProvider.tsx";
 import { TreeChevron } from "../transcript/chevron.tsx";
 
 export interface FilesPaneProps {
@@ -46,6 +47,7 @@ interface Row {
 }
 
 export function FilesPane({ loadDirectory, onOpenFile, selectedPath }: FilesPaneProps) {
+	const { t } = useI18n();
 	const [directories, setDirectories] = useState<Readonly<Record<string, DirectoryState>>>({});
 	const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set([""]));
 	/** 键盘焦点所在的行，键为路径；根目录自身不算一行，用空串占位 */
@@ -125,12 +127,12 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath }: FilesPane
 
 	const header = (
 		<div className="tree-head">
-			<span className="tree-root">项目文件</span>
+			<span className="tree-root">{t("panel.projectFiles")}</span>
 			<button
 				type="button"
 				className="ib"
-				aria-label="刷新文件树"
-				title="刷新文件树"
+				aria-label={t("panel.refreshFiles")}
+				title={t("panel.refreshFiles")}
 				disabled={root?.isLoading === true}
 				onClick={refresh}
 			>
@@ -146,7 +148,7 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath }: FilesPane
 				<p className="chg-note is-error">
 					{root.error}
 					<button type="button" className="chg-retry" onClick={() => void load("")}>
-						重试
+						{t("common.retry")}
 					</button>
 				</p>
 			</>
@@ -157,7 +159,7 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath }: FilesPane
 		return (
 			<>
 				{header}
-				<p className="chg-note">正在读取目录…</p>
+				<p className="chg-note">{t("panel.loadingDirectory")}</p>
 			</>
 		);
 	}
@@ -166,7 +168,7 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath }: FilesPane
 		return (
 			<>
 				{header}
-				<p className="chg-note">这个目录是空的。</p>
+				<p className="chg-note">{t("panel.emptyDirectory")}</p>
 			</>
 		);
 	}
@@ -240,7 +242,7 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath }: FilesPane
 	return (
 		<>
 			{header}
-			<div className="tree" role="tree" aria-label="项目文件">
+			<div className="tree" role="tree" aria-label={t("panel.projectFiles")}>
 				{rows.map((row, index): ReactNode => {
 					const { entry, depth } = row;
 					const isDirectory = entry.kind === "directory";
@@ -288,7 +290,7 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath }: FilesPane
 								{state?.isLoading === true ? <span className="tree-note">…</span> : null}
 								{state?.error === undefined ? null : (
 									<span className="tree-note is-error" title={state.error}>
-										读取失败
+										{t("panel.readFailed")}
 									</span>
 								)}
 							</button>

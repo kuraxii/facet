@@ -62,7 +62,7 @@ describe("项目清单", () => {
 
 	it("拒绝相对路径", async () => {
 		const store = await ProjectStore.open({ file });
-		await expect(store.add({ cwd: "work/a" })).rejects.toThrow("绝对路径");
+		await expect(store.add({ cwd: "work/a" })).rejects.toThrow("absolute");
 	});
 
 	it("改名与清除自定义名", async () => {

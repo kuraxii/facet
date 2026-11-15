@@ -7,7 +7,8 @@
 	"types": "./src/index.ts",
 	"exports": {
 		".": "./src/index.ts",
-		"./styles": "./src/styles/index.css"
+		"./styles": "./src/styles/index.css",
+		"./i18n": "./src/i18n/I18nProvider.tsx"
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit",
@@ -24,7 +25,9 @@
 		"mermaid": "^12.3.0",
 		"shiki": "^4.6.0",
 		"stream-diffs": "^0.0.2",
-		"zustand": "^5.0.14"
+		"zustand": "^5.0.14",
+		"@facet/i18n": "*",
+		"react-i18next": "^18.0.1"
 	},
 	"peerDependencies": {
 		"react": "^19.2.0",

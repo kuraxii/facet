@@ -17,7 +17,8 @@
 		"@facet/protocol": "*",
 		"@xterm/addon-fit": "^0.11.0",
 		"@xterm/xterm": "^6.0.0-beta.315",
-		"lucide-react": "^1.72.0"
+		"lucide-react": "^1.72.0",
+		"@facet/ui": "*"
 	},
 	"peerDependencies": {
 		"react": "^19.2.0",

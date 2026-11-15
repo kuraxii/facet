@@ -186,7 +186,7 @@ describe("WebSocket 接入", () => {
 		);
 		await new Promise((resolve) => setTimeout(resolve, 200));
 		const response = frames.find((frame) => frame.type === "response");
-		expect(response).toMatchObject({ ok: false, error: { message: "这条连接是只读的" } });
+		expect(response).toMatchObject({ ok: false, error: { message: "This connection is read-only" } });
 		ws.close();
 	});
 });

@@ -7,6 +7,7 @@
 
 import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useI18n } from "../i18n/I18nProvider.tsx";
 
 /** 密码框参数。 */
 export interface SshPasswordDialogProps {
@@ -21,6 +22,7 @@ export interface SshPasswordDialogProps {
 }
 
 export function SshPasswordDialog({ host, isRetry, onSubmit, onCancel }: SshPasswordDialogProps) {
+	const { t } = useI18n();
 	const [password, setPassword] = useState("");
 	const inputRef = useRef<HTMLInputElement>(null);
 
@@ -48,20 +50,20 @@ export function SshPasswordDialog({ host, isRetry, onSubmit, onCancel }: SshPass
 
 	return (
 		<div className="dialog-backdrop">
-			<div className="dialog is-narrow" role="dialog" aria-modal="true" aria-label="SSH 登录密码">
+			<div className="dialog is-narrow" role="dialog" aria-modal="true" aria-label={t("ssh.title")}>
 				<div className="dialog-head">
-					<h2 className="dialog-title">连接到 {host}</h2>
-					<button type="button" className="dialog-close" aria-label="关闭" onClick={onCancel}>
+					<h2 className="dialog-title">{t("ssh.heading", { host })}</h2>
+					<button type="button" className="dialog-close" aria-label={t("common.close")} onClick={onCancel}>
 						<X size={18} strokeWidth={1.5} />
 					</button>
 				</div>
 
-				<p className="dialog-label">密码</p>
+				<p className="dialog-label">{t("ssh.password")}</p>
 				<input
 					ref={inputRef}
 					className="set-input ssh-password-input"
 					type="password"
-					aria-label="SSH 密码"
+					aria-label={t("ssh.label")}
 					autoComplete="current-password"
 					value={password}
 					onChange={(event) => setPassword(event.target.value)}
@@ -71,14 +73,14 @@ export function SshPasswordDialog({ host, isRetry, onSubmit, onCancel }: SshPass
 						}
 					}}
 				/>
-				{isRetry ? <p className="ssh-password-error">密码不对</p> : null}
+				{isRetry ? <p className="ssh-password-error">{t("ssh.wrong")}</p> : null}
 
 				<div className="dialog-actions">
 					<button type="button" className="dialog-cancel" onClick={onCancel}>
-						取消
+						{t("common.cancel")}
 					</button>
 					<button type="button" className="dialog-primary" onClick={submit} disabled={password.length === 0}>
-						连接
+						{t("ssh.connect")}
 					</button>
 				</div>
 			</div>

@@ -202,7 +202,7 @@ describe("权限档", () => {
 		expect(await readOnly.request("getSettings")).toEqual({ ok: true, message: undefined });
 		expect((await readOnly.request("updateSettings", { settings: {} })).ok).toBe(false);
 		expect((await readOnly.request("deleteCredential", { providerId: "x" })).message).toBe(
-			"这个操作只在桌面端可用",
+			"This operation is only available in the desktop app",
 		);
 	});
 
@@ -210,12 +210,14 @@ describe("权限档", () => {
 		await start({ socketPath: join(dir, "local.sock") });
 		const remote = await Peer.connect(join(dir, "local.sock"), "令牌", "viewer");
 		peerList.push(remote);
-		expect((await remote.request("createSession", { cwd: dir })).message).toBe("这条连接是只读的");
+		expect((await remote.request("createSession", { cwd: dir })).message).toBe(
+			"This connection is read-only",
+		);
 		expect(
 			(await remote.request("writeFile", { cwd: dir, path: "a", content: "", expectedRevision: "" })).ok,
 		).toBe(false);
 		expect(await remote.dispatch(SESSION, { type: "chat/turnStarted", text: "你好" })).toBe(
-			"这条连接是只读的",
+			"This connection is read-only",
 		);
 	});
 
@@ -233,7 +235,7 @@ describe("权限档", () => {
 		expect(browserHello.role).toBe("operator");
 		expect(browserHello.canManage).toBe(false);
 		expect((await browser.request("updateSettings", { settings: {} })).message).toBe(
-			"这个操作只在桌面端可用",
+			"This operation is only available in the desktop app",
 		);
 		expect((await browser.request("diagnostics")).ok).toBe(false);
 	});
@@ -242,7 +244,9 @@ describe("权限档", () => {
 		await start({ socketPath: join(dir, "local.sock"), remotePermission: "operate" });
 		const browser = await Peer.connect(join(dir, "local.sock"), "令牌", "viewer", "web");
 		peerList.push(browser);
-		expect((await browser.request("createSession", { cwd: dir })).message).toBe("这条连接是只读的");
+		expect((await browser.request("createSession", { cwd: dir })).message).toBe(
+			"This connection is read-only",
+		);
 	});
 });
 
@@ -254,13 +258,13 @@ describe("终端的权限", () => {
 		expect((await remote.hello()).role).toBe("viewer");
 		expect((await remote.request("listTerminals")).ok).toBe(true);
 		expect((await remote.request("createTerminal", { cwd: dir, cols: 80, rows: 24 })).message).toBe(
-			"这条连接是只读的",
+			"This connection is read-only",
 		);
 		expect((await remote.request("writeTerminal", { id: "x", data: "ls\r" })).message).toBe(
-			"这条连接是只读的",
+			"This connection is read-only",
 		);
 		expect((await remote.request("resizeTerminal", { id: "x", cols: 100, rows: 30 })).message).toBe(
-			"这条连接是只读的",
+			"This connection is read-only",
 		);
 		expect((await remote.request("killTerminal", { id: "x" })).ok).toBe(false);
 	});
@@ -274,7 +278,7 @@ describe("终端的权限", () => {
 		expect(hello.capabilities).not.toContain("terminal");
 		const result = await local.request("createTerminal", { cwd: dir, cols: 80, rows: 24 });
 		expect(result.ok).toBe(false);
-		expect(result.message).toBe("这台主机没有装配终端");
+		expect(result.message).toBe("This host has no terminal backend");
 	});
 });
 
@@ -293,6 +297,6 @@ describe("远程操作审计", () => {
 			.filter((line) => line.length > 0)
 			.map((line) => JSON.parse(line) as { role: string; name: string; ok: boolean; reason?: string });
 		expect(lines.map((line) => line.name)).toEqual(["createSession"]);
-		expect(lines[0]).toMatchObject({ role: "viewer", ok: false, reason: "这条连接是只读的" });
+		expect(lines[0]).toMatchObject({ role: "viewer", ok: false, reason: "This connection is read-only" });
 	});
 });

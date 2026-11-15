@@ -340,6 +340,6 @@ describe("PiAgent.revertTo", () => {
 
 	it("扩展取消回退时报错", async () => {
 		const { agent } = createAgent({ navigateTree: async () => ({ cancelled: true }) });
-		await expect(agent.revertTo("e3")).rejects.toThrow("回退被取消");
+		await expect(agent.revertTo("e3")).rejects.toThrow("Revert was cancelled");
 	});
 });

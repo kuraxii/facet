@@ -237,7 +237,7 @@ describe("pi 扩展交互完整链路", () => {
 		await prompt(viewer.client, "input");
 		await expect(
 			viewer.client.respondUi(pending.requestId, { kind: "input", value: "viewer-private" }),
-		).rejects.toThrow("只读");
+		).rejects.toThrow("read-only");
 		const results = await Promise.all([
 			first.client.respondUi(pending.requestId, { kind: "input", value: "admin-private" }),
 			second.client.respondUi(pending.requestId, { kind: "input", value: "operator-private" }),
@@ -389,7 +389,7 @@ describe("pi 扩展交互完整链路", () => {
 			} as never),
 		).rejects.toThrow("boolean");
 		await expect(client.respondUi(pending.requestId, { kind: "confirm", confirmed: true })).rejects.toThrow(
-			"类型",
+			"Response type",
 		);
 		expect(client.sessionView()?.state.extensionUi.prompts[0]?.requestId).toBe(pending.requestId);
 		await vi.waitFor(() => expect(client.sessionView()?.state.extensionUi.prompts).toEqual([]));

@@ -117,7 +117,7 @@ export class TransportCore {
 
 	request<M extends RequestMethod>(method: M, params?: RequestParams[M]): Promise<RequestResults[M]> {
 		if (this.currentState !== "ready" || this.sender === undefined) {
-			return Promise.reject(new TransportError("连接未就绪"));
+			return Promise.reject(new TransportError("Connection is not ready"));
 		}
 		this.requestCount += 1;
 		const id = `r${this.requestCount}`;
@@ -136,7 +136,7 @@ export class TransportCore {
 
 	dispatch(channel: Channel, action: Action): number {
 		if (this.currentState !== "ready") {
-			throw new TransportError("连接未就绪");
+			throw new TransportError("Connection is not ready");
 		}
 		this.clientSeq += 1;
 		this.sendFrame({ type: "dispatch", channel, clientSeq: this.clientSeq, action });
@@ -160,7 +160,7 @@ export class TransportCore {
 	private sendFrame(frame: unknown): void {
 		const sender = this.sender;
 		if (sender === undefined) {
-			throw new TransportError("连接未就绪");
+			throw new TransportError("Connection is not ready");
 		}
 		// 帧一律按行编码：WebSocket 传输去掉行尾再发，字节流传输直接用这一行
 		sender(`${JSON.stringify(frame)}\n`);
@@ -196,7 +196,7 @@ export class TransportCore {
 			if (frame.ok === true) {
 				pending.resolve(frame.data);
 			} else {
-				pending.reject(new TransportError(frame.error?.message ?? "请求失败", frame.error?.code));
+				pending.reject(new TransportError(frame.error?.message ?? "Request failed", frame.error?.code));
 			}
 			return;
 		}

@@ -109,7 +109,9 @@
 	flex: 1;
 	min-height: 0;
 	overflow-y: auto;
-	padding: 24px 24px 14px;
+	scrollbar-gutter: stable;
+	/* 右侧扣掉滚动条沟槽，内容盒与 .footer 对齐 */
+	padding: 24px calc(var(--chat-gutter-x) - var(--scrollbar-width)) 14px var(--chat-gutter-x);
 }
 
 .column {
@@ -117,7 +119,7 @@
 	flex-direction: column;
 	gap: 16px;
 	width: 100%;
-	max-width: 780px;
+	max-width: var(--chat-column-max);
 	margin: auto auto 0;
 }
 
@@ -376,6 +378,8 @@
 
 .assistant-body {
 	min-width: 0;
+	/* 与过程组按钮的内部左右边缘一致，正文不贴到胶囊外框 */
+	padding: 0 var(--group-head-padding-x);
 }
 
 .dot {
@@ -516,9 +520,10 @@
 	display: flex;
 	align-items: center;
 	gap: 7px;
+	width: 100%;
 	max-width: 100%;
-	margin-left: -8px;
-	padding: 4px 8px;
+	margin-left: 0;
+	padding: 4px var(--group-head-padding-x);
 	border: 0;
 	border-radius: 999px;
 	background: transparent;
@@ -601,12 +606,12 @@
 	}
 }
 
-/* 过程组里唯一的横向定位：竖线落在展开箭头字形的左缘，行内容距竖线由变量给出 */
+/* 过程组里唯一的横向定位：竖线随标题内边距右移，落在展开箭头字形的左缘 */
 .group-body {
 	display: flex;
 	flex-direction: column;
 	gap: 1px;
-	margin: 2px 0 0 var(--indent-rail-inset);
+	margin: 2px 0 0 calc(var(--indent-rail-inset) + var(--group-head-padding-x));
 	padding-left: calc(var(--indent-rail-offset) - 1px);
 	border-left: 1px solid var(--line);
 }
@@ -1134,11 +1139,15 @@
 
 /* 窄屏：正文列与滚动区收边 */
 @media (max-width: 880px) {
+	.main {
+		--chat-gutter-x: 12px;
+	}
+
 	.column {
-		width: min(100%, 760px);
+		width: min(100%, var(--chat-column-max-narrow));
 	}
 
 	.scroll {
-		padding: 44px 12px 8px;
+		padding: 44px calc(var(--chat-gutter-x) - var(--scrollbar-width)) 8px var(--chat-gutter-x);
 	}
 }

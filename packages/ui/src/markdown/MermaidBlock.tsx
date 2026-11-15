@@ -13,6 +13,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { useI18n } from "../i18n/I18nProvider.tsx";
 
 /** 缩放的上下限与单步倍率。1 倍是铺满宽度，不再往更小缩。 */
 const MIN_SCALE = 1;
@@ -124,6 +125,7 @@ function readThemeVariables(): Record<string, string> {
 
 /** 复制原始定义。 */
 function CopyButton({ code }: { code: string }) {
+	const { t } = useI18n();
 	const [copied, setCopied] = useState(false);
 	useEffect(() => {
 		if (!copied) {
@@ -136,8 +138,8 @@ function CopyButton({ code }: { code: string }) {
 		<button
 			type="button"
 			className="code-copy"
-			aria-label={copied ? "已复制" : "复制定义"}
-			title={copied ? "已复制" : "复制定义"}
+			aria-label={copied ? t("markdown.copied") : t("markdown.copyDefinition")}
+			title={copied ? t("markdown.copied") : t("markdown.copyDefinition")}
 			onClick={() => {
 				void navigator.clipboard?.writeText(code).then(
 					() => setCopied(true),
@@ -156,6 +158,7 @@ function CopyButton({ code }: { code: string }) {
  * 围栏还在写入时先显示源码，写完再画图；画图失败时留在源码并给出提示，不把整段正文带崩。
  */
 export function MermaidBlock({ node }: MermaidBlockProps) {
+	const { t } = useI18n();
 	const code = (node.code ?? "").trim();
 	const isLoading = node.loading === true;
 	const [svg, setSvg] = useState<string | undefined>(undefined);
@@ -212,7 +215,7 @@ export function MermaidBlock({ node }: MermaidBlockProps) {
 						}
 						if (!hasDiagramContent(rendered.svg)) {
 							setSvg(undefined);
-							setError("这张图没有画出来");
+							setError(t("markdown.diagramFailed"));
 							return;
 						}
 						setSvg(rendered.svg);
@@ -228,7 +231,7 @@ export function MermaidBlock({ node }: MermaidBlockProps) {
 				},
 				() => {
 					if (!cancelled && current === revision.current) {
-						setError("流程图组件没有加载起来");
+						setError(t("markdown.diagramLoadFailed"));
 					}
 				},
 			);
@@ -237,7 +240,7 @@ export function MermaidBlock({ node }: MermaidBlockProps) {
 			cancelled = true;
 			clearTimeout(timer);
 		};
-	}, [code, isLoading, palette, instance]);
+	}, [code, isLoading, palette, instance, t]);
 
 	// 视图：1 表示铺满宽度，缩放与平移都叠在它上面
 	const [view, setView] = useState({ scale: 1, x: 0, y: 0 });
@@ -320,8 +323,8 @@ export function MermaidBlock({ node }: MermaidBlockProps) {
 						<button
 							type="button"
 							className="code-copy"
-							aria-label="缩小"
-							title="缩小"
+							aria-label={t("markdown.zoomOut")}
+							title={t("markdown.zoomOut")}
 							disabled={view.scale <= MIN_SCALE}
 							onClick={() => zoomBy(1 / ZOOM_STEP)}
 						>
@@ -330,8 +333,8 @@ export function MermaidBlock({ node }: MermaidBlockProps) {
 						<button
 							type="button"
 							className="code-copy"
-							aria-label="放大"
-							title="放大"
+							aria-label={t("markdown.zoomIn")}
+							title={t("markdown.zoomIn")}
 							disabled={view.scale >= MAX_SCALE}
 							onClick={() => zoomBy(ZOOM_STEP)}
 						>
@@ -340,8 +343,8 @@ export function MermaidBlock({ node }: MermaidBlockProps) {
 						<button
 							type="button"
 							className="code-copy"
-							aria-label="适应宽度"
-							title="适应宽度"
+							aria-label={t("markdown.fitWidth")}
+							title={t("markdown.fitWidth")}
 							onClick={() => setView({ scale: 1, x: 0, y: 0 })}
 						>
 							<Maximize2 size={13} strokeWidth={1.5} />
@@ -352,8 +355,8 @@ export function MermaidBlock({ node }: MermaidBlockProps) {
 					<button
 						type="button"
 						className="code-copy"
-						aria-label={showSource ? "显示图表" : "显示源码"}
-						title={showSource ? "显示图表" : "显示源码"}
+						aria-label={showSource ? t("markdown.showDiagram") : t("markdown.showSource")}
+						title={showSource ? t("markdown.showDiagram") : t("markdown.showSource")}
 						onClick={() => setShowSource((shown) => !shown)}
 					>
 						{showSource ? <Workflow size={13} strokeWidth={1.5} /> : <Code2 size={13} strokeWidth={1.5} />}
@@ -382,7 +385,7 @@ export function MermaidBlock({ node }: MermaidBlockProps) {
 					onPointerCancel={handlePointerUp}
 					onDoubleClick={() => setView({ scale: 1, x: 0, y: 0 })}
 					role="img"
-					aria-label="流程图"
+					aria-label={t("markdown.diagram")}
 				>
 					<div
 						className="mermaid-diagram"

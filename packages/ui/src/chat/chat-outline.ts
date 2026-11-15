@@ -33,14 +33,18 @@ function textOfItem(item: TranscriptItem): string {
  * 只收用户消息：导航是按轮跳的，助手答复与工具调用都在某一轮里面。没有条目 id 的实时
  * 消息用视图标识顶上，提升成历史消息后键会跟着变，界面按新键重新对齐。
  */
-export function outlinePrompts(items: readonly TranscriptItem[]): OutlinePrompt[] {
+export function outlinePrompts(
+	items: readonly TranscriptItem[],
+	fallback: (index: number) => string = (index) => `第 ${index} 条消息`,
+): OutlinePrompt[] {
 	const prompts: OutlinePrompt[] = [];
 	for (const item of items) {
 		if (item.kind !== "message" || item.role !== "user") {
 			continue;
 		}
 		const key = item.entryId ?? item.id;
-		prompts.push({ key, preview: textOfItem(item) || `第 ${prompts.length + 1} 条消息` });
+		const index = prompts.length + 1;
+		prompts.push({ key, preview: textOfItem(item) || fallback(index) });
 	}
 	return prompts;
 }

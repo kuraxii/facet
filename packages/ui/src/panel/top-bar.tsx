@@ -6,15 +6,18 @@
  * 带里，各自标 `no-drag`，带中间的空白仍然可以拖窗口。
  */
 import { PanelLeft, PanelRight } from "lucide-react";
+import { useI18n } from "../i18n/I18nProvider.tsx";
 
 /** 左栏开关：主区左上角。 */
 export function SidebarToggle({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void }) {
+	const { t } = useI18n();
+	const label = isOpen ? t("panel.collapseSidebar") : t("panel.expandSidebar");
 	return (
 		<button
 			type="button"
 			className="chrome-toggle is-sidebar"
-			aria-label={isOpen ? "收起左侧栏" : "展开左侧栏"}
-			title={isOpen ? "收起左侧栏" : "展开左侧栏"}
+			aria-label={label}
+			title={label}
 			aria-expanded={isOpen}
 			onClick={onToggle}
 		>
@@ -25,12 +28,14 @@ export function SidebarToggle({ isOpen, onToggle }: { isOpen: boolean; onToggle:
 
 /** 右栏开关：主区右上角。 */
 export function PanelToggle({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void }) {
+	const { t } = useI18n();
+	const label = isOpen ? t("panel.collapsePanel") : t("panel.expandPanel");
 	return (
 		<button
 			type="button"
 			className="chrome-toggle is-panel"
-			aria-label={isOpen ? "收起右侧栏" : "展开右侧栏"}
-			title={isOpen ? "收起右侧栏" : "展开右侧栏"}
+			aria-label={label}
+			title={label}
 			aria-expanded={isOpen}
 			onClick={onToggle}
 		>

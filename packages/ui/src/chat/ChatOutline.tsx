@@ -15,6 +15,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { useI18n } from "../i18n/I18nProvider.tsx";
 import {
 	activeOutlineIndex,
 	createOutlineHoverIntent,
@@ -65,7 +66,11 @@ function offsetInContainer(element: Element, container: HTMLElement): number {
 }
 
 export function ChatOutline({ items, container }: ChatOutlineProps) {
-	const prompts = useMemo(() => outlinePrompts(items), [items]);
+	const { t } = useI18n();
+	const prompts = useMemo(
+		() => outlinePrompts(items, (index) => t("outline.fallback", { index })),
+		[items, t],
+	);
 	const [activeIndex, setActiveIndex] = useState<number | null>(null);
 	const [attentionIndex, setAttentionIndex] = useState<number | null>(null);
 	const [isNarrow, setIsNarrow] = useState(false);
@@ -186,7 +191,7 @@ export function ChatOutline({ items, container }: ChatOutlineProps) {
 			<div
 				className="outline-rail"
 				role="tablist"
-				aria-label="对话导航"
+				aria-label={t("outline.nav")}
 				aria-orientation="vertical"
 				onPointerEnter={handleRailEnter}
 				onPointerMove={handleRailMove}
@@ -204,7 +209,11 @@ export function ChatOutline({ items, container }: ChatOutlineProps) {
 								className="outline-tick"
 								role="tab"
 								aria-selected={isActive}
-								aria-label={`第 ${index + 1} 条，共 ${prompts.length} 条：${prompt.preview}`}
+								aria-label={t("outline.item", {
+									index: index + 1,
+									count: prompts.length,
+									preview: prompt.preview,
+								})}
 								data-magnify={magnification.toFixed(3)}
 								onPointerEnter={() => hoverIntent.pointAt(index)}
 								onFocus={() => setAttentionIndex(index)}

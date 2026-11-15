@@ -4,6 +4,7 @@
  * 左侧分类、右侧内容；切换分类只加载该分类需要的数据，读取与保存都有明确的进行中与失败状态。
  * 保存失败时保留用户正在编辑的输入，可以直接重试。
  */
+import type { LanguageSetting } from "@facet/i18n";
 import type {
 	CustomProviderInfo,
 	FacetSettings,
@@ -14,6 +15,7 @@ import type {
 } from "@facet/protocol";
 import { X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useI18n } from "../i18n/I18nProvider.tsx";
 import { CODE_THEME_OPTIONS, UI_THEME_OPTIONS } from "../theme.ts";
 import { ProvidersSection } from "./ProvidersSection.tsx";
 import { providerRows } from "./provider-rows.ts";
@@ -27,12 +29,15 @@ export type SettingsSection = "models" | "appearance" | "input" | "about";
 /** 自动保存的延迟：改动停下后等这么久再提交，连续调整只保存最后一次。 */
 const AUTO_SAVE_DELAY_MS = 1000;
 
-/** 分类顺序与标题。 */
-const SECTIONS: ReadonlyArray<{ key: SettingsSection; label: string }> = [
-	{ key: "models", label: "模型" },
-	{ key: "appearance", label: "外观" },
-	{ key: "input", label: "输入" },
-	{ key: "about", label: "关于" },
+/** 分类顺序与标题文案键。 */
+const SECTIONS: ReadonlyArray<{
+	key: SettingsSection;
+	labelKey: "settings.models" | "settings.appearance" | "settings.input" | "settings.about";
+}> = [
+	{ key: "models", labelKey: "settings.models" },
+	{ key: "appearance", labelKey: "settings.appearance" },
+	{ key: "input", labelKey: "settings.input" },
+	{ key: "about", labelKey: "settings.about" },
 ];
 
 /** 设置的读取与保存入口，由宿主接到主机上。 */
@@ -58,6 +63,10 @@ export interface SettingsPageProps {
 	uiScale?: number;
 	/** 修改本机界面缩放 */
 	onUiScaleChange?: (scale: number) => void;
+	/** 本机语言设置；不传时不显示语言项 */
+	languageSetting?: LanguageSetting;
+	/** 修改本机语言 */
+	onLanguageChange?: (setting: LanguageSetting) => void;
 	/**
 	 * 这条连接能不能改设置。
 	 *
@@ -77,11 +86,12 @@ function StatusNote({
 	onRetry: () => void;
 	tone: "error" | "pending";
 }) {
+	const { t } = useI18n();
 	return (
 		<div className={tone === "error" ? "set-note is-error" : "set-note"}>
 			<span>{message}</span>
 			<button type="button" className="set-note-action" onClick={onRetry}>
-				重试
+				{t("common.retry")}
 			</button>
 		</div>
 	);
@@ -98,7 +108,10 @@ export function SettingsPage({
 	canEdit = true,
 	uiScale,
 	onUiScaleChange,
+	languageSetting,
+	onLanguageChange,
 }: SettingsPageProps) {
+	const { t } = useI18n();
 	/** 已加载的设置；为空表示还没读到 */
 	const [settings, setSettings] = useState<FacetSettings | undefined>(undefined);
 	/** 正在编辑的那份；保存成功前不回写 settings */
@@ -250,18 +263,18 @@ export function SettingsPage({
 				className="set-page"
 				role="dialog"
 				aria-modal="true"
-				aria-label="设置"
+				aria-label={t("settings.title")}
 				tabIndex={-1}
 			>
 				<header className="set-head">
-					<h1 className="set-title">设置</h1>
-					<button type="button" className="set-close" aria-label="关闭设置" onClick={onClose}>
+					<h1 className="set-title">{t("settings.title")}</h1>
+					<button type="button" className="set-close" aria-label={t("settings.close")} onClick={onClose}>
 						<X size={16} strokeWidth={1.5} />
 					</button>
 				</header>
 
 				<div className="set-body">
-					<nav className="set-nav" aria-label="设置分类">
+					<nav className="set-nav" aria-label={t("settings.categories")}>
 						{SECTIONS.map((item) => (
 							<button
 								type="button"
@@ -270,29 +283,47 @@ export function SettingsPage({
 								aria-current={item.key === section}
 								onClick={() => onSectionChange(item.key)}
 							>
-								{item.label}
+								{t(item.labelKey)}
 							</button>
 						))}
 					</nav>
 
 					<div className="set-content">
-						{section === "appearance" && uiScale !== undefined && onUiScaleChange !== undefined ? (
+						{section === "appearance" &&
+						((uiScale !== undefined && onUiScaleChange !== undefined) ||
+							(languageSetting !== undefined && onLanguageChange !== undefined)) ? (
 							<section className="set-section">
-								<SettingsGroup label="本机">
-									<SettingsRow title="界面缩放">
-										<select
-											className="set-input"
-											value={uiScale}
-											onChange={(event) => onUiScaleChange(Number(event.target.value))}
-											aria-label="界面缩放"
-										>
-											{UI_SCALE_STEPS.map((step) => (
-												<option key={step} value={step}>
-													{step}%
-												</option>
-											))}
-										</select>
-									</SettingsRow>
+								<SettingsGroup label={t("settings.local")}>
+									{languageSetting === undefined || onLanguageChange === undefined ? null : (
+										<SettingsRow title={t("settings.language")}>
+											<select
+												className="set-input"
+												value={languageSetting}
+												onChange={(event) => onLanguageChange(event.target.value as LanguageSetting)}
+												aria-label={t("settings.language")}
+											>
+												<option value="auto">{t("language.system")}</option>
+												<option value="en">{t("language.en")}</option>
+												<option value="zh-CN">{t("language.zh-CN")}</option>
+											</select>
+										</SettingsRow>
+									)}
+									{uiScale === undefined || onUiScaleChange === undefined ? null : (
+										<SettingsRow title={t("settings.uiScale")}>
+											<select
+												className="set-input"
+												value={uiScale}
+												onChange={(event) => onUiScaleChange(Number(event.target.value))}
+												aria-label={t("settings.uiScale")}
+											>
+												{UI_SCALE_STEPS.map((step) => (
+													<option key={step} value={step}>
+														{step}%
+													</option>
+												))}
+											</select>
+										</SettingsRow>
+									)}
 								</SettingsGroup>
 							</section>
 						) : null}
@@ -303,9 +334,13 @@ export function SettingsPage({
 							<fieldset className="set-lock" disabled={!canEdit}>
 								<section className="set-section">
 									{loadError === undefined ? null : (
-										<StatusNote message={`读取设置失败:${loadError}`} onRetry={loadSettings} tone="error" />
+										<StatusNote
+											message={t("settings.readFailed", { error: loadError })}
+											onRetry={loadSettings}
+											tone="error"
+										/>
 									)}
-									{isLoading ? <p className="set-hint">正在读取设置…</p> : null}
+									{isLoading ? <p className="set-hint">{t("settings.loading")}</p> : null}
 									{draft === undefined ? null : (
 										<>
 											{section === "models" ? (
@@ -324,7 +359,7 @@ export function SettingsPage({
 											{section === "input" ? <InputSection draft={draft} patch={patch} /> : null}
 											{saveError === undefined ? null : (
 												<StatusNote
-													message={`保存失败:${saveError}`}
+													message={t("settings.saveFailed", { error: saveError })}
 													onRetry={() => void save(draft)}
 													tone="error"
 												/>
@@ -367,6 +402,7 @@ function ModelsSection({
 	providersError: string | undefined;
 	onReloadProviders: () => void;
 }) {
+	const { t } = useI18n();
 	const [models, setModels] = useState<readonly ModelInfo[] | undefined>(undefined);
 	const [error, setError] = useState<string | undefined>(undefined);
 	/** 每个模型的测试结果，键为 provider/model */
@@ -428,16 +464,20 @@ function ModelsSection({
 	if (error !== undefined) {
 		return (
 			<>
-				<h2 className="set-section-title">模型</h2>
-				<StatusNote message={`读取模型失败:${error}`} onRetry={() => void load()} tone="error" />
+				<h2 className="set-section-title">{t("settings.models")}</h2>
+				<StatusNote
+					message={t("settings.modelsPage.readFailed", { error })}
+					onRetry={() => void load()}
+					tone="error"
+				/>
 			</>
 		);
 	}
 	if (models === undefined) {
 		return (
 			<>
-				<h2 className="set-section-title">模型</h2>
-				<p className="set-hint">正在读取模型…</p>
+				<h2 className="set-section-title">{t("settings.models")}</h2>
+				<p className="set-hint">{t("settings.modelsPage.loading")}</p>
 			</>
 		);
 	}
@@ -464,9 +504,9 @@ function ModelsSection({
 
 	return (
 		<>
-			<h2 className="set-section-title">模型</h2>
-			<SettingsGroup label="默认设置">
-				<SettingsRow title="默认模型">
+			<h2 className="set-section-title">{t("settings.models")}</h2>
+			<SettingsGroup label={t("settings.modelsPage.defaultSettings")}>
+				<SettingsRow title={t("settings.modelsPage.defaultModel")}>
 					<select
 						className="set-input"
 						value={selected === undefined ? "" : modelKey(selected)}
@@ -478,9 +518,9 @@ function ModelsSection({
 								defaultModel: found === undefined ? undefined : { provider: found.provider, id: found.id },
 							}));
 						}}
-						aria-label="默认模型"
+						aria-label={t("settings.modelsPage.defaultModel")}
 					>
-						<option value="">由主机决定</option>
+						<option value="">{t("settings.modelsPage.hostDefault")}</option>
 						{usable.map((model) => (
 							<option key={modelKey(model)} value={modelKey(model)}>
 								{model.provider} / {model.name}
@@ -488,7 +528,7 @@ function ModelsSection({
 						))}
 					</select>
 				</SettingsRow>
-				<SettingsRow title="默认思考档位">
+				<SettingsRow title={t("settings.modelsPage.defaultThinking")}>
 					<select
 						className="set-input"
 						value={draft.defaultThinkingLevel ?? ""}
@@ -501,9 +541,9 @@ function ModelsSection({
 									: { defaultThinkingLevel: value as ThinkingLevelValue }),
 							}));
 						}}
-						aria-label="默认思考档位"
+						aria-label={t("settings.modelsPage.defaultThinking")}
 					>
-						<option value="">由模型决定</option>
+						<option value="">{t("settings.modelsPage.modelDefault")}</option>
 						{levelOptions.map((level) => (
 							<option key={level} value={level}>
 								{level}
@@ -526,7 +566,7 @@ function ModelsSection({
 				onCustomsChange={setCustoms}
 			/>
 
-			<h3 className="set-group-title set-group-title-lg">可用模型</h3>
+			<h3 className="set-group-title set-group-title-lg">{t("settings.modelsPage.available")}</h3>
 			<ul className="set-list set-list-scroll">
 				{usable.map((model) => {
 					const key = modelKey(model);
@@ -539,7 +579,9 @@ function ModelsSection({
 								</span>
 								{probe === undefined ? null : (
 									<span className={probe.ok ? "set-badge is-on" : "set-badge is-off"}>
-										{probe.ok ? `可用 · ${probe.latencyMs} ms` : "不可用"}
+										{probe.ok
+											? t("settings.modelsPage.probeAvailable", { latency: probe.latencyMs })
+											: t("settings.modelsPage.probeUnavailable")}
 									</span>
 								)}
 								<button
@@ -548,14 +590,16 @@ function ModelsSection({
 									disabled={testing === key}
 									onClick={() => void runTest(model)}
 								>
-									{testing === key ? "测试中…" : "测试"}
+									{testing === key ? t("settings.modelsPage.testing") : t("settings.modelsPage.test")}
 								</button>
 							</div>
 							{probe?.message === undefined ? null : <p className="set-row-error">{probe.message}</p>}
 						</li>
 					);
 				})}
-				{usable.length === 0 ? <li className="set-row set-row-empty">还没有可用的模型</li> : null}
+				{usable.length === 0 ? (
+					<li className="set-row set-row-empty">{t("settings.modelsPage.noModels")}</li>
+				) : null}
 			</ul>
 		</>
 	);
@@ -566,9 +610,12 @@ const THINKING_LEVEL_OPTIONS = ["off", "minimal", "low", "medium", "high", "xhig
 type ThinkingLevelValue = (typeof THINKING_LEVEL_OPTIONS)[number];
 
 /** 运行中动效的选项，顺序与设置页列出的顺序一致。 */
-const LIVE_MOTION_OPTIONS: ReadonlyArray<{ id: LiveMotion; label: string }> = [
-	{ id: "pulse", label: "呼吸" },
-	{ id: "shimmer", label: "扫光" },
+const LIVE_MOTION_OPTIONS: ReadonlyArray<{
+	id: LiveMotion;
+	labelKey: "settings.appearancePage.pulse" | "settings.appearancePage.shimmer";
+}> = [
+	{ id: "pulse", labelKey: "settings.appearancePage.pulse" },
+	{ id: "shimmer", labelKey: "settings.appearancePage.shimmer" },
 ];
 
 /** 外观设置。 */
@@ -581,7 +628,26 @@ function AppearanceSection({
 	patch: (change: (current: FacetSettings) => FacetSettings) => void;
 	onPreview: ((appearance: FacetSettings["appearance"]) => void) | undefined;
 }) {
+	const { t } = useI18n();
 	const appearance = draft.appearance;
+	const themeLabel = (id: FacetSettings["appearance"]["theme"]): string => {
+		switch (id) {
+			case "light":
+				return t("theme.light");
+			case "zinc":
+				return t("theme.zinc");
+			case "midnight":
+				return t("theme.midnight");
+			case "claude":
+				return t("theme.claude");
+			case "ghostty":
+				return t("theme.ghostty");
+			case "pureBlack":
+				return t("theme.pureBlack");
+			case "system":
+				return t("theme.system");
+		}
+	};
 	// 外观改动立刻作用到界面上，关掉设置页而不保存时由宿主恢复
 	const patchAppearance = (change: Partial<FacetSettings["appearance"]>): void => {
 		const next = { ...appearance, ...change };
@@ -609,60 +675,60 @@ function AppearanceSection({
 
 	return (
 		<>
-			<h2 className="set-section-title">外观</h2>
-			<SettingsGroup label="通用">
-				<SettingsRow title="主题" isStacked>
+			<h2 className="set-section-title">{t("settings.appearancePage.title")}</h2>
+			<SettingsGroup label={t("settings.appearancePage.general")}>
+				<SettingsRow title={t("settings.appearancePage.theme")} isStacked>
 					<div className="set-swatches">
 						{UI_THEME_OPTIONS.map((option) => (
 							<button
 								key={option.id}
 								type="button"
 								className={appearance.theme === option.id ? "set-swatch is-active" : "set-swatch"}
-								title={option.label}
-								aria-label={option.label}
+								title={themeLabel(option.id)}
+								aria-label={themeLabel(option.id)}
 								aria-pressed={appearance.theme === option.id}
 								onClick={() => patchAppearance({ theme: option.id })}
 							>
 								<i className="set-swatch-chip" style={{ background: option.swatch }} />
-								<span className="set-swatch-name">{option.label}</span>
+								<span className="set-swatch-name">{themeLabel(option.id)}</span>
 							</button>
 						))}
 						<button
 							type="button"
 							className={appearance.theme === "system" ? "set-swatch is-active" : "set-swatch"}
-							title="跟随系统"
-							aria-label="跟随系统"
+							title={t("theme.system")}
+							aria-label={t("theme.system")}
 							aria-pressed={appearance.theme === "system"}
 							onClick={() => patchAppearance({ theme: "system" })}
 						>
 							<i className="set-swatch-chip is-system" />
-							<span className="set-swatch-name">跟随系统</span>
+							<span className="set-swatch-name">{t("theme.system")}</span>
 						</button>
 					</div>
 				</SettingsRow>
-				<SettingsRow title="运行中的动效">
+				<SettingsRow title={t("settings.appearancePage.liveMotion")}>
 					<select
 						className="set-input"
 						value={appearance.liveMotion}
 						onChange={(event) => patchAppearance({ liveMotion: event.target.value as LiveMotion })}
-						aria-label="运行中的动效"
+						aria-label={t("settings.appearancePage.liveMotion")}
 					>
 						{LIVE_MOTION_OPTIONS.map((option) => (
 							<option key={option.id} value={option.id}>
-								{option.label}
+								{t(option.labelKey)}
 							</option>
 						))}
 					</select>
 				</SettingsRow>
-				<SettingsRow title="减少动效">
+				<SettingsRow title={t("settings.appearancePage.reducedMotion")}>
 					<input
 						type="checkbox"
 						checked={appearance.reducedMotion}
 						onChange={(event) => patchAppearance({ reducedMotion: event.target.checked })}
-						aria-label="减少动效"
+						aria-label={t("settings.appearancePage.reducedMotion")}
 					/>
 				</SettingsRow>
-				<SettingsRow title="对话导航缩放">
+				<SettingsRow title={t("settings.appearancePage.outlineScale")}>
 					<input
 						className="set-input is-number mono"
 						type="number"
@@ -676,47 +742,49 @@ function AppearanceSection({
 								patchAppearance({ outlineScale: next });
 							}
 						}}
-						aria-label="对话导航缩放"
+						aria-label={t("settings.appearancePage.outlineScale")}
 					/>
 				</SettingsRow>
 			</SettingsGroup>
 
-			<SettingsGroup label="字体">
-				<SettingsRow title="代码字体">
+			<SettingsGroup label={t("settings.appearancePage.fonts")}>
+				<SettingsRow title={t("settings.appearancePage.codeFont")}>
 					<input
 						className="set-input"
 						value={appearance.codeFont}
 						onChange={(event) => patchAppearance({ codeFont: event.target.value })}
 						placeholder="Maple Mono CN"
-						aria-label="代码字体"
+						aria-label={t("settings.appearancePage.codeFont")}
 					/>
 				</SettingsRow>
-				<SettingsRow title="编辑器字体">
+				<SettingsRow title={t("settings.appearancePage.editorFont")}>
 					<input
 						className="set-input"
 						value={appearance.editorFont}
 						onChange={(event) => patchAppearance({ editorFont: event.target.value })}
-						placeholder="跟代码字体"
-						aria-label="编辑器字体"
+						placeholder={t("settings.appearancePage.followCodeFont")}
+						aria-label={t("settings.appearancePage.editorFont")}
 					/>
 				</SettingsRow>
-				<SettingsRow title="编辑器字号">{sizeInput(appearance.editorFontSize, "editorFontSize")}</SettingsRow>
-				<SettingsRow title="终端字体">
+				<SettingsRow title={t("settings.appearancePage.editorFontSize")}>
+					{sizeInput(appearance.editorFontSize, "editorFontSize")}
+				</SettingsRow>
+				<SettingsRow title={t("settings.appearancePage.terminalFont")}>
 					<input
 						className="set-input"
 						value={appearance.terminalFont}
 						onChange={(event) => patchAppearance({ terminalFont: event.target.value })}
-						placeholder="跟代码字体"
-						aria-label="终端字体"
+						placeholder={t("settings.appearancePage.followCodeFont")}
+						aria-label={t("settings.appearancePage.terminalFont")}
 					/>
 				</SettingsRow>
-				<SettingsRow title="终端字号">
+				<SettingsRow title={t("settings.appearancePage.terminalFontSize")}>
 					{sizeInput(appearance.terminalFontSize, "terminalFontSize")}
 				</SettingsRow>
 			</SettingsGroup>
 
-			<SettingsGroup label="代码配色">
-				<SettingsRow title="代码配色">
+			<SettingsGroup label={t("settings.appearancePage.codeTheme")}>
+				<SettingsRow title={t("settings.appearancePage.codeTheme")}>
 					<select
 						className="set-input"
 						value={appearance.codeTheme}
@@ -725,7 +793,7 @@ function AppearanceSection({
 								codeTheme: event.target.value as FacetSettings["appearance"]["codeTheme"],
 							})
 						}
-						aria-label="代码配色"
+						aria-label={t("settings.appearancePage.codeTheme")}
 					>
 						{CODE_THEME_OPTIONS.map((option) => (
 							<option key={option.id} value={option.id}>
@@ -747,11 +815,12 @@ function InputSection({
 	draft: FacetSettings;
 	patch: (change: (current: FacetSettings) => FacetSettings) => void;
 }) {
+	const { t } = useI18n();
 	return (
 		<>
-			<h2 className="set-section-title">输入</h2>
-			<SettingsGroup label="发送">
-				<SettingsRow title="发送键位">
+			<h2 className="set-section-title">{t("settings.inputPage.title")}</h2>
+			<SettingsGroup label={t("settings.inputPage.sending")}>
+				<SettingsRow title={t("settings.inputPage.sendKey")}>
 					<select
 						className="set-input"
 						value={draft.input.sendKey}
@@ -761,21 +830,21 @@ function InputSection({
 								input: { ...current.input, sendKey: event.target.value as FacetSettings["input"]["sendKey"] },
 							}))
 						}
-						aria-label="发送键位"
+						aria-label={t("settings.inputPage.sendKey")}
 					>
-						<option value="enter">回车发送</option>
-						<option value="shiftEnter">Shift+回车发送</option>
+						<option value="enter">{t("settings.inputPage.enter")}</option>
+						<option value="shiftEnter">{t("settings.inputPage.shiftEnter")}</option>
 					</select>
 				</SettingsRow>
 			</SettingsGroup>
 
-			<SettingsGroup label="快捷键">
+			<SettingsGroup label={t("settings.inputPage.shortcuts")}>
 				{SHORTCUTS.map((item) => (
-					<SettingsRow key={item.keys} title={item.action}>
+					<SettingsRow key={item.keys} title={t(item.actionKey)}>
 						<span className="set-item-key mono">{item.keys}</span>
 					</SettingsRow>
 				))}
-				<SettingsRow title="发送消息">
+				<SettingsRow title={t("settings.inputPage.sendMessage")}>
 					<span className="set-item-key mono">
 						{draft.input.sendKey === "shiftEnter" ? "Shift+Enter" : "Enter"}
 					</span>
@@ -786,10 +855,16 @@ function InputSection({
 }
 
 /** 已实现的快捷键，按使用频率排列。 */
-const SHORTCUTS: ReadonlyArray<{ keys: string; action: string }> = [
-	{ keys: "⌘K / Ctrl+K", action: "展开并聚焦侧栏搜索" },
-	{ keys: "Esc", action: "关闭浮层、对话框与搜索" },
-	{ keys: "Enter", action: "提交对话框里的输入" },
+const SHORTCUTS: ReadonlyArray<{
+	keys: string;
+	actionKey:
+		| "settings.inputPage.expandSearch"
+		| "settings.inputPage.closeOverlays"
+		| "settings.inputPage.submitDialog";
+}> = [
+	{ keys: "⌘K / Ctrl+K", actionKey: "settings.inputPage.expandSearch" },
+	{ keys: "Esc", actionKey: "settings.inputPage.closeOverlays" },
+	{ keys: "Enter", actionKey: "settings.inputPage.submitDialog" },
 ];
 
 /**
@@ -798,6 +873,7 @@ const SHORTCUTS: ReadonlyArray<{ keys: string; action: string }> = [
  * 诊断文本由主机生成，凭证与令牌不在其中；导出走宿主的保存对话框，用户自己挑位置。
  */
 function AboutSection({ about, data }: { about: SettingsPageProps["about"]; data: SettingsDataSource }) {
+	const { t } = useI18n();
 	const [isExporting, setIsExporting] = useState(false);
 	const [result, setResult] = useState<{ tone: "ok" | "error"; message: string } | undefined>(undefined);
 
@@ -810,7 +886,11 @@ function AboutSection({ about, data }: { about: SettingsPageProps["about"]; data
 				`facet-diagnostic-${new Date().toISOString().slice(0, 19)}.json`,
 				text,
 			);
-			setResult(saved ? { tone: "ok", message: "诊断已导出" } : { tone: "ok", message: "已取消" });
+			setResult(
+				saved
+					? { tone: "ok", message: t("settings.aboutPage.exported") }
+					: { tone: "ok", message: t("settings.aboutPage.cancelled") },
+			);
 		} catch (error) {
 			setResult({ tone: "error", message: error instanceof Error ? error.message : String(error) });
 		} finally {
@@ -820,18 +900,18 @@ function AboutSection({ about, data }: { about: SettingsPageProps["about"]; data
 
 	return (
 		<section className="set-section">
-			<h2 className="set-section-title">关于</h2>
+			<h2 className="set-section-title">{t("settings.aboutPage.title")}</h2>
 			<ul className="set-list">
 				<li className="set-row">
-					<span className="set-row-name">应用版本</span>
+					<span className="set-row-name">{t("settings.aboutPage.appVersion")}</span>
 					<span className="set-row-meta mono selectable">{about.appVersion}</span>
 				</li>
 				<li className="set-row">
-					<span className="set-row-name">运行时</span>
+					<span className="set-row-name">{t("settings.aboutPage.runtime")}</span>
 					<span className="set-row-meta mono selectable">{about.runtime}</span>
 				</li>
 				<li className="set-row">
-					<span className="set-row-name">主机端点</span>
+					<span className="set-row-name">{t("settings.aboutPage.endpoint")}</span>
 					<span className="set-row-meta mono selectable">{about.endpoint}</span>
 				</li>
 			</ul>
@@ -842,7 +922,7 @@ function AboutSection({ about, data }: { about: SettingsPageProps["about"]; data
 					disabled={isExporting}
 					onClick={() => void exportDiagnostics()}
 				>
-					{isExporting ? "导出中…" : "导出诊断"}
+					{isExporting ? t("settings.aboutPage.exporting") : t("settings.aboutPage.export")}
 				</button>
 			</div>
 			{result === undefined ? null : (

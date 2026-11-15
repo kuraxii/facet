@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useI18n } from "../i18n/I18nProvider.tsx";
 import { Markdown } from "../markdown/Markdown.tsx";
 import { ChevronIcon, TreeChevron } from "./chevron.tsx";
 import { lineClass, patchLines } from "./diff-lines.ts";
@@ -63,12 +64,13 @@ function retryDelayText(
 	delayMs: number,
 	startedAt: number | undefined,
 	now: number | undefined,
+	t: ReturnType<typeof useI18n>["t"],
 ): string | undefined {
 	if (delayMs <= 0 || startedAt === undefined || now === undefined) {
 		return undefined;
 	}
 	const left = Math.ceil((startedAt + delayMs - now) / 1000);
-	return left <= 0 ? "正在重试…" : `${left} 秒后重试`;
+	return left <= 0 ? t("transcript.retrying") : t("transcript.retryIn", { seconds: left });
 }
 
 function useNow(isTicking: boolean): number | undefined {
@@ -103,6 +105,7 @@ function textOf(parts: readonly Part[]): string {
  * 复制成功之后对勾亮一小会儿再换回复制图标，避免连点时分不清是没反应还是已经复制过。
  */
 function CopyButton({ text, onCopy }: { text: string; onCopy: (text: string) => void }) {
+	const { t } = useI18n();
 	const [isDone, setIsDone] = useState(false);
 	useEffect(() => {
 		if (!isDone) {
@@ -115,8 +118,8 @@ function CopyButton({ text, onCopy }: { text: string; onCopy: (text: string) => 
 		<button
 			type="button"
 			className={isDone ? "copy-btn is-done" : "copy-btn"}
-			aria-label={isDone ? "已复制" : "复制原文"}
-			title={isDone ? "已复制" : "复制原文"}
+			aria-label={isDone ? t("transcript.copied") : t("transcript.copy")}
+			title={isDone ? t("transcript.copied") : t("transcript.copy")}
 			onClick={() => {
 				onCopy(text);
 				setIsDone(true);
@@ -205,6 +208,7 @@ const TIP_DELAY_MS = 500;
 const TIP_HIDE_DELAY_MS = 300;
 
 function ToolRow({ part }: { part: ToolCallPart }) {
+	const { t } = useI18n();
 	const [isOpen, setOpen] = useState(false);
 	const [isExpanded, setExpanded] = useState(false);
 	/** 参数完整内容弹窗的落点，未悬停时为空 */
@@ -265,7 +269,7 @@ function ToolRow({ part }: { part: ToolCallPart }) {
 						<ToolImageThumb
 							key={`${part.callId}-${image.mimeType}-${image.data.slice(0, 32)}`}
 							image={image}
-							label={`${kind.label} 结果里的第 ${index + 1} 张图片`}
+							label={t("transcript.imageLabel", { tool: kind.label, index: index + 1 })}
 						/>
 					))}
 				</div>
@@ -275,7 +279,7 @@ function ToolRow({ part }: { part: ToolCallPart }) {
 					<pre>{shown}</pre>
 					{isLong && !isExpanded ? (
 						<button type="button" className="tr-more" onClick={() => setExpanded(true)}>
-							已折叠 {folded.hiddenLines} 行 · 显示全部
+							{t("transcript.folded", { count: folded.hiddenLines })}
 						</button>
 					) : null}
 				</div>
@@ -326,6 +330,7 @@ function PartView({ part, isStreaming }: { part: Part; isStreaming: boolean }) {
 
 /** 一轮的文件改动。文件是按钮,点开看这一段补丁。 */
 function FilesRow({ diffs }: { diffs: readonly DiffChunk[] }) {
+	const { t } = useI18n();
 	const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set());
 	const toggle = useCallback((callId: string) => {
 		setOpened((previous) => {
@@ -351,7 +356,7 @@ function FilesRow({ diffs }: { diffs: readonly DiffChunk[] }) {
 						<button key={diff.callId} type="button" className="fc" onClick={() => toggle(diff.callId)}>
 							<ChevronIcon isOpen={isOpen} />
 							<span className="path" title={file ?? ""}>
-								{file === undefined ? "未命名文件" : shortPath(file)}
+								{file === undefined ? t("transcript.unnamedFile") : shortPath(file)}
 							</span>
 							<b className="add">+{diff.added}</b>
 							<b className="del">−{diff.removed}</b>
@@ -359,7 +364,8 @@ function FilesRow({ diffs }: { diffs: readonly DiffChunk[] }) {
 					);
 				})}
 				<span className="files-meta">
-					{diffs.length} 个文件 · <b className="add">+{totalAdded}</b> <b className="del">−{totalRemoved}</b>
+					{t("transcript.filesCount", { count: diffs.length })} · <b className="add">+{totalAdded}</b>{" "}
+					<b className="del">−{totalRemoved}</b>
 				</span>
 			</div>
 			{diffs
@@ -385,7 +391,8 @@ function isAborted(row: DisplayRow): boolean {
 
 /** 中止的提示,挂在被截断的那一行末尾。 */
 function StoppedNote(): ReactNode {
-	return <div className="stopped-line">已停止</div>;
+	const { t } = useI18n();
+	return <div className="stopped-line">{t("transcript.stopped")}</div>;
 }
 
 /** 答复行的正文:相邻的正文段合成一块 Markdown,思考与工具按原位置插入。 */
@@ -464,6 +471,7 @@ export function ChatTranscript({
 	emptyHint,
 	renames,
 }: ChatTranscriptProps) {
+	const { t } = useI18n();
 	const rows = useMemo(() => groupRows(items), [items]);
 	const retry = maintenance?.kind === "retry" ? maintenance : undefined;
 	const isCompacting = maintenance?.kind === "compaction";
@@ -511,7 +519,7 @@ export function ChatTranscript({
 	}, []);
 
 	if (rows.length === 0 && maintenance === undefined) {
-		return <div className="empty">{emptyHint ?? "还没有消息"}</div>;
+		return <div className="empty">{emptyHint ?? t("transcript.empty")}</div>;
 	}
 
 	/** 这一轮最后一条助手答复的原文，分叉行上的复制按钮用它 */
@@ -550,16 +558,16 @@ export function ChatTranscript({
 									<button
 										type="button"
 										className="fork-btn"
-										aria-label="从这一轮往后继续"
-										title="从这一轮往后继续"
+										aria-label={t("transcript.fork")}
+										title={t("transcript.fork")}
 										disabled={fork.needsSettle && !canFork}
 										onClick={() => onFork(fork.beforeEntryId)}
 									>
 										<Split size={14} strokeWidth={1.5} />
 									</button>
 								</div>
-								{turnDurationText(row, now).length === 0 ? null : (
-									<span className="turn-time">{turnDurationText(row, now)}</span>
+								{turnDurationText(row, now, t).length === 0 ? null : (
+									<span className="turn-time">{turnDurationText(row, now, t)}</span>
 								)}
 							</div>
 						</Shell>
@@ -571,7 +579,10 @@ export function ChatTranscript({
 						.flatMap((item) => item.parts)
 						.map((part) => (part.kind === "text" ? part.text : ""))
 						.join("");
-					const label = row.items[0]?.kind === "compaction" ? "上下文摘要" : "分支摘要";
+					const label =
+						row.items[0]?.kind === "compaction"
+							? t("transcript.compactionSummary")
+							: t("transcript.branchSummary");
 					return (
 						<Shell key={row.id} className="is-divider">
 							<details className="context-summary">
@@ -594,7 +605,7 @@ export function ChatTranscript({
 
 				if (row.kind === "error") {
 					const text = textOf(row.items.flatMap((item) => item.parts));
-					const message = text.length > 0 ? text : "运行出错";
+					const message = text.length > 0 ? text : t("transcript.runError");
 					// 重试按最后一条用户消息重发一次,失败的那条助手消息留在历史里
 					const lastUser = [...rows].reverse().find((item) => item.kind === "user");
 					const retryTarget =
@@ -620,12 +631,12 @@ export function ChatTranscript({
 													className="error-btn"
 													onClick={() => onRetryTurn(retryTarget.entryId as string, retryTarget.text)}
 												>
-													重试
+													{t("transcript.retry")}
 												</button>
 											) : null}
 											{onCopyDetails === undefined ? null : (
 												<button type="button" className="error-btn" onClick={() => onCopyDetails(message)}>
-													复制详情
+													{t("transcript.copyDetails")}
 												</button>
 											)}
 										</div>
@@ -654,8 +665,8 @@ export function ChatTranscript({
 										<button
 											type="button"
 											className="revert-btn"
-											aria-label="回退到这条消息之前"
-											title="回退到这条消息之前"
+											aria-label={t("transcript.revert")}
+											title={t("transcript.revert")}
 											onClick={() => onRevert(entryId, text)}
 										>
 											<Undo2 size={12} strokeWidth={1.5} />
@@ -677,13 +688,13 @@ export function ChatTranscript({
 									className={isCollapsed ? "group-head" : "group-head is-open"}
 									onClick={() => toggle(row)}
 									aria-expanded={!isCollapsed}
-									aria-label="过程"
+									aria-label={t("transcript.process")}
 								>
 									<span className="group-icon">
 										{isCollapsed ? <Wrench size={14} strokeWidth={1.5} /> : <TreeChevron isOpen />}
 									</span>
 									<span className={row.isStreaming ? "group-label is-live" : "group-label"}>
-										{groupLabel(row)}
+										{groupLabel(row, t)}
 									</span>
 								</button>
 								{isCollapsed ? null : (
@@ -720,7 +731,7 @@ export function ChatTranscript({
 					<div className="divider" role="status" aria-live="polite" aria-busy="true">
 						<span className="line" />
 						<ListCollapse size={14} strokeWidth={1.5} aria-hidden="true" />
-						<span className="group-label is-live">上下文摘要</span>
+						<span className="group-label is-live">{t("transcript.compactionSummary")}</span>
 						<span className="line" />
 					</div>
 				</Shell>
@@ -730,10 +741,11 @@ export function ChatTranscript({
 				<Shell className="is-retry" key="retry">
 					<div className="retry-line">
 						<span className="chip is-warn">
-							<i className="dot is-warn pulse" />第 {retry.attempt}/{retry.maxAttempts} 次重试
+							<i className="dot is-warn pulse" />
+							{t("transcript.retryAttempt", { attempt: retry.attempt, max: retry.maxAttempts })}
 						</span>
-						{retryDelayText(retry.delayMs, retryStartedAt, now) === undefined ? null : (
-							<span className="t2">{retryDelayText(retry.delayMs, retryStartedAt, now)}</span>
+						{retryDelayText(retry.delayMs, retryStartedAt, now, t) === undefined ? null : (
+							<span className="t2">{retryDelayText(retry.delayMs, retryStartedAt, now, t)}</span>
 						)}
 					</div>
 				</Shell>

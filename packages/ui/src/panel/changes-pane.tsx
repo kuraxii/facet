@@ -8,6 +8,7 @@
 import type { GitDiff, GitFileChange, GitFileStatus, GitStatus } from "@facet/protocol";
 import { RefreshCw } from "lucide-react";
 import { type ReactNode, useCallback, useState } from "react";
+import { useI18n } from "../i18n/I18nProvider.tsx";
 import { ChevronIcon } from "../transcript/chevron.tsx";
 import { lineClass, patchLines } from "../transcript/diff-lines.ts";
 
@@ -19,16 +20,6 @@ const STATUS_LETTER: Record<GitFileStatus, string> = {
 	renamed: "R",
 	untracked: "?",
 	conflicted: "!",
-};
-
-/** 状态的悬浮说明。 */
-const STATUS_LABEL: Record<GitFileStatus, string> = {
-	added: "新增",
-	modified: "修改",
-	deleted: "删除",
-	renamed: "重命名",
-	untracked: "未跟踪",
-	conflicted: "有冲突",
 };
 
 export interface ChangesPaneProps {
@@ -62,13 +53,26 @@ function ChangeRow({
 	isLoadingDiff: boolean;
 	onRetryDiff: () => void;
 }): ReactNode {
+	const { t } = useI18n();
+	const statusTitle =
+		file.status === "added"
+			? t("panel.status.added")
+			: file.status === "modified"
+				? t("panel.status.modified")
+				: file.status === "deleted"
+					? t("panel.status.deleted")
+					: file.status === "renamed"
+						? t("panel.status.renamed")
+						: file.status === "untracked"
+							? t("panel.status.untracked")
+							: t("panel.status.conflicted");
 	const name = file.path.split("/").pop() ?? file.path;
 	const directory = file.path.slice(0, Math.max(0, file.path.length - name.length - 1));
 	return (
 		<li className="chg-item">
 			<button type="button" className="chg-row" onClick={onToggle} aria-expanded={isOpen}>
 				<ChevronIcon isOpen={isOpen} size={11} />
-				<span className={`chg-status is-${file.status}`} title={STATUS_LABEL[file.status]}>
+				<span className={`chg-status is-${file.status}`} title={statusTitle}>
 					{STATUS_LETTER[file.status]}
 				</span>
 				<span className="chg-name" title={file.path}>
@@ -77,7 +81,7 @@ function ChangeRow({
 				{directory.length === 0 ? null : <span className="chg-dir">{directory}</span>}
 				<span className="chg-counts">
 					{file.binary ? (
-						<span className="chg-binary">二进制</span>
+						<span className="chg-binary">{t("panel.binary")}</span>
 					) : (
 						<>
 							<b className="add">+{file.added}</b>
@@ -88,22 +92,22 @@ function ChangeRow({
 			</button>
 			{isOpen ? (
 				<div className="chg-diff">
-					{isLoadingDiff ? <p className="chg-note">正在取补丁…</p> : null}
+					{isLoadingDiff ? <p className="chg-note">{t("panel.loadingDiff")}</p> : null}
 					{diffError === undefined ? null : (
 						<p className="chg-note is-error">
 							{diffError}
 							<button type="button" className="chg-retry" onClick={onRetryDiff}>
-								重试
+								{t("common.retry")}
 							</button>
 						</p>
 					)}
 					{diff === undefined ? null : diff.binary ? (
-						<p className="chg-note">二进制文件，不展示补丁</p>
+						<p className="chg-note">{t("panel.binaryDiff")}</p>
 					) : diff.patch.trim().length === 0 ? (
-						<p className="chg-note">没有可展示的改动</p>
+						<p className="chg-note">{t("panel.noDiff")}</p>
 					) : (
 						<>
-							{diff.truncated ? <p className="chg-note">补丁过长，只显示前半部分</p> : null}
+							{diff.truncated ? <p className="chg-note">{t("panel.truncatedDiff")}</p> : null}
 							<div className="diff-body">
 								{patchLines(diff.patch).map(({ key, line, number }) => (
 									<div key={key} className={`diff-line ${lineClass(line)}`}>
@@ -121,6 +125,7 @@ function ChangeRow({
 }
 
 export function ChangesPane({ status, isLoading, error, onRefresh, loadDiff }: ChangesPaneProps) {
+	const { t } = useI18n();
 	/** 展开的文件路径，一次只展开一个 */
 	const [openPath, setOpenPath] = useState<string | undefined>(undefined);
 	const [diffs, setDiffs] = useState<Readonly<Record<string, GitDiff>>>({});
@@ -179,8 +184,8 @@ export function ChangesPane({ status, isLoading, error, onRefresh, loadDiff }: C
 			<button
 				type="button"
 				className="ib"
-				aria-label="刷新改动"
-				title="刷新改动"
+				aria-label={t("panel.refreshChanges")}
+				title={t("panel.refreshChanges")}
 				onClick={onRefresh}
 				disabled={isLoading}
 			>
@@ -196,7 +201,7 @@ export function ChangesPane({ status, isLoading, error, onRefresh, loadDiff }: C
 				<p className="chg-note is-error">
 					{error}
 					<button type="button" className="chg-retry" onClick={onRefresh}>
-						重试
+						{t("common.retry")}
 					</button>
 				</p>
 			</>
@@ -207,7 +212,7 @@ export function ChangesPane({ status, isLoading, error, onRefresh, loadDiff }: C
 		return (
 			<>
 				{header}
-				<p className="chg-note">正在读取改动…</p>
+				<p className="chg-note">{t("panel.loadingChanges")}</p>
 			</>
 		);
 	}
@@ -216,7 +221,7 @@ export function ChangesPane({ status, isLoading, error, onRefresh, loadDiff }: C
 		return (
 			<>
 				{header}
-				<p className="chg-note">这个项目不是 Git 仓库，看不到改动。</p>
+				<p className="chg-note">{t("panel.notRepo")}</p>
 			</>
 		);
 	}
@@ -225,7 +230,7 @@ export function ChangesPane({ status, isLoading, error, onRefresh, loadDiff }: C
 		return (
 			<>
 				{header}
-				<p className="chg-note">工作树干净，没有未提交的改动。</p>
+				<p className="chg-note">{t("panel.clean")}</p>
 			</>
 		);
 	}
@@ -251,7 +256,7 @@ export function ChangesPane({ status, isLoading, error, onRefresh, loadDiff }: C
 				))}
 			</ul>
 			<p className="chg-total">
-				{status.files.length} 个文件 · <b className="add">+{totalAdded}</b>{" "}
+				{t("panel.filesCount", { count: status.files.length })} · <b className="add">+{totalAdded}</b>{" "}
 				<b className="del">−{totalRemoved}</b>
 			</p>
 		</>

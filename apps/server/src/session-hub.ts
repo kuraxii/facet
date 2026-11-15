@@ -72,7 +72,7 @@ export class SessionNotFoundError extends Error {
 	readonly sessionId: string;
 
 	constructor(sessionId: string) {
-		super(`会话不存在:${sessionId}`);
+		super(`Session does not exist: ${sessionId}`);
 		this.sessionId = sessionId;
 	}
 }
@@ -92,7 +92,7 @@ export class SessionEntryNotFoundError extends Error {
 	readonly messageId: string;
 
 	constructor(messageId: string) {
-		super(`找不到消息对应的会话条目:${messageId}`);
+		super(`Cannot find the session entry for message: ${messageId}`);
 		this.messageId = messageId;
 	}
 }
@@ -102,7 +102,7 @@ export class SessionBoundaryNotFoundError extends Error {
 	readonly entryId: string;
 
 	constructor(entryId: string) {
-		super(`条目不在活动分支上:${entryId}`);
+		super(`Entry is not on the active branch: ${entryId}`);
 		this.entryId = entryId;
 	}
 }
@@ -112,7 +112,7 @@ export class SessionBusyError extends Error {
 	readonly sessionId: string;
 
 	constructor(sessionId: string) {
-		super(`会话正在运行,不能执行这个操作:${sessionId}`);
+		super(`Session is running; this operation is unavailable: ${sessionId}`);
 		this.sessionId = sessionId;
 	}
 }
@@ -122,7 +122,7 @@ export class SessionFileMissingError extends Error {
 	readonly file: string;
 
 	constructor(file: string) {
-		super(`会话文件不存在:${file}`);
+		super(`Session file does not exist: ${file}`);
 		this.file = file;
 	}
 }
@@ -133,7 +133,7 @@ export class SessionConflictError extends Error {
 	readonly opened: string;
 
 	constructor(requested: string, opened: string) {
-		super(`会话文件与已打开的会话 id 相同但路径不同:${requested}`);
+		super(`Session file has the same session id as an open session but a different path: ${requested}`);
 		this.requested = requested;
 		this.opened = opened;
 	}
@@ -626,7 +626,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		// 边界不在活动分支上时 agent 抛普通错误，这里换成端点认识的分类
 		try {
 			const result = agent.entriesAfter(afterEntryId);
-			debugLog("commit", "返回边界之后的条目", {
+			debugLog("commit", "Returning entries after the boundary", {
 				sessionId,
 				afterEntryId,
 				leafId: result.leafId,
@@ -635,7 +635,11 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 			});
 			return result;
 		} catch (error) {
-			debugLog("commit", "边界条目不在活动分支上", { sessionId, afterEntryId, error: String(error) });
+			debugLog("commit", "Boundary entry is not on the active branch", {
+				sessionId,
+				afterEntryId,
+				error: String(error),
+			});
 			throw new SessionBoundaryNotFoundError(afterEntryId ?? "");
 		}
 	}

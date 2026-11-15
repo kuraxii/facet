@@ -7,6 +7,7 @@
 
 import { X } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { useI18n } from "../i18n/I18nProvider.tsx";
 import { ShieldIcon } from "../transcript/icons.tsx";
 
 /** 确认框参数。 */
@@ -20,6 +21,7 @@ export interface TrustDialogProps {
 }
 
 export function TrustDialog({ cwd, onDecide, onCancel }: TrustDialogProps) {
+	const { t } = useI18n();
 	const trustRef = useRef<HTMLButtonElement>(null);
 
 	// 打开即把焦点放在主按钮，Esc 取消
@@ -39,15 +41,15 @@ export function TrustDialog({ cwd, onDecide, onCancel }: TrustDialogProps) {
 
 	return (
 		<div className="dialog-backdrop">
-			<div className="dialog" role="dialog" aria-modal="true" aria-label="信任这个项目">
+			<div className="dialog" role="dialog" aria-modal="true" aria-label={t("trust.label")}>
 				<div className="dialog-head">
-					<h2 className="dialog-title">信任这个项目？</h2>
-					<button type="button" className="dialog-close" aria-label="关闭" onClick={onCancel}>
+					<h2 className="dialog-title">{t("trust.title")}</h2>
+					<button type="button" className="dialog-close" aria-label={t("common.close")} onClick={onCancel}>
 						<X size={18} strokeWidth={1.5} />
 					</button>
 				</div>
 
-				<p className="dialog-label">目录</p>
+				<p className="dialog-label">{t("trust.directory")}</p>
 				<div className="source-box">
 					<span className="source-path mono" title={cwd}>
 						{cwd}
@@ -59,18 +61,18 @@ export function TrustDialog({ cwd, onDecide, onCancel }: TrustDialogProps) {
 						<ShieldIcon size={15} />
 					</span>
 					<span className="trust-text">
-						<span>这个目录里有项目级扩展、skill 或 MCP 配置。</span>
-						<span>信任之后才会加载,不信任时这些配置不加载,会话照常可用。</span>
-						<span>决定会记住,之后不再询问。</span>
+						<span>{t("trust.hasConfig")}</span>
+						<span>{t("trust.loadHint")}</span>
+						<span>{t("trust.remember")}</span>
 					</span>
 				</div>
 
 				<div className="dialog-actions">
 					<button type="button" className="dialog-cancel" onClick={() => onDecide(false)}>
-						不信任
+						{t("trust.notTrust")}
 					</button>
 					<button ref={trustRef} type="button" className="dialog-primary" onClick={() => onDecide(true)}>
-						信任并打开
+						{t("trust.trustOpen")}
 					</button>
 				</div>
 			</div>

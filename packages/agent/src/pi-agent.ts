@@ -81,28 +81,28 @@ function toEntry(entry: SessionEntry): Entry {
 export const FACET_COMMANDS: readonly SlashCommand[] = [
 	{
 		name: "model",
-		description: "切换当前会话的模型",
+		description: "Switch the model for this session",
 		argumentHint: "<provider/model>",
 		source: "builtin",
 		handler: "facet",
 	},
 	{
 		name: "thinking",
-		description: "切换思考档位",
+		description: "Switch the thinking level",
 		argumentHint: "<off|low|medium|high>",
 		source: "builtin",
 		handler: "facet",
 	},
 	{
 		name: "compact",
-		description: "把较早的历史压成摘要，腾出上下文",
+		description: "Summarize earlier history to free context",
 		source: "builtin",
 		handler: "facet",
 	},
 	{
 		name: "name",
-		description: "给这个会话改名",
-		argumentHint: "<名字>",
+		description: "Rename this session",
+		argumentHint: "<name>",
 		source: "builtin",
 		handler: "facet",
 	},
@@ -462,7 +462,7 @@ export class PiAgent {
 		this.ui?.resume();
 		const result = await this.session.navigateTree(entryId);
 		if (result.cancelled) {
-			throw new Error("回退被取消");
+			throw new Error("Revert was cancelled");
 		}
 		return result.editorText;
 	}

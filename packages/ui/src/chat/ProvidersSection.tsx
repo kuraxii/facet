@@ -6,6 +6,7 @@
  */
 import type { CustomProviderInfo, ProviderInfo } from "@facet/protocol";
 import { useState } from "react";
+import { useI18n } from "../i18n/I18nProvider.tsx";
 import { ProviderForm } from "./ProviderForm.tsx";
 import { ProviderPicker } from "./ProviderPicker.tsx";
 import { providerRows } from "./provider-rows.ts";
@@ -29,11 +30,12 @@ export interface ProvidersSectionProps {
 
 /** 一段带重试的失败提示。 */
 function StatusNote({ message, onRetry }: { message: string; onRetry: () => void }) {
+	const { t } = useI18n();
 	return (
 		<div className="set-note is-error">
 			<span>{message}</span>
 			<button type="button" className="set-note-action" onClick={onRetry}>
-				重试
+				{t("common.retry")}
 			</button>
 		</div>
 	);
@@ -47,6 +49,7 @@ export function ProvidersSection({
 	customs,
 	onCustomsChange,
 }: ProvidersSectionProps) {
+	const { t } = useI18n();
 	/** 展开凭证输入的提供方 */
 	const [credentialId, setCredentialId] = useState<string | undefined>(undefined);
 	const [key, setKey] = useState("");
@@ -144,16 +147,16 @@ export function ProvidersSection({
 	if (error !== undefined) {
 		return (
 			<>
-				<h3 className="set-group-title set-group-title-lg">已配置的提供方</h3>
-				<StatusNote message={`读取提供方失败:${error}`} onRetry={onReload} />
+				<h3 className="set-group-title set-group-title-lg">{t("providers.configured")}</h3>
+				<StatusNote message={t("providers.readFailed", { error })} onRetry={onReload} />
 			</>
 		);
 	}
 	if (providers === undefined) {
 		return (
 			<>
-				<h3 className="set-group-title set-group-title-lg">已配置的提供方</h3>
-				<p className="set-hint">正在读取提供方…</p>
+				<h3 className="set-group-title set-group-title-lg">{t("providers.configured")}</h3>
+				<p className="set-hint">{t("providers.loading")}</p>
 			</>
 		);
 	}
@@ -165,7 +168,7 @@ export function ProvidersSection({
 
 	return (
 		<>
-			<h3 className="set-group-title set-group-title-lg">已配置的提供方</h3>
+			<h3 className="set-group-title set-group-title-lg">{t("providers.configured")}</h3>
 
 			<ul className="set-list">
 				{rows.map(({ provider, custom }) => {
@@ -179,7 +182,7 @@ export function ProvidersSection({
 										{/* 列表里只有配置好的，所以凭证徽标只表示登录方式，不给「未配置」 */}
 										{provider.authenticated ? (
 											<span className="set-badge is-on">
-												{provider.subscription ? "订阅登录" : "已配置凭证"}
+												{provider.subscription ? t("providers.subscription") : t("providers.credential")}
 											</span>
 										) : null}
 										{provider.authSource === undefined ? null : (
@@ -188,7 +191,7 @@ export function ProvidersSection({
 									</>
 								) : (
 									// 自定义提供方的密钥写在模型配置里，凭证状态与来源都由「编辑」那支管
-									<span className="set-badge is-custom">自定义</span>
+									<span className="set-badge is-custom">{t("providers.custom")}</span>
 								)}
 
 								{custom === undefined ? (
@@ -201,7 +204,7 @@ export function ProvidersSection({
 											setCredentialId(credentialId === provider.id ? undefined : provider.id);
 										}}
 									>
-										{provider.authenticated ? "替换凭证" : "添加凭证"}
+										{provider.authenticated ? t("providers.replaceCredential") : t("providers.addCredential")}
 									</button>
 								) : null}
 								<button
@@ -213,7 +216,7 @@ export function ProvidersSection({
 										setAddressId(addressId === provider.id ? undefined : provider.id);
 									}}
 								>
-									地址
+									{t("providers.address")}
 								</button>
 
 								{custom === undefined ? (
@@ -224,7 +227,7 @@ export function ProvidersSection({
 											disabled={isBusy}
 											onClick={() => void removeCredential(provider.id)}
 										>
-											删除凭证
+											{t("providers.deleteCredential")}
 										</button>
 									) : null
 								) : (
@@ -237,7 +240,7 @@ export function ProvidersSection({
 												setForm({ initial: custom });
 											}}
 										>
-											编辑
+											{t("providers.edit")}
 										</button>
 										{removingId === provider.id ? (
 											<>
@@ -247,14 +250,14 @@ export function ProvidersSection({
 													disabled={isBusy}
 													onClick={() => void removeProvider(provider.id)}
 												>
-													确认删除
+													{t("providers.confirmDelete")}
 												</button>
 												<button
 													type="button"
 													className="set-row-action"
 													onClick={() => setRemovingId(undefined)}
 												>
-													取消
+													{t("common.cancel")}
 												</button>
 											</>
 										) : (
@@ -263,7 +266,7 @@ export function ProvidersSection({
 												className="set-row-action is-danger"
 												onClick={() => setRemovingId(provider.id)}
 											>
-												删除
+												{t("providers.delete")}
 											</button>
 										)}
 									</>
@@ -282,8 +285,8 @@ export function ProvidersSection({
 												void saveCredential(provider.id);
 											}
 										}}
-										placeholder="粘贴 API key"
-										aria-label={`${provider.name} 的 API key`}
+										placeholder={t("providers.apiKeyPlaceholder")}
+										aria-label={t("providers.apiKeyLabel", { name: provider.name })}
 									/>
 									<button
 										type="button"
@@ -291,7 +294,7 @@ export function ProvidersSection({
 										disabled={isBusy || key.trim().length === 0}
 										onClick={() => void saveCredential(provider.id)}
 									>
-										{isBusy ? "保存中…" : "保存"}
+										{isBusy ? t("providers.saving") : t("common.save")}
 									</button>
 								</div>
 							) : null}
@@ -307,8 +310,8 @@ export function ProvidersSection({
 												void saveAddress(provider.id);
 											}
 										}}
-										placeholder="接口地址,留空恢复默认"
-										aria-label={`${provider.name} 的接口地址`}
+										placeholder={t("providers.addressPlaceholder")}
+										aria-label={t("providers.addressLabel", { name: provider.name })}
 									/>
 									<button
 										type="button"
@@ -316,7 +319,7 @@ export function ProvidersSection({
 										disabled={isBusy}
 										onClick={() => void saveAddress(provider.id)}
 									>
-										{isBusy ? "保存中…" : "保存"}
+										{isBusy ? t("providers.saving") : t("common.save")}
 									</button>
 								</div>
 							) : null}
@@ -327,13 +330,13 @@ export function ProvidersSection({
 						</li>
 					);
 				})}
-				{rows.length === 0 ? <li className="set-row set-row-empty">还没有配置提供方</li> : null}
+				{rows.length === 0 ? <li className="set-row set-row-empty">{t("providers.noProviders")}</li> : null}
 			</ul>
 
 			{failure?.providerId === "" ? <p className="set-row-error">{failure.message}</p> : null}
 
 			<button type="button" className="set-add-provider" onClick={() => setIsPickerOpen(true)}>
-				添加提供商
+				{t("providers.addProvider")}
 			</button>
 
 			{form === undefined ? null : (

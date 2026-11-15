@@ -22,6 +22,7 @@ import {
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import { facetAskUserQuestion } from "@facet/plugin-ask-user-question";
+import sessionNames from "@facet/plugin-session-names";
 import type { ModelInfo, ModelRef, ProviderInfo, SessionSummary, ThinkingLevel } from "@facet/protocol";
 import { toModelInfo } from "./convert.ts";
 import { FileCredentialStore } from "./credential-store.ts";
@@ -107,12 +108,12 @@ const KNOWN_APIS = [
 
 /** 凭证来源的展示名。pi 给的是来源分类，这里换成能看懂的说明。 */
 const AUTH_SOURCE_LABELS: Record<string, string> = {
-	stored: "本机保存的密钥",
-	runtime: "本次运行里设置的密钥",
-	environment: "环境变量",
-	fallback: "内置缺省凭证",
-	models_json_key: "模型配置里的密钥",
-	models_json_command: "模型配置里的取密钥命令",
+	stored: "Key stored on this device",
+	runtime: "Key set for this run",
+	environment: "Environment variable",
+	fallback: "Built-in fallback credential",
+	models_json_key: "Key in the model configuration",
+	models_json_command: "Key command in the model configuration",
 };
 
 /**
@@ -147,6 +148,7 @@ const BUILTIN_EXTENSIONS: InlineExtension[] = [
 	{ name: "tool-search", factory: createToolSearchExtension(), builtin: true, replaceable: true },
 	{ name: "mcp", factory: createMcpExtension(), builtin: true, replaceable: true },
 	{ name: "ask-user-question", factory: facetAskUserQuestion, builtin: true },
+	{ name: "session-names", factory: sessionNames, builtin: true, replaceable: true },
 ];
 
 /** 内置扩展里不允许被同名用户扩展替换的路径。 */
@@ -310,32 +312,32 @@ export class PiAgentFactory {
 		const id = input.id.trim();
 		if (!/^[a-z0-9][a-z0-9._-]*$/.test(id)) {
 			throw new InvalidProviderError(
-				"提供方标识只能用小写字母、数字、点、下划线与连字符，且以字母或数字开头",
+				"Provider ID must start with a letter or digit and contain only lowercase letters, digits, dots, underscores, and hyphens",
 			);
 		}
 		const isKnownCustom = await this.modelConfig.isCustom(id);
 		if (!isKnownCustom && this.modelRuntime.getProvider(id) !== undefined) {
-			throw new InvalidProviderError(`提供方标识与内置提供方重名:${id}`);
+			throw new InvalidProviderError(`Provider ID conflicts with a built-in provider: ${id}`);
 		}
 		const name = input.name.trim();
 		if (name.length === 0) {
-			throw new InvalidProviderError("提供方名称不能为空");
+			throw new InvalidProviderError("Provider name is required");
 		}
 		const baseUrl = normalizeBaseUrl(input.baseUrl);
 		if (baseUrl === undefined) {
-			throw new InvalidProviderError("接口地址不能为空");
+			throw new InvalidProviderError("Base URL is required");
 		}
 		const api = input.api.trim();
 		if (!KNOWN_APIS.includes(api)) {
-			throw new InvalidProviderError(`接口协议不支持:${api}`);
+			throw new InvalidProviderError(`Unsupported API protocol: ${api}`);
 		}
 		const models = input.models.map((model) => ({ ...model, id: model.id.trim() }));
 		if (models.length === 0) {
-			throw new InvalidProviderError("至少要有一个模型");
+			throw new InvalidProviderError("At least one model is required");
 		}
 		for (const model of models) {
 			if (model.id.length === 0) {
-				throw new InvalidProviderError("模型标识不能为空");
+				throw new InvalidProviderError("Model ID is required");
 			}
 		}
 		await this.modelConfig.saveProvider({ id, name, baseUrl, api, models });
@@ -346,7 +348,7 @@ export class PiAgentFactory {
 	/** 删除一个自定义提供方：配置、凭证与运行态一起清掉。 */
 	async removeCustomProvider(providerId: string): Promise<void> {
 		if (!(await this.modelConfig.isCustom(providerId))) {
-			throw new InvalidProviderError(`不是自定义提供方:${providerId}`);
+			throw new InvalidProviderError(`Not a custom provider: ${providerId}`);
 		}
 		await this.modelConfig.removeProvider(providerId);
 		delete this.customBaseUrls[providerId];
@@ -383,7 +385,7 @@ export class PiAgentFactory {
 	async saveCredential(providerId: string, apiKey: string): Promise<void> {
 		const trimmed = apiKey.trim();
 		if (trimmed.length === 0) {
-			throw new Error("凭证内容不能为空");
+			throw new Error("Credential cannot be empty");
 		}
 		await this.credentials.modify(providerId, async () => ({ type: "api_key", key: trimmed }));
 		await this.modelRuntime.setRuntimeApiKey(providerId, trimmed);
@@ -409,7 +411,7 @@ export class PiAgentFactory {
 			);
 			const latencyMs = Date.now() - started;
 			if (reply.stopReason === "error") {
-				return { ok: false, latencyMs, message: reply.errorMessage ?? "请求失败" };
+				return { ok: false, latencyMs, message: reply.errorMessage ?? "Request failed" };
 			}
 			return { ok: true, latencyMs };
 		} catch (error) {
@@ -505,7 +507,7 @@ export class PiAgentFactory {
 		} catch (error) {
 			// 文件被删或路径写错是最常见的原因,给一句能看懂的说明
 			if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-				throw new Error(`会话文件不存在:${file}`);
+				throw new Error(`Session file does not exist: ${file}`);
 			}
 			throw error;
 		}
@@ -518,10 +520,10 @@ export class PiAgentFactory {
 			try {
 				header = JSON.parse(line) as { type?: unknown; id?: unknown; cwd?: unknown };
 			} catch {
-				throw new Error(`不是会话文件:${file}`);
+				throw new Error(`Not a session file: ${file}`);
 			}
 			if (header.type !== "session" || typeof header.id !== "string" || typeof header.cwd !== "string") {
-				throw new Error(`不是会话文件:${file}`);
+				throw new Error(`Not a session file: ${file}`);
 			}
 			return { id: header.id, cwd: header.cwd };
 		} finally {
@@ -556,7 +558,7 @@ export class PiAgentFactory {
 		const source = SessionManager.open(options.sessionFile, options.sessionDir, options.cwd);
 		const entryId = options.entryId ?? source.getLeafId() ?? undefined;
 		if (entryId === undefined) {
-			throw new Error("会话还没有消息,无法分叉");
+			throw new Error("Session has no messages and cannot be forked");
 		}
 		const forked = source.createBranchedSession(entryId);
 		if (!forked) {
@@ -572,7 +574,7 @@ export class PiAgentFactory {
 
 	private assertAlive(): void {
 		if (this.disposed) {
-			throw new Error("会话工厂已关闭");
+			throw new Error("Session factory is closed");
 		}
 	}
 

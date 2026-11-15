@@ -5,6 +5,7 @@ import {
 	TerminalClient,
 	toTranscript,
 } from "@facet/client-core";
+import type { LanguageSetting, SupportedLanguage } from "@facet/i18n";
 import type {
 	FileContent,
 	GitFileChange,
@@ -36,6 +37,7 @@ import {
 	FilesPane,
 	HostSwitcher,
 	hasEndpoint,
+	I18nProvider,
 	isDarkTheme,
 	normalizeEndpoint,
 	normalizeUiScale,
@@ -63,6 +65,7 @@ import {
 	THEME_MODES,
 	type ThemeName,
 	TrustDialog,
+	useI18n,
 	useStickToBottom,
 	writeHostList,
 	writePanelState,
@@ -100,6 +103,12 @@ interface FacetBridge extends HostChannelBridge {
 	uiScale: number;
 	/** 设置本机界面缩放 */
 	setUiScale?: (scale: number) => void;
+	/** 本机保存的语言设置 */
+	languageSetting: LanguageSetting;
+	/** 主进程解析后的实际语言 */
+	language: SupportedLanguage;
+	/** 修改语言，返回实际使用的语言 */
+	setLanguage: (setting: LanguageSetting) => Promise<SupportedLanguage>;
 	/** 主机是本机管的（local），还是外面给的（external） */
 	hostMode: string;
 	/** 打开系统的目录选择窗口,取消时返回空 */
@@ -344,7 +353,32 @@ function pickStartupSession(
 	return scoped ?? newest;
 }
 
-export function App() {
+/** 界面外壳参数；语言状态在外层维护，切换语言不重建 AppView 的无关心状态。 */
+interface AppViewProps {
+	languageSetting: LanguageSetting;
+	onLanguageChange: (setting: LanguageSetting) => void;
+}
+
+/** 界面语言从本机桥读入，切换时由主进程或 Web 桥解析实际语言。 */
+export function App(): React.JSX.Element {
+	const [languageSetting, setLanguageSetting] = useState(bridge.languageSetting);
+	const [language, setLanguage] = useState(bridge.language);
+	const changeLanguage = useCallback((setting: LanguageSetting) => {
+		setLanguageSetting(setting);
+		void bridge
+			.setLanguage(setting)
+			.then(setLanguage)
+			.catch(() => undefined);
+	}, []);
+	return (
+		<I18nProvider language={language}>
+			<AppView languageSetting={languageSetting} onLanguageChange={changeLanguage} />
+		</I18nProvider>
+	);
+}
+
+function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
+	const { t } = useI18n();
 	const version = useSyncExternalStore(
 		(onChange) => client.store.subscribe(onChange),
 		() => client.store.getVersion(),
@@ -684,7 +718,7 @@ export function App() {
 						return;
 					}
 					// 重连失败的原因留在控制台，便于排查连不上的问题
-					console.log("[reconnect] 重连失败", error instanceof Error ? error.message : String(error));
+					console.log("[reconnect] Reconnect failed", error instanceof Error ? error.message : String(error));
 					await new Promise((done) => setTimeout(done, delay));
 					delay = Math.min(delay * 2, 8000);
 				}
@@ -737,7 +771,7 @@ export function App() {
 	/** 新建终端的启动目录：跟着当前会话，没有会话时用第一个项目 */
 	const terminalCwd = sessionCwd ?? projects[0]?.cwd;
 	/** 终端面板不能用的原因，能用时为空 */
-	const terminalDisabledReason = canUseTerminal ? undefined : "这台主机的终端不可用";
+	const terminalDisabledReason = canUseTerminal ? undefined : t("app.terminalUnavailable");
 
 	/** 终端外观：跟着界面配色与等宽字体走，主题一换就重算 */
 	const terminalAppearance = useMemo<TerminalAppearance>(() => {
@@ -976,10 +1010,10 @@ export function App() {
 		(name: string, address: string): string | undefined => {
 			const normalized = normalizeEndpoint(address);
 			if (normalized === undefined) {
-				return "地址看不懂，写 host:port 或 ws://host:port/endpoint";
+				return t("app.invalidAddress");
 			}
 			if (hasEndpoint(hostList, normalized, LOCAL_TARGET)) {
-				return "这台主机已经在清单里";
+				return t("app.duplicateHost");
 			}
 			const host: SavedHost = {
 				id: `${Date.now().toString(36)}-${hostList.hosts.length}`,
@@ -989,7 +1023,7 @@ export function App() {
 			updateHostList({ ...hostList, hosts: [...hostList.hosts, host] });
 			return undefined;
 		},
-		[hostList, updateHostList],
+		[hostList, updateHostList, t],
 	);
 
 	/** 改一台远程主机的名字，名字从清单里读，不改连接。 */
@@ -1292,7 +1326,7 @@ export function App() {
 				const [provider, id] = args.split("/");
 				if (provider === undefined || id === undefined || provider.length === 0 || id.length === 0) {
 					setSessionError({
-						message: "用法：/model <提供方>/<模型>，例如 /model openai/gpt-5",
+						message: t("app.usageModel"),
 						retry: () => {},
 					});
 					return true;
@@ -1305,7 +1339,10 @@ export function App() {
 				const allowed = session?.state.availableThinkingLevels ?? [];
 				if (!allowed.includes(level)) {
 					setSessionError({
-						message: allowed.length === 0 ? "当前模型没有可选的思考档位" : `可选档位：${allowed.join(" / ")}`,
+						message:
+							allowed.length === 0
+								? t("app.noThinkingLevels")
+								: t("app.availableLevels", { levels: allowed.join(" / ") }),
 						retry: () => {},
 					});
 					return true;
@@ -1315,7 +1352,7 @@ export function App() {
 			}
 			if (name === "name") {
 				if (args.length === 0) {
-					setSessionError({ message: "用法：/name <名字>", retry: () => {} });
+					setSessionError({ message: t("app.usageName"), retry: () => {} });
 					return true;
 				}
 				void client.renameSession(activeFile ?? "", args).then(
@@ -1326,7 +1363,7 @@ export function App() {
 			}
 			return false;
 		},
-		[activeFile, refreshSessions, session?.state.availableThinkingLevels],
+		[activeFile, refreshSessions, session?.state.availableThinkingLevels, t],
 	);
 
 	const send = useCallback(() => {
@@ -1510,9 +1547,14 @@ export function App() {
 			<div className="session-error">
 				<span className="session-error-text">{sessionError.message}</span>
 				<button type="button" className="btn" onClick={sessionError.retry}>
-					重试
+					{t("common.retry")}
 				</button>
-				<button type="button" className="ib" aria-label="关闭提示" onClick={() => setSessionError(undefined)}>
+				<button
+					type="button"
+					className="ib"
+					aria-label={t("app.closeNotice")}
+					onClick={() => setSessionError(undefined)}
+				>
 					<X size={12} strokeWidth={1.5} />
 				</button>
 			</div>
@@ -1613,7 +1655,7 @@ export function App() {
 				}}
 				onCancel={() => {
 					setPasswordPrompt(undefined);
-					setFailure("需要登录密码");
+					setFailure(t("app.passwordRequired"));
 					setPhase("failed");
 				}}
 			/>
@@ -1623,7 +1665,7 @@ export function App() {
 		return (
 			<AppFrame>
 				<main className="boot">
-					<h1>连不上主机</h1>
+					<h1>{t("app.connectFailed")}</h1>
 					<p>{failure}</p>
 					<p>{endpoint}</p>
 					<div className="boot-hosts">
@@ -1633,7 +1675,7 @@ export function App() {
 							onClick={() => void switchHost(LOCAL_TARGET)}
 							disabled={endpoint === LOCAL_TARGET}
 						>
-							本机 · {endpointLabel(LOCAL_TARGET)}
+							{t("app.localHost")} · {endpointLabel(LOCAL_TARGET)}
 						</button>
 						{hostList.hosts.map((host) => (
 							<button
@@ -1658,7 +1700,7 @@ export function App() {
 							);
 						}}
 					>
-						重试
+						{t("common.retry")}
 					</button>
 				</main>
 				{passwordDialog}
@@ -1670,7 +1712,7 @@ export function App() {
 		return (
 			<AppFrame>
 				<main className="boot">
-					<h1>正在连接主机</h1>
+					<h1>{t("app.connecting")}</h1>
 					<p>{endpoint}</p>
 				</main>
 				{passwordDialog}
@@ -1723,7 +1765,7 @@ export function App() {
 						<button
 							type="button"
 							className="sb-backdrop"
-							aria-label="收起侧栏"
+							aria-label={t("app.closeSidebar")}
 							onClick={() => setIsDrawerOpen(false)}
 						/>
 					) : null}
@@ -1763,13 +1805,15 @@ export function App() {
 							setView("settings");
 						}}
 						isSettingsOpen={view === "settings"}
-						hostStatus={isReconnecting ? "重连中" : host?.role === "viewer" ? "只读" : undefined}
+						hostStatus={
+							isReconnecting ? t("app.reconnecting") : host?.role === "viewer" ? t("app.readOnly") : undefined
+						}
 						isOpen={isDrawerOpen}
 						onNavigate={() => setIsDrawerOpen(false)}
 						hostSwitcher={
 							<HostSwitcher
 								localEndpoint={LOCAL_TARGET}
-								localName={host?.hostName ?? "本机"}
+								localName={host?.hostName ?? t("app.localHost")}
 								activeEndpoint={hostList.activeEndpoint}
 								hosts={hostList.hosts}
 								isOnline={isOnline}
@@ -1817,7 +1861,7 @@ export function App() {
 												void navigator.clipboard.writeText(text).catch(() => undefined);
 											}}
 											renames={chat?.renames}
-											emptyHint="还没有消息,输入内容开始"
+											emptyHint={t("app.emptyHint")}
 										/>
 									</div>
 								</section>
@@ -1827,7 +1871,7 @@ export function App() {
 										<button
 											type="button"
 											className="to-bottom"
-											aria-label="回到底部"
+											aria-label={t("app.backToBottom")}
 											onClick={() => scrollToBottom("smooth")}
 										>
 											<ArrowDownIcon size={16} />
@@ -1944,7 +1988,7 @@ export function App() {
 									onRefresh={() => void refreshChanges()}
 									loadDiff={(file: GitFileChange) =>
 										sessionCwd === undefined
-											? Promise.reject(new Error("还没有打开会话"))
+											? Promise.reject(new Error(t("app.noSession")))
 											: client.gitDiff(sessionCwd, file.path, file.status === "untracked")
 									}
 								/>
@@ -1953,7 +1997,7 @@ export function App() {
 									<FilesPane
 										loadDirectory={(path) =>
 											sessionCwd === undefined
-												? Promise.reject(new Error("还没有打开会话"))
+												? Promise.reject(new Error(t("app.noSession")))
 												: client.listDirectory(sessionCwd, path)
 										}
 										onOpenFile={(path) => void openFile(path)}
@@ -1973,12 +2017,12 @@ export function App() {
 									onClose={() => setOpenedFile(undefined)}
 									onSave={(text, expectedRevision) =>
 										sessionCwd === undefined
-											? Promise.reject(new Error("还没有打开会话"))
+											? Promise.reject(new Error(t("app.noSession")))
 											: client.writeFile(sessionCwd, openedFile.path, text, expectedRevision)
 									}
 									onReload={async () => {
 										if (sessionCwd === undefined) {
-											throw new Error("还没有打开会话");
+											throw new Error(t("app.noSession"));
 										}
 										const next = await client.readFile(sessionCwd, openedFile.path);
 										setOpenedFile({ path: openedFile.path, content: next });
@@ -2016,6 +2060,8 @@ export function App() {
 							}}
 							uiScale={bridge.platform === "web" ? undefined : uiScale}
 							onUiScaleChange={bridge.platform === "web" ? undefined : changeUiScale}
+							languageSetting={languageSetting}
+							onLanguageChange={onLanguageChange}
 							// 浏览器入口改不了主机配置，桌面与 SSH 通道可以
 							canEdit={host?.canManage === true}
 						/>

@@ -5,6 +5,7 @@
  * 由外壳排布。
  */
 import type { ReactNode } from "react";
+import { useI18n } from "../i18n/I18nProvider.tsx";
 import { PaneResizer } from "./pane-resizer.tsx";
 import { PANEL_MAX_WIDTH, PANEL_MIN_WIDTH } from "./panel-state.ts";
 
@@ -18,11 +19,12 @@ export interface RightPanelProps {
 }
 
 export function RightPanel({ width, onWidthChange, children }: RightPanelProps) {
+	const { t } = useI18n();
 	return (
 		<aside className="panel">
 			<PaneResizer
 				className="panel-resizer"
-				label="调整右侧栏宽度"
+				label={t("panel.resizePanel")}
 				width={width}
 				min={PANEL_MIN_WIDTH}
 				max={PANEL_MAX_WIDTH}

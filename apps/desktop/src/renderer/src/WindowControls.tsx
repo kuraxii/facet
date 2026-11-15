@@ -5,6 +5,7 @@
  * 透明的 `.app-drag` 与侧栏头部承担。双击拖动区切换最大化由 Chromium 处理。浏览器里跑同一份
  * 界面时桥上没有这些方法，这组按钮不渲染。
  */
+import { useI18n } from "@facet/ui";
 import { Copy, Minus, Square, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -36,6 +37,7 @@ export function readWindowControls(bridge: {
 }
 
 export function WindowControls({ controls }: { controls: WindowControls }) {
+	const { t } = useI18n();
 	const [isMaximized, setIsMaximized] = useState(false);
 
 	useEffect(() => controls.onWindowState(setIsMaximized), [controls]);
@@ -46,8 +48,8 @@ export function WindowControls({ controls }: { controls: WindowControls }) {
 				<button
 					type="button"
 					className="window-btn"
-					aria-label="最小化"
-					title="最小化"
+					aria-label={t("window.minimize")}
+					title={t("window.minimize")}
 					onClick={() => controls.minimize()}
 				>
 					<Minus size={14} strokeWidth={1.6} />
@@ -55,8 +57,8 @@ export function WindowControls({ controls }: { controls: WindowControls }) {
 				<button
 					type="button"
 					className="window-btn"
-					aria-label={isMaximized ? "还原" : "最大化"}
-					title={isMaximized ? "还原" : "最大化"}
+					aria-label={isMaximized ? t("window.restore") : t("window.maximize")}
+					title={isMaximized ? t("window.restore") : t("window.maximize")}
 					onClick={() => controls.toggleMaximize()}
 				>
 					{isMaximized ? <Copy size={13} strokeWidth={1.6} /> : <Square size={12} strokeWidth={1.6} />}
@@ -64,8 +66,8 @@ export function WindowControls({ controls }: { controls: WindowControls }) {
 				<button
 					type="button"
 					className="window-btn is-close"
-					aria-label="关闭"
-					title="关闭"
+					aria-label={t("window.close")}
+					title={t("window.close")}
 					onClick={() => controls.close()}
 				>
 					<X size={15} strokeWidth={1.6} />

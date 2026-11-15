@@ -6,6 +6,8 @@
  * 归类只看有没有正文:有正文的行是模型的答复,没有正文的行属于过程。
  */
 import type { Part, ToolCallPart, TranscriptItem } from "@facet/client-core";
+import { createI18n } from "@facet/i18n";
+import type { TFunction } from "i18next";
 import { toolKind } from "./tool-text.ts";
 
 /** 面板里一行的种类。 */
@@ -55,6 +57,9 @@ export interface ToolCounts {
 function emptyCounts(): ToolCounts {
 	return { commands: 0, reads: 0, edits: 0, searches: 0, others: 0, thoughts: 0 };
 }
+
+/** 没有 Provider 时的中文译文，测试与纯函数调用使用。 */
+const fallbackI18n = createI18n("zh-CN");
 
 /** 归类对应的计数键。 */
 const COUNT_KEY = {
@@ -441,31 +446,32 @@ export function groupRows(items: readonly TranscriptItem[]): DisplayRow[] {
  *
  * 只有一类时直接说这一类，多类用「和」连起来；只有思考时是「已思考」。
  */
-export function groupLabel(row: DisplayRow): string {
+export function groupLabel(row: DisplayRow, t: TFunction = fallbackI18n.t): string {
 	const { counts } = row;
 	const parts: string[] = [];
 	if (counts.edits > 0) {
-		parts.push(`编辑了 ${counts.edits} 个文件`);
+		parts.push(t("transcript.group.edits", { count: counts.edits }));
 	}
 	if (counts.commands > 0) {
-		parts.push(`运行了 ${counts.commands} 个命令`);
+		parts.push(t("transcript.group.commands", { count: counts.commands }));
 	}
 	if (counts.reads > 0) {
-		parts.push(`读取了 ${counts.reads} 个文件`);
+		parts.push(t("transcript.group.reads", { count: counts.reads }));
 	}
 	if (counts.searches > 0) {
-		parts.push(`搜索了 ${counts.searches} 次`);
+		parts.push(t("transcript.group.searches", { count: counts.searches }));
 	}
 	if (counts.others > 0) {
-		parts.push(`使用了 ${counts.others} 个其他工具`);
+		parts.push(t("transcript.group.others", { count: counts.others }));
 	}
 	if (parts.length === 0) {
-		return counts.thoughts > 0 ? "已思考" : "";
+		return counts.thoughts > 0 ? t("transcript.group.thought") : "";
 	}
 	if (parts.length === 1) {
 		return parts[0] as string;
 	}
-	return `${parts.slice(0, -1).join("，")}和${parts.at(-1)}`;
+	const last = parts.at(-1) as string;
+	return `${parts.slice(0, -1).join(t("transcript.listSeparator"))}${t("transcript.listConjunction")}${last}`;
 }
 
 /**
@@ -473,14 +479,14 @@ export function groupLabel(row: DisplayRow): string {
  *
  * 回合结束后用主机记录的起止时间；还在跑的时候由界面自己计时，调用方每秒传一次当前时间。
  */
-export function turnDurationText(row: DisplayRow, now?: number): string {
+export function turnDurationText(row: DisplayRow, now?: number, t: TFunction = fallbackI18n.t): string {
 	const text =
 		row.durationMs !== undefined
 			? formatDuration(row.durationMs)
 			: row.startedAt === undefined || now === undefined
 				? ""
 				: formatDuration(Math.max(0, now - row.startedAt));
-	return text.length === 0 ? "" : `工作了 ${text}`;
+	return text.length === 0 ? "" : t("transcript.duration", { duration: text });
 }
 
 /** 毫秒转成 paseo 那种短写法：7s、3m 16s、1h 5m。 */

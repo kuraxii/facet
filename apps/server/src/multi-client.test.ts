@@ -432,7 +432,7 @@ describe("两个端接同一台主机", () => {
 		await settle();
 		expect(agent.compactCalls).toBe(1);
 		const rejected = peer.frames.filter((frame) => frame.rejectionReason !== undefined);
-		expect(rejected.at(-1)?.rejectionReason).toContain("等它停下");
+		expect(rejected.at(-1)?.rejectionReason).toContain("wait for it to stop");
 	});
 
 	it("断线重连按序号补齐中间的动作", async () => {

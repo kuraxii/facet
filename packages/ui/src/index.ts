@@ -19,7 +19,7 @@ export {
 	filterCommands,
 	isFacetCommand,
 	parseCommand,
-	SOURCE_LABELS,
+	SOURCE_LABEL_KEYS,
 } from "./chat/command-palette.ts";
 export type { EmptyStateProps } from "./chat/EmptyState.tsx";
 export { EmptyState } from "./chat/EmptyState.tsx";
@@ -87,6 +87,8 @@ export {
 } from "./chat/ui-scale.ts";
 export type { StickToBottom } from "./chat/use-stick-to-bottom.ts";
 export { useStickToBottom } from "./chat/use-stick-to-bottom.ts";
+export type { I18nProviderProps } from "./i18n/I18nProvider.tsx";
+export { I18nProvider, useI18n } from "./i18n/I18nProvider.tsx";
 export type { CodeBlockShape } from "./markdown/code-block-state.ts";
 export { shouldShowCodeBlock } from "./markdown/code-block-state.ts";
 export { extractLangToken, PLAIN, resolveCodeLang } from "./markdown/code-lang.ts";

@@ -6,6 +6,7 @@
  */
 import { Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useI18n } from "../i18n/I18nProvider.tsx";
 import type { ProviderRow } from "./provider-rows.ts";
 
 /** 挑选弹窗参数。 */
@@ -25,6 +26,7 @@ function isAdded(row: ProviderRow): boolean {
 }
 
 export function ProviderPicker({ rows, onSaveCredential, onCreateCustom, onClose }: ProviderPickerProps) {
+	const { t } = useI18n();
 	const [query, setQuery] = useState("");
 	/** 展开输入凭证的提供方 */
 	const [editingId, setEditingId] = useState<string | undefined>(undefined);
@@ -66,10 +68,10 @@ export function ProviderPicker({ rows, onSaveCredential, onCreateCustom, onClose
 
 	return (
 		<div className="dialog-backdrop">
-			<div className="dialog is-picker" role="dialog" aria-modal="true" aria-label="添加提供商">
+			<div className="dialog is-picker" role="dialog" aria-modal="true" aria-label={t("picker.title")}>
 				<div className="dialog-head">
-					<h2 className="dialog-title">添加提供商</h2>
-					<button type="button" className="dialog-close" aria-label="关闭" onClick={onClose}>
+					<h2 className="dialog-title">{t("picker.title")}</h2>
+					<button type="button" className="dialog-close" aria-label={t("common.close")} onClick={onClose}>
 						<X size={18} strokeWidth={1.5} />
 					</button>
 				</div>
@@ -81,8 +83,8 @@ export function ProviderPicker({ rows, onSaveCredential, onCreateCustom, onClose
 						className="picker-search-input"
 						value={query}
 						onChange={(event) => setQuery(event.target.value)}
-						placeholder="搜索提供商"
-						aria-label="搜索提供商"
+						placeholder={t("picker.search")}
+						aria-label={t("picker.search")}
 					/>
 				</label>
 
@@ -103,7 +105,7 @@ export function ProviderPicker({ rows, onSaveCredential, onCreateCustom, onClose
 											setEditingId(editingId === provider.id ? undefined : provider.id);
 										}}
 									>
-										添加
+										{t("picker.add")}
 									</button>
 								</div>
 
@@ -119,8 +121,8 @@ export function ProviderPicker({ rows, onSaveCredential, onCreateCustom, onClose
 													void save(provider.id);
 												}
 											}}
-											placeholder="粘贴 API key"
-											aria-label={`${provider.name} 的 API key`}
+											placeholder={t("picker.apiKeyPlaceholder")}
+											aria-label={t("picker.apiKeyLabel", { name: provider.name })}
 										/>
 										<button
 											type="button"
@@ -128,7 +130,7 @@ export function ProviderPicker({ rows, onSaveCredential, onCreateCustom, onClose
 											disabled={isBusy || key.trim().length === 0}
 											onClick={() => void save(provider.id)}
 										>
-											{isBusy ? "保存中…" : "保存"}
+											{isBusy ? t("picker.saving") : t("common.save")}
 										</button>
 									</div>
 								) : null}
@@ -140,16 +142,18 @@ export function ProviderPicker({ rows, onSaveCredential, onCreateCustom, onClose
 						);
 					})}
 					{visible.length === 0 ? (
-						<li className="picker-empty">{pending.length === 0 ? "都配置好了" : "没有匹配的提供商"}</li>
+						<li className="picker-empty">
+							{pending.length === 0 ? t("picker.emptyConfigured") : t("picker.emptyMatch")}
+						</li>
 					) : null}
 				</ul>
 
 				<div className="dialog-actions">
 					<button type="button" className="set-reset" onClick={onCreateCustom}>
-						添加自定义提供方
+						{t("picker.addCustom")}
 					</button>
 					<button type="button" className="set-save" onClick={onClose}>
-						完成
+						{t("picker.done")}
 					</button>
 				</div>
 			</div>

@@ -115,7 +115,7 @@ export class ChildPtyBackend implements PtyBackend {
 		const result = await new Promise<{ pid: number; shell: string }>((resolve, reject) => {
 			const timer = setTimeout(() => {
 				this.pending.delete(requestId);
-				reject(new Error("pty 启动超时"));
+				reject(new Error("PTY startup timed out"));
 			}, SPAWN_TIMEOUT_MS);
 			timer.unref?.();
 			this.pending.set(requestId, { resolve, reject, timer });
@@ -136,7 +136,7 @@ export class ChildPtyBackend implements PtyBackend {
 	dispose(): void {
 		for (const request of this.pending.values()) {
 			clearTimeout(request.timer);
-			request.reject(new Error("pty 子进程已关闭"));
+			request.reject(new Error("PTY child process closed"));
 		}
 		this.pending.clear();
 		this.live.clear();
@@ -165,13 +165,13 @@ export class ChildPtyBackend implements PtyBackend {
 		});
 		child.on("message", (message: PtyChildMessage) => this.onMessage(message));
 		child.on("error", (error: Error) => {
-			this.failure = `pty 子进程启动失败：${error.message}`;
+			this.failure = `PTY child process failed to start: ${error.message}`;
 			this.failAll(this.failure);
 		});
 		child.on("exit", (code) => {
 			this.child = undefined;
 			// 子进程没了，还活着的终端随之结束；下次开终端时重建
-			const reason = `pty 子进程退出（${code ?? "未知"}）`;
+			const reason = `PTY child process exited (${code ?? "unknown"})`;
 			this.failure = code === 0 || code === null ? undefined : this.failure;
 			this.failAll(reason);
 		});
@@ -226,7 +226,7 @@ export class ChildPtyBackend implements PtyBackend {
 			case "spawn-error": {
 				// requestId 为 -1 表示原生模块没能加载，这台主机的终端整体不可用
 				if (message.requestId < 0) {
-					this.failure = `这台主机的终端不可用：${message.message}`;
+					this.failure = `Terminal unavailable on this host: ${message.message}`;
 					this.failAll(this.failure);
 					return;
 				}
@@ -298,7 +298,7 @@ export class DisabledPtyBackend implements PtyBackend {
 	}
 
 	async spawn(): Promise<PtyHandle> {
-		throw new Error(this.unavailable ?? "终端不可用");
+		throw new Error(this.unavailable ?? "Terminal unavailable");
 	}
 
 	dispose(): void {

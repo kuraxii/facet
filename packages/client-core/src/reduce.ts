@@ -42,7 +42,7 @@ function patchMessage(
 
 /** 列出某个动作类型没被处理的情况,由类型系统保证穷尽。 */
 function unhandled(value: never): never {
-	throw new Error(`未处理的动作:${JSON.stringify(value)}`);
+	throw new Error(`Unhandled action: ${JSON.stringify(value)}`);
 }
 
 /** 归约一条会话通道动作。对话动作原样返回。 */

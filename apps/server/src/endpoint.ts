@@ -297,11 +297,11 @@ async function resolveTerminalCwd(cwd: string): Promise<string> {
 	try {
 		real = await realpath(cwd);
 	} catch {
-		throw new RequestError("file_not_found", `启动目录不存在: ${cwd}`);
+		throw new RequestError("file_not_found", `Startup directory does not exist: ${cwd}`);
 	}
 	const info = await stat(real).catch(() => undefined);
 	if (info === undefined || !info.isDirectory()) {
-		throw new RequestError("bad_params", `启动目录不是目录: ${cwd}`);
+		throw new RequestError("bad_params", `Startup directory is not a directory: ${cwd}`);
 	}
 	return real;
 }
@@ -375,7 +375,10 @@ async function applyAction(
 			case "session/compact":
 				// 压缩要读整条分支写摘要，与运行中的回合不能同时进行
 				if (agent.isBusy) {
-					throw new RequestError("rejected", "这一轮还没结束,等它停下再压缩上下文");
+					throw new RequestError(
+						"rejected",
+						"This turn has not finished; wait for it to stop before compacting context",
+					);
 				}
 				await agent.compact();
 				return;
@@ -430,10 +433,10 @@ function assertRequestAllowed(connection: Connection, method: string): void {
 		return;
 	}
 	if (ADMIN_ONLY_REQUESTS.has(method) && !canManage(connection)) {
-		throw new RequestError("rejected", "这个操作只在桌面端可用");
+		throw new RequestError("rejected", "This operation is only available in the desktop app");
 	}
 	if (connection.role === "viewer" && WRITE_REQUESTS.has(method)) {
-		throw new RequestError("rejected", "这条连接是只读的");
+		throw new RequestError("rejected", "This connection is read-only");
 	}
 }
 
@@ -835,17 +838,17 @@ async function asFileError<T>(work: Promise<T>): Promise<T> {
 
 async function resolveProjectDirectory(cwd: string): Promise<string> {
 	if (!isAbsolute(cwd)) {
-		throw new RequestError("bad_params", `项目目录必须是绝对路径:${cwd}`);
+		throw new RequestError("bad_params", `Project directory must be absolute: ${cwd}`);
 	}
 	let target: string;
 	try {
 		target = await realpath(cwd);
 	} catch {
-		throw new RequestError("rejected", `项目目录不存在:${cwd}`);
+		throw new RequestError("rejected", `Project directory does not exist: ${cwd}`);
 	}
 	const info = await stat(target).catch(() => undefined);
 	if (info === undefined || !info.isDirectory()) {
-		throw new RequestError("rejected", `不是目录:${cwd}`);
+		throw new RequestError("rejected", `Not a directory: ${cwd}`);
 	}
 	return target;
 }
@@ -889,7 +892,7 @@ async function handleDispatch(context: EndpointContext, connection: Connection, 
 	const clientSeq = optionalNumber(source, "clientSeq") ?? 0;
 	if (connection.role === "viewer") {
 		// 只读连接派发动作直接拒绝：回一条带原因的帧，不写任何东西
-		const reason = "这条连接是只读的";
+		const reason = "This connection is read-only";
 		auditRemote(context, connection, action.type, reason);
 		connection.send({
 			type: "action",
@@ -982,11 +985,11 @@ async function handleFrame(context: EndpointContext, connection: Connection, tex
 	if (!connection.authenticated) {
 		// 首帧必须是认证帧；TCP 与 Web 入口还要带上正确令牌，unix socket 已由内核确认身份
 		if (frame.type !== "auth") {
-			connection.close(1008, "需要先认证");
+			connection.close(1008, "Authentication required");
 			return;
 		}
 		if (!connection.trusted && (typeof frame.token !== "string" || !matchesToken(context, frame.token))) {
-			connection.close(1008, "令牌不匹配");
+			connection.close(1008, "Token mismatch");
 			return;
 		}
 		connection.authenticated = true;
@@ -1062,7 +1065,8 @@ export async function startEndpoint(options: {
 		connections: new Set(),
 		sessions: options.sessions,
 		terminals:
-			options.terminals ?? new TerminalService({ backend: new DisabledPtyBackend("这台主机没有装配终端") }),
+			options.terminals ??
+			new TerminalService({ backend: new DisabledPtyBackend("This host has no terminal backend") }),
 		audit: options.audit ?? new AuditLog(join(options.config.dataDir, "audit.log")),
 	};
 
@@ -1129,7 +1133,7 @@ export async function startEndpoint(options: {
 			try {
 				lines = decoder.push(chunk);
 			} catch {
-				connection.close(1009, "帧超过上限");
+				connection.close(1009, "Frame exceeds the limit");
 				return;
 			}
 			for (const line of lines) {

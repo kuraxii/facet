@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DEFAULT_AGENT_DIR, DEV_AGENT_DIR } from "@facet/agent";
+import { createI18n, readLanguageSetting, resolveLanguage } from "@facet/i18n";
 import { app, BrowserWindow, dialog, ipcMain, screen, shell } from "electron";
 import { HostChannels, LOCAL_TARGET } from "./host-channel.ts";
 import {
@@ -65,6 +66,8 @@ let hostChannels: HostChannels | undefined;
 let host: HostDaemon | undefined;
 let localSettingsFile = "";
 let localSettings: LocalSettings = { version: 1 };
+/** 主进程侧的语言实例，原生弹窗与渲染进程共用同一份资源 */
+let mainI18n = createI18n("en");
 /** 退出确认已通过，之后的关闭与退出不再询问 */
 let quitConfirmed = false;
 /** 正在确认退出，避免关闭事件与 before-quit 各弹一次对话框 */
@@ -117,6 +120,7 @@ function saveWindowBounds(window: BrowserWindow): void {
 	const next: LocalSettings = {
 		version: 1,
 		...(localSettings.uiScale === undefined ? {} : { uiScale: localSettings.uiScale }),
+		...(localSettings.language === undefined ? {} : { language: localSettings.language }),
 		window: {
 			width: bounds.width,
 			height: bounds.height,
@@ -127,7 +131,7 @@ function saveWindowBounds(window: BrowserWindow): void {
 	};
 	localSettings = next;
 	void writeLocalSettings(localSettingsFile, next).catch((error: unknown) => {
-		console.log(`[main] 保存窗口尺寸失败 ${String(error)}`);
+		console.log(`[main] Failed to save window bounds: ${String(error)}`);
 	});
 }
 
@@ -158,11 +162,11 @@ async function confirmQuit(window: BrowserWindow | undefined): Promise<boolean> 
 	}
 	const options = {
 		type: "warning",
-		buttons: ["取消", "关闭窗口"],
+		buttons: [mainI18n.t("dialog.quit.cancel"), mainI18n.t("dialog.quit.close")],
 		defaultId: 0,
 		cancelId: 0,
-		message: "有会话还在运行",
-		detail: `${busy} 个会话上有任务正在运行。关闭窗口后主机继续在后台运行，任务不受影响，下次打开应用回到这里。`,
+		message: mainI18n.t("dialog.quit.title"),
+		detail: mainI18n.t("dialog.quit.detail", { count: busy }),
 	} as const;
 	const choice =
 		window === undefined
@@ -195,6 +199,8 @@ function createWindow(): BrowserWindow {
 				`--facet-platform=${process.platform}`,
 				`--facet-version=${app.getVersion()}`,
 				`--facet-ui-scale=${uiScale}`,
+				`--facet-language-setting=${localSettings.language ?? "auto"}`,
+				`--facet-language=${mainI18n.language}`,
 			],
 		},
 	});
@@ -256,7 +262,7 @@ function createWindow(): BrowserWindow {
 			}
 		});
 		window.webContents.on("did-fail-load", (_event, code, description, url) => {
-			console.log(`[renderer] 加载失败 ${code} ${description} ${url}`);
+			console.log(`[renderer] Failed to load ${code} ${description} ${url}`);
 		});
 	}
 
@@ -289,7 +295,7 @@ async function waitForHostReady(): Promise<LocalHost | undefined> {
 	return new Promise<LocalHost | undefined>((resolve) => {
 		const timer = setTimeout(() => {
 			resolveReady = undefined;
-			console.log("[main] 等待主机就绪超时，先打开窗口");
+			console.log("[main] Timed out waiting for the host; opening the window first");
 			resolve(undefined);
 		}, READY_WAIT_MS);
 		resolveReady = (info) => {
@@ -303,7 +309,7 @@ async function waitForHostReady(): Promise<LocalHost | undefined> {
 ipcMain.handle("facet:pick-directory", async (event) => {
 	const window = BrowserWindow.fromWebContents(event.sender);
 	const options = {
-		title: "选择项目文件夹",
+		title: mainI18n.t("dialog.pickDirectory.title"),
 		properties: ["openDirectory", "createDirectory"],
 	} as const;
 	const result = window
@@ -315,7 +321,7 @@ ipcMain.handle("facet:pick-directory", async (event) => {
 ipcMain.handle("facet:save-text", async (event, suggestedName: string, text: string) => {
 	const window = BrowserWindow.fromWebContents(event.sender);
 	const options = {
-		title: "保存文件",
+		title: mainI18n.t("dialog.saveFile.title"),
 		defaultPath: suggestedName,
 	};
 	const result = window ? await dialog.showSaveDialog(window, options) : await dialog.showSaveDialog(options);
@@ -357,8 +363,18 @@ ipcMain.on("facet:ui-scale", (event, value: unknown) => {
 	window.webContents.setZoomFactor(uiScale / 100);
 	localSettings = { ...localSettings, uiScale };
 	void writeLocalSettings(localSettingsFile, localSettings).catch((error: unknown) => {
-		console.log(`[main] 保存界面缩放失败 ${String(error)}`);
+		console.log(`[main] Failed to save interface scale: ${String(error)}`);
 	});
+});
+
+/** 切换界面语言；用户选择写进本机设置，系统语言与自动识别的结果由主进程返回。 */
+ipcMain.handle("facet:language", async (_event, value: unknown) => {
+	const setting = readLanguageSetting(value) ?? "auto";
+	localSettings = { ...localSettings, language: setting };
+	await writeLocalSettings(localSettingsFile, localSettings);
+	const language = resolveLanguage(setting, app.getLocale());
+	await mainI18n.changeLanguage(language);
+	return language;
 });
 
 /** 本机主机的连接信息：界面只知道「本机」这个目标与展示地址，具体端口与令牌在主进程。 */
@@ -384,7 +400,7 @@ const sshPasswords = new Map<string, string>();
 ipcMain.handle("facet:host-open", async (event, target: string, password?: string) => {
 	const channels = hostChannels;
 	if (channels === undefined) {
-		return { ok: false, code: "not_ready", message: "主机通道还没准备好" };
+		return { ok: false, code: "not_ready", message: mainI18n.t("host.notReady") };
 	}
 	const secret = password ?? sshPasswords.get(target);
 	try {
@@ -425,7 +441,7 @@ function resolveHostLaunch(): { command: string; args: string[]; env: NodeJS.Pro
 		: join(app.getAppPath(), "dist-server");
 	const node = join(bundled, "bin", "node");
 	if (!existsSync(node)) {
-		console.error(`找不到 server 产物：${bundled}，先跑 npm run build:server`);
+		console.error(`Cannot find the server build: ${bundled}. Run npm run build:server first.`);
 		return undefined;
 	}
 	return { command: node, args: [join(bundled, "lib", "server.mjs")], env: {} };
@@ -441,6 +457,7 @@ app.whenReady().then(async () => {
 	// 本地设置放在桌面自己的配置目录（Linux 上是 ~/.config/facet），与主机侧的应用设置分开
 	localSettingsFile = join(app.getPath("userData"), "desktop.json");
 	localSettings = await readLocalSettings(localSettingsFile);
+	mainI18n = createI18n(resolveLanguage(localSettings.language, app.getLocale()));
 
 	if (externalEndpoint === undefined) {
 		await mkdir(dataDir, { recursive: true }).catch(() => undefined);
@@ -449,10 +466,10 @@ app.whenReady().then(async () => {
 		if (running !== undefined) {
 			localHost = running;
 			const info = await readDiscovery(dataDir).catch(() => undefined);
-			console.log(`接上已在运行的主机 ${info?.hostId ?? "?"} 监听 ${running.path}`);
+			console.log(`Connected to running host ${info?.hostId ?? "?"} at ${running.path}`);
 			resolveReady = undefined;
 		} else if (hostLaunch === undefined) {
-			console.error("没有可用的 server 产物，跳过启动");
+			console.error("No server build is available; skipping startup");
 		} else {
 			host = new HostDaemon({
 				...hostLaunch,
@@ -469,8 +486,8 @@ app.whenReady().then(async () => {
 					localHost = info;
 					// 发现文件只用于日志：主机标识与 pi 数据目录在那里，不参与连接
 					void readDiscovery(dataDir).then((record) => {
-						console.log(`主机 ${record?.hostId ?? "?"} 监听 ${info.path}`);
-						console.log(`数据目录 ${record?.agentDir ?? "未知"}`);
+						console.log(`Host ${record?.hostId ?? "?"} listening at ${info.path}`);
+						console.log(`Data directory ${record?.agentDir ?? "unknown"}`);
 					});
 					if (resolveReady !== undefined) {
 						resolveReady(info);
@@ -480,7 +497,11 @@ app.whenReady().then(async () => {
 					broadcastLocalHost();
 				},
 				onExit: (code, restarting) => {
-					console.log(restarting ? `[main] 主机进程退出 ${code}，稍后重启` : `[main] 主机进程退出 ${code}`);
+					console.log(
+						restarting
+							? `[main] Host process exited with ${code}; restarting shortly`
+							: `[main] Host process exited with ${code}`,
+					);
 				},
 				log: (line) => console.log(`[host] ${line}`),
 			});
@@ -488,7 +509,7 @@ app.whenReady().then(async () => {
 			await waitForHostReady();
 		}
 	} else {
-		console.log(`连接外部主机 ${externalEndpoint}`);
+		console.log(`Connecting to external host ${externalEndpoint}`);
 	}
 
 	// 界面不直连主机：主进程按目标建通道，本机走固定 socket，远程按 host:port
@@ -501,8 +522,8 @@ app.whenReady().then(async () => {
 		return parseTcpTarget(target);
 	});
 
-	console.log(`项目目录 ${projectDir}`);
-	console.log(`本地设置 ${localSettingsFile}`);
+	console.log(`Project directory ${projectDir}`);
+	console.log(`Local settings ${localSettingsFile}`);
 	createWindow();
 
 	app.on("activate", () => {

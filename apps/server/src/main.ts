@@ -52,11 +52,11 @@ const payload: HostReadyPayload = {
 };
 await writeDiscovery(config.dataDir, payload);
 console.log(`${READY_MARKER} ${JSON.stringify(payload)}`);
-console.log(`数据目录 ${config.dataDir}`);
+console.log(`Data directory ${config.dataDir}`);
 console.log(
-	`连接方式 ${payload.endpoint.transport === "unix" ? payload.endpoint.path : payload.endpoint.url}`,
+	`Connection ${payload.endpoint.transport === "unix" ? payload.endpoint.path : payload.endpoint.url}`,
 );
-console.log("按 Ctrl+C 结束");
+console.log("Press Ctrl+C to stop");
 
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);

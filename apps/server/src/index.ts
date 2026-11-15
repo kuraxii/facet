@@ -4,14 +4,14 @@
  * 装配共享的运行时、会话登记与端点监听，供嵌入方（桌面主进程）与独立进程共用。
  */
 import { join } from "node:path";
-import { PiAgentFactory } from "@facet/agent";
+import { PiAgentFactory, projectIdOf } from "@facet/agent";
 import { sessionsChannelFor } from "@facet/protocol";
 import { loadServerConfig, type ServerConfig } from "./config.ts";
 import { type EndpointHandle, startEndpoint } from "./endpoint.ts";
 import { type HostIdentity, loadOrCreateHostId } from "./host-identity.ts";
 import { debugLog, setDebugLog } from "./log.ts";
 import { ProjectCatalog } from "./project-catalog.ts";
-import { ProjectStore } from "./project-store.ts";
+import { ProjectExistsError, ProjectStore } from "./project-store.ts";
 import { ChildPtyBackend } from "./pty-server.ts";
 import { SessionHub } from "./session-hub.ts";
 import { SessionIndex } from "./session-index.ts";
@@ -58,6 +58,20 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 	const hostIdentity = await loadOrCreateHostId({ dataDir: config.dataDir });
 	const hostId = hostIdentity.id;
 	const sessions = new SessionsChannel(config.replayLimit);
+	const projectStore = await ProjectStore.open({ file: join(config.dataDir, "projects.json") });
+	/** 会话目录首次出现时补进项目清单；已有项目保留用户改过的名字。 */
+	const ensureProject = async (cwd: string): Promise<void> => {
+		if (cwd.length === 0 || projectStore.get(projectIdOf(cwd)) !== undefined) {
+			return;
+		}
+		try {
+			await projectStore.add({ cwd });
+		} catch (error) {
+			if (!(error instanceof ProjectExistsError)) {
+				console.error("Failed to register project automatically", error);
+			}
+		}
+	};
 	let sessionIndex: SessionIndex | undefined;
 	const hub = new SessionHub({
 		factory,
@@ -74,22 +88,25 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 			peekSessionCwd: (file) => factory.peekSessionCwd(file),
 			busyFiles: () => hub.busyFiles(),
 		},
+		onCwd: (cwd) => void ensureProject(cwd),
 	});
 	const projects = new ProjectCatalog(factory);
 	await projects.refresh().catch((error: unknown) => {
-		console.error("项目扫描失败", error);
+		console.error("Project scan failed", error);
 	});
-	const projectStore = await ProjectStore.open({ file: join(config.dataDir, "projects.json") });
+	for (const project of projects.list()) {
+		await ensureProject(project.cwd);
+	}
 	const settingsStore = await SettingsStore.open({ file: join(config.dataDir, "settings.json") });
 	// 每隔一段时间按数量上限回收闲置会话：长时间开着也不该越攒越多
 	const evictionTimer = setInterval(() => {
 		try {
 			const removed = hub.enforceLimits({ maxSessions: 8 });
 			if (removed.length > 0) {
-				debugLog("server", "回收闲置会话", { removed: removed.length, ...hub.stats() });
+				debugLog("server", "Evicted idle sessions", { removed: removed.length, ...hub.stats() });
 			}
 		} catch (error) {
-			debugLog("server", "回收闲置会话失败", { error: String(error) });
+			debugLog("server", "Failed to evict idle sessions", { error: String(error) });
 		}
 	}, 60_000);
 	evictionTimer.unref();
@@ -100,9 +117,9 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 		file: join(config.dataDir, "terminals.json"),
 	});
 	await terminals.load().catch((error: unknown) => {
-		console.error("终端登记读取失败", error);
+		console.error("Failed to read the terminal registry", error);
 	});
-	debugLog("server", "终端就绪", { unavailable: terminals.unavailable });
+	debugLog("server", "Terminals ready", { unavailable: terminals.unavailable });
 
 	const endpoint = await startEndpoint({
 		config,
@@ -115,7 +132,10 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 		sessions,
 		terminals,
 	});
-	debugLog("server", "主机端点就绪", { endpoint: `ws://${endpoint.host}:${endpoint.port}/endpoint`, hostId });
+	debugLog("server", "Host endpoint ready", {
+		endpoint: `ws://${endpoint.host}:${endpoint.port}/endpoint`,
+		hostId,
+	});
 
 	return {
 		...endpoint,

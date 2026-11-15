@@ -240,7 +240,7 @@ describe("TerminalService", () => {
 			exit: { exitCode: 3 },
 		});
 		expect(service.serialize(info.id).text).toContain("再见");
-		expect(() => service.write(info.id, "x")).toThrow("已经结束");
+		expect(() => service.write(info.id, "x")).toThrow("ended");
 	});
 
 	it("订阅时按 since 补齐缺口，缺口超出缓冲就报 resync", async () => {
@@ -284,15 +284,17 @@ describe("TerminalService", () => {
 		expect(restored?.cols).toBe(90);
 		expect(restored?.rows).toBe(25);
 		expect(second.list()).toHaveLength(1);
-		expect(() => second.write(info.id, "x")).toThrow("已经结束");
+		expect(() => second.write(info.id, "x")).toThrow("ended");
 	});
 
 	it("pty 后端不可用时开终端直接报原因", async () => {
 		const backend = new FakeBackend();
-		backend.unavailable = "这台主机的终端不可用：原生模块加载失败";
+		backend.unavailable = "Terminal unavailable: native module failed to load";
 		const service = new TerminalService({ backend });
-		expect(service.unavailable).toBe("这台主机的终端不可用：原生模块加载失败");
-		await expect(service.create({ cwd: "/work/a", cols: 80, rows: 24 })).rejects.toThrow("原生模块加载失败");
+		expect(service.unavailable).toBe("Terminal unavailable: native module failed to load");
+		await expect(service.create({ cwd: "/work/a", cols: 80, rows: 24 })).rejects.toThrow(
+			"native module failed to load",
+		);
 		expect(service.list()).toEqual([]);
 	});
 });

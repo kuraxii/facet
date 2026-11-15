@@ -4,15 +4,23 @@
  * 未给出数值时只画一圈底环并在说明里写「暂无数据」，不把未知画成 0%。接近上限换成提醒色，
  * 越过 90% 换成错误色。点一下打开浮层，里面有具体数值与手动压缩入口。
  */
+import { createI18n } from "@facet/i18n";
 import type { ContextUsage } from "@facet/protocol";
+import type { TFunction } from "i18next";
+import { useI18n } from "../i18n/I18nProvider.tsx";
+
+const fallbackI18n = createI18n("zh-CN");
 
 /** 讲占用的说法，未知时也有一句明确的。 */
-export function usageLabel(usage: ContextUsage | undefined): string {
+export function usageLabel(usage: ContextUsage | undefined, t: TFunction = fallbackI18n.t): string {
 	if (usage === undefined || usage.tokens === null || usage.percent === null) {
-		return "上下文窗口：暂无数据";
+		return t("context.noData");
 	}
-	const percent = Math.round(usage.percent);
-	return `上下文窗口已使用 ${percent}% · ${formatTokens(usage.tokens)} / ${formatTokens(usage.contextWindow)}`;
+	return t("context.windowUsed", {
+		percent: Math.round(usage.percent),
+		used: formatTokens(usage.tokens),
+		total: formatTokens(usage.contextWindow),
+	});
 }
 
 /** token 数收成便于阅读的写法：百万以上按兆取整，一万以上按千取整，千位保留一位小数。 */
@@ -30,11 +38,14 @@ export function formatTokens(tokens: number): string {
 }
 
 /** 浮层中间那行：已使用的比例。估不出来时为 null，正在压缩时由界面另说一句。 */
-export function usagePercentText(usage: ContextUsage | undefined): string | null {
+export function usagePercentText(
+	usage: ContextUsage | undefined,
+	t: TFunction = fallbackI18n.t,
+): string | null {
 	if (usage === undefined || usage.percent === null || usage.tokens === null) {
 		return null;
 	}
-	return `已使用 ${Math.round(usage.percent)}%`;
+	return t("context.used", { percent: Math.round(usage.percent) });
 }
 
 /** 浮层底行：已用量与窗口大小。估不出来时为 null。 */
@@ -83,7 +94,8 @@ export function ContextRing({ usage, size = 16, strokeWidth = 2 }: ContextRingPr
 		usage !== undefined && usage.tokens !== null && usage.percent !== null && usage.contextWindow > 0;
 	const percent = valid ? Math.max(0, Math.min(100, usage.percent as number)) : null;
 	const level = usageLevel(percent);
-	const label = usageLabel(usage);
+	const { t } = useI18n();
+	const label = usageLabel(usage, t);
 
 	return (
 		<span className="ctx-ring" role="img" aria-label={label} title={label}>

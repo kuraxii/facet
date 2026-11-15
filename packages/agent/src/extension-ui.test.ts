@@ -75,7 +75,7 @@ describe("扩展交互", () => {
 		});
 		const id = requestId(ui);
 		expect(() => ui.respond(id, { kind: "form", answers: [{ id: "p1", selections: ["A"] }] })).toThrow(
-			"数量",
+			"Answer count",
 		);
 		expect(() =>
 			ui.respond(id, {
@@ -85,7 +85,7 @@ describe("扩展交互", () => {
 					{ id: "p2", selections: ["X"] },
 				],
 			}),
-		).toThrow("单选");
+		).toThrow("Single-choice question accepts");
 		expect(() =>
 			ui.respond(id, {
 				kind: "form",
@@ -94,7 +94,7 @@ describe("扩展交互", () => {
 					{ id: "p2", selections: ["X"] },
 				],
 			}),
-		).toThrow("选项");
+		).toThrow("Option is not");
 		expect(
 			ui.respond(id, {
 				kind: "form",
@@ -130,7 +130,7 @@ describe("扩展交互", () => {
 					{ id: "p2", selections: [] },
 				],
 			}),
-		).toThrow("同时");
+		).toThrow("cannot submit both");
 		expect(() =>
 			ui.respond(id, {
 				kind: "form",
@@ -139,7 +139,7 @@ describe("扩展交互", () => {
 					{ id: "p2", selections: [], custom: "自定义" },
 				],
 			}),
-		).toThrow("自定义");
+		).toThrow("Request does not allow");
 		expect(
 			ui.respond(id, {
 				kind: "form",
@@ -182,8 +182,8 @@ describe("扩展交互", () => {
 		const ui = bridge();
 		const result = ui.context.select("选择", ["A"]);
 		const id = requestId(ui);
-		expect(() => ui.respond(id, { kind: "input", value: "A" })).toThrow("类型");
-		expect(() => ui.respond(id, { kind: "select", value: "B" })).toThrow("选项");
+		expect(() => ui.respond(id, { kind: "input", value: "A" })).toThrow("Response type");
+		expect(() => ui.respond(id, { kind: "select", value: "B" })).toThrow("Option is not");
 		expect(ui.respond(id, { kind: "select", value: "A" })).toBe(true);
 		expect(ui.respond(id, { kind: "cancel" })).toBe(false);
 		await expect(result).resolves.toBe("A");

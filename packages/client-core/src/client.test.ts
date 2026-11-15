@@ -335,7 +335,9 @@ describe("SessionClient", () => {
 		const clientSeq = client.send("你好");
 		transport.reject(CHAT, clientSeq, { type: "chat/turnStarted", text: "你好" }, "session is running");
 		expect(sent).toEqual([]);
-		expect(client.chatView()?.notices).toEqual([{ level: "error", message: "发送失败:session is running" }]);
+		expect(client.chatView()?.notices).toEqual([
+			{ level: "error", message: "Send failed:session is running" },
+		]);
 		// 之后同类消息也不会再触发确认
 		transport.emit(CHAT, {
 			type: "chat/messageAppended",
@@ -388,7 +390,7 @@ describe("SessionClient", () => {
 		expect(client.chatView()?.notices).toEqual([
 			{
 				level: "error",
-				message: "发送失败:Cannot submit a prompt while compaction is in progress",
+				message: "Send failed:Cannot submit a prompt while compaction is in progress",
 			},
 		]);
 	});
@@ -398,7 +400,7 @@ describe("SessionClient", () => {
 		await client.openSession("/tmp/s1.jsonl");
 		transport.reject(SESSION, 1, { type: "session/configChanged" }, "unknown model: nope/nope");
 		expect(client.chatView()?.notices).toEqual([
-			{ level: "error", message: "操作被拒绝:unknown model: nope/nope" },
+			{ level: "error", message: "Action rejected:unknown model: nope/nope" },
 		]);
 	});
 
@@ -1438,7 +1440,9 @@ describe("提交日志排版", () => {
 	it("摘要一行给出本轮条数、叶子、边界与视图总量", () => {
 		const text = formatCommitLog("提升成功", 8, "76190aeb", "76190aeb", [item("e:a1", "a1"), item("e:b2")]);
 		const [head] = text.split("\n");
-		expect(head).toBe("提升成功 · 本轮 8 条 · 叶子 76190aeb · 边界 76190aeb · 视图 2 条，其中已提升 1 条");
+		expect(head).toBe(
+			"提升成功 · turn 8 items · leaf 76190aeb · boundary 76190aeb · view 2 items, 1 promoted",
+		);
 	});
 
 	it("条目按行宽折开，每行不超过宽度加缩进", () => {

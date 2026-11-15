@@ -72,12 +72,17 @@
 	/* 侧栏会话行：悬停 4%、选中 8% 的文字色叠加 */
 	--sb-row-hover: color-mix(in srgb, var(--t1) 4%, transparent);
 	--sb-row-selected: color-mix(in srgb, var(--t1) 8%, transparent);
+	/* 会话标题溢出时右侧渐隐的宽度 */
+	--sb-title-fade: 24px;
 	--status-dot: 6px;
 	--status-dot-failed: 8px;
 	--status-ring-stroke: 1.5px;
 	--status-ring-gap: 1.5px;
 	--status-ring-size: calc(var(--status-dot) + (var(--status-ring-stroke) + var(--status-ring-gap)) * 2);
 	--sidebar-edge: 10px;
+	/* 聊天正文与输入区共用的内容列宽；输入框和过程组胶囊用同一个边界 */
+	--chat-column-max: 780px;
+	--chat-column-max-narrow: 760px;
 	/* 三栏宽度：顶带的格子与下面的正文共用，由界面按当前状态写入 */
 	--sidebar-width: 272px;
 	--panel-width: 0px;
@@ -105,6 +110,8 @@
 	   （后者来自展开箭头字形在图标盒子里的内缩，改箭头图标时跟着调） */
 	--indent-rail-offset: 16px;
 	--indent-rail-inset: 4px;
+	/* 过程组标题的左右内边距；竖线按同一距离右移，和图标字形对齐 */
+	--group-head-padding-x: 8px;
 	/* 行首图标的边长，以及图标到短名的间距；短名列与输出、思考正文都用两者之和 */
 	--indent-rail-icon: 14px;
 	--indent-rail-gap: 8px;

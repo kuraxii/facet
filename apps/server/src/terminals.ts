@@ -270,7 +270,7 @@ export class TerminalService {
 	resize(id: string, cols: number, rows: number): void {
 		const row = this.rows.get(id);
 		if (row === undefined) {
-			throw new Error(`没有这个终端：${id}`);
+			throw new Error(`No such terminal: ${id}`);
 		}
 		const nextCols = Math.max(2, Math.round(cols));
 		const nextRows = Math.max(2, Math.round(rows));
@@ -293,7 +293,7 @@ export class TerminalService {
 	kill(id: string): void {
 		const row = this.rows.get(id);
 		if (row === undefined) {
-			throw new Error(`没有这个终端：${id}`);
+			throw new Error(`No such terminal: ${id}`);
 		}
 		const handle = row.handle;
 		row.handle = undefined;
@@ -309,7 +309,7 @@ export class TerminalService {
 	serialize(id: string): TerminalSnapshot {
 		const row = this.rows.get(id);
 		if (row === undefined) {
-			throw new Error(`没有这个终端：${id}`);
+			throw new Error(`No such terminal: ${id}`);
 		}
 		row.info.lastUsedAt = Date.now();
 		return { text: row.scrollback, seq: row.log.lastSeq, cols: row.info.cols, rows: row.info.rows };
@@ -397,10 +397,10 @@ export class TerminalService {
 	private running(id: string): TerminalRow {
 		const row = this.rows.get(id);
 		if (row === undefined) {
-			throw new Error(`没有这个终端：${id}`);
+			throw new Error(`No such terminal: ${id}`);
 		}
 		if (row.handle === undefined || row.info.restored) {
-			throw new Error("这个终端已经结束");
+			throw new Error("This terminal has ended");
 		}
 		return row;
 	}
@@ -472,7 +472,7 @@ export class TerminalService {
 		this.saving = this.saving
 			.then(() => writeFileAtomic(file, payload))
 			.catch((error: unknown) => {
-				console.error("终端登记写入失败", error);
+				console.error("Failed to write the terminal registry", error);
 			});
 	}
 }

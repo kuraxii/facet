@@ -73,7 +73,7 @@ export class StreamTransport implements Transport {
 			const timeout = setTimeout(() => {
 				if (!settled) {
 					settled = true;
-					reject(new TransportError("握手超时"));
+					reject(new TransportError("Handshake timed out"));
 					this.dropStream();
 				}
 			}, this.options.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS);
@@ -88,7 +88,7 @@ export class StreamTransport implements Transport {
 						if (!settled) {
 							settled = true;
 							clearTimeout(timeout);
-							reject(new TransportError("帧超过上限"));
+							reject(new TransportError("Frame exceeds the limit"));
 						}
 						return;
 					}
@@ -110,12 +110,12 @@ export class StreamTransport implements Transport {
 			);
 			this.stops.push(
 				stream.onClose((reason) => {
-					this.core.handleClose(`连接已断开:${reason}`, this.core.isClosedByCaller);
+					this.core.handleClose(`Connection closed: ${reason}`, this.core.isClosedByCaller);
 					this.stream = undefined;
 					if (!settled) {
 						settled = true;
 						clearTimeout(timeout);
-						reject(new TransportError(`连接已关闭:${reason}`));
+						reject(new TransportError(`Connection closed: ${reason}`));
 					}
 				}),
 			);
@@ -163,6 +163,6 @@ export class StreamTransport implements Transport {
 			// 已经关掉的流再关一次由实现抛错，这里忽略
 		}
 		// 主动断开：状态回到 closed，在途请求一律失败
-		this.core.handleClose("连接已关闭", false);
+		this.core.handleClose("Connection closed", false);
 	}
 }

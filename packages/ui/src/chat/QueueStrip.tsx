@@ -5,6 +5,7 @@
  */
 import type { QueuedInput } from "@facet/protocol";
 import { X } from "lucide-react";
+import { useI18n } from "../i18n/I18nProvider.tsx";
 
 /** 排队条参数。 */
 export interface QueueStripProps {
@@ -23,6 +24,7 @@ function entriesOf(queued: QueuedInput): { key: string; text: string }[] {
 }
 
 export function QueueStrip({ queued, onClear }: QueueStripProps) {
+	const { t } = useI18n();
 	const entries = entriesOf(queued);
 	if (entries.length === 0) {
 		return null;
@@ -30,15 +32,15 @@ export function QueueStrip({ queued, onClear }: QueueStripProps) {
 
 	return (
 		<div className="queue-strip">
-			<span className="queue-label">排队 {entries.length} 条</span>
+			<span className="queue-label">{t("queue.label", { count: entries.length })}</span>
 			{entries.map((entry) => (
 				<span key={entry.key} className="queue-item" title={entry.text}>
 					{entry.text}
 				</span>
 			))}
-			<button type="button" className="queue-clear" onClick={onClear} title="收回排队内容">
+			<button type="button" className="queue-clear" onClick={onClear} title={t("queue.withdraw")}>
 				<X size={11} strokeWidth={1.5} />
-				收回
+				{t("queue.withdraw")}
 			</button>
 		</div>
 	);

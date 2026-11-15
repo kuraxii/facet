@@ -9,6 +9,8 @@
 	flex-direction: column;
 	min-width: 0;
 	min-height: 0;
+	/* 聊天正文与输入区共用的左右边距；滚动条沟槽由 .scroll 单独补回 */
+	--chat-gutter-x: 24px;
 }
 
 /* 右栏：文件与变更。左缘一条分隔条，拖动改宽度 */

@@ -59,6 +59,16 @@ describe("parseLocalSettings", () => {
 		expect(readUiScale("125")).toBeUndefined();
 		expect(readUiScale(Number.NaN)).toBeUndefined();
 	});
+
+	it("读取语言设置，未知值丢掉", () => {
+		expect(parseLocalSettings(JSON.stringify({ version: 1, language: "zh-CN" }))).toEqual({
+			version: 1,
+			language: "zh-CN",
+		});
+		expect(parseLocalSettings(JSON.stringify({ version: 1, language: "fr" }))).toEqual({
+			version: 1,
+		});
+	});
 });
 
 describe("readWindowBounds", () => {
@@ -92,11 +102,13 @@ describe("读写本地设置", () => {
 		await writeLocalSettings(file, {
 			version: 1,
 			uiScale: 125,
+			language: "zh-CN",
 			window: { width: 1200, height: 800, x: 5, y: 6, maximized: true },
 		});
 		expect(await readLocalSettings(file)).toEqual({
 			version: 1,
 			uiScale: 125,
+			language: "zh-CN",
 			window: { width: 1200, height: 800, x: 5, y: 6, maximized: true },
 		});
 		const written = JSON.parse(await readFile(file, "utf8")) as { version: number };

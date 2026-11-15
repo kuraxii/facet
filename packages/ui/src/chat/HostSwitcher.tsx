@@ -7,6 +7,7 @@
  */
 import { Check, Pencil, Plus, Server, Settings2, X } from "lucide-react";
 import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { useI18n } from "../i18n/I18nProvider.tsx";
 import { endpointLabel, type SavedHost } from "./host-list.ts";
 
 /** 点浮层外面时关掉。 */
@@ -64,6 +65,7 @@ export function HostSwitcher({
 	onRemoveHost,
 	onRenameHost,
 }: HostSwitcherProps): ReactNode {
+	const { t } = useI18n();
 	const [isOpen, setIsOpen] = useState(false);
 	const [isAdding, setIsAdding] = useState(false);
 	/** 正在改名的主机与草稿 */
@@ -115,8 +117,8 @@ export function HostSwitcher({
 			<button
 				type="button"
 				className="sb-foot-btn is-icon"
-				aria-label="主机"
-				title="主机"
+				aria-label={t("host.menu")}
+				title={t("host.menu")}
 				aria-expanded={isOpen}
 				onClick={() => {
 					setIsOpen((open) => !open);
@@ -126,7 +128,7 @@ export function HostSwitcher({
 				<Server size={14} strokeWidth={1.5} />
 			</button>
 			{isOpen ? (
-				<div className="host-pop" role="dialog" aria-label="主机清单">
+				<div className="host-pop" role="dialog" aria-label={t("host.list")}>
 					<ul className="host-list">
 						<li className={activeEndpoint === localEndpoint ? "host-row is-on" : "host-row"}>
 							<button type="button" className="host-main" onClick={() => onConnect(localEndpoint)}>
@@ -134,7 +136,7 @@ export function HostSwitcher({
 								<span className="host-name">{localName}</span>
 								<span className="host-addr mono">
 									{activeEndpoint === localEndpoint && isReconnecting
-										? "重连中"
+										? t("host.reconnecting")
 										: endpointLabel(localEndpoint)}
 								</span>
 							</button>
@@ -144,7 +146,7 @@ export function HostSwitcher({
 								<li key={host.id} className="host-row is-editing">
 									<input
 										className="set-input host-rename"
-										aria-label="新的主机名字"
+										aria-label={t("host.newName")}
 										value={renaming.draft}
 										ref={renameRef}
 										onChange={(event) => setRenaming({ id: host.id, draft: event.target.value })}
@@ -160,8 +162,8 @@ export function HostSwitcher({
 									<button
 										type="button"
 										className="host-remove"
-										aria-label="保存名字"
-										title="保存"
+										aria-label={t("host.saveName")}
+										title={t("common.save")}
 										onClick={() => {
 											onRenameHost(host.id, renaming.draft);
 											setRenaming(undefined);
@@ -172,8 +174,8 @@ export function HostSwitcher({
 									<button
 										type="button"
 										className="host-remove"
-										aria-label="取消改名"
-										title="取消"
+										aria-label={t("host.cancelRename")}
+										title={t("common.cancel")}
 										onClick={() => setRenaming(undefined)}
 									>
 										<X size={12} strokeWidth={1.5} />
@@ -189,15 +191,15 @@ export function HostSwitcher({
 										<span className="host-name">{host.name}</span>
 										<span className="host-addr mono">
 											{activeEndpoint === host.endpoint && isReconnecting
-												? "重连中"
+												? t("host.reconnecting")
 												: endpointLabel(host.endpoint)}
 										</span>
 									</button>
 									<button
 										type="button"
 										className="host-remove"
-										aria-label={`给主机 ${host.name} 改名`}
-										title="改名"
+										aria-label={t("host.renameLabel", { name: host.name })}
+										title={t("host.rename")}
 										onClick={() => setRenaming({ id: host.id, draft: host.name })}
 									>
 										<Pencil size={12} strokeWidth={1.5} />
@@ -205,8 +207,8 @@ export function HostSwitcher({
 									<button
 										type="button"
 										className="host-remove"
-										aria-label={`删除主机 ${host.name}`}
-										title="从清单里删除"
+										aria-label={t("host.removeLabel", { name: host.name })}
+										title={t("host.remove")}
 										onClick={() => onRemoveHost(host.id)}
 									>
 										<Settings2 size={12} strokeWidth={1.5} />
@@ -221,21 +223,21 @@ export function HostSwitcher({
 								className="set-input"
 								value={name}
 								onChange={(event) => setName(event.target.value)}
-								placeholder="名字，留空取地址"
-								aria-label="主机名字"
+								placeholder={t("host.namePlaceholder")}
+								aria-label={t("host.name")}
 							/>
 							<input
 								className="set-input mono"
 								value={address}
 								onChange={(event) => setAddress(event.target.value)}
-								placeholder="user@host 或 host:port"
-								aria-label="主机地址"
+								placeholder={t("host.addressPlaceholder")}
+								aria-label={t("host.address")}
 								ref={addressRef}
 							/>
 							{error === undefined ? null : <p className="host-error">{error}</p>}
 							<div className="host-form-actions">
 								<button type="submit" className="set-save">
-									添加
+									{t("host.add")}
 								</button>
 								<button
 									type="button"
@@ -245,7 +247,7 @@ export function HostSwitcher({
 										setError(undefined);
 									}}
 								>
-									取消
+									{t("host.cancel")}
 								</button>
 							</div>
 						</form>
@@ -259,7 +261,7 @@ export function HostSwitcher({
 							}}
 						>
 							<Plus size={13} strokeWidth={1.5} />
-							添加主机
+							{t("host.addHost")}
 						</button>
 					)}
 				</div>

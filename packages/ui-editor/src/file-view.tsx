@@ -6,6 +6,7 @@
  * 选择，改动先留在编辑器里。
  */
 import type { FileContent } from "@facet/protocol";
+import { useI18n } from "@facet/ui/i18n";
 import { ArrowLeft, Check, Pencil, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { CodeSurface } from "./code-surface.tsx";
@@ -39,6 +40,7 @@ function isConflict(error: unknown): boolean {
 }
 
 export function FileView({ path, content, onClose, onSave, onReload }: FileViewProps) {
+	const { t } = useI18n();
 	/** 编辑器里的当前内容 */
 	const [draft, setDraft] = useState(content.kind === "text" ? content.content : "");
 	/** 磁盘上那份内容，用来判断有没有改动 */
@@ -138,19 +140,25 @@ export function FileView({ path, content, onClose, onSave, onReload }: FileViewP
 	return (
 		<div className="file-view">
 			<div className="file-head">
-				<button type="button" className="ib" aria-label="返回目录" title="返回目录" onClick={onClose}>
+				<button
+					type="button"
+					className="ib"
+					aria-label={t("editor.backToDirectory")}
+					title={t("editor.backToDirectory")}
+					onClick={onClose}
+				>
 					<ArrowLeft size={14} strokeWidth={1.5} />
 				</button>
 				<span className="file-path" title={path}>
 					{path}
 				</span>
-				{isDirty ? <span className="file-dirty" role="status" title="有未保存的改动" /> : null}
+				{isDirty ? <span className="file-dirty" role="status" title={t("editor.unsavedChanges")} /> : null}
 				{isText && !isEditing ? (
 					<button
 						type="button"
 						className="ib"
-						aria-label="编辑"
-						title="编辑"
+						aria-label={t("editor.edit")}
+						title={t("editor.edit")}
 						onClick={() => {
 							setIsEditing(true);
 						}}
@@ -163,18 +171,22 @@ export function FileView({ path, content, onClose, onSave, onReload }: FileViewP
 						<button
 							type="button"
 							className="ib"
-							aria-label="保存"
-							title="保存（Mod+S）"
+							aria-label={t("editor.save")}
+							title={t("editor.saveShortcut")}
 							disabled={!isDirty || isSaving}
 							onClick={() => void save()}
 						>
-							{isSaved ? <Check size={14} strokeWidth={1.5} /> : <span className="file-save">保存</span>}
+							{isSaved ? (
+								<Check size={14} strokeWidth={1.5} />
+							) : (
+								<span className="file-save">{t("editor.saved")}</span>
+							)}
 						</button>
 						<button
 							type="button"
 							className="ib"
-							aria-label="退出编辑"
-							title="退出编辑"
+							aria-label={t("editor.exitEdit")}
+							title={t("editor.exitEdit")}
 							onClick={() => {
 								setDraft(baseline);
 								setIsEditing(false);
@@ -208,7 +220,9 @@ export function FileView({ path, content, onClose, onSave, onReload }: FileViewP
 					onSaveShortcut={() => void save()}
 				/>
 			) : (
-				<p className="chg-note">{content.kind === "binary" ? "二进制文件，不预览" : "文件太大，不预览"}</p>
+				<p className="chg-note">
+					{content.kind === "binary" ? t("editor.binaryNoPreview") : t("editor.tooLargeNoPreview")}
+				</p>
 			)}
 		</div>
 	);

@@ -32,6 +32,8 @@ export interface SessionIndexOptions {
 	readonly uri: Channel;
 	/** 合并的时间片，毫秒 */
 	readonly debounceMs?: number;
+	/** 读到会话目录时的通知，用于把新目录补进项目清单 */
+	readonly onCwd?: (cwd: string) => void;
 }
 
 /** 缺省合并时间片：一轮里连续产生的事件合成一次读盘。 */
@@ -87,7 +89,7 @@ export class SessionIndex {
 			}
 		} catch (error) {
 			// 推送失败不该影响会话本身，端还能手工刷新
-			debugLog("sessions", "会话清单推送失败", { error: String(error) });
+			debugLog("sessions", "Failed to publish the session list", { error: String(error) });
 		} finally {
 			this.flushing = false;
 		}
@@ -111,6 +113,7 @@ export class SessionIndex {
 			return undefined;
 		}
 		const pool = await this.options.source.listSessions(cwd);
+		this.options.onCwd?.(cwd);
 		return pool.find((item) => item.path === file);
 	}
 }

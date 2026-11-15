@@ -6,6 +6,7 @@
  */
 import { readFile } from "node:fs/promises";
 import { writeFileAtomic } from "@facet/agent";
+import { type LanguageSetting, readLanguageSetting } from "@facet/i18n";
 
 /** 窗口位置与尺寸。x、y 缺省时由系统决定位置。 */
 export interface WindowBounds {
@@ -29,6 +30,8 @@ export interface LocalSettings {
 	window?: WindowBounds;
 	/** 界面缩放百分比，缺省 100 */
 	uiScale?: number;
+	/** 界面语言设置；缺省跟随系统 */
+	language?: LanguageSetting;
 }
 
 /** 缺省宽度，没有记录时用。 */
@@ -77,13 +80,15 @@ export function parseLocalSettings(text: string): LocalSettings {
 	if (typeof data !== "object" || data === null) {
 		return { version: 1 };
 	}
-	const record = data as { version?: unknown; window?: unknown; uiScale?: unknown };
+	const record = data as { version?: unknown; window?: unknown; uiScale?: unknown; language?: unknown };
 	const window = readWindowBounds(record.window);
 	const uiScale = readUiScale(record.uiScale);
+	const language = readLanguageSetting(record.language);
 	return {
 		version: 1,
 		...(window === undefined ? {} : { window }),
 		...(uiScale === undefined ? {} : { uiScale }),
+		...(language === undefined ? {} : { language }),
 	};
 }
 

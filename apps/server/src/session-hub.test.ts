@@ -394,14 +394,14 @@ describe("会话建立与复用", () => {
 		const source = await hub.openSession("/tmp/s1.jsonl");
 		hub.agent(source.id).busy = true;
 		await expect(hub.forkSession({ sessionFile: "/tmp/s1.jsonl", beforeEntryId: "e1" })).rejects.toThrow(
-			"不能执行这个操作",
+			"this operation is unavailable",
 		);
 	});
 
 	it("分叉点不在分支上时报错", async () => {
 		await hub.openSession("/tmp/s1.jsonl");
 		await expect(hub.forkSession({ sessionFile: "/tmp/s1.jsonl", beforeEntryId: "e99" })).rejects.toThrow(
-			"找不到消息对应的会话条目",
+			"Cannot find the session entry",
 		);
 	});
 
@@ -491,7 +491,7 @@ describe("空闲回收", () => {
 		const last = await hub.entries(snapshot.id, second.nextCursor, 2);
 		expect(last.entries.map((entry) => entry.id)).toEqual(["e1"]);
 		expect(last.nextCursor).toBeUndefined();
-		await expect(hub.entries(snapshot.id, "nope", 2)).rejects.toThrow("找不到消息对应的会话条目");
+		await expect(hub.entries(snapshot.id, "nope", 2)).rejects.toThrow("Cannot find the session entry");
 	});
 
 	it("取边界之后的条目只返回这一段", async () => {
@@ -525,7 +525,7 @@ describe("空闲回收", () => {
 		const result = await hub.entriesAfter(snapshot.id, "e1");
 		expect(result.entries.map((entry) => entry.id)).toEqual(["e2", "e3"]);
 		expect(result.leafId).toBe("e3");
-		await expect(hub.entriesAfter(snapshot.id, "e9")).rejects.toThrow("条目不在活动分支上");
+		await expect(hub.entriesAfter(snapshot.id, "e9")).rejects.toThrow("Entry is not on the active branch");
 	});
 
 	it("持有期间到点也不回收,归还后才回收", async () => {
@@ -720,7 +720,7 @@ describe("动作的持有与串行", () => {
 	});
 
 	it("会话不存在时报错", async () => {
-		await expect(hub.withSession("nope", async () => {})).rejects.toThrow("会话不存在");
+		await expect(hub.withSession("nope", async () => {})).rejects.toThrow("Session does not exist");
 	});
 });
 
@@ -779,7 +779,7 @@ describe("查询", () => {
 	});
 
 	it("未登记的会话取快照报不存在", async () => {
-		await expect(hub.snapshot("nope")).rejects.toThrow("会话不存在");
+		await expect(hub.snapshot("nope")).rejects.toThrow("Session does not exist");
 	});
 });
 
@@ -798,8 +798,8 @@ describe("会话改名与删除", () => {
 	});
 
 	it("会话文件不在盘上时改名与删除都报错", async () => {
-		await expect(hub.renameSession("/tmp/missing.jsonl", "x")).rejects.toThrow("会话文件不存在");
-		await expect(hub.deleteSession("/tmp/missing.jsonl")).rejects.toThrow("会话文件不存在");
+		await expect(hub.renameSession("/tmp/missing.jsonl", "x")).rejects.toThrow("Session file does not exist");
+		await expect(hub.deleteSession("/tmp/missing.jsonl")).rejects.toThrow("Session file does not exist");
 	});
 
 	it("删除已打开的会话先释放再删文件", async () => {

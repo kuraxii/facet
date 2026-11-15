@@ -10,10 +10,11 @@ import type { ChatActivity } from "@facet/client-core";
 import type { ContextUsage, ModelInfo, SlashCommand, ThinkingLevel } from "@facet/protocol";
 import { Brain, FileUp, ImagePlus, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useI18n } from "../i18n/I18nProvider.tsx";
 import { ChevronIcon } from "../transcript/chevron.tsx";
 import { SendIcon, StopIcon } from "../transcript/icons.tsx";
 import { ContextRing, usageDetailText, usageLabel, usagePercentText } from "./ContextRing.tsx";
-import { commandQuery, filterCommands, isFacetCommand, SOURCE_LABELS } from "./command-palette.ts";
+import { commandQuery, filterCommands, isFacetCommand, SOURCE_LABEL_KEYS } from "./command-palette.ts";
 
 /** 输入区参数。 */
 export interface ComposerProps {
@@ -62,9 +63,9 @@ export interface ComposerProps {
 }
 
 /** 模型芯片的显示文本。 */
-function modelLabel(model: ModelInfo | undefined): string {
+function modelLabel(model: ModelInfo | undefined, noModel: string): string {
 	if (!model) {
-		return "无模型";
+		return noModel;
 	}
 	return model.name.trim().length > 0 ? model.name : model.id;
 }
@@ -129,6 +130,8 @@ export function Composer({
 	commands,
 	onRunCommand,
 }: ComposerProps) {
+	const { t } = useI18n();
+
 	// 运行中发送走排队，插入当前轮次；压缩、停止中与连接断开时不接受新输入
 	const canSend =
 		isBlocked !== true && value.trim().length > 0 && (activity === "idle" || activity === "running");
@@ -199,10 +202,10 @@ export function Composer({
 				value={value}
 				placeholder={
 					isQueuing
-						? "输入消息,回车插入当前轮次"
+						? t("composer.queuedPlaceholder")
 						: sendsOnEnter
-							? "输入消息,回车发送"
-							: "输入消息,Shift+回车发送"
+							? t("composer.sendPlaceholder")
+							: t("composer.shiftEnterPlaceholder")
 				}
 				onChange={(event) => {
 					onChange(event.target.value);
@@ -246,7 +249,7 @@ export function Composer({
 				}}
 			/>
 			{isPaletteOpen ? (
-				<div className="cmd-pop" role="listbox" aria-label="命令">
+				<div className="cmd-pop" role="listbox" aria-label={t("composer.commandList")}>
 					{matches.map((command, index) => (
 						<button
 							key={`${command.source}:${command.name}`}
@@ -263,7 +266,7 @@ export function Composer({
 								<span className="cmd-hint">{command.argumentHint}</span>
 							)}
 							<span className="cmd-desc">{command.description ?? ""}</span>
-							<span className="cmd-source">{SOURCE_LABELS[command.source]}</span>
+							<span className="cmd-source">{t(SOURCE_LABEL_KEYS[command.source])}</span>
 						</button>
 					))}
 				</div>
@@ -273,34 +276,34 @@ export function Composer({
 					<button
 						type="button"
 						className="ib"
-						aria-label="添加"
-						title="添加图片或文件"
+						aria-label={t("composer.add")}
+						title={t("composer.addImageOrFile")}
 						aria-expanded={openMenu === "attach"}
 						onClick={() => setOpenMenu(openMenu === "attach" ? undefined : "attach")}
 					>
 						<Plus size={16} strokeWidth={1.5} />
 					</button>
 					{openMenu === "attach" ? (
-						<div className="chip-pop is-attach" role="menu" aria-label="添加内容">
+						<div className="chip-pop is-attach" role="menu" aria-label={t("composer.addContent")}>
 							<button
 								type="button"
 								className="chip-pop-item is-row"
 								role="menuitem"
 								disabled
-								title="尚未接入"
+								title={t("composer.notAvailable")}
 							>
 								<ImagePlus size={14} strokeWidth={1.5} />
-								<span className="ell">添加图片</span>
+								<span className="ell">{t("composer.addImage")}</span>
 							</button>
 							<button
 								type="button"
 								className="chip-pop-item is-row"
 								role="menuitem"
 								disabled
-								title="尚未接入"
+								title={t("composer.notAvailable")}
 							>
 								<FileUp size={14} strokeWidth={1.5} />
-								<span className="ell">上传文件</span>
+								<span className="ell">{t("composer.uploadFile")}</span>
 							</button>
 						</div>
 					) : null}
@@ -313,19 +316,19 @@ export function Composer({
 						onClick={() => setOpenMenu(openMenu === "model" ? undefined : "model")}
 						disabled={!canPickModel}
 						aria-expanded={openMenu === "model"}
-						title={canPickModel ? "切换模型" : "当前模型"}
+						title={canPickModel ? t("composer.switchModel") : t("composer.currentModel")}
 					>
-						{modelLabel(model)}
+						{modelLabel(model, t("composer.noModel"))}
 						{canPickModel ? <ChevronIcon isOpen={openMenu === "model"} /> : null}
 					</button>
 					{openMenu === "model" ? (
-						<div className="chip-pop" role="dialog" aria-label="选择模型">
+						<div className="chip-pop" role="dialog" aria-label={t("composer.chooseModel")}>
 							{grouped.map(([provider, items]) => (
 								<div key={provider} className="chip-pop-group">
 									<p className="chip-pop-head">
 										<span>{provider}</span>
 										{providerAuth?.[provider] === false ? (
-											<span className="chip-pop-note">未配置凭证</span>
+											<span className="chip-pop-note">{t("composer.noCredentials")}</span>
 										) : null}
 									</p>
 									{items.map((item) => {
@@ -338,7 +341,7 @@ export function Composer({
 												key={modelKey(item)}
 												className={isCurrent ? "chip-pop-item is-on" : "chip-pop-item"}
 												disabled={!usable}
-												title={usable ? item.id : "这个提供方还没有配置凭证"}
+												title={usable ? item.id : t("composer.providerNoCredentials")}
 												onClick={() => {
 													onModelChange?.(item);
 													setOpenMenu(undefined);
@@ -351,7 +354,9 @@ export function Composer({
 									})}
 								</div>
 							))}
-							{(models ?? []).length === 0 ? <p className="chip-pop-empty">没有可选的模型</p> : null}
+							{(models ?? []).length === 0 ? (
+								<p className="chip-pop-empty">{t("composer.noModels")}</p>
+							) : null}
 						</div>
 					) : null}
 				</div>
@@ -363,15 +368,17 @@ export function Composer({
 						onClick={() => setOpenMenu(openMenu === "level" ? undefined : "level")}
 						disabled={!canPickLevel}
 						aria-expanded={openMenu === "level"}
-						title={canPickLevel ? "切换思考档位" : "当前思考档位"}
-						aria-label={`思考档位 ${thinkingLevel === undefined ? "默认" : LEVEL_LABELS[thinkingLevel]}`}
+						title={canPickLevel ? t("composer.switchThinking") : t("composer.currentThinking")}
+						aria-label={t("composer.thinkingLevel", {
+							level: thinkingLevel === undefined ? t("composer.defaultLevel") : LEVEL_LABELS[thinkingLevel],
+						})}
 					>
 						<Brain size={13} strokeWidth={1.5} />
-						{thinkingLevel === undefined ? "默认" : LEVEL_LABELS[thinkingLevel]}
+						{thinkingLevel === undefined ? t("composer.defaultLevel") : LEVEL_LABELS[thinkingLevel]}
 						{canPickLevel ? <ChevronIcon isOpen={openMenu === "level"} /> : null}
 					</button>
 					{openMenu === "level" ? (
-						<div className="chip-pop" role="dialog" aria-label="选择思考档位">
+						<div className="chip-pop" role="dialog" aria-label={t("composer.chooseThinking")}>
 							{levels.map((level) => (
 								<button
 									type="button"
@@ -396,16 +403,18 @@ export function Composer({
 							className="ctx-chip"
 							onClick={() => setOpenMenu(openMenu === "context" ? undefined : "context")}
 							aria-expanded={openMenu === "context"}
-							aria-label={usageLabel(contextUsage)}
-							title={usageLabel(contextUsage)}
+							aria-label={usageLabel(contextUsage, t)}
+							title={usageLabel(contextUsage, t)}
 						>
 							<ContextRing usage={contextUsage} />
 						</button>
 						{openMenu === "context" ? (
-							<div className="chip-pop is-context" role="dialog" aria-label="上下文用量">
-								<p className="ctx-pop-title">上下文窗口</p>
+							<div className="chip-pop is-context" role="dialog" aria-label={t("composer.contextUsage")}>
+								<p className="ctx-pop-title">{t("composer.contextWindow")}</p>
 								<p className="ctx-pop-value">
-									{isCompacting ? "正在压缩…" : (usagePercentText(contextUsage) ?? "暂无数据")}
+									{isCompacting
+										? t("composer.compacting")
+										: (usagePercentText(contextUsage, t) ?? t("composer.noData"))}
 								</p>
 								{isCompacting || usageDetailText(contextUsage) === null ? null : (
 									<p className="ctx-pop-detail">{usageDetailText(contextUsage)}</p>
@@ -421,13 +430,13 @@ export function Composer({
 										disabled={!canCompact || isCompacting}
 										title={
 											isCompacting
-												? "正在压缩"
+												? t("composer.compacting")
 												: canCompact
-													? "把较早的历史压成摘要，腾出上下文"
-													: "等这一轮结束再压缩"
+													? t("composer.compactHint")
+													: t("composer.waitForCompact")
 										}
 									>
-										压缩上下文
+										{t("composer.compact")}
 									</button>
 								)}
 							</div>
@@ -443,8 +452,8 @@ export function Composer({
 							className="send is-stop"
 							onClick={onStop}
 							disabled={!canStop || activity === "stopping"}
-							aria-label={activity === "stopping" ? "停止中" : "停止"}
-							title={activity === "stopping" ? "正在停止" : "停止这一轮"}
+							aria-label={activity === "stopping" ? t("composer.stopping") : t("composer.stop")}
+							title={activity === "stopping" ? t("composer.stopping") : t("composer.stopTurn")}
 						>
 							<StopIcon size={15} />
 						</button>
@@ -452,8 +461,8 @@ export function Composer({
 						<button
 							type="button"
 							className="send"
-							aria-label={isQueuing ? "排队" : "发送"}
-							title={isQueuing ? "插入当前轮次" : undefined}
+							aria-label={isQueuing ? t("composer.queue") : t("composer.send")}
+							title={isQueuing ? t("composer.insertTurn") : undefined}
 							onClick={onSend}
 							disabled={!canSend}
 						>

@@ -223,7 +223,9 @@ export class HostDaemon {
 		child.unref();
 		this.child = child;
 		this.readyTimer = setTimeout(() => {
-			this.options.log(`主机 ${READY_TIMEOUT_MS} 毫秒内没有就绪，按启动失败处理`);
+			this.options.log(
+				`Host did not become ready within ${READY_TIMEOUT_MS} ms; treating it as a startup failure`,
+			);
 			child.kill("SIGKILL");
 		}, READY_TIMEOUT_MS);
 		void this.watch();

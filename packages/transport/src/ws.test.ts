@@ -167,7 +167,9 @@ describe("WsTransport", () => {
 		await connection.connect();
 		connection.close();
 		expect(connection.state).toBe("closed");
-		await expect(connection.request("listSessions", {})).rejects.toThrow("连接未就绪");
-		expect(() => connection.dispatch("chat:/s1", { type: "chat/turnCancelled" })).toThrow("连接未就绪");
+		await expect(connection.request("listSessions", {})).rejects.toThrow("Connection is not ready");
+		expect(() => connection.dispatch("chat:/s1", { type: "chat/turnCancelled" })).toThrow(
+			"Connection is not ready",
+		);
 	});
 });

@@ -65,21 +65,21 @@ export class FileAccessError extends Error {
  */
 export async function resolveInsideProject(cwd: string, path: string): Promise<string> {
 	if (isAbsolute(path)) {
-		throw new FileAccessError("outside_project", `路径必须是相对项目根的路径:${path}`);
+		throw new FileAccessError("outside_project", `Path must be relative to the project root: ${path}`);
 	}
 	const root = await realpath(cwd);
 	const target = resolve(root, path);
 	if (target !== root && !target.startsWith(`${root}${sep}`)) {
-		throw new FileAccessError("outside_project", `路径不在项目内:${path}`);
+		throw new FileAccessError("outside_project", `Path is outside the project: ${path}`);
 	}
 	let real: string;
 	try {
 		real = await realpath(target);
 	} catch {
-		throw new FileAccessError("file_not_found", `找不到:${path}`);
+		throw new FileAccessError("file_not_found", `Not found: ${path}`);
 	}
 	if (real !== root && !real.startsWith(`${root}${sep}`)) {
-		throw new FileAccessError("outside_project", `路径指向项目外:${path}`);
+		throw new FileAccessError("outside_project", `Path points outside the project: ${path}`);
 	}
 	return real;
 }
@@ -100,7 +100,7 @@ export async function listDirectory(cwd: string, path: string): Promise<FileEntr
 	const target = await resolveInsideProject(cwd, path);
 	const info = await stat(target);
 	if (!info.isDirectory()) {
-		throw new FileAccessError("not_a_directory", `不是目录:${path}`);
+		throw new FileAccessError("not_a_directory", `Not a directory: ${path}`);
 	}
 	const dirents = await readdir(target, { withFileTypes: true });
 	const entries: FileEntry[] = [];
@@ -154,7 +154,7 @@ export async function readTextFile(cwd: string, path: string): Promise<FileConte
 	const target = await resolveInsideProject(cwd, path);
 	const info = await stat(target);
 	if (!info.isFile()) {
-		throw new FileAccessError("not_a_file", `不是文件:${path}`);
+		throw new FileAccessError("not_a_file", `Not a file: ${path}`);
 	}
 	if (info.size > MAX_TEXT_BYTES) {
 		return { kind: "tooLarge", size: info.size };
@@ -193,15 +193,15 @@ export async function writeTextFile(
 	const target = await resolveInsideProject(cwd, path);
 	const info = await stat(target);
 	if (!info.isFile()) {
-		throw new FileAccessError("not_a_file", `不是文件:${path}`);
+		throw new FileAccessError("not_a_file", `Not a file: ${path}`);
 	}
 	const buffer = Buffer.from(content, "utf8");
 	if (buffer.byteLength > MAX_WRITE_BYTES) {
-		throw new FileAccessError("file_too_large", `内容超过 ${MAX_WRITE_BYTES} 字节:${path}`);
+		throw new FileAccessError("file_too_large", `Content exceeds ${MAX_WRITE_BYTES} bytes: ${path}`);
 	}
 	const current = await readFile(target);
 	if (revisionOf(current) !== expectedRevision) {
-		throw new FileAccessError("file_conflict", `文件已在磁盘上改动:${path}`);
+		throw new FileAccessError("file_conflict", `File changed on disk: ${path}`);
 	}
 	await writeFileAtomic(target, content);
 	const written = await stat(target);

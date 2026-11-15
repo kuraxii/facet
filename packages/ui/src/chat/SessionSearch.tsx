@@ -7,6 +7,7 @@
 import type { SessionSummary } from "@facet/protocol";
 import { Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useI18n } from "../i18n/I18nProvider.tsx";
 import { type SidebarSession, searchSessions, shortTime } from "./sidebar-model.ts";
 
 /** 结果最多给这么多条，再多靠打字收窄。 */
@@ -35,6 +36,7 @@ export function SessionSearch({
 	onClose,
 	onSelect,
 }: SessionSearchProps) {
+	const { t, i18n } = useI18n();
 	const [keyword, setKeyword] = useState("");
 	const [selected, setSelected] = useState(0);
 	const inputRef = useRef<HTMLInputElement>(null);
@@ -49,8 +51,9 @@ export function SessionSearch({
 			runningFile,
 			keyword,
 			limit: RESULT_LIMIT,
+			untitled: t("sidebar.untitled"),
 		});
-	}, [isOpen, sessions, runningFile, keyword]);
+	}, [isOpen, sessions, runningFile, keyword, t]);
 
 	// 每次打开都从空关键词、第一条结果开始
 	useEffect(() => {
@@ -88,7 +91,7 @@ export function SessionSearch({
 			className="search-overlay"
 			role="dialog"
 			aria-modal="true"
-			aria-label="搜索会话"
+			aria-label={t("search.title")}
 			onPointerDown={(event) => {
 				if (event.target === event.currentTarget) {
 					onClose();
@@ -128,13 +131,15 @@ export function SessionSearch({
 								}
 							}
 						}}
-						placeholder="搜索会话"
-						aria-label="搜索会话"
+						placeholder={t("search.placeholder")}
+						aria-label={t("search.placeholder")}
 					/>
 				</label>
-				<div className="search-results" role="listbox" aria-label="搜索结果">
+				<div className="search-results" role="listbox" aria-label={t("search.results")}>
 					{results.length === 0 ? (
-						<p className="search-empty">{keyword.trim().length === 0 ? "还没有会话" : "没有匹配的会话"}</p>
+						<p className="search-empty">
+							{keyword.trim().length === 0 ? t("search.emptyAll") : t("search.empty")}
+						</p>
 					) : (
 						results.map((session, index) => (
 							<button
@@ -155,7 +160,12 @@ export function SessionSearch({
 										session.path === activeFile ? "search-row-time mono is-active" : "search-row-time mono"
 									}
 								>
-									{shortTime(session.modified)}
+									{shortTime(
+										session.modified,
+										Date.now(),
+										undefined,
+										i18n.language === "zh-CN" ? "zh-CN" : "en",
+									)}
 								</span>
 							</button>
 						))

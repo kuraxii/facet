@@ -135,36 +135,36 @@ export class ExtensionUi {
 			return false;
 		}
 		if (response.kind !== "cancel" && response.kind !== pending.prompt.kind) {
-			throw new Error("应答类型与请求类型不一致");
+			throw new Error("Response type does not match request type");
 		}
 		if (
 			pending.prompt.kind === "select" &&
 			response.kind === "select" &&
 			!pending.prompt.options.includes(response.value)
 		) {
-			throw new Error("选项不在请求列表中");
+			throw new Error("Option is not in the request");
 		}
 		if (pending.prompt.kind === "form" && response.kind === "form") {
 			if (response.answers.length !== pending.prompt.questions.length) {
-				throw new Error("应答题目数量与请求不一致");
+				throw new Error("Answer count does not match request");
 			}
 			pending.prompt.questions.forEach((question, index) => {
 				const answer = response.answers[index];
 				if (answer === undefined || answer.id !== question.id) {
-					throw new Error("应答题目与请求顺序不一致");
+					throw new Error("Answers are not in request order");
 				}
 				if (!question.multiple && answer.selections.length > 1) {
-					throw new Error("单选题只能提交一个选项");
+					throw new Error("Single-choice question accepts one option");
 				}
 				if (answer.custom !== undefined && answer.custom.length > 0) {
-					if (question.allowCustom !== true) throw new Error("请求不允许自定义答案");
+					if (question.allowCustom !== true) throw new Error("Request does not allow a custom answer");
 					if (!question.multiple && answer.selections.length > 0) {
-						throw new Error("单选题不能同时提交选项与自定义答案");
+						throw new Error("Single-choice question cannot submit both an option and a custom answer");
 					}
 				}
 				const labels = question.choices.map((choice) => choice.label);
 				if (answer.selections.some((value) => !labels.includes(value))) {
-					throw new Error("选项不在请求列表中");
+					throw new Error("Option is not in the request");
 				}
 			});
 		}

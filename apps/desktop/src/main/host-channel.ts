@@ -66,7 +66,9 @@ export class HostChannels {
 		}
 		const resolved = await this.resolve(target);
 		if (resolved === undefined) {
-			throw new Error(target === LOCAL_TARGET ? "没有发现正在运行的主机" : `主机地址无效:${target}`);
+			throw new Error(
+				target === LOCAL_TARGET ? "No running host was found" : `Invalid host address: ${target}`,
+			);
 		}
 		const socket =
 			"path" in resolved

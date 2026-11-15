@@ -6,6 +6,7 @@
 
 import { FolderPlus, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useI18n } from "../i18n/I18nProvider.tsx";
 import { ChevronIcon } from "../transcript/chevron.tsx";
 import { FolderIcon } from "../transcript/icons.tsx";
 import { RequestEpoch } from "./request-epoch.ts";
@@ -23,6 +24,7 @@ export interface CreateProjectDialogProps {
 }
 
 export function CreateProjectDialog({ isOpen, onPickFolder, onCreate, onClose }: CreateProjectDialogProps) {
+	const { t } = useI18n();
 	const [name, setName] = useState("");
 	const [cwd, setCwd] = useState<string | undefined>(undefined);
 	const [isNameFocused, setIsNameFocused] = useState(false);
@@ -139,10 +141,16 @@ export function CreateProjectDialog({ isOpen, onPickFolder, onCreate, onClose }:
 
 	return (
 		<div className="dialog-backdrop">
-			<div ref={cardRef} className="dialog" role="dialog" aria-modal="true" aria-label="创建项目">
+			<div
+				ref={cardRef}
+				className="dialog"
+				role="dialog"
+				aria-modal="true"
+				aria-label={t("projectDialog.title")}
+			>
 				<div className="dialog-head">
-					<h2 className="dialog-title">创建项目</h2>
-					<button type="button" className="dialog-close" aria-label="关闭" onClick={close}>
+					<h2 className="dialog-title">{t("projectDialog.title")}</h2>
+					<button type="button" className="dialog-close" aria-label={t("common.close")} onClick={close}>
 						<X size={18} strokeWidth={1.5} />
 					</button>
 				</div>
@@ -162,16 +170,16 @@ export function CreateProjectDialog({ isOpen, onPickFolder, onCreate, onClose }:
 								void submit();
 							}
 						}}
-						placeholder="项目名称"
-						aria-label="项目名称"
+						placeholder={t("projectDialog.name")}
+						aria-label={t("projectDialog.name")}
 					/>
 				</label>
 
-				<p className="dialog-label">源文件夹</p>
+				<p className="dialog-label">{t("projectDialog.sourceFolder")}</p>
 				<div className="source-box">
 					{cwd === undefined ? (
 						<span className="source-hint">
-							在此电脑上添加文件夹
+							{t("projectDialog.sourceHint")}
 							<ChevronIcon isOpen={false} />
 						</span>
 					) : (
@@ -181,7 +189,7 @@ export function CreateProjectDialog({ isOpen, onPickFolder, onCreate, onClose }:
 					)}
 					<button type="button" className="source-add" onClick={() => void pickFolder()} disabled={isPicking}>
 						<FolderPlus size={14} strokeWidth={1.5} />
-						{isPicking ? "选择中…" : "添加"}
+						{isPicking ? t("projectDialog.picking") : t("projectDialog.add")}
 					</button>
 				</div>
 
@@ -189,7 +197,7 @@ export function CreateProjectDialog({ isOpen, onPickFolder, onCreate, onClose }:
 
 				<div className="dialog-actions">
 					<button type="button" className="dialog-cancel" onClick={close}>
-						取消
+						{t("common.cancel")}
 					</button>
 					<button
 						type="button"
@@ -197,7 +205,7 @@ export function CreateProjectDialog({ isOpen, onPickFolder, onCreate, onClose }:
 						onClick={() => void submit()}
 						disabled={cwd === undefined || isSubmitting}
 					>
-						{isSubmitting ? "创建中…" : "创建项目"}
+						{isSubmitting ? t("projectDialog.creating") : t("projectDialog.create")}
 					</button>
 				</div>
 			</div>

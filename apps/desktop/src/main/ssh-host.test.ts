@@ -153,7 +153,7 @@ describe("SshHosts", () => {
 		});
 		await expect(hosts.open("ssh://dev@laptop")).rejects.toMatchObject({
 			code: "not_installed",
-			message: expect.stringContaining("没有安装 facet"),
+			message: expect.stringContaining("is not installed"),
 		});
 	});
 
@@ -167,7 +167,7 @@ describe("SshHosts", () => {
 		});
 		await expect(hosts.open("ssh://dev@laptop")).rejects.toMatchObject({
 			code: "no_socket",
-			message: expect.stringContaining("没等到 socket"),
+			message: expect.stringContaining("no socket appeared"),
 		});
 	});
 
@@ -181,7 +181,7 @@ describe("SshHosts", () => {
 		});
 		await expect(hosts.open("ssh://dev@laptop")).rejects.toMatchObject({
 			code: "no_socket",
-			message: expect.stringContaining("查不到主机位置"),
+			message: expect.stringContaining("Could not find the host location"),
 		});
 	});
 
@@ -223,7 +223,7 @@ describe("SshHosts", () => {
 		});
 		await expect(hosts.open("ssh://root@10.1.10.152", "错的")).rejects.toMatchObject({
 			code: "need_password",
-			message: expect.stringContaining("密码不对"),
+			message: expect.stringContaining("Incorrect password"),
 		});
 	});
 

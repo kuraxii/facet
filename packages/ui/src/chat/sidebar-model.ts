@@ -4,6 +4,7 @@
  * 侧栏由项目过滤器与按时间分组的会话队列组成。过滤器决定队列的范围与新建会话的目录，
  * 队列按「进行中 / 今天 / 昨天 / 更早」分组。这里只做纯函数变换，组件负责渲染。
  */
+import type { SupportedLanguage } from "@facet/i18n";
 import type { ProjectInfo, SessionSummary } from "@facet/protocol";
 
 /**
@@ -82,6 +83,8 @@ export interface SidebarInput {
 	keyword?: string | undefined;
 	/** 当前时间，缺省取系统时间 */
 	now?: number;
+	/** 没有标题时的占位名 */
+	untitled?: string;
 }
 
 /**
@@ -108,10 +111,10 @@ export interface SidebarData {
 /** 分组顺序与标题。 */
 const GROUP_ORDER: readonly GroupKey[] = ["running", "today", "yesterday", "earlier"];
 const GROUP_LABELS: Record<GroupKey, string> = {
-	running: "进行中",
-	today: "今天",
-	yesterday: "昨天",
-	earlier: "更早",
+	running: "Running",
+	today: "Today",
+	yesterday: "Yesterday",
+	earlier: "Earlier",
 };
 
 /** 取路径末段作名称，末段为空时回退成原值。 */
@@ -130,39 +133,72 @@ export function samePath(left: string, right: string): boolean {
 	return pathKey(left) === pathKey(right);
 }
 
+/** 首条消息生成的标题上限；显示宽度交给 CSS 省略，不在数据层按窄列表硬截断。 */
+const MAX_TITLE_LENGTH = 50;
+
+/** 去掉截断后残留的标点，避免标题以顿号或冒号结尾。 */
+function trimTitlePunctuation(text: string): string {
+	return text.replace(/[、，,：:；;]+$/u, "").trim();
+}
+
 /** 会话标题：优先会话名，其次首条消息摘要，都为空时给占位名。 */
-export function sessionTitle(name: string | undefined, firstMessage: string): string {
+export function sessionTitle(
+	name: string | undefined,
+	firstMessage: string,
+	untitled = "Untitled session",
+): string {
 	const trimmed = name?.trim() ?? "";
 	if (trimmed.length > 0) {
 		return trimmed;
 	}
 	const first = firstMessage.trim();
-	return first.length > 0 ? first.slice(0, 24) : "未命名会话";
+	if (first.length === 0) {
+		return untitled;
+	}
+	return trimTitlePunctuation(first.length > MAX_TITLE_LENGTH ? first.slice(0, MAX_TITLE_LENGTH) : first);
 }
 
-const WEEKDAYS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+/** 昨天分组里的时间用具体时刻，便于区分不同时段。 */
+function clockTime(date: Date): string {
+	return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
 
-/** 相对时间的短写法，例：刚刚、8 分钟、3 小时、昨天、周一、11月3日。 */
-export function shortTime(value: number, now: number = Date.now()): string {
+/**
+ * 相对时间的短写法。
+ *
+ * 今天用相对时长，昨天用 HH:mm，更早用星期或日期；默认不带分组，保持旧行为。
+ */
+export function shortTime(
+	value: number,
+	now: number = Date.now(),
+	group?: GroupKey,
+	locale: SupportedLanguage = "en",
+): string {
+	const date = new Date(value);
+	if (group === "yesterday") {
+		return clockTime(date);
+	}
 	const diff = Math.max(0, now - value);
+	const isChinese = locale === "zh-CN";
 	if (diff < 60_000) {
-		return "刚刚";
+		return isChinese ? "刚刚" : "now";
 	}
 	if (diff < 3_600_000) {
-		return `${Math.floor(diff / 60_000)} 分钟`;
+		const minutes = Math.floor(diff / 60_000);
+		return isChinese ? `${minutes} 分钟` : `${minutes}m`;
 	}
-	const date = new Date(value);
 	if (date.toDateString() === new Date(now).toDateString()) {
-		return `${Math.floor(diff / 3_600_000)} 小时`;
+		const hours = Math.floor(diff / 3_600_000);
+		return isChinese ? `${hours} 小时` : `${hours}h`;
 	}
 	const yesterday = new Date(now - 86_400_000);
 	if (date.toDateString() === yesterday.toDateString()) {
-		return "昨天";
+		return isChinese ? "昨天" : "Yesterday";
 	}
 	if (diff < 6 * 86_400_000) {
-		return WEEKDAYS[date.getDay()] ?? "";
+		return new Intl.DateTimeFormat(locale, { weekday: "short" }).format(date);
 	}
-	return `${date.getMonth() + 1}月${date.getDate()}日`;
+	return new Intl.DateTimeFormat(locale, { month: "short", day: "numeric" }).format(date);
 }
 
 /** 本地时区当天零点的时间戳，分组边界按本地日期划分。 */
@@ -188,11 +224,12 @@ function toSession(
 	summary: SessionSummary,
 	runningFile: string | undefined,
 	phase: SessionDot | undefined,
+	untitled: string | undefined,
 ): SidebarSession {
 	const isRunning = summary.path === runningFile;
 	return {
 		path: summary.path,
-		title: sessionTitle(summary.name, summary.firstMessage),
+		title: sessionTitle(summary.name, summary.firstMessage, untitled),
 		modified: summary.modified,
 		messageCount: summary.messageCount,
 		isRunning,
@@ -296,7 +333,7 @@ export function buildSidebar(input: SidebarInput): SidebarData {
 	const now = input.now ?? Date.now();
 	const keyword = (input.keyword ?? "").trim().toLowerCase();
 	const all = input.sessions
-		.map((summary) => toSession(summary, input.runningFile, input.runningDot))
+		.map((summary) => toSession(summary, input.runningFile, input.runningDot, input.untitled))
 		.sort((left, right) => right.modified - left.modified);
 
 	const inScope =

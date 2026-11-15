@@ -158,7 +158,7 @@ function userParts(entryView: EntryView): Part[] {
 	return message.content.map((block, index) =>
 		block.type === "text"
 			? { kind: "text" as const, partId: `text:${index}`, text: block.text }
-			: { kind: "text" as const, partId: `text:${index}`, text: `[图片 ${block.mimeType}]` },
+			: { kind: "text" as const, partId: `text:${index}`, text: `[Image ${block.mimeType}]` },
 	);
 }
 
@@ -342,7 +342,7 @@ export function toTranscript(view: ChatView): TranscriptItem[] {
 			items.push({
 				...base,
 				kind: "error",
-				parts: [{ kind: "text", partId: "text:0", text: entryView.message.errorMessage ?? "运行出错" }],
+				parts: [{ kind: "text", partId: "text:0", text: entryView.message.errorMessage ?? "Run failed" }],
 			});
 			continue;
 		}
@@ -415,6 +415,6 @@ function orphanToolPart(message: Message & { role: "toolResult" }): ToolCallPart
 /** 命令记录拼成一段文本。 */
 function commandText(message: Message & { role: "bashExecution" }): string {
 	const header = `$ ${message.command}`;
-	const tail = message.cancelled ? "（已取消）" : message.truncated ? "（输出已截断）" : "";
+	const tail = message.cancelled ? " (cancelled)" : message.truncated ? " (output truncated)" : "";
 	return `${header}\n${message.output}${tail}`;
 }

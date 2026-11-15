@@ -1,3 +1,11 @@
+import {
+	createI18n,
+	type LanguageSetting,
+	readLanguageSetting,
+	resolveLanguage,
+	type SupportedLanguage,
+} from "@facet/i18n";
+
 /**
  * Web 端的桥。
  *
@@ -8,6 +16,19 @@
 
 /** 令牌在本地存储里的键。 */
 const TOKEN_KEY = "facet.web.token";
+
+/** Web 本机语言设置；Web 没有主进程，直接存在 localStorage。 */
+const LANGUAGE_KEY = "facet.web.language";
+
+/** 浏览器语言作为 auto 的系统语言。 */
+function systemLanguage(): string {
+	return navigator.languages[0] ?? navigator.language;
+}
+
+/** 读取 Web 本机语言设置，非法值按跟随系统处理。 */
+function readWebLanguageSetting(): LanguageSetting {
+	return readLanguageSetting(localStorage.getItem(LANGUAGE_KEY)) ?? "auto";
+}
 
 /** 连接的 WebSocket 地址：与页面同源，路径固定。 */
 function socketUrl(): string {
@@ -28,6 +49,7 @@ function readToken(): string {
 /** 给浏览器补一个与桌面同形的桥。 */
 export function installWebBridge(): void {
 	const token = readToken();
+	const i18n = createI18n(resolveLanguage(readWebLanguageSetting(), systemLanguage()));
 
 	window.facet = {
 		projectDir: "",
@@ -36,18 +58,25 @@ export function installWebBridge(): void {
 		// Web 端暂时不做界面缩放，浏览器自身负责页面缩放
 		uiScale: 100,
 		setUiScale: () => {},
+		// Web 没有主进程，语言设置与浏览器语言都在这一层解析
+		languageSetting: readWebLanguageSetting(),
+		language: resolveLanguage(readWebLanguageSetting(), systemLanguage()),
+		setLanguage: (setting: LanguageSetting): Promise<SupportedLanguage> => {
+			localStorage.setItem(LANGUAGE_KEY, setting);
+			return Promise.resolve(resolveLanguage(setting, systemLanguage()));
+		},
 		// Web 端连的就是当前这台主机，没有「本机/远程」之分
 		hostMode: "external",
 		getLocalHost: async () => ({ target: "local", address: location.host, token }),
 		onLocalHostChanged: () => () => {},
 		openHostChannel: async (target, handlers) => {
 			if (target !== "local") {
-				throw new Error("Web 端只能连接当前主机");
+				throw new Error(i18n.t("web.onlyCurrentHost"));
 			}
 			const socket = new WebSocket(socketUrl());
 			await new Promise<void>((resolve, reject) => {
 				socket.onopen = () => resolve();
-				socket.onerror = () => reject(new Error(`连不上主机 ${location.host}`));
+				socket.onerror = () => reject(new Error(i18n.t("web.connectFailed", { address: location.host })));
 			});
 			socket.onmessage = (event) => {
 				handlers.onData(typeof event.data === "string" ? event.data : "");
@@ -65,7 +94,7 @@ export function installWebBridge(): void {
 			};
 		},
 		// 浏览器里没有原生的目录选择与保存窗口，用最接近的替代
-		pickDirectory: async () => window.prompt("主机上的项目目录（绝对路径）") ?? undefined,
+		pickDirectory: async () => window.prompt(i18n.t("web.projectDirPrompt")) ?? undefined,
 		saveText: async (suggestedName, text) => {
 			const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
 			const url = URL.createObjectURL(blob);

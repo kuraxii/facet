@@ -41,7 +41,9 @@ const DEFAULT_HANDSHAKE_TIMEOUT_MS = 10_000;
 function defaultSocketFactory(url: string): SocketLike {
 	const ctor = (globalThis as { WebSocket?: new (url: string) => SocketLike }).WebSocket;
 	if (!ctor) {
-		throw new TransportError("当前运行时不提供 WebSocket，需要通过 createSocket 指定实现");
+		throw new TransportError(
+			"The current runtime does not provide WebSocket; pass an implementation through createSocket",
+		);
 	}
 	return new ctor(url);
 }
@@ -93,7 +95,7 @@ export class WsTransport implements Transport {
 			const timeout = setTimeout(() => {
 				if (!settled) {
 					settled = true;
-					reject(new TransportError("握手超时"));
+					reject(new TransportError("Handshake timed out"));
 					this.dropSocket();
 				}
 			}, this.options.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS);
@@ -105,16 +107,16 @@ export class WsTransport implements Transport {
 				if (!settled) {
 					settled = true;
 					clearTimeout(timeout);
-					reject(new TransportError("连接失败"));
+					reject(new TransportError("Connection failed"));
 				}
 			};
 			socket.onclose = (event) => {
-				this.core.handleClose(`连接已断开:${event.reason || event.code}`, this.core.isClosedByCaller);
+				this.core.handleClose(`Connection closed: ${event.reason || event.code}`, this.core.isClosedByCaller);
 				this.socket = null;
 				if (!settled) {
 					settled = true;
 					clearTimeout(timeout);
-					reject(new TransportError(`连接已关闭:${event.reason || event.code}`));
+					reject(new TransportError(`Connection closed: ${event.reason || event.code}`));
 				}
 			};
 			socket.onmessage = (event) => {
@@ -167,7 +169,7 @@ export class WsTransport implements Transport {
 	private sendFrame(text: string): void {
 		const socket = this.socket;
 		if (socket === null || socket.readyState !== READY_STATE_OPEN) {
-			throw new TransportError("连接未就绪");
+			throw new TransportError("Connection is not ready");
 		}
 		socket.send(text.endsWith("\n") ? text.slice(0, -1) : text);
 	}
@@ -187,6 +189,6 @@ export class WsTransport implements Transport {
 			}
 		}
 		// 主动断开：状态回到 closed，在途请求一律失败
-		this.core.handleClose("连接已关闭", false);
+		this.core.handleClose("Connection closed", false);
 	}
 }

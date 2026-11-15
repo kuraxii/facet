@@ -295,7 +295,7 @@ export class SshHosts {
 	}> {
 		const target = parseSshTarget(targetText);
 		if (target === undefined) {
-			throw new SshHostError("no_target", `主机地址看不懂:${targetText}`);
+			throw new SshHostError("no_target", `Cannot parse host address: ${targetText}`);
 		}
 		const localHome = this.options.home ?? homedir();
 		const env = this.options.env ?? process.env;
@@ -324,7 +324,7 @@ export class SshHosts {
 				const privateKey = await firstReadable(identityFiles, readLocal);
 				const agent = env.SSH_AUTH_SOCK;
 				if (privateKey === undefined && agent === undefined) {
-					throw new SshHostError("need_password", `需要 ${sshTargetLabel(target)} 的登录密码`);
+					throw new SshHostError("need_password", `Login password required for ${sshTargetLabel(target)}`);
 				}
 				if (privateKey !== undefined) {
 					login.privateKey = privateKey;
@@ -356,11 +356,14 @@ export class SshHosts {
 				throw new SshHostError(
 					"need_password",
 					password === undefined || password.length === 0
-						? `需要 ${sshTargetLabel(target)} 的登录密码`
-						: `${sshTargetLabel(target)} 的密码不对`,
+						? `Login password required for ${sshTargetLabel(target)}`
+						: `Incorrect password for ${sshTargetLabel(target)}`,
 				);
 			}
-			throw new SshHostError("connect_failed", `连不上 ${sshTargetLabel(target)}:${messageOf(error)}`);
+			throw new SshHostError(
+				"connect_failed",
+				`Cannot connect to ${sshTargetLabel(target)}: ${messageOf(error)}`,
+			);
 		}
 
 		const label = sshTargetLabel(target);
@@ -369,7 +372,10 @@ export class SshHosts {
 			output = await client.run(REMOTE_SOCKET_SCRIPT);
 		} catch (error) {
 			client.close();
-			throw new SshHostError("no_socket", `${label} 上查不到主机位置:${messageOf(error)}`);
+			throw new SshHostError(
+				"no_socket",
+				`Could not find the host location on ${label}: ${messageOf(error)}`,
+			);
 		}
 		let path = parseSocketPath(output);
 		if (path === undefined) {
@@ -384,7 +390,7 @@ export class SshHosts {
 			client.close();
 			throw new SshHostError(
 				"no_socket",
-				`${label} 上拉起了 facet 主机，但 ${this.options.socketWaitMs ?? SOCKET_WAIT_MS} 毫秒内没等到 socket`,
+				`Started the facet host on ${label}, but no socket appeared within ${this.options.socketWaitMs ?? SOCKET_WAIT_MS} ms`,
 			);
 		}
 
@@ -393,7 +399,7 @@ export class SshHosts {
 			return { stream, address: path };
 		} catch (error) {
 			client.close();
-			throw new SshHostError("no_socket", `${label} 上的 ${path} 连不上:${messageOf(error)}`);
+			throw new SshHostError("no_socket", `Cannot connect to ${path} on ${label}: ${messageOf(error)}`);
 		}
 	}
 }
@@ -413,10 +419,13 @@ async function startRemoteHost(client: SshClientLike, label: string): Promise<Ss
 	try {
 		output = await client.run(REMOTE_START_SCRIPT);
 	} catch (error) {
-		return new SshHostError("no_socket", `${label} 上启动 facet 主机失败:${messageOf(error)}`);
+		return new SshHostError("no_socket", `Failed to start the facet host on ${label}: ${messageOf(error)}`);
 	}
 	if (output.includes("none")) {
-		return new SshHostError("not_installed", `${label} 上没有安装 facet，先在那边装好再来添加`);
+		return new SshHostError(
+			"not_installed",
+			`facet is not installed on ${label}; install it there before adding this host`,
+		);
 	}
 	return undefined;
 }
@@ -460,7 +469,7 @@ const defaultConnector: SshConnector = async (config) => {
 		// 脚本里要加多少步都行
 		run: (script) =>
 			new Promise<string>((resolve, reject) => {
-				const timer = setTimeout(() => reject(new Error("远端脚本超时")), RUN_TIMEOUT_MS);
+				const timer = setTimeout(() => reject(new Error("Remote script timed out")), RUN_TIMEOUT_MS);
 				client.exec("/bin/sh", (error, channel) => {
 					if (error !== undefined) {
 						clearTimeout(timer);
@@ -484,7 +493,7 @@ const defaultConnector: SshConnector = async (config) => {
 						clearTimeout(timer);
 						// 没有输出属于正常结果（比如「现在没有 socket」），只有退出码非 0 才算脚本失败
 						if (text.length === 0 && exitCode !== undefined && exitCode !== 0) {
-							reject(new Error(stderr.trim() || `远端脚本退出码 ${exitCode}`));
+							reject(new Error(stderr.trim() || `Remote script exited with code ${exitCode}`));
 							return;
 						}
 						resolve(text);

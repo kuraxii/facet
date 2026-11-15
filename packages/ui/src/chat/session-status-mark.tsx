@@ -7,6 +7,7 @@
 
 import { CircleAlert } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { useI18n } from "../i18n/I18nProvider.tsx";
 import { type SessionStatusBucket, STATUS_RING_PERIOD_MS, statusBucketLabel } from "./session-status.ts";
 
 /** 状态标记参数。 */
@@ -16,11 +17,12 @@ export interface SessionStatusMarkProps {
 }
 
 export function SessionStatusMark({ bucket }: SessionStatusMarkProps) {
+	const { t } = useI18n();
 	return (
 		<span
 			className={`status-mark is-${bucket}`}
 			role="status"
-			aria-label={statusBucketLabel(bucket)}
+			aria-label={statusBucketLabel(bucket, t)}
 			data-status={bucket}
 		>
 			{bucket === "running" ? <StatusRing /> : null}

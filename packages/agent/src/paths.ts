@@ -45,7 +45,7 @@ export function applyAgentDir(agentDir?: string): string {
 	process.env[AGENT_DIR_ENV] = target;
 	const applied = resolve(getAgentDir());
 	if (applied !== target) {
-		throw new Error(`pi 没有采纳 agent 目录设置,期望 ${target},实际 ${applied}`);
+		throw new Error(`pi did not apply the agent directory setting; expected ${target}, got ${applied}`);
 	}
 	return target;
 }

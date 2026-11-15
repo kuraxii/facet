@@ -11,7 +11,7 @@ export class RevealFailedError extends Error {
 	readonly path: string;
 
 	constructor(path: string, reason: string) {
-		super(`打不开目录:${path} ${reason}`);
+		super(`Cannot open directory: ${path} ${reason}`);
 		this.name = "RevealFailedError";
 		this.path = path;
 	}

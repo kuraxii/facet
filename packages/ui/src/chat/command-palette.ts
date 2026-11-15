@@ -6,13 +6,13 @@
  */
 import type { SlashCommand } from "@facet/protocol";
 
-/** 一条命令的中文来源说明，列表里显示成小标签。 */
-export const SOURCE_LABELS: Record<SlashCommand["source"], string> = {
-	builtin: "自带",
-	extension: "扩展",
-	prompt: "模板",
-	skill: "技能",
-};
+/** 命令来源的文案键，列表里显示成小标签。 */
+export const SOURCE_LABEL_KEYS = {
+	builtin: "commands.builtin",
+	extension: "commands.extension",
+	prompt: "commands.prompt",
+	skill: "commands.skill",
+} as const satisfies Record<SlashCommand["source"], string>;
 
 /**
  * 输入框里正在输入的命令前缀。

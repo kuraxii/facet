@@ -5,6 +5,7 @@
 | 目录 | 工具 | 用途 |
 | --- | --- | --- |
 | `ask-user-question` | `ask_user_question` | 结构化提问；参数与 prompt 取自 rpiv，界面走 facet 的 `askForm`，随 server 打包并内置到会话 |
+| `session-names` | — | 首轮回复后生成会话名；fork 子会话取分叉后的第一条用户消息 |
 
 扩展目录的约定：
 

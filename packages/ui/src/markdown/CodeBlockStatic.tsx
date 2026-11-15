@@ -9,6 +9,7 @@
 import { Check, Copy } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import type { CodeBlockNode } from "stream-markdown-parser";
+import { useI18n } from "../i18n/I18nProvider.tsx";
 import { codeThemeName } from "../theme.ts";
 import { shouldShowCodeBlock } from "./code-block-state.ts";
 import { resolveCodeLang } from "./code-lang.ts";
@@ -75,6 +76,7 @@ function CodeLine({ line }: { line: HighlightLine }) {
 
 /** 复制按钮。 */
 function CopyButton({ code }: { code: string }) {
+	const { t } = useI18n();
 	const [copied, setCopied] = useState(false);
 	useEffect(() => {
 		if (!copied) {
@@ -87,8 +89,8 @@ function CopyButton({ code }: { code: string }) {
 		<button
 			type="button"
 			className="code-copy"
-			aria-label={copied ? "已复制" : "复制代码"}
-			title={copied ? "已复制" : "复制代码"}
+			aria-label={copied ? t("markdown.copied") : t("markdown.copyCode")}
+			title={copied ? t("markdown.copied") : t("markdown.copyCode")}
 			onClick={() => {
 				void navigator.clipboard?.writeText(code).then(
 					() => setCopied(true),

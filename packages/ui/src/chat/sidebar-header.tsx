@@ -5,6 +5,7 @@
  * 主体里，这里只负责开合它。
  */
 import { FolderPlus, PanelLeft, Search } from "lucide-react";
+import { useI18n } from "../i18n/I18nProvider.tsx";
 
 export interface SidebarHeaderProps {
 	/** 会话搜索框是否展开 */
@@ -23,6 +24,7 @@ export function SidebarHeader({
 	onAddProject,
 	onCollapse,
 }: SidebarHeaderProps) {
+	const { t } = useI18n();
 	return (
 		<div className="sb-head">
 			<span className="sb-title">Facet</span>
@@ -30,21 +32,26 @@ export function SidebarHeader({
 				<button
 					type="button"
 					className="chrome-toggle"
-					aria-label="搜索会话"
+					aria-label={t("sidebar.searchSessions")}
 					aria-expanded={isSearchOpen}
 					onClick={onToggleSearch}
 				>
 					<Search size={15} strokeWidth={1.5} />
 				</button>
-				<button type="button" className="chrome-toggle" aria-label="添加项目" onClick={onAddProject}>
+				<button
+					type="button"
+					className="chrome-toggle"
+					aria-label={t("common.addProject")}
+					onClick={onAddProject}
+				>
 					<FolderPlus size={15} strokeWidth={1.5} />
 				</button>
 				{onCollapse === undefined ? null : (
 					<button
 						type="button"
 						className="chrome-toggle"
-						aria-label="收起左侧栏"
-						title="收起左侧栏"
+						aria-label={t("sidebar.collapse")}
+						title={t("sidebar.collapse")}
 						aria-expanded={true}
 						onClick={onCollapse}
 					>

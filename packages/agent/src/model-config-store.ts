@@ -71,7 +71,7 @@ export class InvalidBaseUrlError extends Error {
 	readonly value: string;
 
 	constructor(value: string) {
-		super(`接口地址要以 http:// 或 https:// 开头:${value}`);
+		super(`Base URL must start with http:// or https://: ${value}`);
 		this.name = "InvalidBaseUrlError";
 		this.value = value;
 	}

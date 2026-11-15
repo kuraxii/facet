@@ -31,7 +31,7 @@ export class FrameDecoder {
 		this.buffer += chunk;
 		if (this.buffer.length > MAX_FRAME_LENGTH) {
 			this.buffer = "";
-			throw new Error("帧超过上限");
+			throw new Error("Frame exceeds the limit");
 		}
 		const lines = this.buffer.split("\n");
 		this.buffer = lines.pop() ?? "";

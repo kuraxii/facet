@@ -2,6 +2,7 @@
 import type { UiFormAnswer, UiFormQuestion, UiPrompt, UiResponse } from "@facet/protocol";
 import { Check, X } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useI18n } from "../i18n/I18nProvider.tsx";
 import styles from "./ExtensionPromptCard.module.css";
 
 /** 源类名到模块类名的映射，状态类也在这里集中命名。 */
@@ -90,6 +91,7 @@ function answersFor(questions: UiFormQuestion[], states: FormAnswerState[]): UiF
 }
 
 export function ExtensionPromptCard({ prompt, canRespond, onRespond }: ExtensionPromptCardProps) {
+	const { t } = useI18n();
 	const cardRef = useRef<HTMLElement>(null);
 	const inputRef = useRef<HTMLInputElement>(null);
 	const editorRef = useRef<HTMLTextAreaElement>(null);
@@ -243,7 +245,9 @@ export function ExtensionPromptCard({ prompt, canRespond, onRespond }: Extension
 										{item.allowCustom === true ? (
 											<li className={`${s.option} ${s.optionPreview}`}>
 												<span className={s.radio} aria-hidden="true" />
-												<span className={`${s.optionLabel} ${s.placeholder}`}>Type something.</span>
+												<span className={`${s.optionLabel} ${s.placeholder}`}>
+													{t("extension.customPlaceholder")}
+												</span>
 											</li>
 										) : null}
 									</ul>
@@ -280,7 +284,7 @@ export function ExtensionPromptCard({ prompt, canRespond, onRespond }: Extension
 					ref={tablistRef}
 					className={s.tabs}
 					role="tablist"
-					aria-label="题目"
+					aria-label={t("extension.questions")}
 					onKeyDown={(event) => {
 						if (event.key === "ArrowLeft") {
 							event.preventDefault();
@@ -410,8 +414,8 @@ export function ExtensionPromptCard({ prompt, canRespond, onRespond }: Extension
 										ref={customRef}
 										className={s.customInput}
 										data-extension-custom-input
-										aria-label={`${question.title} 自定义答案`}
-										placeholder="Type something."
+										aria-label={t("extension.customAnswer", { title: question.title })}
+										placeholder={t("extension.customPlaceholder")}
 										value={answer?.custom ?? ""}
 										disabled={busy}
 										onChange={(event) =>
@@ -456,7 +460,9 @@ export function ExtensionPromptCard({ prompt, canRespond, onRespond }: Extension
 										className={`${s.radio}${question.multiple ? ` ${s.square}` : ""}`}
 										aria-hidden="true"
 									/>
-									<span className={`${s.optionLabel} ${s.placeholder}`}>Type something.</span>
+									<span className={`${s.optionLabel} ${s.placeholder}`}>
+										{t("extension.customPlaceholder")}
+									</span>
 								</label>
 							)
 						) : null}
@@ -468,8 +474,8 @@ export function ExtensionPromptCard({ prompt, canRespond, onRespond }: Extension
 					)}
 					<input
 						className={s.input}
-						aria-label={`${question.title} 备注`}
-						placeholder="备注"
+						aria-label={`${question.title} ${t("extension.note")}`}
+						placeholder={t("extension.note")}
 						value={answer?.comment ?? ""}
 						disabled={busy}
 						onChange={(event) => updateAnswer(tab, { comment: event.target.value })}
@@ -518,7 +524,7 @@ export function ExtensionPromptCard({ prompt, canRespond, onRespond }: Extension
 						}}
 					>
 						<X size={14} strokeWidth={1.5} aria-hidden="true" />
-						<span>关闭</span>
+						<span>{t("extension.close")}</span>
 					</button>
 					<button
 						ref={submitRef}
@@ -529,7 +535,7 @@ export function ExtensionPromptCard({ prompt, canRespond, onRespond }: Extension
 						onClick={submit}
 					>
 						<Check size={14} strokeWidth={1.5} aria-hidden="true" />
-						<span>提交</span>
+						<span>{t("extension.submit")}</span>
 					</button>
 				</div>
 			</div>

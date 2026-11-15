@@ -7,10 +7,19 @@
  */
 import type { CustomModelInfo, CustomProviderInfo } from "@facet/protocol";
 import { useState } from "react";
+import { useI18n } from "../i18n/I18nProvider.tsx";
 
 /** 可选的接口协议。 */
-const API_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
-	{ value: "openai-completions", label: "OpenAI 兼容（chat completions）" },
+const API_OPTIONS: ReadonlyArray<{
+	value: string;
+	label: string;
+	labelKey?: "providerForm.apiOpenAICompatible";
+}> = [
+	{
+		value: "openai-completions",
+		label: "OpenAI compatible (chat completions)",
+		labelKey: "providerForm.apiOpenAICompatible",
+	},
 	{ value: "openai-responses", label: "OpenAI Responses" },
 	{ value: "anthropic-messages", label: "Anthropic Messages" },
 	{ value: "google-generative-ai", label: "Google Generative AI" },
@@ -54,6 +63,7 @@ export interface ProviderFormProps {
 }
 
 export function ProviderForm({ initial, onSave, onCancel }: ProviderFormProps) {
+	const { t } = useI18n();
 	const [draft, setDraft] = useState<CustomProviderInfo & { rows: ModelRow[] }>(() =>
 		initial === undefined
 			? emptyDraft()
@@ -75,16 +85,16 @@ export function ProviderForm({ initial, onSave, onCancel }: ProviderFormProps) {
 	/** 提交前的本地校验，只说最明显的几条；主机侧还会再校验一次。 */
 	const validate = (): string | undefined => {
 		if (!/^[a-z0-9][a-z0-9._-]*$/.test(draft.id.trim())) {
-			return "标识只能用小写字母、数字、点、下划线与连字符，且以字母或数字开头";
+			return t("providerForm.invalidId");
 		}
 		if (draft.name.trim().length === 0) {
-			return "名称不能为空";
+			return t("providerForm.invalidName");
 		}
 		if (draft.baseUrl.trim().length === 0) {
-			return "接口地址不能为空";
+			return t("providerForm.invalidBaseUrl");
 		}
 		if (draft.rows.length === 0 || draft.rows.some((row) => row.model.id.trim().length === 0)) {
-			return "每个模型都要填标识";
+			return t("providerForm.invalidModelId");
 		}
 		return undefined;
 	};
@@ -115,53 +125,53 @@ export function ProviderForm({ initial, onSave, onCancel }: ProviderFormProps) {
 	return (
 		<div className="prov-form">
 			<label className="set-field">
-				<span className="set-label">标识</span>
+				<span className="set-label">{t("providerForm.id")}</span>
 				<input
 					className="set-input mono"
 					value={draft.id}
 					onChange={(event) => setDraft((current) => ({ ...current, id: event.target.value }))}
 					placeholder="my-gateway"
-					aria-label="提供方标识"
+					aria-label={t("providerForm.id")}
 					disabled={isEditing}
 				/>
 			</label>
 			<label className="set-field">
-				<span className="set-label">名称</span>
+				<span className="set-label">{t("providerForm.name")}</span>
 				<input
 					className="set-input"
 					value={draft.name}
 					onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
-					placeholder="我的网关"
-					aria-label="提供方名称"
+					placeholder={t("providerForm.name")}
+					aria-label={t("providerForm.name")}
 				/>
 			</label>
 			<label className="set-field">
-				<span className="set-label">接口地址</span>
+				<span className="set-label">{t("providerForm.baseUrl")}</span>
 				<input
 					className="set-input mono"
 					value={draft.baseUrl}
 					onChange={(event) => setDraft((current) => ({ ...current, baseUrl: event.target.value }))}
 					placeholder="https://gateway.example.com/v1"
-					aria-label="接口地址"
+					aria-label={t("providerForm.baseUrl")}
 				/>
 			</label>
 			<label className="set-field">
-				<span className="set-label">接口协议</span>
+				<span className="set-label">{t("providerForm.api")}</span>
 				<select
 					className="set-input"
 					value={draft.api}
 					onChange={(event) => setDraft((current) => ({ ...current, api: event.target.value }))}
-					aria-label="接口协议"
+					aria-label={t("providerForm.api")}
 				>
 					{API_OPTIONS.map((option) => (
 						<option key={option.value} value={option.value}>
-							{option.label}
+							{option.labelKey === undefined ? option.label : t(option.labelKey)}
 						</option>
 					))}
 				</select>
 			</label>
 
-			<p className="set-label">模型</p>
+			<p className="set-label">{t("providerForm.models")}</p>
 			<ul className="set-list">
 				{draft.rows.map((row, index) => {
 					const model = row.model;
@@ -172,15 +182,15 @@ export function ProviderForm({ initial, onSave, onCancel }: ProviderFormProps) {
 									className="set-input mono"
 									value={model.id}
 									onChange={(event) => patchModel(row.key, { id: event.target.value })}
-									placeholder="模型标识"
-									aria-label={`模型 ${index + 1} 标识`}
+									placeholder={t("providerForm.modelId")}
+									aria-label={t("providerForm.modelIdLabel", { index: index + 1 })}
 								/>
 								<input
 									className="set-input"
 									value={model.name ?? ""}
 									onChange={(event) => patchModel(row.key, { name: event.target.value })}
-									placeholder="展示名（可选）"
-									aria-label={`模型 ${index + 1} 展示名`}
+									placeholder={t("providerForm.modelName")}
+									aria-label={t("providerForm.modelNameLabel", { index: index + 1 })}
 								/>
 								<input
 									className="set-input mono"
@@ -191,8 +201,8 @@ export function ProviderForm({ initial, onSave, onCancel }: ProviderFormProps) {
 											contextWindow: event.target.value === "" ? undefined : Number(event.target.value),
 										})
 									}
-									placeholder="上下文窗口"
-									aria-label={`模型 ${index + 1} 上下文窗口`}
+									placeholder={t("providerForm.contextWindow")}
+									aria-label={t("providerForm.modelContextLabel", { index: index + 1 })}
 								/>
 								<input
 									className="set-input mono"
@@ -203,8 +213,8 @@ export function ProviderForm({ initial, onSave, onCancel }: ProviderFormProps) {
 											maxTokens: event.target.value === "" ? undefined : Number(event.target.value),
 										})
 									}
-									placeholder="最大输出"
-									aria-label={`模型 ${index + 1} 最大输出`}
+									placeholder={t("providerForm.maxOutput")}
+									aria-label={t("providerForm.modelOutputLabel", { index: index + 1 })}
 								/>
 								<label className="set-toggle">
 									<input
@@ -212,7 +222,7 @@ export function ProviderForm({ initial, onSave, onCancel }: ProviderFormProps) {
 										checked={model.reasoning === true}
 										onChange={(event) => patchModel(row.key, { reasoning: event.target.checked })}
 									/>
-									<span>支持思考</span>
+									<span>{t("providerForm.supportsThinking")}</span>
 								</label>
 								<button
 									type="button"
@@ -225,7 +235,7 @@ export function ProviderForm({ initial, onSave, onCancel }: ProviderFormProps) {
 									}
 									disabled={draft.rows.length <= 1}
 								>
-									移除
+									{t("providerForm.remove")}
 								</button>
 							</div>
 						</li>
@@ -238,7 +248,7 @@ export function ProviderForm({ initial, onSave, onCancel }: ProviderFormProps) {
 					className="set-reset"
 					onClick={() => setDraft((current) => ({ ...current, rows: [...current.rows, modelRow()] }))}
 				>
-					添加模型
+					{t("providerForm.addModel")}
 				</button>
 			</div>
 
@@ -246,10 +256,10 @@ export function ProviderForm({ initial, onSave, onCancel }: ProviderFormProps) {
 
 			<div className="set-actions">
 				<button type="button" className="set-save" disabled={isSaving} onClick={() => void submit()}>
-					{isSaving ? "保存中…" : "保存提供方"}
+					{isSaving ? t("providerForm.saving") : t("providerForm.save")}
 				</button>
 				<button type="button" className="set-reset" onClick={onCancel}>
-					取消
+					{t("providerForm.cancel")}
 				</button>
 			</div>
 		</div>

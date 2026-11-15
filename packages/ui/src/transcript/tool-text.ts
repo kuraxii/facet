@@ -5,6 +5,12 @@
  * 参数结构由工具决定,这里按常见字段取,取不到就退回空串。
  */
 
+import { createI18n } from "@facet/i18n";
+import type { TFunction } from "i18next";
+
+/** 没有 Provider 时的中文译文。 */
+const fallbackI18n = createI18n("zh-CN");
+
 /** 摘要在头部可占的最大字符数。 */
 const MAX_TARGET = 48;
 
@@ -104,12 +110,13 @@ export function toolDetail(input: unknown): string {
 export function toolStatusText(
 	status: "running" | "done" | "failed" | "skipped",
 	durationMs: number | undefined,
+	t: TFunction = fallbackI18n.t,
 ): string {
 	if (status === "running") {
-		return "执行中";
+		return t("transcript.running");
 	}
 	if (status === "skipped") {
-		return "未执行";
+		return t("transcript.skipped");
 	}
 	if (durationMs === undefined) {
 		return "";

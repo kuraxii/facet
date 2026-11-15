@@ -20,12 +20,12 @@ export interface UiThemeOption {
 
 /** 设置页上的配色清单，浅色在前，其余按深浅排列。 */
 export const UI_THEME_OPTIONS: readonly UiThemeOption[] = [
-	{ id: "light", label: "浅色", swatch: "#ffffff", dark: false },
+	{ id: "light", label: "Light", swatch: "#ffffff", dark: false },
 	{ id: "zinc", label: "Zinc", swatch: "#808080", dark: true },
 	{ id: "midnight", label: "Midnight", swatch: "#4a6ba8", dark: true },
 	{ id: "claude", label: "Claude", swatch: "#d97757", dark: true },
 	{ id: "ghostty", label: "Ghostty", swatch: "#8caaee", dark: true },
-	{ id: "pureBlack", label: "纯黑", swatch: "#000000", dark: true },
+	{ id: "pureBlack", label: "Pure black", swatch: "#000000", dark: true },
 ];
 
 /** 设置里允许的取值，含跟随系统。 */

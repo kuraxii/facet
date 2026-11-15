@@ -62,18 +62,30 @@ describe("路径与标题", () => {
 	it("标题回退顺序为会话名、首条消息、占位名", () => {
 		expect(sessionTitle("  压测脚本调整 ", "首条消息")).toBe("压测脚本调整");
 		expect(sessionTitle(undefined, "  修一下限流策略  ")).toBe("修一下限流策略");
-		expect(sessionTitle(undefined, "   ")).toBe("未命名会话");
+		expect(sessionTitle(undefined, "   ")).toBe("Untitled session");
+	});
+
+	it("首条消息生成的标题放宽到 50 字并去掉末尾标点", () => {
+		const long = `${"长".repeat(49)}、后`;
+		expect(sessionTitle(undefined, long)).toBe("长".repeat(49));
+		expect(sessionTitle(undefined, "短标题、")).toBe("短标题");
 	});
 });
 
 describe("相对时间", () => {
 	it("按距离分档", () => {
-		expect(shortTime(NOW - 30_000, NOW)).toBe("刚刚");
-		expect(shortTime(NOW - 8 * 60_000, NOW)).toBe("8 分钟");
-		expect(shortTime(NOW - 3 * 3_600_000, NOW)).toBe("3 小时");
-		expect(shortTime(NOW - 30 * 3_600_000, NOW)).toBe("昨天");
-		expect(shortTime(NOW - 2 * 86_400_000, NOW)).toBe("周一");
-		expect(shortTime(new Date(2024, 9, 3).getTime(), NOW)).toBe("10月3日");
+		expect(shortTime(NOW - 30_000, NOW, undefined, "zh-CN")).toBe("刚刚");
+		expect(shortTime(NOW - 8 * 60_000, NOW, undefined, "zh-CN")).toBe("8 分钟");
+		expect(shortTime(NOW - 3 * 3_600_000, NOW, undefined, "zh-CN")).toBe("3 小时");
+		expect(shortTime(NOW - 30 * 3_600_000, NOW, undefined, "zh-CN")).toBe("昨天");
+		expect(shortTime(NOW - 2 * 86_400_000, NOW, undefined, "zh-CN")).toBe("周一");
+		expect(shortTime(new Date(2024, 9, 3).getTime(), NOW, undefined, "zh-CN")).toBe("10月3日");
+	});
+
+	it("昨天分组显示具体时刻，更早分组保留星期与日期", () => {
+		expect(shortTime(NOW - 30 * 3_600_000, NOW, "yesterday", "zh-CN")).toBe("09:00");
+		expect(shortTime(NOW - 2 * 86_400_000, NOW, "earlier", "zh-CN")).toBe("周一");
+		expect(shortTime(new Date(2024, 9, 3).getTime(), NOW, "earlier", "zh-CN")).toBe("10月3日");
 	});
 });
 
@@ -90,7 +102,7 @@ describe("队列分组", () => {
 			NOW,
 		);
 		expect(groups.map((group) => group.key)).toEqual(["running", "today", "yesterday", "earlier"]);
-		expect(groups.map((group) => group.label)).toEqual(["进行中", "今天", "昨天", "更早"]);
+		expect(groups.map((group) => group.label)).toEqual(["Running", "Today", "Yesterday", "Earlier"]);
 		expect(groups[1]?.sessions.map((item) => item.path)).toEqual(["/s/today-a.jsonl", "/s/today-b.jsonl"]);
 	});
 

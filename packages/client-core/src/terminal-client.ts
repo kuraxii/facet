@@ -94,7 +94,7 @@ export class TerminalClient {
 	async attach(id: string, listener: TerminalListener): Promise<AttachedTerminal> {
 		const info = (await this.transport.request("listTerminals")).terminals.find((item) => item.id === id);
 		if (info === undefined) {
-			throw new Error(`没有这个终端：${id}`);
+			throw new Error(`No such terminal: ${id}`);
 		}
 		const snapshot = await this.transport.request("serializeTerminal", { id });
 		const channel = terminalChannelFor(id);

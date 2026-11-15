@@ -34,7 +34,7 @@ export class ProjectExistsError extends Error {
 	readonly cwd: string;
 
 	constructor(cwd: string) {
-		super(`项目已在清单里:${cwd}`);
+		super(`Project is already in the list: ${cwd}`);
 		this.name = "ProjectExistsError";
 		this.cwd = cwd;
 	}
@@ -45,7 +45,7 @@ export class ProjectNotFoundError extends Error {
 	readonly id: string;
 
 	constructor(id: string) {
-		super(`项目不存在:${id}`);
+		super(`Project does not exist: ${id}`);
 		this.name = "ProjectNotFoundError";
 		this.id = id;
 	}
@@ -108,7 +108,7 @@ export class ProjectStore {
 	/** 添加一个项目。目录重复或不是绝对路径时报错。 */
 	async add(input: { cwd: string; name?: string }): Promise<StoredProject> {
 		if (!isAbsolute(input.cwd)) {
-			throw new Error(`项目目录必须是绝对路径:${input.cwd}`);
+			throw new Error(`Project directory must be absolute: ${input.cwd}`);
 		}
 		const cwd = normalizeProjectPath(input.cwd);
 		return await this.transact((draft) => {

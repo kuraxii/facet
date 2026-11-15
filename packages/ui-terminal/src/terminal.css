@@ -7,7 +7,7 @@
 	flex: none;
 	min-height: 0;
 	border-top: 1px solid var(--line);
-	background: var(--card);
+	background: transparent;
 }
 
 /* 上缘的分隔条：贴在边上，命中区比视觉上的线宽一些 */
@@ -162,10 +162,15 @@
 	flex: 1;
 	min-width: 0;
 	min-height: 0;
+	background: transparent;
 }
 
 .term-surface .xterm {
 	height: 100%;
+}
+
+.term-surface .xterm .xterm-viewport {
+	background-color: transparent;
 }
 
 /* 开终端失败时贴在面板上方的提示 */

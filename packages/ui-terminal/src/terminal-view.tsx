@@ -24,8 +24,6 @@ export interface TerminalAppearance {
 	cursorBlink: boolean;
 	/** 回滚行数 */
 	scrollback: number;
-	/** 背景色 */
-	background: string;
 	/** 前景色 */
 	foreground: string;
 	/** 光标色 */
@@ -73,8 +71,10 @@ export function TerminalView({
 			lineHeight: appearance.lineHeight,
 			cursorBlink: appearance.cursorBlink,
 			scrollback: appearance.scrollback,
+			// 终端不铺自己的底色，透出界面背景；xterm 只有打开透明选项才接受透明主题
+			allowTransparency: true,
 			theme: {
-				background: appearance.background,
+				background: "rgba(0,0,0,0)",
 				foreground: appearance.foreground,
 				cursor: appearance.cursor,
 				selectionBackground: appearance.selection,
@@ -161,7 +161,7 @@ export function TerminalView({
 		terminal.options.lineHeight = appearance.lineHeight;
 		terminal.options.cursorBlink = appearance.cursorBlink;
 		terminal.options.theme = {
-			background: appearance.background,
+			background: "rgba(0,0,0,0)",
 			foreground: appearance.foreground,
 			cursor: appearance.cursor,
 			selectionBackground: appearance.selection,

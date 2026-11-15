@@ -4,6 +4,7 @@ import {
 	readLanguageSetting,
 	resolveLanguage,
 	type SupportedLanguage,
+	translate,
 } from "@facet/i18n";
 
 /**
@@ -50,6 +51,7 @@ function readToken(): string {
 export function installWebBridge(): void {
 	const token = readToken();
 	const i18n = createI18n(resolveLanguage(readWebLanguageSetting(), systemLanguage()));
+	const t = translate(i18n);
 
 	window.facet = {
 		projectDir: "",
@@ -71,12 +73,12 @@ export function installWebBridge(): void {
 		onLocalHostChanged: () => () => {},
 		openHostChannel: async (target, handlers) => {
 			if (target !== "local") {
-				throw new Error(i18n.t("web.onlyCurrentHost"));
+				throw new Error(t("web.onlyCurrentHost"));
 			}
 			const socket = new WebSocket(socketUrl());
 			await new Promise<void>((resolve, reject) => {
 				socket.onopen = () => resolve();
-				socket.onerror = () => reject(new Error(i18n.t("web.connectFailed", { address: location.host })));
+				socket.onerror = () => reject(new Error(t("web.connectFailed", { address: location.host })));
 			});
 			socket.onmessage = (event) => {
 				handlers.onData(typeof event.data === "string" ? event.data : "");
@@ -94,7 +96,7 @@ export function installWebBridge(): void {
 			};
 		},
 		// 浏览器里没有原生的目录选择与保存窗口，用最接近的替代
-		pickDirectory: async () => window.prompt(i18n.t("web.projectDirPrompt")) ?? undefined,
+		pickDirectory: async () => window.prompt(t("web.projectDirPrompt")) ?? undefined,
 		saveText: async (suggestedName, text) => {
 			const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
 			const url = URL.createObjectURL(blob);

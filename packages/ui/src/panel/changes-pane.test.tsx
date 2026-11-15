@@ -1,9 +1,3 @@
-/**
- * 变更页的测试。
- *
- * 渲染脚本只核对三种空态与列表里的状态字母和增删行数；展开与取补丁要交互，靠手工验证。
- */
-
 import type { GitStatus } from "@facet/protocol";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -18,7 +12,9 @@ function render(status: GitStatus | undefined, error?: string): string {
 			isLoading: false,
 			error,
 			onRefresh: () => {},
-			loadDiff: () => Promise.resolve({ patch: "", truncated: false, binary: false }),
+			commits: { isRepo: true, commits: [] },
+			commitsLoading: false,
+			commitsError: undefined,
 		}),
 	);
 }
@@ -34,7 +30,7 @@ describe("变更页", () => {
 		expect(render({ isRepo: true, branch: "main", files: [] })).toContain("工作树干净");
 	});
 
-	it("列出文件的状态、路径与增删行数", () => {
+	it("按目录分组列出文件与增删行数", () => {
 		const html = render({
 			isRepo: true,
 			branch: "dev",
@@ -47,17 +43,26 @@ describe("变更页", () => {
 		});
 		expect(html).toContain("dev");
 		expect(html).toContain("↑2 ↓1");
-		expect(html).toContain(">M<");
+		expect(html).toContain("src");
 		expect(html).toContain("app.ts");
 		expect(html).toContain("+12");
 		expect(html).toContain("−3");
 		expect(html).toContain("二进制");
-		expect(html).toContain("3 个文件");
+		expect(html).not.toContain(">M<");
 	});
 
 	it("取状态失败时给出原因与重试", () => {
 		const html = render(undefined, "git 超时");
 		expect(html).toContain("git 超时");
 		expect(html).toContain("重试");
+	});
+
+	it("文件行把完整路径放在悬停标题里", () => {
+		const html = render({
+			isRepo: true,
+			branch: "dev",
+			files: [{ path: "src/app.ts", status: "modified", added: 1, removed: 0, binary: false }],
+		});
+		expect(html).toContain('title="src/app.ts"');
 	});
 });

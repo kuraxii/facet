@@ -8,6 +8,9 @@ import {
 import type { LanguageSetting, SupportedLanguage } from "@facet/i18n";
 import type {
 	FileContent,
+	GitCommit,
+	GitCommitDetail,
+	GitCommits,
 	GitFileChange,
 	GitStatus,
 	SlashCommand,
@@ -23,22 +26,30 @@ import {
 } from "@facet/protocol";
 import {
 	ArrowDownIcon,
+	baseName,
+	ChangesDocument,
 	ChangesPane,
 	ChatOutline,
 	ChatTranscript,
 	CodeThemeProvider,
 	Composer,
 	CreateProjectDialog,
+	changesTabId,
 	clampSidebarWidth,
+	commitTabId,
 	DEFAULT_DARK_THEME,
 	EmptyState,
 	ExtensionPromptCard,
 	endpointLabel,
 	FilesPane,
+	fileTabId,
 	HostSwitcher,
 	hasEndpoint,
 	I18nProvider,
 	isDarkTheme,
+	type MainTab,
+	type MainTabItem,
+	MainTabs,
 	normalizeEndpoint,
 	normalizeUiScale,
 	PanelTabs,
@@ -61,10 +72,13 @@ import {
 	SidebarToggle,
 	SshPasswordDialog,
 	samePath,
+	sessionTabId,
+	sessionTitle,
 	stepUiScale,
 	THEME_MODES,
 	type ThemeName,
 	TrustDialog,
+	terminalTabId,
 	useI18n,
 	useStickToBottom,
 	writeHostList,
@@ -72,14 +86,8 @@ import {
 	writeSidebarWidth,
 } from "@facet/ui";
 import { FileView } from "@facet/ui-editor";
-import {
-	clampDockHeight,
-	readDockState,
-	type TerminalAppearance,
-	TerminalDock,
-	type TerminalDockState,
-	writeDockState,
-} from "@facet/ui-terminal";
+import type { TerminalAppearance } from "@facet/ui-terminal";
+import { TerminalView } from "@facet/ui-terminal";
 import { X } from "lucide-react";
 import {
 	type ReactNode,
@@ -377,6 +385,14 @@ export function App(): React.JSX.Element {
 	);
 }
 
+/** 把项目内的相对路径拼成绝对路径。 */
+function absoluteProjectPath(cwd: string, path: string): string {
+	if (path.startsWith("/")) {
+		return path;
+	}
+	return cwd.endsWith("/") ? `${cwd}${path}` : `${cwd}/${path}`;
+}
+
 function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 	const { t } = useI18n();
 	const version = useSyncExternalStore(
@@ -529,8 +545,12 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 	/** 右栏的状态；展开、分页与宽度都记在本地 */
 	const [panel, setPanel] = useState<RightPanelState>(() => readPanelState(localStorage));
 
-	/** 右栏里打开的文件；为空时显示目录树 */
-	const [openedFile, setOpenedFile] = useState<{ path: string; content: FileContent } | undefined>(undefined);
+	/** 主区域已打开的标签：会话、文件、变更文档与终端 */
+	const [mainTabs, setMainTabs] = useState<MainTab[]>([]);
+	/** 当前主区域标签；为空时显示空状态 */
+	const [activeTabId, setActiveTabId] = useState<string | undefined>(undefined);
+	/** 打开的文件内容，按主区域标签标识存 */
+	const [fileContents, setFileContents] = useState<Readonly<Record<string, FileContent>>>({});
 	/** 取文件失败的原因 */
 	const [fileError, setFileError] = useState<string | undefined>(undefined);
 
@@ -541,24 +561,29 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 	/** 变更请求的序号，只采用最后一次的结果 */
 	const changesSeq = useRef(0);
 
+	/** 提交历史的数据、加载状态与失败原因 */
+	const [commits, setCommits] = useState<{
+		data?: GitCommits;
+		isLoading: boolean;
+		error?: string;
+	}>({ isLoading: false });
+
+	/** 每个提交标签的改动详情 */
+	const [commitDetails, setCommitDetails] = useState<
+		Record<string, { detail?: GitCommitDetail; isLoading: boolean; error?: string }>
+	>({});
+	/** 每个提交标签的请求序号，避免旧结果覆盖新结果 */
+	const commitRequests = useRef(new Map<string, number>());
+
 	/** 输入区能用的命令：界面自带几条，加会话里的扩展、模板与技能 */
 	const [commands, setCommands] = useState<SlashCommand[]>([]);
 
-	/** 终端面板的状态：是否展开、高度、当前标签 */
-	const [dock, setDock] = useState<TerminalDockState>(() => readDockState(localStorage));
 	/** 主机上的终端清单，含已结束的 */
 	const [terminals, setTerminals] = useState<TerminalInfo[]>([]);
+	/** 本端关掉的终端，避免清单还没刷新时又自动补回标签 */
+	const closedTerminalIds = useRef(new Set<string>());
 	/** 开终端失败的原因 */
 	const [terminalError, setTerminalError] = useState<string | undefined>(undefined);
-
-	/** 改终端面板状态并写回本地存储。 */
-	const updateDock = useCallback((patch: Partial<TerminalDockState>) => {
-		setDock((current) => {
-			const next = { ...current, ...patch };
-			writeDockState(localStorage, next);
-			return next;
-		});
-	}, []);
 
 	/** 重新取终端清单。连不上或主机没有终端能力时按空处理。 */
 	const refreshTerminals = useCallback(async (): Promise<TerminalInfo[]> => {
@@ -588,6 +613,55 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 			const next = { ...current, ...patch };
 			writePanelState(localStorage, next);
 			return next;
+		});
+	}, []);
+
+	/** 打开或切到一个主区域标签；同一份内容只保留一个标签。 */
+	const focusMainTab = useCallback((tab: MainTab) => {
+		setMainTabs((current) =>
+			current.some((item) => item.id === tab.id)
+				? current.map((item) => (item.id === tab.id ? tab : item))
+				: [...current, tab],
+		);
+		setActiveTabId(tab.id);
+	}, []);
+
+	/** 收起一个主区域标签，并丢掉它保存的文件内容。 */
+	const removeMainTab = useCallback((id: string) => {
+		setMainTabs((current) => current.filter((item) => item.id !== id));
+		setFileContents((current) => {
+			const next = { ...current };
+			delete next[id];
+			return next;
+		});
+		setCommitDetails((current) => {
+			if (!(id in current)) {
+				return current;
+			}
+			const next = { ...current };
+			delete next[id];
+			return next;
+		});
+		commitRequests.current.delete(id);
+		setActiveTabId((current) => (current === id ? undefined : current));
+	}, []);
+
+	/** 按拖动结果重排标签；标识对不上时保持原顺序。 */
+	const reorderMainTabs = useCallback((ids: readonly string[]) => {
+		setMainTabs((current) => {
+			if (ids.length !== current.length) {
+				return current;
+			}
+			const byId = new Map(current.map((tab) => [tab.id, tab]));
+			const next: MainTab[] = [];
+			for (const id of ids) {
+				const tab = byId.get(id);
+				if (tab === undefined) {
+					return current;
+				}
+				next.push(tab);
+			}
+			return next.some((tab, index) => tab !== current[index]) ? next : current;
 		});
 	}, []);
 	const [settingsSection, setSettingsSection] = useState<SettingsSection>("models");
@@ -761,16 +835,98 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 	void version;
 
 	const session = client.sessionView();
-	/** 变更页是否正在显示：展开右栏并停在变更分页 */
-	const isChangesVisible = panel.open && panel.tab === "changes";
+	/** 变更是否正在显示：右栏停在变更分页，或主区打开着变更文档 */
+	const isChangesVisible =
+		(panel.open && panel.tab === "changes") ||
+		mainTabs.some((tab) => tab.id === activeTabId && tab.kind === "changes");
 	/** 会话所在的目录，git 命令都在它下面跑 */
 	const sessionCwd = session?.state.cwd;
+	/** 当前会话对应的主区域标签 */
+	const currentSessionTabId =
+		session === undefined
+			? undefined
+			: sessionTabId(session.state.file, client.current?.snapshot.id ?? session.channel);
+
+	// 会话打开或切换后，保证它有一个标签；首次打开时把焦点放到它上面
+	useEffect(() => {
+		if (session === undefined || currentSessionTabId === undefined) {
+			return;
+		}
+		setMainTabs((current) =>
+			current.some((item) => item.id === currentSessionTabId)
+				? current
+				: [
+						...current,
+						{
+							id: currentSessionTabId,
+							kind: "session",
+							file: session.state.file,
+							sessionId: client.current?.snapshot.id ?? session.channel,
+						},
+					],
+		);
+		setActiveTabId((current) => current ?? currentSessionTabId);
+	}, [currentSessionTabId, session]);
+
+	// 提交历史与变更状态跟着当前会话目录；换项目时丢掉旧列表并关掉对不上的变更标签
+	useEffect(() => {
+		changesSeq.current += 1;
+		setCommits({ isLoading: false });
+		setMainTabs((current) => {
+			const next = current.filter(
+				(tab) => tab.kind !== "changes" || (sessionCwd !== undefined && tab.cwd === sessionCwd),
+			);
+			return next.length === current.length ? current : next;
+		});
+	}, [sessionCwd]);
+
+	// 标签被关掉后把焦点移到剩下的第一个，避免主区域空白
+	useEffect(() => {
+		if (mainTabs.length === 0) {
+			setActiveTabId(undefined);
+			return;
+		}
+		if (activeTabId === undefined || !mainTabs.some((item) => item.id === activeTabId)) {
+			setActiveTabId(mainTabs[0]?.id);
+		}
+	}, [activeTabId, mainTabs]);
+
+	// 主机上已经打开的终端都补成标签，不抢当前焦点
+	useEffect(() => {
+		const open = terminals.filter(
+			(terminal) => !terminal.restored && !closedTerminalIds.current.has(terminal.id),
+		);
+		if (open.length === 0) {
+			return;
+		}
+		setMainTabs((current) => {
+			const missing = open.filter(
+				(terminal) => !current.some((tab) => tab.kind === "terminal" && tab.terminalId === terminal.id),
+			);
+			if (missing.length === 0) {
+				return current;
+			}
+			return [
+				...current,
+				...missing.map((terminal) => ({
+					id: terminalTabId(terminal.id),
+					kind: "terminal" as const,
+					terminalId: terminal.id,
+				})),
+			];
+		});
+	}, [terminals]);
+
+	const activeTab = mainTabs.find((item) => item.id === activeTabId);
+	const changesTab = activeTab?.kind === "changes" ? activeTab : undefined;
+	const commitTab = activeTab?.kind === "commit" ? activeTab : undefined;
+	const commitDetail = commitTab === undefined ? undefined : commitDetails[commitTab.id];
 
 	/** 终端能力：主机没装 pty 后端时不给入口 */
 	const canUseTerminal = host?.capabilities.includes("terminal") ?? false;
 	/** 新建终端的启动目录：跟着当前会话，没有会话时用第一个项目 */
 	const terminalCwd = sessionCwd ?? projects[0]?.cwd;
-	/** 终端面板不能用的原因，能用时为空 */
+	/** 终端不能用的原因，能用时为空 */
 	const terminalDisabledReason = canUseTerminal ? undefined : t("app.terminalUnavailable");
 
 	/** 终端外观：跟着界面配色与等宽字体走，主题一换就重算 */
@@ -783,7 +939,6 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 			lineHeight: 1.35,
 			cursorBlink: true,
 			scrollback: 5000,
-			background: read("--bg", "#ffffff"),
 			foreground: read("--t1", "#1a1a1e"),
 			cursor: read("--acc", "#239956"),
 			selection: read("--surface3", "#e4e4e7"),
@@ -792,96 +947,177 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 
 	/** 在当前目录开一个终端，并把它设成当前标签。 */
 	const openTerminal = useCallback(async (): Promise<void> => {
+		if (!canUseTerminal) {
+			return;
+		}
 		setTerminalError(undefined);
 		try {
 			// 尺寸先给一个常用值，视图挂上之后 fit 出来的真实尺寸会再报一次
 			const info = await terminalClient.create(terminalCwd, 100, 24);
 			await refreshTerminals();
-			updateDock({ open: true, activeId: info.id });
+			focusMainTab({ id: terminalTabId(info.id), kind: "terminal", terminalId: info.id });
 		} catch (error) {
 			setTerminalError(error instanceof Error ? error.message : String(error));
-			updateDock({ open: true });
 		}
-	}, [refreshTerminals, terminalCwd, updateDock]);
+	}, [canUseTerminal, focusMainTab, refreshTerminals, terminalCwd]);
 
-	/** 关掉一个终端，清单跟着刷新。 */
-	const killTerminal = useCallback(
-		async (id: string): Promise<void> => {
+	/** 关掉一个终端标签，进程与清单一起收尾。 */
+	const closeTerminal = useCallback(
+		async (terminalId: string): Promise<void> => {
+			closedTerminalIds.current.add(terminalId);
+			removeMainTab(terminalTabId(terminalId));
 			try {
-				await terminalClient.kill(id);
+				await terminalClient.kill(terminalId);
 			} catch {
 				// 已经结束的终端再关一次没有影响
 			}
-			const list = await refreshTerminals();
-			const next = list.find((terminal) => !terminal.restored && terminal.exit === null);
-			updateDock({ activeId: next?.id });
+			await refreshTerminals();
 		},
-		[refreshTerminals, updateDock],
+		[refreshTerminals, removeMainTab],
 	);
 
-	/** 展开或收起终端面板。 */
-	const toggleTerminal = useCallback(() => {
-		setDock((current) => {
-			const next = { ...current, open: !current.open };
-			writeDockState(localStorage, next);
-			return next;
-		});
+	/** 关掉一个主区域标签；终端还要一并结束进程。 */
+	const closeMainTab = useCallback(
+		(id: string): void => {
+			const tab = mainTabs.find((item) => item.id === id);
+			if (tab?.kind === "terminal") {
+				void closeTerminal(tab.terminalId);
+				return;
+			}
+			removeMainTab(id);
+		},
+		[closeTerminal, mainTabs, removeMainTab],
+	);
+
+	/** 一次关闭多个标签；终端仍走单个关闭流程。 */
+	const closeMainTabs = useCallback(
+		(ids: readonly string[]): void => {
+			for (const id of ids) {
+				closeMainTab(id);
+			}
+		},
+		[closeMainTab],
+	);
+
+	/** 标签菜单里的复制动作。 */
+	const copyText = useCallback((text: string): void => {
+		void navigator.clipboard.writeText(text).catch(() => undefined);
 	}, []);
 
-	// 快捷键 Ctrl + ` 开关终端面板
+	// 快捷键 Ctrl + ` 回到终端标签；没有终端时在当前目录新建一个
 	useEffect(() => {
 		const onKeyDown = (event: KeyboardEvent) => {
 			if (event.key !== "`" || !(event.ctrlKey || event.metaKey)) {
 				return;
 			}
 			event.preventDefault();
-			toggleTerminal();
+			const terminalTab = mainTabs.find((item) => item.kind === "terminal");
+			if (terminalTab !== undefined) {
+				setActiveTabId(terminalTab.id);
+				return;
+			}
+			void openTerminal();
 		};
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [toggleTerminal]);
+	}, [mainTabs, openTerminal]);
 
-	// 窗口变矮时把面板高度收回来，避免把对话挤没
-	useEffect(() => {
-		const onResize = () => {
-			setDock((current) => {
-				const next = clampDockHeight(current.height, window.innerHeight);
-				if (next === current.height) {
-					return current;
-				}
-				writeDockState(localStorage, { ...current, height: next });
-				return { ...current, height: next };
-			});
-		};
-		window.addEventListener("resize", onResize);
-		return () => window.removeEventListener("resize", onResize);
-	}, []);
-
-	/** 打开一个文件：取内容失败时把原因留在右栏。 */
+	/** 打开一个文件：取内容后放进主区域标签。 */
 	const openFile = useCallback(
 		async (path: string): Promise<void> => {
 			if (sessionCwd === undefined) {
 				return;
 			}
+			const id = fileTabId(sessionCwd, path);
 			setFileError(undefined);
 			try {
 				const content = await client.readFile(sessionCwd, path);
-				setOpenedFile({ path, content });
+				setFileContents((current) => ({ ...current, [id]: content }));
+				focusMainTab({ id, kind: "file", cwd: sessionCwd, path });
 			} catch (error) {
 				setFileError(error instanceof Error ? error.message : String(error));
 			}
 		},
-		[sessionCwd],
+		[focusMainTab, sessionCwd],
 	);
 
-	// 换会话时把打开的文件收起来
+	/** 把变更页里的一行打开到变更文档，并定位到该文件。 */
+	const openDiff = useCallback(
+		(file: GitFileChange): void => {
+			if (sessionCwd === undefined) {
+				return;
+			}
+			focusMainTab({
+				id: changesTabId(sessionCwd),
+				kind: "changes",
+				cwd: sessionCwd,
+				focusPath: file.path,
+				focusRequestId: Date.now(),
+			});
+		},
+		[focusMainTab, sessionCwd],
+	);
+
+	/** 取一次提交的改动详情；同一个标签的旧请求不会覆盖新结果。 */
+	const loadCommit = useCallback(async (tabId: string, cwd: string, sha: string): Promise<void> => {
+		const request = (commitRequests.current.get(tabId) ?? 0) + 1;
+		commitRequests.current.set(tabId, request);
+		setCommitDetails((current) => ({
+			...current,
+			[tabId]: { ...current[tabId], isLoading: true, error: undefined },
+		}));
+		try {
+			const detail = await client.gitCommit(cwd, sha);
+			if (commitRequests.current.get(tabId) === request) {
+				setCommitDetails((current) => ({
+					...current,
+					[tabId]: { detail, isLoading: false },
+				}));
+			}
+		} catch (error) {
+			if (commitRequests.current.get(tabId) === request) {
+				setCommitDetails((current) => ({
+					...current,
+					[tabId]: {
+						detail: current[tabId]?.detail,
+						isLoading: false,
+						error: error instanceof Error ? error.message : String(error),
+					},
+				}));
+			}
+		}
+	}, []);
+
+	/** 打开一次提交的改动文档；同一提交只保留一个标签。 */
+	const openCommit = useCallback(
+		(commit: GitCommit): void => {
+			if (sessionCwd === undefined) {
+				return;
+			}
+			const tabId = commitTabId(sessionCwd, commit.sha);
+			focusMainTab({
+				id: tabId,
+				kind: "commit",
+				cwd: sessionCwd,
+				sha: commit.sha,
+				shortSha: commit.shortSha,
+				subject: commit.subject,
+			});
+			const current = commitDetails[tabId];
+			if (current?.isLoading !== true && (current?.detail === undefined || current.error !== undefined)) {
+				void loadCommit(tabId, sessionCwd, commit.sha);
+			}
+		},
+		[commitDetails, focusMainTab, loadCommit, sessionCwd],
+	);
+
+	// 换会话时清掉上一个会话留下的文件错误提示
 	// biome-ignore lint/correctness/useExhaustiveDependencies: 只在会话变化时清空，状态设置函数不必列入
 	useEffect(() => {
-		setOpenedFile(undefined);
 		setFileError(undefined);
 	}, [activeFile]);
 
-	/** 重新取工作树状态。并发调用只采用最后一次的结果。 */
+	/** 重新取工作树状态与提交历史。并发调用只采用最后一次的结果。 */
 	const refreshChanges = useCallback(async (): Promise<void> => {
 		if (sessionCwd === undefined) {
 			return;
@@ -889,18 +1125,32 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 		changesSeq.current += 1;
 		const seq = changesSeq.current;
 		setChanges((current) => ({ ...current, isLoading: true, error: undefined }));
-		try {
-			const status = await client.gitStatus(sessionCwd);
-			if (seq === changesSeq.current) {
-				setChanges({ status, isLoading: false });
-			}
-		} catch (error) {
-			if (seq === changesSeq.current) {
-				setChanges({
-					isLoading: false,
-					error: error instanceof Error ? error.message : String(error),
-				});
-			}
+		setCommits((current) => ({ ...current, isLoading: true, error: undefined }));
+		const [statusResult, commitsResult] = await Promise.allSettled([
+			client.gitStatus(sessionCwd),
+			client.gitCommits(sessionCwd),
+		]);
+		if (seq !== changesSeq.current) {
+			return;
+		}
+		if (statusResult.status === "fulfilled") {
+			setChanges({ status: statusResult.value, isLoading: false });
+		} else {
+			setChanges({
+				isLoading: false,
+				error:
+					statusResult.reason instanceof Error ? statusResult.reason.message : String(statusResult.reason),
+			});
+		}
+		if (commitsResult.status === "fulfilled") {
+			setCommits({ data: commitsResult.value, isLoading: false });
+		} else {
+			setCommits((current) => ({
+				data: current.data,
+				isLoading: false,
+				error:
+					commitsResult.reason instanceof Error ? commitsResult.reason.message : String(commitsResult.reason),
+			}));
 		}
 	}, [sessionCwd]);
 
@@ -974,9 +1224,13 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 			setActiveFile(undefined);
 			setSessions([]);
 			setProjects([]);
-			setOpenedFile(undefined);
+			setTerminals([]);
+			closedTerminalIds.current.clear();
 			setChanges({ isLoading: false });
 			await client.release().catch(() => undefined);
+			setMainTabs([]);
+			setActiveTabId(undefined);
+			setFileContents({});
 			setPhase("connecting");
 			// 只握一次手：连不上就直接回到「连不上主机」那一屏，重试按钮走退避重连
 			try {
@@ -1127,7 +1381,7 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 	 * 失败留下带重试的提示,成功则清掉旧提示并刷新列表。
 	 */
 	const runSessionAction = useCallback(
-		(action: () => Promise<string | undefined>, onDone?: () => void) => {
+		(action: () => Promise<string | undefined>, onDone?: (file: string | undefined) => void) => {
 			switchSeq.current += 1;
 			const seq = switchSeq.current;
 			void (async () => {
@@ -1136,7 +1390,7 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 					if (seq !== switchSeq.current) {
 						return;
 					}
-					onDone?.();
+					onDone?.(file);
 					setActiveFile(file);
 					setSessionError(undefined);
 					await refreshSessions();
@@ -1203,13 +1457,27 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 		(path: string, knownCwd?: string) => {
 			const cwd = knownCwd ?? sessions.find((session) => session.path === path)?.cwd;
 			withTrust(cwd, () => {
-				runSessionAction(async () => {
-					await client.switchSession(path);
-					return path;
-				});
+				runSessionAction(
+					async () => {
+						await client.switchSession(path);
+						return path;
+					},
+					(file) => {
+						const opened = client.current;
+						if (file === undefined || opened === undefined) {
+							return;
+						}
+						focusMainTab({
+							id: sessionTabId(file, opened.snapshot.id),
+							kind: "session",
+							file,
+							sessionId: opened.snapshot.id,
+						});
+					},
+				);
 			});
 		},
-		[runSessionAction, sessions, withTrust],
+		[focusMainTab, runSessionAction, sessions, withTrust],
 	);
 
 	/** 新建会话，采用设置里的默认模型与思考档位；没有设置时交给主机决定。 */
@@ -1218,17 +1486,31 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 			const model = settings.defaultModel;
 			const thinkingLevel = settings.defaultThinkingLevel;
 			withTrust(cwd, () => {
-				runSessionAction(async () => {
-					const opened = await client.createSession({
-						...(cwd.length > 0 ? { cwd } : {}),
-						...(model === undefined ? {} : { model }),
-						...(thinkingLevel === undefined ? {} : { thinkingLevel }),
-					});
-					return opened.file;
-				});
+				runSessionAction(
+					async () => {
+						const opened = await client.createSession({
+							...(cwd.length > 0 ? { cwd } : {}),
+							...(model === undefined ? {} : { model }),
+							...(thinkingLevel === undefined ? {} : { thinkingLevel }),
+						});
+						return opened.file;
+					},
+					(file) => {
+						const opened = client.current;
+						if (opened === undefined) {
+							return;
+						}
+						focusMainTab({
+							id: sessionTabId(file, opened.snapshot.id),
+							kind: "session",
+							file,
+							sessionId: opened.snapshot.id,
+						});
+					},
+				);
 			});
 		},
-		[runSessionAction, settings.defaultModel, settings.defaultThinkingLevel, withTrust],
+		[focusMainTab, runSessionAction, settings.defaultModel, settings.defaultThinkingLevel, withTrust],
 	);
 
 	// 连接状态：断开时输入区说明原因，恢复后自动放开
@@ -1516,6 +1798,7 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 	const deleteSession = useCallback(
 		async (path: string) => {
 			await client.deleteSession(path);
+			setMainTabs((current) => current.filter((tab) => !(tab.kind === "session" && tab.file === path)));
 			const pool = (await refreshSessions()) ?? [];
 			if (activeFile !== path) {
 				return;
@@ -1642,6 +1925,106 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 		}),
 		[settings.appearance.codeTheme, settings.appearance.theme],
 	);
+
+	const tabItems = useMemo<MainTabItem[]>(() => {
+		return mainTabs.map((tab) => {
+			if (tab.kind === "session") {
+				const summary = sessions.find((item) => item.path === tab.file);
+				const isCurrent =
+					session !== undefined &&
+					(session.state.file === tab.file ||
+						(tab.file === undefined && (client.current?.snapshot.id ?? session.channel) === tab.sessionId));
+				const name = isCurrent ? session.state.title : summary?.name;
+				const label = sessionTitle(name, summary?.firstMessage ?? "", t("sidebar.untitled"));
+				return {
+					id: tab.id,
+					kind: tab.kind,
+					label,
+					title: tab.file ?? label,
+				};
+			}
+			if (tab.kind === "file") {
+				return {
+					id: tab.id,
+					kind: tab.kind,
+					label: tab.path,
+					title: tab.path,
+					closable: true,
+					copyPath: {
+						absolute: absoluteProjectPath(tab.cwd, tab.path),
+						relative: tab.path,
+					},
+				};
+			}
+			if (tab.kind === "diff") {
+				return {
+					id: tab.id,
+					kind: tab.kind,
+					label: `${t("mainTabs.diff")} · ${baseName(tab.path)}`,
+					title: tab.path,
+					closable: true,
+					copyPath: {
+						absolute: absoluteProjectPath(tab.cwd, tab.path),
+						relative: tab.path,
+					},
+				};
+			}
+			if (tab.kind === "changes") {
+				return {
+					id: tab.id,
+					kind: tab.kind,
+					label: t("mainTabs.changes"),
+					title: tab.cwd,
+					closable: true,
+				};
+			}
+			if (tab.kind === "commit") {
+				return {
+					id: tab.id,
+					kind: tab.kind,
+					label: t("mainTabs.commit", { sha: tab.shortSha }),
+					title: `${tab.shortSha} · ${tab.subject}`,
+					closable: true,
+				};
+			}
+			const terminal = terminals.find((item) => item.id === tab.terminalId);
+			return {
+				id: tab.id,
+				kind: tab.kind,
+				label: terminal === undefined ? t("terminal.newTerminal") : baseName(terminal.cwd),
+				title: terminal === undefined ? tab.terminalId : `${terminal.shell} · ${terminal.cwd}`,
+				closable: true,
+			};
+		});
+	}, [mainTabs, session, sessions, t, terminals]);
+
+	/** 切换标签；会话标签指向别的会话时先把它打开。 */
+	const selectMainTab = useCallback(
+		(id: string): void => {
+			const tab = mainTabs.find((item) => item.id === id);
+			if (tab === undefined) {
+				return;
+			}
+			if (tab.kind !== "session") {
+				setActiveTabId(id);
+				return;
+			}
+			const isCurrent =
+				session !== undefined &&
+				(session.state.file === tab.file ||
+					(tab.file === undefined && (client.current?.snapshot.id ?? session.channel) === tab.sessionId));
+			if (isCurrent || tab.file === undefined) {
+				setActiveTabId(id);
+				return;
+			}
+			openSession(tab.file);
+		},
+		[mainTabs, openSession, session],
+	);
+
+	const fileTab = activeTab?.kind === "file" ? activeTab : undefined;
+	const terminalTab = activeTab?.kind === "terminal" ? activeTab : undefined;
+	const fileContent = fileTab === undefined ? undefined : fileContents[fileTab.id];
 
 	const passwordDialog =
 		passwordPrompt === undefined ? null : (
@@ -1827,127 +2210,20 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 					/>
 
 					<main className="main">
-						{session === undefined ? null : <ChatOutline items={transcript} container={scrollElement} />}
-						{session === undefined ? (
-							<div className="empty-wrap">
-								{errorBar}
-								<EmptyState
-									cwd={emptyCreateCwd}
-									canCreate={phase === "ready"}
-									onCreate={() => {
-										if (emptyCreateCwd !== undefined) {
-											createSession(emptyCreateCwd);
-										}
-									}}
-									onAddProject={() => setIsProjectDialogOpen(true)}
-								/>
-							</div>
-						) : (
-							<>
-								<section className="scroll" ref={scrollRef}>
-									<div className="column">
-										<ChatTranscript
-											items={transcript}
-											canFork={canFork}
-											onFork={forkTurn}
-											canRevert={canFork}
-											onRevert={revertTo}
-											maintenance={session.state.maintenance}
-											onRetryTurn={retryTurn}
-											onCopyDetails={(text) => {
-												void navigator.clipboard.writeText(text).catch(() => undefined);
-											}}
-											onCopyText={(text) => {
-												void navigator.clipboard.writeText(text).catch(() => undefined);
-											}}
-											renames={chat?.renames}
-											emptyHint={t("app.emptyHint")}
-										/>
-									</div>
-								</section>
-
-								<div className="footer">
-									{isPinned ? null : (
-										<button
-											type="button"
-											className="to-bottom"
-											aria-label={t("app.backToBottom")}
-											onClick={() => scrollToBottom("smooth")}
-										>
-											<ArrowDownIcon size={16} />
-										</button>
-									)}
-									<div className="footer-column">
-										{errorBar}
-										{session.state.initialization.kind === "failed" ? (
-											<p className="dialog-error">{session.state.initialization.message}</p>
-										) : null}
-										<QueueStrip queued={queued} onClear={takeBackQueue} />
-										{session.state.extensionUi.prompts[0] === undefined ? null : (
-											<ExtensionPromptCard
-												key={`${host?.hostId}:${session.channel}:${session.state.extensionUi.prompts[0].requestId}`}
-												prompt={session.state.extensionUi.prompts[0]}
-												canRespond={isOnline && host?.role !== "viewer"}
-												onRespond={async (response) => {
-													await client.respondUi(
-														session.state.extensionUi.prompts[0]?.requestId ?? "",
-														response,
-														openedSessionId,
-													);
-												}}
-											/>
-										)}
-										<Composer
-											value={draft}
-											onChange={updateDraft}
-											onSend={send}
-											onStop={() => client.cancel()}
-											activity={activity}
-											model={session.state.model}
-											thinkingLevel={session.state.thinkingLevel}
-											thinkingLevels={session.state.availableThinkingLevels}
-											models={catalog.models}
-											providerAuth={providerAuth}
-											onModelChange={(next) => client.setModel({ provider: next.provider, id: next.id })}
-											onThinkingLevelChange={(level) => client.setThinkingLevel(level)}
-											shiftEnterToSend={settings.input.sendKey === "shiftEnter"}
-											isBlocked={isBlocked}
-											canStop={isOnline && host?.role !== "viewer"}
-											contextUsage={session.state.contextUsage}
-											isCompacting={activity === "compacting"}
-											canCompact={activity === "idle"}
-											onCompact={() => client.compact()}
-											commands={commands}
-											onRunCommand={(command, args) => {
-												runFacetCommand(command.name, args);
-											}}
-										/>
-
-										{notices.length > 0 ? (
-											<div className="notices">
-												{notices.map((notice) => (
-													<span
-														key={`${notice.level}:${notice.message}`}
-														className={
-															notice.level === "error"
-																? "chip is-error"
-																: notice.level === "warning"
-																	? "chip is-warn"
-																	: "chip"
-														}
-													>
-														{notice.message}
-													</span>
-												))}
-											</div>
-										) : null}
-									</div>
-								</div>
-							</>
-						)}
-
+						<MainTabs
+							tabs={tabItems}
+							activeId={activeTabId}
+							onSelect={selectMainTab}
+							onClose={closeMainTab}
+							onCloseTabs={closeMainTabs}
+							onCopyText={copyText}
+							onReorder={reorderMainTabs}
+							onCreateTerminal={() => void openTerminal()}
+							canCreateTerminal={canUseTerminal}
+							terminalDisabledReason={terminalDisabledReason}
+						/>
 						{terminalError === undefined ? null : (
-							<p className="term-dock-error">
+							<p className="main-error">
 								{terminalError}
 								<button
 									type="button"
@@ -1957,25 +2233,204 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 										void openTerminal();
 									}}
 								>
-									重试
+									{t("common.retry")}
 								</button>
 							</p>
 						)}
-						<TerminalDock
-							isOpen={dock.open}
-							height={dock.height}
-							terminals={terminals}
-							activeId={dock.activeId}
-							cwd={terminalCwd}
-							client={terminalClient}
-							appearance={terminalAppearance}
-							disabledReason={terminalDisabledReason}
-							onHeightChange={(height) => updateDock({ height })}
-							onSelect={(id) => updateDock({ activeId: id })}
-							onCreate={() => void openTerminal()}
-							onKill={(id) => void killTerminal(id)}
-							onClose={toggleTerminal}
-						/>
+						<div className="main-tab-content" id="main-tab-content">
+							{fileTab !== undefined ? (
+								<section className="main-view is-file">
+									{fileContent === undefined ? null : (
+										<FileView
+											key={fileTab.id}
+											path={fileTab.path}
+											content={fileContent}
+											onSave={(text, expectedRevision) =>
+												client.writeFile(fileTab.cwd, fileTab.path, text, expectedRevision)
+											}
+											onReload={async () => {
+												const next = await client.readFile(fileTab.cwd, fileTab.path);
+												setFileContents((current) => ({ ...current, [fileTab.id]: next }));
+												return next;
+											}}
+										/>
+									)}
+								</section>
+							) : commitTab !== undefined ? (
+								<section className="main-view is-changes">
+									<ChangesDocument
+										key={commitTab.id}
+										title={`${commitTab.shortSha} · ${commitTab.subject}`}
+										emptyMessage={t("panel.noCommitChanges")}
+										status={
+											commitDetail?.detail === undefined
+												? undefined
+												: {
+														isRepo: true,
+														branch: commitTab.shortSha,
+														files: commitDetail.detail.files,
+													}
+										}
+										isLoading={commitDetail?.isLoading ?? true}
+										error={commitDetail?.error}
+										focusPath={undefined}
+										focusRequestId={undefined}
+										loadDiff={(file: GitFileChange) =>
+											client.gitCommitDiff(commitTab.cwd, commitTab.sha, file.path, file.oldPath)
+										}
+										onRefresh={() => void loadCommit(commitTab.id, commitTab.cwd, commitTab.sha)}
+										commits={undefined}
+										commitsLoading={false}
+										commitsError={undefined}
+									/>
+								</section>
+							) : changesTab !== undefined ? (
+								<section className="main-view is-changes">
+									<ChangesDocument
+										key={changesTab.id}
+										status={changes.status}
+										isLoading={changes.isLoading}
+										error={changes.error}
+										focusPath={changesTab.focusPath}
+										focusRequestId={changesTab.focusRequestId}
+										loadDiff={(file: GitFileChange) =>
+											client.gitDiff(changesTab.cwd, file.path, file.status === "untracked")
+										}
+										onRefresh={() => void refreshChanges()}
+										commits={commits.data}
+										commitsLoading={commits.isLoading}
+										commitsError={commits.error}
+										onCommitPress={openCommit}
+									/>
+								</section>
+							) : terminalTab !== undefined ? (
+								<section className="main-view is-terminal">
+									<TerminalView
+										key={terminalTab.terminalId}
+										terminalId={terminalTab.terminalId}
+										client={terminalClient}
+										appearance={terminalAppearance}
+									/>
+								</section>
+							) : session === undefined ? (
+								<div className="empty-wrap">
+									{errorBar}
+									<EmptyState
+										cwd={emptyCreateCwd}
+										canCreate={phase === "ready"}
+										onCreate={() => {
+											if (emptyCreateCwd !== undefined) {
+												createSession(emptyCreateCwd);
+											}
+										}}
+										onAddProject={() => setIsProjectDialogOpen(true)}
+									/>
+								</div>
+							) : (
+								<>
+									<ChatOutline items={transcript} container={scrollElement} />
+									<section className="scroll" ref={scrollRef}>
+										<div className="column">
+											<ChatTranscript
+												items={transcript}
+												canFork={canFork}
+												onFork={forkTurn}
+												canRevert={canFork}
+												onRevert={revertTo}
+												maintenance={session.state.maintenance}
+												onRetryTurn={retryTurn}
+												onCopyDetails={(text) => {
+													void navigator.clipboard.writeText(text).catch(() => undefined);
+												}}
+												onCopyText={(text) => {
+													void navigator.clipboard.writeText(text).catch(() => undefined);
+												}}
+												renames={chat?.renames}
+												emptyHint={t("app.emptyHint")}
+											/>
+										</div>
+									</section>
+
+									<div className="footer">
+										{isPinned ? null : (
+											<button
+												type="button"
+												className="to-bottom"
+												aria-label={t("app.backToBottom")}
+												onClick={() => scrollToBottom("smooth")}
+											>
+												<ArrowDownIcon size={16} />
+											</button>
+										)}
+										<div className="footer-column">
+											{errorBar}
+											{session.state.initialization.kind === "failed" ? (
+												<p className="dialog-error">{session.state.initialization.message}</p>
+											) : null}
+											<QueueStrip queued={queued} onClear={takeBackQueue} />
+											{session.state.extensionUi.prompts[0] === undefined ? null : (
+												<ExtensionPromptCard
+													key={`${host?.hostId}:${session.channel}:${session.state.extensionUi.prompts[0].requestId}`}
+													prompt={session.state.extensionUi.prompts[0]}
+													canRespond={isOnline && host?.role !== "viewer"}
+													onRespond={async (response) => {
+														await client.respondUi(
+															session.state.extensionUi.prompts[0]?.requestId ?? "",
+															response,
+															openedSessionId,
+														);
+													}}
+												/>
+											)}
+											<Composer
+												value={draft}
+												onChange={updateDraft}
+												onSend={send}
+												onStop={() => client.cancel()}
+												activity={activity}
+												model={session.state.model}
+												thinkingLevel={session.state.thinkingLevel}
+												thinkingLevels={session.state.availableThinkingLevels}
+												models={catalog.models}
+												providerAuth={providerAuth}
+												onModelChange={(next) => client.setModel({ provider: next.provider, id: next.id })}
+												onThinkingLevelChange={(level) => client.setThinkingLevel(level)}
+												shiftEnterToSend={settings.input.sendKey === "shiftEnter"}
+												isBlocked={isBlocked}
+												canStop={isOnline && host?.role !== "viewer"}
+												contextUsage={session.state.contextUsage}
+												isCompacting={activity === "compacting"}
+												canCompact={activity === "idle"}
+												onCompact={() => client.compact()}
+												commands={commands}
+												onRunCommand={(command, args) => {
+													runFacetCommand(command.name, args);
+												}}
+											/>
+
+											{notices.length > 0 ? (
+												<div className="notices">
+													{notices.map((notice) => (
+														<span
+															key={`${notice.level}:${notice.message}`}
+															className={
+																notice.level === "error"
+																	? "chip is-error"
+																	: notice.level === "warning"
+																		? "chip is-warn"
+																		: "chip"
+															}
+														>
+															{notice.message}
+														</span>
+													))}
+												</div>
+											) : null}
+										</div>
+									</div>
+								</>
+							)}
+						</div>
 					</main>
 
 					{panel.open ? (
@@ -1986,49 +2441,31 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 									isLoading={changes.isLoading}
 									error={changes.error}
 									onRefresh={() => void refreshChanges()}
-									loadDiff={(file: GitFileChange) =>
+									onOpenDiff={openDiff}
+									commits={commits.data}
+									commitsLoading={commits.isLoading}
+									commitsError={commits.error}
+									onCommitPress={openCommit}
+								/>
+							) : fileError === undefined ? (
+								<FilesPane
+									loadDirectory={(path) =>
 										sessionCwd === undefined
 											? Promise.reject(new Error(t("app.noSession")))
-											: client.gitDiff(sessionCwd, file.path, file.status === "untracked")
+											: client.listDirectory(sessionCwd, path)
+									}
+									onOpenFile={(path) => void openFile(path)}
+									selectedPath={
+										fileTab !== undefined && fileTab.cwd === sessionCwd ? fileTab.path : undefined
 									}
 								/>
-							) : openedFile === undefined ? (
-								fileError === undefined ? (
-									<FilesPane
-										loadDirectory={(path) =>
-											sessionCwd === undefined
-												? Promise.reject(new Error(t("app.noSession")))
-												: client.listDirectory(sessionCwd, path)
-										}
-										onOpenFile={(path) => void openFile(path)}
-									/>
-								) : (
-									<p className="chg-note is-error">
-										{fileError}
-										<button type="button" className="chg-retry" onClick={() => setFileError(undefined)}>
-											返回目录
-										</button>
-									</p>
-								)
 							) : (
-								<FileView
-									path={openedFile.path}
-									content={openedFile.content}
-									onClose={() => setOpenedFile(undefined)}
-									onSave={(text, expectedRevision) =>
-										sessionCwd === undefined
-											? Promise.reject(new Error(t("app.noSession")))
-											: client.writeFile(sessionCwd, openedFile.path, text, expectedRevision)
-									}
-									onReload={async () => {
-										if (sessionCwd === undefined) {
-											throw new Error(t("app.noSession"));
-										}
-										const next = await client.readFile(sessionCwd, openedFile.path);
-										setOpenedFile({ path: openedFile.path, content: next });
-										return next;
-									}}
-								/>
+								<p className="chg-note is-error">
+									{fileError}
+									<button type="button" className="chg-retry" onClick={() => setFileError(undefined)}>
+										{t("editor.backToDirectory")}
+									</button>
+								</p>
 							)}
 						</RightPanel>
 					) : null}

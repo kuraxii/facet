@@ -162,7 +162,7 @@ FACET_WEB_ROOT=apps/desktop/out/renderer \
 ## 校验
 
 ```bash
-npm run typecheck   # 全部工作区的类型检查
+npm run typecheck   # 并行检查全部工作区，各包增量复用 tsbuildinfo
 npm run lint        # biome
 npm run test        # vitest，所有工作区
 ```

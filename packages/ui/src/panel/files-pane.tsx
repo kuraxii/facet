@@ -8,8 +8,9 @@
  */
 
 import type { FileEntry } from "@facet/protocol";
-import { File as FileGlyph, Folder, RefreshCw } from "lucide-react";
+import { File as FileGlyph, RefreshCw } from "lucide-react";
 import {
+	type CSSProperties,
 	type KeyboardEvent as ReactKeyboardEvent,
 	type ReactNode,
 	useCallback,
@@ -262,7 +263,7 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath }: FilesPane
 									}
 								}}
 								className={isSelected ? "tree-row is-on" : "tree-row"}
-								style={{ paddingLeft: `${6 + depth * 12}px` }}
+								style={{ "--files-depth": depth } as CSSProperties}
 								title={entry.path}
 								role="treeitem"
 								aria-level={depth + 1}
@@ -280,11 +281,10 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath }: FilesPane
 									}
 								}}
 							>
-								{isDirectory ? <TreeChevron isOpen={isOpen} size={11} /> : <span className="tree-spacer" />}
 								{isDirectory ? (
-									<Folder size={13} strokeWidth={1.5} className="tree-icon" />
+									<TreeChevron isOpen={isOpen} size={14} />
 								) : (
-									<FileGlyph size={13} strokeWidth={1.5} className="tree-icon" />
+									<FileGlyph size={14} strokeWidth={1.5} className="tree-icon" />
 								)}
 								<span className="tree-name">{entry.name}</span>
 								{state?.isLoading === true ? <span className="tree-note">…</span> : null}

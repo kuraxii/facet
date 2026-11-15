@@ -4,15 +4,15 @@
  * 未给出数值时只画一圈底环并在说明里写「暂无数据」，不把未知画成 0%。接近上限换成提醒色，
  * 越过 90% 换成错误色。点一下打开浮层，里面有具体数值与手动压缩入口。
  */
-import { createI18n } from "@facet/i18n";
+import { createI18n, type Translate, translate } from "@facet/i18n";
 import type { ContextUsage } from "@facet/protocol";
-import type { TFunction } from "i18next";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 
 const fallbackI18n = createI18n("zh-CN");
+const fallbackT = translate(fallbackI18n);
 
 /** 讲占用的说法，未知时也有一句明确的。 */
-export function usageLabel(usage: ContextUsage | undefined, t: TFunction = fallbackI18n.t): string {
+export function usageLabel(usage: ContextUsage | undefined, t: Translate = fallbackT): string {
 	if (usage === undefined || usage.tokens === null || usage.percent === null) {
 		return t("context.noData");
 	}
@@ -38,10 +38,7 @@ export function formatTokens(tokens: number): string {
 }
 
 /** 浮层中间那行：已使用的比例。估不出来时为 null，正在压缩时由界面另说一句。 */
-export function usagePercentText(
-	usage: ContextUsage | undefined,
-	t: TFunction = fallbackI18n.t,
-): string | null {
+export function usagePercentText(usage: ContextUsage | undefined, t: Translate = fallbackT): string | null {
 	if (usage === undefined || usage.percent === null || usage.tokens === null) {
 		return null;
 	}

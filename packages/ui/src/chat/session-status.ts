@@ -4,10 +4,10 @@
  * 一档对应一种画法：运行中是环，等待输入是告警图标，需要关注是实心点，失败是带描边的点，
  * 已完成是弱化的点。颜色只在这里映射一次，行、角标、分组头都从这里取。
  */
-import { createI18n } from "@facet/i18n";
-import type { TFunction } from "i18next";
+import { createI18n, type Translate, translate } from "@facet/i18n";
 
 const fallbackI18n = createI18n("zh-CN");
+const fallbackT = translate(fallbackI18n);
 
 /** 侧栏行首的状态分档。 */
 export type SessionStatusBucket = "running" | "needs_input" | "attention" | "failed" | "done";
@@ -47,7 +47,7 @@ export function statusBucketColor(bucket: SessionStatusBucket): string | undefin
 }
 
 /** 分档给人看（读屏也与它一致）的说明。 */
-export function statusBucketLabel(bucket: SessionStatusBucket, t: TFunction = fallbackI18n.t): string {
+export function statusBucketLabel(bucket: SessionStatusBucket, t: Translate = fallbackT): string {
 	switch (bucket) {
 		case "running":
 			return t("sessionStatus.running");

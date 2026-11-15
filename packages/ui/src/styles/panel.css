@@ -86,6 +86,251 @@
 	padding: 8px 0 8px 8px;
 }
 
+/* 主区域标签栏与标签内容 */
+.main-tabs {
+	display: flex;
+	flex: none;
+	align-items: center;
+	gap: var(--main-tab-gap);
+	height: var(--main-tabs-height);
+	padding: 0 var(--main-tabs-edge);
+	border-top: 1px solid var(--line);
+	border-bottom: 1px solid var(--line);
+}
+
+.main-tab-strip {
+	display: flex;
+	align-items: center;
+	gap: var(--main-tab-gap);
+	min-width: 0;
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+
+.main-tab-strip::-webkit-scrollbar {
+	display: none;
+}
+
+.main-tab {
+	position: relative;
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	max-width: 220px;
+	height: var(--main-tab-height);
+	padding: 0 4px 0 0;
+	border-radius: 6px;
+	color: var(--t3);
+	font-size: 12.5px;
+}
+
+.main-tab.is-dragging {
+	opacity: 0.45;
+}
+
+/* 拖动落点：在目标标签左侧或右侧画一条强调色竖线，位置落在标签间距里 */
+.main-tab.is-drop-before::before,
+.main-tab.is-drop-after::after {
+	content: "";
+	position: absolute;
+	top: var(--main-tab-drop-inset);
+	bottom: var(--main-tab-drop-inset);
+	width: var(--main-tab-drop-width);
+	border-radius: 1px;
+	background: var(--acc);
+	pointer-events: none;
+}
+
+.main-tab.is-drop-before::before {
+	left: 0;
+}
+
+.main-tab.is-drop-after::after {
+	right: 0;
+}
+
+.main-tab:hover {
+	background: color-mix(in srgb, var(--t1) 4%, transparent);
+	color: var(--t1);
+}
+
+.main-tab.is-on {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+.main-tab-main {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	height: 100%;
+	padding: 0 var(--main-tab-padding-x);
+	border: 0;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	cursor: grab;
+}
+
+.main-tab-main:active {
+	cursor: grabbing;
+}
+
+.main-tab-name {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.main-tab-close {
+	display: grid;
+	place-items: center;
+	flex: none;
+	width: var(--main-tab-close-size);
+	height: var(--main-tab-close-size);
+	padding: 0;
+	border: 0;
+	border-radius: 4px;
+	background: transparent;
+	color: var(--t3);
+	opacity: 0;
+}
+
+.main-tab:hover .main-tab-close,
+.main-tab:focus-within .main-tab-close {
+	opacity: 1;
+}
+
+.main-tab-close:hover {
+	background: var(--surface3);
+	color: var(--t1);
+}
+
+.main-tab-add-wrap {
+	position: relative;
+	flex: none;
+	margin-left: var(--main-tab-add-gap);
+}
+
+.main-tab-add {
+	display: grid;
+	place-items: center;
+	width: var(--main-tab-add-size);
+	height: var(--main-tab-add-size);
+	padding: 0;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--t3);
+}
+
+.main-tab-add:hover {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+.main-tab-menu {
+	position: absolute;
+	top: calc(100% + var(--main-tab-menu-gap));
+	left: 0;
+	z-index: 30;
+	width: var(--main-tab-menu-width);
+	padding: 4px;
+	border: 1px solid var(--line2);
+	border-radius: 8px;
+	background: var(--card);
+	box-shadow: 0 8px 24px rgb(0 0 0 / 32%);
+}
+
+.main-tab-menu-item {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	height: 28px;
+	padding: 0 8px;
+	border: 0;
+	border-radius: 5px;
+	background: transparent;
+	color: var(--t1);
+	font-size: 12px;
+	text-align: left;
+}
+
+.main-tab-menu-item:hover:not(:disabled) {
+	background: var(--surface2);
+}
+
+.main-tab-menu-item:disabled {
+	color: var(--t3);
+	cursor: default;
+}
+
+.main-tab-context-menu {
+	position: fixed;
+	z-index: 70;
+	width: 180px;
+}
+
+.main-tab-menu-sep {
+	height: 1px;
+	margin: 4px 6px;
+	background: var(--line);
+}
+
+.main-tab-content {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-height: 0;
+}
+
+.main-view {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-height: 0;
+	overflow: hidden;
+	padding: var(--main-view-padding-y) var(--chat-gutter-x);
+}
+
+.main-view.is-file {
+	padding: var(--editor-view-padding-y) 0;
+}
+
+.main-view.is-changes {
+	padding: 0;
+}
+
+.main-view.is-terminal {
+	padding: var(--main-terminal-padding);
+}
+
+.diff-scroll {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+}
+
+.diff-scroll .diff-body {
+	width: max-content;
+	min-width: 100%;
+}
+
+.main-error {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex: none;
+	margin: 0;
+	padding: 6px var(--chat-gutter-x);
+	background: var(--errbg);
+	color: var(--err);
+	font-size: 12px;
+}
+
 /* 增删行数的颜色，对话里的文件改动与变更页共用 */
 .add {
 	color: var(--add);
@@ -129,11 +374,18 @@
 	list-style: none;
 }
 
+.chg-line {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+}
+
 .chg-row {
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	width: 100%;
+	flex: 1;
+	min-width: 0;
 	padding: 4px 6px;
 	border: 0;
 	border-radius: 6px;
@@ -144,6 +396,30 @@
 }
 
 .chg-row:hover {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+.chg-open {
+	display: grid;
+	place-items: center;
+	flex: none;
+	width: 22px;
+	height: 22px;
+	padding: 0;
+	border: 0;
+	border-radius: 5px;
+	background: transparent;
+	color: var(--t3);
+	opacity: 0;
+}
+
+.chg-line:hover .chg-open,
+.chg-open:focus-visible {
+	opacity: 1;
+}
+
+.chg-open:hover {
 	background: var(--surface2);
 	color: var(--t1);
 }
@@ -246,8 +522,8 @@
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	margin-bottom: 4px;
-	padding: 0 2px 4px;
+	margin-bottom: 2px;
+	padding: 0 2px 2px;
 }
 
 .tree-root {
@@ -265,35 +541,34 @@
 .tree-row {
 	display: flex;
 	align-items: center;
-	gap: 5px;
+	gap: var(--files-icon-gap);
 	width: 100%;
-	height: 24px;
-	padding-right: 6px;
+	height: var(--files-row-height);
+	padding-top: 0;
+	padding-right: var(--files-trailing);
+	padding-bottom: 0;
+	padding-left: calc(var(--files-row-padding-x) + var(--files-depth, 0) * var(--files-tree-indent));
 	border: 0;
-	border-radius: 5px;
 	background: transparent;
 	color: var(--t2);
-	font-size: 12px;
+	font-size: 12.5px;
 	text-align: left;
 }
 
 .tree-row:hover {
-	background: var(--surface2);
+	background: var(--sb-row-hover);
 	color: var(--t1);
 }
 
 .tree-row.is-on {
-	background: var(--surface3);
+	background: var(--sb-row-selected);
 	color: var(--t1);
-}
-
-.tree-spacer {
-	flex: none;
-	width: 11px;
 }
 
 .tree-icon {
 	flex: none;
+	width: var(--files-icon-size);
+	height: var(--files-icon-size);
 	color: var(--t3);
 }
 
@@ -320,6 +595,19 @@
 	gap: 6px;
 	margin-bottom: 6px;
 	padding-bottom: 6px;
+}
+
+.main-view.is-file .file-head {
+	height: var(--editor-head-height);
+	margin: 0;
+	padding: 0 var(--editor-gutter-x);
+}
+
+.main-view.is-file .file-head .ib {
+	width: auto;
+	min-width: var(--editor-head-height);
+	height: var(--editor-head-height);
+	padding: 0 3px;
 }
 
 .file-path {
@@ -359,7 +647,6 @@
 	height: auto;
 	min-height: 0;
 	overflow: hidden;
-	border-radius: 6px;
 }
 
 /* 右栏里的占位说明：还没有接上内容时用 */

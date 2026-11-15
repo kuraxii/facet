@@ -8,7 +8,17 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { gitDiff, gitStatus, parseNumstat, parseStatusRecords } from "./git.ts";
+import {
+	gitCommit,
+	gitCommitDiff,
+	gitCommits,
+	gitDiff,
+	gitStatus,
+	parseCommitLog,
+	parseCommitNameStatus,
+	parseNumstat,
+	parseStatusRecords,
+} from "./git.ts";
 
 const roots: string[] = [];
 
@@ -159,5 +169,107 @@ describe("gitDiff", () => {
 		const root = await mkdtemp(join(tmpdir(), "facet-norepo-"));
 		roots.push(root);
 		expect(await gitDiff(root, "a.txt")).toEqual({ patch: "", truncated: false, binary: false });
+	});
+});
+
+describe("gitCommits", () => {
+	it("解析短哈希、说明与作者时间", () => {
+		const output = [
+			"aaa\u0000aaa1111\u0000第二个提交\u00002026-01-02T03:04:05+08:00",
+			"bbb\u0000bbb2222\u0000初始提交\u00002026-01-01T00:00:00+08:00",
+			"",
+		].join("\n");
+		expect(parseCommitLog(output)).toEqual([
+			{
+				sha: "aaa",
+				shortSha: "aaa1111",
+				subject: "第二个提交",
+				authorDate: "2026-01-02T03:04:05+08:00",
+			},
+			{
+				sha: "bbb",
+				shortSha: "bbb2222",
+				subject: "初始提交",
+				authorDate: "2026-01-01T00:00:00+08:00",
+			},
+		]);
+	});
+
+	it("从新到旧列出提交", async () => {
+		const root = await createRepo();
+		await writeFile(join(root, "tracked.txt"), "第三行\n", "utf8");
+		execFileSync("git", ["-C", root, "add", "tracked.txt"]);
+		execFileSync("git", ["-C", root, "commit", "-m", "第二个提交"]);
+		const result = await gitCommits(root);
+		expect(result.isRepo).toBe(true);
+		expect(result.commits.map((commit) => commit.subject)).toEqual(["第二个提交", "初始提交"]);
+		expect(result.commits[0]?.shortSha.length).toBeGreaterThan(0);
+		expect(Number.isNaN(Date.parse(result.commits[0]?.authorDate ?? ""))).toBe(false);
+	});
+
+	it("不是仓库时给 isRepo false", async () => {
+		const root = await mkdtemp(join(tmpdir(), "facet-norepo-"));
+		roots.push(root);
+		expect(await gitCommits(root)).toEqual({ isRepo: false, commits: [] });
+	});
+});
+
+describe("gitCommit", () => {
+	it("解析提交的 name-status，重命名保留旧路径", () => {
+		const entries = parseCommitNameStatus(
+			"M\u0000a.ts\u0000R100\u0000旧.ts\u0000新.ts\u0000D\u0000删.ts\u0000",
+		);
+		expect(entries.get("a.ts")).toEqual({ status: "modified" });
+		expect(entries.get("新.ts")).toEqual({ status: "renamed", oldPath: "旧.ts" });
+		expect(entries.get("删.ts")).toEqual({ status: "deleted" });
+	});
+
+	it("根提交把文件都算新增，并给每个文件补丁", async () => {
+		const root = await createRepo();
+		const [commit] = (await gitCommits(root)).commits;
+		expect(commit).toBeDefined();
+		const detail = await gitCommit(root, commit?.sha ?? "");
+		expect(detail.commit.shortSha).toBe(commit?.shortSha);
+		expect(detail.files).toEqual([
+			expect.objectContaining({ path: "tracked.txt", status: "added", added: 2, removed: 0 }),
+		]);
+		const diff = await gitCommitDiff(root, commit?.sha ?? "", "tracked.txt");
+		expect(diff.patch).toContain("new file mode");
+		expect(diff.patch).toContain("+第一行");
+	});
+
+	it("后续提交相对第一父提交给出修改、新增与删除", async () => {
+		const root = await createRepo();
+		await writeFile(join(root, "tracked.txt"), "第一行\n改过的第二行\n", "utf8");
+		await writeFile(join(root, "fresh.txt"), "新文件\n", "utf8");
+		execFileSync("git", ["-C", root, "add", "-A"]);
+		execFileSync("git", ["-C", root, "commit", "-m", "第二次提交"]);
+		const [commit] = (await gitCommits(root)).commits;
+		const detail = await gitCommit(root, commit?.sha ?? "");
+		const byPath = new Map(detail.files.map((file) => [file.path, file]));
+		expect(byPath.get("tracked.txt")).toMatchObject({ status: "modified", added: 1, removed: 1 });
+		expect(byPath.get("fresh.txt")).toMatchObject({ status: "added", added: 1 });
+		const diff = await gitCommitDiff(root, commit?.sha ?? "", "tracked.txt");
+		expect(diff.patch).toContain("-第二行");
+		expect(diff.patch).toContain("+改过的第二行");
+	});
+
+	it("重命名文件同时带旧路径才能取到完整补丁", async () => {
+		const root = await createRepo();
+		execFileSync("git", ["-C", root, "mv", "tracked.txt", "renamed.txt"]);
+		execFileSync("git", ["-C", root, "commit", "-m", "重命名"]);
+		const [commit] = (await gitCommits(root)).commits;
+		const detail = await gitCommit(root, commit?.sha ?? "");
+		const renamed = detail.files.find((file) => file.path === "renamed.txt");
+		expect(renamed).toMatchObject({ status: "renamed", oldPath: "tracked.txt" });
+		const diff = await gitCommitDiff(root, commit?.sha ?? "", renamed?.path ?? "", renamed?.oldPath);
+		expect(diff.patch).toContain("rename from tracked.txt");
+		expect(diff.patch).toContain("rename to renamed.txt");
+	});
+
+	it("非仓库取提交会失败", async () => {
+		const root = await mkdtemp(join(tmpdir(), "facet-norepo-"));
+		roots.push(root);
+		await expect(gitCommit(root, "abcdef0")).rejects.toThrow("not a git repository");
 	});
 });

@@ -5,11 +5,11 @@
  * 参数结构由工具决定,这里按常见字段取,取不到就退回空串。
  */
 
-import { createI18n } from "@facet/i18n";
-import type { TFunction } from "i18next";
+import { createI18n, type Translate, translate } from "@facet/i18n";
 
 /** 没有 Provider 时的中文译文。 */
 const fallbackI18n = createI18n("zh-CN");
+const fallbackT = translate(fallbackI18n);
 
 /** 摘要在头部可占的最大字符数。 */
 const MAX_TARGET = 48;
@@ -110,7 +110,7 @@ export function toolDetail(input: unknown): string {
 export function toolStatusText(
 	status: "running" | "done" | "failed" | "skipped",
 	durationMs: number | undefined,
-	t: TFunction = fallbackI18n.t,
+	t: Translate = fallbackT,
 ): string {
 	if (status === "running") {
 		return t("transcript.running");

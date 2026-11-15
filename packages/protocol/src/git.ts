@@ -1,5 +1,5 @@
 /**
- * 工作树的改动状态。
+ * 工作树的改动状态与最近提交。
  *
  * 变更侧栏只看 git：工作树相对 HEAD 的差异，已暂存与未暂存合并成一份。这里的结构是主机
  * 算出来之后直接给界面用的，字段尽量与界面展示一一对应，界面不再自己推断状态。
@@ -22,6 +22,34 @@ export interface GitFileChange {
 	removed: number;
 	/** 是否是二进制文件，补丁不展开 */
 	binary: boolean;
+}
+
+/** 最近的一条提交。 */
+export interface GitCommit {
+	/** 完整提交哈希 */
+	sha: string;
+	/** 短哈希，列表里显示 */
+	shortSha: string;
+	/** 提交说明的第一行 */
+	subject: string;
+	/** 作者时间，ISO 8601 */
+	authorDate: string;
+}
+
+/** 提交清单。 */
+export interface GitCommits {
+	/** 项目根是不是一个 git 仓库 */
+	isRepo: boolean;
+	/** 从新到旧排列的提交 */
+	commits: readonly GitCommit[];
+}
+
+/** 某一次提交相对第一父提交的改动。 */
+export interface GitCommitDetail {
+	/** 提交自身的信息 */
+	commit: GitCommit;
+	/** 这次提交改动的文件，按路径排序 */
+	files: readonly GitFileChange[];
 }
 
 /** 工作树的整体状态。 */

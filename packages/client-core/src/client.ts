@@ -20,6 +20,8 @@ import type {
 	FileContent,
 	FileEntry,
 	FileWriteResult,
+	GitCommitDetail,
+	GitCommits,
 	GitDiff,
 	GitStatus,
 	ModelInfo,
@@ -365,6 +367,24 @@ export class SessionClient {
 	 */
 	async gitStatus(cwd: string): Promise<GitStatus> {
 		return await this.transport.request("gitStatus", { cwd });
+	}
+
+	/** 列出当前分支的全部提交，从新到旧。 */
+	async gitCommits(cwd: string): Promise<GitCommits> {
+		return await this.transport.request("gitCommits", { cwd });
+	}
+
+	/** 取一次提交相对第一父提交的改动清单。 */
+	async gitCommit(cwd: string, sha: string): Promise<GitCommitDetail> {
+		return await this.transport.request("gitCommit", { cwd, sha });
+	}
+
+	/** 取一次提交里某个文件的补丁；重命名文件同时带上旧路径。 */
+	async gitCommitDiff(cwd: string, sha: string, path: string, oldPath?: string): Promise<GitDiff> {
+		return await this.transport.request(
+			"gitCommitDiff",
+			oldPath === undefined ? { cwd, sha, path } : { cwd, sha, path, oldPath },
+		);
 	}
 
 	/** 取单个文件的补丁；未跟踪文件由主机按「从空文件新增」合成。 */

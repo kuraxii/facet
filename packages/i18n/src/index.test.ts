@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { createI18n, normalizeSystemLanguage, readLanguageSetting, resolveLanguage } from "./index.ts";
+import {
+	createI18n,
+	normalizeSystemLanguage,
+	readLanguageSetting,
+	resolveLanguage,
+	translate,
+} from "./index.ts";
 
 describe("normalizeSystemLanguage", () => {
 	it("中文区域统一落到 zh-CN", () => {
@@ -54,5 +60,13 @@ describe("createI18n", () => {
 
 	it("未知语言回退到 en", () => {
 		expect(createI18n("ja").t("settings.language")).toBe("Language");
+	});
+});
+
+describe("translate", () => {
+	it("保留复数基名并返回字符串", () => {
+		const t = translate(createI18n("en"));
+		expect(t("panel.filesCount", { count: 2 })).toBe("2 files");
+		expect(t("panel.filesCount", { count: 1 })).toBe("1 file");
 	});
 });

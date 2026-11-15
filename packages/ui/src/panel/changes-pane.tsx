@@ -1,26 +1,18 @@
 /**
  * 变更页。
  *
- * 列工作树相对 HEAD 的改动：分支与上下游、每个文件的状态与增删行数，点开在列表里就地看
- * unified diff。数据全部来自主机的 git，不读工具返回的补丁。
+ * 列工作树相对 HEAD 的改动：分支与上下游、按目录分组的文件、每个文件的状态图标与增删
+ * 行数。点文件在主区域打开变更文档；这里不展开补丁。
  */
 
-import type { GitDiff, GitFileChange, GitFileStatus, GitStatus } from "@facet/protocol";
-import { RefreshCw } from "lucide-react";
-import { type ReactNode, useCallback, useState } from "react";
+import type { GitCommit, GitCommits, GitFileChange, GitStatus } from "@facet/protocol";
+import { ChevronRight, FileText, RefreshCw } from "lucide-react";
+import { type CSSProperties, type ReactNode, useCallback, useMemo, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
-import { ChevronIcon } from "../transcript/chevron.tsx";
-import { lineClass, patchLines } from "../transcript/diff-lines.ts";
-
-/** 状态字母。 */
-const STATUS_LETTER: Record<GitFileStatus, string> = {
-	added: "A",
-	modified: "M",
-	deleted: "D",
-	renamed: "R",
-	untracked: "?",
-	conflicted: "!",
-};
+import styles from "./changes.module.css";
+import { ChangeMark, changeStatusLabelKey } from "./changes-mark.tsx";
+import { buildChangesTree, type ChangesTreeRow, flattenChangesTree } from "./changes-tree.ts";
+import { CommitHistory } from "./commit-history.tsx";
 
 export interface ChangesPaneProps {
 	/** 工作树状态；还没取到时为空 */
@@ -31,159 +23,149 @@ export interface ChangesPaneProps {
 	error: string | undefined;
 	/** 重新取状态 */
 	onRefresh: () => void;
-	/** 取某个文件的补丁 */
-	loadDiff: (file: GitFileChange) => Promise<GitDiff>;
+	/** 在主区域打开某个文件的补丁 */
+	onOpenDiff?: (file: GitFileChange) => void;
+	/** 当前项目的提交历史 */
+	commits: GitCommits | undefined;
+	/** 正在取提交历史 */
+	commitsLoading: boolean;
+	/** 取提交历史失败的原因 */
+	commitsError: string | undefined;
+	/** 点一条提交时打开它的改动 */
+	onCommitPress?: (commit: GitCommit) => void;
 }
 
-/** 一条改动记录的一行。 */
-function ChangeRow({
-	file,
-	isOpen,
+/** 行首缩进。 */
+function rowStyle(depth: number): CSSProperties {
+	return { "--changes-depth": depth } as CSSProperties;
+}
+
+/** 目录行。 */
+function FolderRow({
+	row,
 	onToggle,
-	diff,
-	diffError,
-	isLoadingDiff,
-	onRetryDiff,
 }: {
-	file: GitFileChange;
-	isOpen: boolean;
-	onToggle: () => void;
-	diff: GitDiff | undefined;
-	diffError: string | undefined;
-	isLoadingDiff: boolean;
-	onRetryDiff: () => void;
+	row: Extract<ChangesTreeRow, { kind: "folder" }>;
+	onToggle: (path: string) => void;
 }): ReactNode {
-	const { t } = useI18n();
-	const statusTitle =
-		file.status === "added"
-			? t("panel.status.added")
-			: file.status === "modified"
-				? t("panel.status.modified")
-				: file.status === "deleted"
-					? t("panel.status.deleted")
-					: file.status === "renamed"
-						? t("panel.status.renamed")
-						: file.status === "untracked"
-							? t("panel.status.untracked")
-							: t("panel.status.conflicted");
-	const name = file.path.split("/").pop() ?? file.path;
-	const directory = file.path.slice(0, Math.max(0, file.path.length - name.length - 1));
 	return (
-		<li className="chg-item">
-			<button type="button" className="chg-row" onClick={onToggle} aria-expanded={isOpen}>
-				<ChevronIcon isOpen={isOpen} size={11} />
-				<span className={`chg-status is-${file.status}`} title={statusTitle}>
-					{STATUS_LETTER[file.status]}
-				</span>
-				<span className="chg-name" title={file.path}>
-					{name}
-				</span>
-				{directory.length === 0 ? null : <span className="chg-dir">{directory}</span>}
-				<span className="chg-counts">
-					{file.binary ? (
-						<span className="chg-binary">{t("panel.binary")}</span>
-					) : (
-						<>
-							<b className="add">+{file.added}</b>
-							<b className="del">−{file.removed}</b>
-						</>
-					)}
-				</span>
+		<li className={styles.item}>
+			<button
+				type="button"
+				className={styles.row}
+				style={rowStyle(row.depth)}
+				data-open={!row.collapsed}
+				aria-expanded={!row.collapsed}
+				onClick={() => onToggle(row.path)}
+			>
+				<ChevronRight className={styles.chevron} size={14} strokeWidth={1.5} data-open={!row.collapsed} />
+				<span className={styles.name}>{row.name}</span>
 			</button>
-			{isOpen ? (
-				<div className="chg-diff">
-					{isLoadingDiff ? <p className="chg-note">{t("panel.loadingDiff")}</p> : null}
-					{diffError === undefined ? null : (
-						<p className="chg-note is-error">
-							{diffError}
-							<button type="button" className="chg-retry" onClick={onRetryDiff}>
-								{t("common.retry")}
-							</button>
-						</p>
-					)}
-					{diff === undefined ? null : diff.binary ? (
-						<p className="chg-note">{t("panel.binaryDiff")}</p>
-					) : diff.patch.trim().length === 0 ? (
-						<p className="chg-note">{t("panel.noDiff")}</p>
-					) : (
-						<>
-							{diff.truncated ? <p className="chg-note">{t("panel.truncatedDiff")}</p> : null}
-							<div className="diff-body">
-								{patchLines(diff.patch).map(({ key, line, number }) => (
-									<div key={key} className={`diff-line ${lineClass(line)}`}>
-										<i>{number}</i>
-										<span>{line}</span>
-									</div>
-								))}
-							</div>
-						</>
-					)}
-				</div>
-			) : null}
 		</li>
 	);
 }
 
-export function ChangesPane({ status, isLoading, error, onRefresh, loadDiff }: ChangesPaneProps) {
+/** 文件行。 */
+function FileRow({
+	row,
+	isSelected,
+	onSelect,
+	onOpenDiff,
+}: {
+	row: Extract<ChangesTreeRow, { kind: "file" }>;
+	isSelected: boolean;
+	onSelect: (path: string) => void;
+	onOpenDiff: ((file: GitFileChange) => void) | undefined;
+}): ReactNode {
 	const { t } = useI18n();
-	/** 展开的文件路径，一次只展开一个 */
-	const [openPath, setOpenPath] = useState<string | undefined>(undefined);
-	const [diffs, setDiffs] = useState<Readonly<Record<string, GitDiff>>>({});
-	const [diffErrors, setDiffErrors] = useState<Readonly<Record<string, string>>>({});
-	const [loadingPath, setLoadingPath] = useState<string | undefined>(undefined);
-
-	/** 取补丁，结果按路径缓存；失败也记下来，给重试入口。 */
-	const fetchDiff = useCallback(
-		async (file: GitFileChange): Promise<void> => {
-			setLoadingPath(file.path);
-			setDiffErrors((current) => {
-				const next = { ...current };
-				delete next[file.path];
-				return next;
-			});
-			try {
-				const diff = await loadDiff(file);
-				setDiffs((current) => ({ ...current, [file.path]: diff }));
-			} catch (loadError) {
-				setDiffErrors((current) => ({
-					...current,
-					[file.path]: loadError instanceof Error ? loadError.message : String(loadError),
-				}));
-			} finally {
-				setLoadingPath((current) => (current === file.path ? undefined : current));
-			}
-		},
-		[loadDiff],
+	const file = row.file;
+	const name = file.path.split("/").pop() ?? file.path;
+	const statusLabel = t(changeStatusLabelKey(file.status));
+	const open = useCallback(() => {
+		onSelect(file.path);
+		onOpenDiff?.(file);
+	}, [file, onOpenDiff, onSelect]);
+	return (
+		<li className={styles.item}>
+			<button
+				type="button"
+				className={styles.row}
+				style={rowStyle(row.depth)}
+				data-selected={isSelected}
+				title={file.path}
+				onClick={open}
+			>
+				<FileText className={styles.fileIcon} size={14} strokeWidth={1.5} />
+				<span className={styles.name}>{name}</span>
+				{file.binary ? (
+					<span className={styles.binary}>{t("panel.binary")}</span>
+				) : (
+					<span className={styles.stats}>
+						<b className={styles.add}>+{file.added}</b>
+						<b className={styles.del}>−{file.removed}</b>
+					</span>
+				)}
+				<span className={styles.change} data-status={file.status} role="img" aria-label={statusLabel}>
+					<ChangeMark status={file.status} />
+				</span>
+			</button>
+		</li>
 	);
+}
 
-	/** 点一行：已展开就收起，未展开就先收起别的再展开它。 */
-	const toggle = useCallback(
-		(file: GitFileChange): void => {
-			if (openPath === file.path) {
-				setOpenPath(undefined);
-				return;
+/** 变更页。 */
+export function ChangesPane({
+	status,
+	isLoading,
+	error,
+	onRefresh,
+	onOpenDiff,
+	commits,
+	commitsLoading,
+	commitsError,
+	onCommitPress,
+}: ChangesPaneProps): ReactNode {
+	const { t } = useI18n();
+	const [collapsedFolders, setCollapsedFolders] = useState<ReadonlySet<string>>(new Set());
+	const [selectedPath, setSelectedPath] = useState<string | undefined>(undefined);
+
+	const tree = useMemo(() => buildChangesTree(status?.files ?? []), [status?.files]);
+	const rows = useMemo(() => flattenChangesTree(tree, collapsedFolders), [collapsedFolders, tree]);
+
+	const toggleFolder = useCallback((path: string) => {
+		setCollapsedFolders((current) => {
+			const next = new Set(current);
+			if (next.has(path)) {
+				next.delete(path);
+			} else {
+				next.add(path);
 			}
-			setOpenPath(file.path);
-			if (diffs[file.path] === undefined && diffErrors[file.path] === undefined) {
-				void fetchDiff(file);
-			}
-		},
-		[diffErrors, diffs, fetchDiff, openPath],
-	);
+			return next;
+		});
+	}, []);
+
+	const totalAdded = status?.files.reduce((sum, file) => sum + file.added, 0) ?? 0;
+	const totalRemoved = status?.files.reduce((sum, file) => sum + file.removed, 0) ?? 0;
 
 	const header = (
-		<div className="chg-head">
-			<span className="chg-branch mono" title={status?.branch ?? ""}>
+		<div className={styles.head}>
+			<span className={styles.branch} title={status?.branch ?? ""}>
 				{status?.branch ?? "…"}
 				{status?.upstream === undefined ? null : (
-					<span className="chg-upstream">
+					<span className={styles.upstream}>
 						↑{status.upstream.ahead} ↓{status.upstream.behind}
 					</span>
 				)}
 			</span>
+			{status === undefined ? null : (
+				<span className={styles.total}>
+					<b className={styles.add}>+{totalAdded}</b>
+					<b className={styles.del}>−{totalRemoved}</b>
+				</span>
+			)}
 			<button
 				type="button"
-				className="ib"
+				className={styles.iconButton}
 				aria-label={t("panel.refreshChanges")}
 				title={t("panel.refreshChanges")}
 				onClick={onRefresh}
@@ -194,71 +176,52 @@ export function ChangesPane({ status, isLoading, error, onRefresh, loadDiff }: C
 		</div>
 	);
 
+	let body: ReactNode;
 	if (error !== undefined) {
-		return (
-			<>
-				{header}
-				<p className="chg-note is-error">
-					{error}
-					<button type="button" className="chg-retry" onClick={onRefresh}>
-						{t("common.retry")}
-					</button>
-				</p>
-			</>
+		body = (
+			<p className={`${styles.note} ${styles.noteError}`}>
+				{error}
+				<button type="button" className={styles.retry} onClick={onRefresh}>
+					{t("common.retry")}
+				</button>
+			</p>
+		);
+	} else if (status === undefined) {
+		body = <p className={styles.note}>{t("panel.loadingChanges")}</p>;
+	} else if (!status.isRepo) {
+		body = <p className={styles.note}>{t("panel.notRepo")}</p>;
+	} else if (status.files.length === 0) {
+		body = <p className={styles.note}>{t("panel.clean")}</p>;
+	} else {
+		body = (
+			<ul className={styles.tree}>
+				{rows.map((row) =>
+					row.kind === "folder" ? (
+						<FolderRow key={`folder:${row.path}`} row={row} onToggle={toggleFolder} />
+					) : (
+						<FileRow
+							key={`file:${row.file.path}`}
+							row={row}
+							isSelected={selectedPath === row.file.path}
+							onSelect={setSelectedPath}
+							onOpenDiff={onOpenDiff}
+						/>
+					),
+				)}
+			</ul>
 		);
 	}
-
-	if (status === undefined) {
-		return (
-			<>
-				{header}
-				<p className="chg-note">{t("panel.loadingChanges")}</p>
-			</>
-		);
-	}
-
-	if (!status.isRepo) {
-		return (
-			<>
-				{header}
-				<p className="chg-note">{t("panel.notRepo")}</p>
-			</>
-		);
-	}
-
-	if (status.files.length === 0) {
-		return (
-			<>
-				{header}
-				<p className="chg-note">{t("panel.clean")}</p>
-			</>
-		);
-	}
-
-	const totalAdded = status.files.reduce((sum, file) => sum + file.added, 0);
-	const totalRemoved = status.files.reduce((sum, file) => sum + file.removed, 0);
 
 	return (
-		<>
+		<div className={styles.pane}>
 			{header}
-			<ul className="chg-list">
-				{status.files.map((file) => (
-					<ChangeRow
-						key={file.path}
-						file={file}
-						isOpen={openPath === file.path}
-						onToggle={() => toggle(file)}
-						diff={diffs[file.path]}
-						diffError={diffErrors[file.path]}
-						isLoadingDiff={loadingPath === file.path}
-						onRetryDiff={() => void fetchDiff(file)}
-					/>
-				))}
-			</ul>
-			<p className="chg-total">
-				{t("panel.filesCount", { count: status.files.length })} · <b className="add">+{totalAdded}</b>{" "}
-				<b className="del">−{totalRemoved}</b>
-			</p>
-		</>
+			{body}
+			<CommitHistory
+				commits={commits}
+				isLoading={commitsLoading}
+				error={commitsError}
+				onCommitPress={onCommitPress}
+			/>
+		</div>
 	);
 }

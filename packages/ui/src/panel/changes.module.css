@@ -1,0 +1,491 @@
+/* 变更侧栏与变更文档：树行、文件头与补丁行共用一套行高和缩进。 */
+
+.pane,
+.document {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-height: 0;
+}
+
+.head,
+.docToolbar {
+	display: flex;
+	align-items: center;
+	gap: var(--changes-icon-gap);
+	flex: none;
+	padding: 8px var(--changes-trailing) 6px;
+	border-bottom: 1px solid var(--line);
+}
+
+.branch {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	color: var(--t2);
+	font-size: 12px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.upstream {
+	margin-left: 6px;
+	color: var(--t3);
+	font-size: 11px;
+}
+
+.total {
+	display: flex;
+	flex: none;
+	gap: var(--changes-stat-gap);
+	font-family: var(--font-mono);
+	font-size: 11px;
+}
+
+.add {
+	color: var(--add);
+	font-weight: 400;
+}
+
+.del {
+	color: var(--del);
+	font-weight: 400;
+}
+
+.iconButton {
+	display: grid;
+	place-items: center;
+	flex: none;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	border: 0;
+	border-radius: 5px;
+	background: transparent;
+	color: var(--t3);
+}
+
+.iconButton:hover:not(:disabled),
+.iconButton[data-on="true"] {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+.iconButton:disabled {
+	color: var(--t3);
+	opacity: 0.4;
+}
+
+.tree {
+	flex: 1;
+	min-height: 0;
+	margin: 0;
+	padding: 4px 0 12px;
+	overflow: auto;
+	list-style: none;
+}
+
+.item {
+	margin: 0;
+	padding: 0;
+}
+
+.row {
+	display: flex;
+	align-items: center;
+	gap: var(--changes-icon-gap);
+	width: 100%;
+	height: var(--changes-row-height);
+	padding-top: 0;
+	padding-right: var(--changes-trailing);
+	padding-bottom: 0;
+	padding-left: calc(var(--changes-row-padding-x) + var(--changes-depth, 0) * var(--changes-tree-indent));
+	border: 0;
+	background: transparent;
+	color: var(--t2);
+	font-size: 13px;
+	text-align: left;
+}
+
+.row:hover {
+	background: var(--sb-row-hover);
+	color: var(--t1);
+}
+
+.row[data-selected="true"] {
+	background: var(--sb-row-selected);
+	color: var(--t1);
+}
+
+.chevron {
+	flex: none;
+	width: var(--changes-icon-size);
+	height: var(--changes-icon-size);
+	color: var(--t3);
+	transition: transform var(--dur-fast) var(--ease);
+}
+
+.chevron[data-open="true"] {
+	transform: rotate(90deg);
+}
+
+.fileIcon {
+	flex: none;
+	width: var(--changes-icon-size);
+	height: var(--changes-icon-size);
+	color: var(--t3);
+}
+
+.name {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	opacity: 0.76;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.row:hover .name,
+.row[data-selected="true"] .name {
+	opacity: 1;
+}
+
+.stats {
+	display: flex;
+	flex: none;
+	gap: var(--changes-stat-gap);
+	margin-left: auto;
+	font-family: var(--font-mono);
+	font-size: 11px;
+}
+
+.binary {
+	flex: none;
+	margin-left: auto;
+	color: var(--t3);
+	font-size: 11px;
+}
+
+.change {
+	display: grid;
+	flex: none;
+	place-items: center;
+	width: var(--changes-icon-size);
+	height: var(--changes-icon-size);
+}
+
+.change[data-status="added"],
+.change[data-status="untracked"] {
+	color: var(--ok);
+}
+
+.change[data-status="deleted"],
+.change[data-status="conflicted"] {
+	color: var(--err);
+}
+
+.change[data-status="modified"],
+.change[data-status="renamed"] {
+	color: var(--warn);
+}
+
+.note {
+	margin: 10px 12px;
+	color: var(--t3);
+	font-size: 12px;
+	line-height: 1.6;
+}
+
+.noteError {
+	color: var(--err);
+}
+
+.retry {
+	margin-left: 6px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--acc);
+	font-size: 12px;
+}
+
+.docToolbar {
+	padding-right: 12px;
+	padding-left: 12px;
+}
+
+.docScroll {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	scrollbar-gutter: stable;
+}
+
+.section {
+	border-bottom: 1px solid var(--line);
+	content-visibility: auto;
+	contain-intrinsic-size: auto 120px;
+}
+
+.fileHeader {
+	position: sticky;
+	top: 0;
+	z-index: 2;
+	height: var(--changes-header-height);
+	border-bottom: 1px solid var(--line);
+	background: var(--bg);
+}
+
+.fileHeaderButton {
+	display: flex;
+	align-items: center;
+	gap: var(--changes-icon-gap);
+	width: 100%;
+	height: 100%;
+	padding: 0 12px 0 8px;
+	border: 0;
+	background: transparent;
+	color: var(--t1);
+	font-size: 13px;
+	text-align: left;
+}
+
+.fileHeaderButton:hover {
+	background: var(--sb-row-hover);
+}
+
+.section[data-focused="true"] .fileHeader {
+	background: var(--surface2);
+}
+
+.fileName {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.fileDir {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	color: var(--t3);
+	font-size: 12px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.fileBody {
+	background: var(--bg);
+}
+
+.loading {
+	height: 40px;
+	margin: 8px 12px;
+	border-radius: 6px;
+	background: var(--surface2);
+	animation: changes-loading 1.2s var(--ease) infinite alternate;
+}
+
+@keyframes changes-loading {
+	from {
+		opacity: 0.45;
+	}
+
+	to {
+		opacity: 0.9;
+	}
+}
+
+.diffBody {
+	overflow-x: auto;
+	font-family: var(--font-mono);
+	font-size: 11.5px;
+	line-height: var(--changes-line-height);
+}
+
+.diffLine {
+	display: flex;
+	width: max-content;
+	min-width: 100%;
+	padding: 0 10px;
+	box-sizing: border-box;
+}
+
+.diffLine i {
+	flex: none;
+	width: var(--changes-line-number-width);
+	padding-right: 10px;
+	color: var(--t3);
+	font-style: normal;
+	text-align: right;
+}
+
+.diffLine span {
+	white-space: pre;
+}
+
+.diffLine:global(.is-add) {
+	background: color-mix(in srgb, var(--add) 15%, transparent);
+	color: var(--add);
+}
+
+.diffLine:global(.is-del) {
+	background: color-mix(in srgb, var(--del) 10%, transparent);
+	color: var(--del);
+}
+
+.diffLine:global(.is-meta) {
+	color: var(--t3);
+}
+
+.diffBody[data-wrap="true"] .diffLine {
+	width: auto;
+	min-width: 0;
+}
+
+.diffBody[data-wrap="true"] .diffLine span {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+/* 提交历史：可折叠区，列表最多占一段固定高度，不把变更树或补丁挤出视口 */
+.commitSection {
+	display: flex;
+	flex: none;
+	flex-direction: column;
+	min-height: 0;
+	margin-top: auto;
+	border-top: 1px solid var(--line);
+}
+
+.commitSection[data-open="true"] {
+	flex: 0 1 auto;
+	max-height: var(--commit-section-max-height);
+}
+
+.commitHeader {
+	display: flex;
+	align-items: center;
+	gap: var(--changes-icon-gap);
+	width: 100%;
+	height: var(--changes-header-height);
+	padding: 0 var(--changes-trailing);
+	border: 0;
+	background: transparent;
+	color: var(--t2);
+	text-align: left;
+}
+
+.commitHeader:hover {
+	background: var(--sb-row-hover);
+	color: var(--t1);
+}
+
+.commitTitle {
+	font-size: 13px;
+}
+
+.commitCount {
+	margin-left: auto;
+	color: var(--t3);
+	font-family: var(--font-mono);
+	font-size: 11px;
+}
+
+.commitList {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+}
+
+.commitSkeleton {
+	height: var(--commit-row-height);
+	margin: 2px var(--changes-trailing);
+	border-radius: 5px;
+	background: var(--surface2);
+	animation: changes-loading 1.2s var(--ease) infinite alternate;
+}
+
+.commitRow {
+	display: flex;
+	content-visibility: auto;
+	contain-intrinsic-size: auto var(--commit-row-height);
+	align-items: center;
+	gap: var(--changes-icon-gap);
+	width: 100%;
+	height: var(--commit-row-height);
+	padding: 0 var(--changes-trailing);
+	border: 0;
+	background: transparent;
+	color: var(--t2);
+	font-size: 12px;
+	text-align: left;
+}
+
+.commitRow:hover {
+	background: var(--sb-row-hover);
+	color: var(--t1);
+}
+
+.commitGraph {
+	position: relative;
+	display: grid;
+	flex: none;
+	place-items: center;
+	width: var(--commit-graph-width);
+	align-self: stretch;
+}
+
+.commitGraph::before {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 2px;
+	background: var(--line);
+	content: "";
+}
+
+.commitGraph[data-first="true"]::before {
+	top: 50%;
+}
+
+.commitGraph[data-last="true"]::before {
+	bottom: 50%;
+}
+
+.commitDot {
+	position: relative;
+	z-index: 1;
+	width: var(--commit-graph-width);
+	height: var(--commit-graph-width);
+	border: 2px solid var(--acc);
+	border-radius: 50%;
+	background: var(--bg);
+}
+
+.commitSha {
+	flex: none;
+	width: var(--commit-sha-width);
+	overflow: hidden;
+	color: var(--t3);
+	font-family: var(--font-mono);
+	font-size: 11px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.commitSubject {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.commitTime {
+	flex: none;
+	color: var(--t3);
+	font-size: 11px;
+}

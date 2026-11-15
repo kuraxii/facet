@@ -15,6 +15,7 @@
 		"isolatedModules": true,
 		"verbatimModuleSyntax": true,
 		"resolveJsonModule": true,
+		"incremental": true,
 		"noEmit": true,
 		"types": []
 	}

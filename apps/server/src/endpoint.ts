@@ -39,7 +39,7 @@ import { AuditLog } from "./audit.ts";
 import type { ServerConfig } from "./config.ts";
 import { buildDiagnostics } from "./diagnostics.ts";
 import { FileAccessError, listDirectory, readTextFile, writeTextFile } from "./files.ts";
-import { gitDiff, gitStatus } from "./git.ts";
+import { gitCommit, gitCommitDiff, gitCommits, gitDiff, gitStatus } from "./git.ts";
 import type { HostSource } from "./host-identity.ts";
 import { ProjectExistsError, ProjectNotFoundError, type ProjectStore } from "./project-store.ts";
 import { DisabledPtyBackend } from "./pty-server.ts";
@@ -639,6 +639,23 @@ async function handleRequest(
 			const source = asObject(params);
 			const cwd = await resolveProjectDirectory(requiredString(source, "cwd"));
 			return await gitDiff(cwd, requiredString(source, "path"), source.untracked === true);
+		}
+		case "gitCommits":
+			return await gitCommits(await resolveProjectDirectory(requiredString(asObject(params), "cwd")));
+		case "gitCommit": {
+			const source = asObject(params);
+			const cwd = await resolveProjectDirectory(requiredString(source, "cwd"));
+			return await gitCommit(cwd, requiredString(source, "sha"));
+		}
+		case "gitCommitDiff": {
+			const source = asObject(params);
+			const cwd = await resolveProjectDirectory(requiredString(source, "cwd"));
+			return await gitCommitDiff(
+				cwd,
+				requiredString(source, "sha"),
+				requiredString(source, "path"),
+				optionalString(source, "oldPath"),
+			);
 		}
 		case "listProjects":
 			return { projects: [...context.projectStore.list()] };

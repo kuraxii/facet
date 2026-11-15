@@ -87,7 +87,7 @@ export {
 } from "./chat/ui-scale.ts";
 export type { StickToBottom } from "./chat/use-stick-to-bottom.ts";
 export { useStickToBottom } from "./chat/use-stick-to-bottom.ts";
-export type { I18nProviderProps } from "./i18n/I18nProvider.tsx";
+export type { I18nProviderProps, I18nValue } from "./i18n/I18nProvider.tsx";
 export { I18nProvider, useI18n } from "./i18n/I18nProvider.tsx";
 export type { CodeBlockShape } from "./markdown/code-block-state.ts";
 export { shouldShowCodeBlock } from "./markdown/code-block-state.ts";
@@ -96,10 +96,25 @@ export type { CodeThemeValue } from "./markdown/code-theme.tsx";
 export { CodeThemeProvider, useCodeTheme } from "./markdown/code-theme.tsx";
 export type { MarkdownProps } from "./markdown/Markdown.tsx";
 export { Markdown } from "./markdown/Markdown.tsx";
+export type { ChangesDocumentProps } from "./panel/changes-document.tsx";
+export { ChangesDocument } from "./panel/changes-document.tsx";
 export type { ChangesPaneProps } from "./panel/changes-pane.tsx";
 export { ChangesPane } from "./panel/changes-pane.tsx";
+export type { DiffViewProps } from "./panel/diff-view.tsx";
+export { DiffView } from "./panel/diff-view.tsx";
 export type { FilesPaneProps } from "./panel/files-pane.tsx";
 export { FilesPane } from "./panel/files-pane.tsx";
+export type { MainTab } from "./panel/main-tab.ts";
+export {
+	changesTabId,
+	commitTabId,
+	diffTabId,
+	fileTabId,
+	sessionTabId,
+	terminalTabId,
+} from "./panel/main-tab.ts";
+export type { MainTabItem, MainTabsProps } from "./panel/main-tabs.tsx";
+export { MainTabs } from "./panel/main-tabs.tsx";
 export type { PaneResizerProps } from "./panel/pane-resizer.tsx";
 export { clampWidth, PaneResizer } from "./panel/pane-resizer.tsx";
 export type { PanelStorage, RightPanelState, RightPanelTab } from "./panel/panel-state.ts";

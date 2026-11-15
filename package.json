@@ -15,7 +15,7 @@
 		"dev:host": "node scripts/dev-host.mjs",
 		"dev:split": "node scripts/dev-split.mjs",
 		"build": "npm run build --workspaces --if-present",
-		"typecheck": "npm run typecheck --workspaces --if-present",
+		"typecheck": "node scripts/typecheck.mjs",
 		"test": "npm run test --workspaces --if-present",
 		"lint": "biome check .",
 		"dist": "npm run build:server && npm run dist -w @facet/desktop",

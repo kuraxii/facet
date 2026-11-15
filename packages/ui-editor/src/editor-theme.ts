@@ -27,6 +27,8 @@ export interface EditorPalette {
 	selection: string;
 	/** 当前行底色 */
 	activeLine: string;
+	/** 标题到第一行正文的间距 */
+	headGap: string;
 	/** 等宽字体栈 */
 	monoFont: string;
 	/** 字号 */
@@ -42,6 +44,7 @@ export function readEditorPalette(): EditorPalette {
 		accent: readVar("--acc", "#fafafa"),
 		selection: readVar("--surface3", "#3f3f46"),
 		activeLine: readVar("--surface2", "#27272a"),
+		headGap: readVar("--editor-head-gap", "4px"),
 		monoFont: readVar("--font-editor", readVar("--font-mono", "ui-monospace, monospace")),
 		fontSize: readVar("--editor-size", "13px"),
 	};
@@ -63,7 +66,8 @@ export function editorTheme(palette: EditorPalette): Extension {
 				lineHeight: "1.55",
 				overflow: "auto",
 			},
-			".cm-content": { padding: "6px 0" },
+			".cm-content": { padding: `${palette.headGap} 0` },
+			".cm-line": { paddingRight: "0" },
 			".cm-gutters": {
 				backgroundColor: palette.background,
 				border: "none",

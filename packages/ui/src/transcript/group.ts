@@ -6,8 +6,7 @@
  * 归类只看有没有正文:有正文的行是模型的答复,没有正文的行属于过程。
  */
 import type { Part, ToolCallPart, TranscriptItem } from "@facet/client-core";
-import { createI18n } from "@facet/i18n";
-import type { TFunction } from "i18next";
+import { createI18n, type Translate, translate } from "@facet/i18n";
 import { toolKind } from "./tool-text.ts";
 
 /** 面板里一行的种类。 */
@@ -60,6 +59,7 @@ function emptyCounts(): ToolCounts {
 
 /** 没有 Provider 时的中文译文，测试与纯函数调用使用。 */
 const fallbackI18n = createI18n("zh-CN");
+const fallbackT = translate(fallbackI18n);
 
 /** 归类对应的计数键。 */
 const COUNT_KEY = {
@@ -446,7 +446,7 @@ export function groupRows(items: readonly TranscriptItem[]): DisplayRow[] {
  *
  * 只有一类时直接说这一类，多类用「和」连起来；只有思考时是「已思考」。
  */
-export function groupLabel(row: DisplayRow, t: TFunction = fallbackI18n.t): string {
+export function groupLabel(row: DisplayRow, t: Translate = fallbackT): string {
 	const { counts } = row;
 	const parts: string[] = [];
 	if (counts.edits > 0) {
@@ -479,7 +479,7 @@ export function groupLabel(row: DisplayRow, t: TFunction = fallbackI18n.t): stri
  *
  * 回合结束后用主机记录的起止时间；还在跑的时候由界面自己计时，调用方每秒传一次当前时间。
  */
-export function turnDurationText(row: DisplayRow, now?: number, t: TFunction = fallbackI18n.t): string {
+export function turnDurationText(row: DisplayRow, now?: number, t: Translate = fallbackT): string {
 	const text =
 		row.durationMs !== undefined
 			? formatDuration(row.durationMs)

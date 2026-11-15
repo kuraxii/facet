@@ -36,6 +36,31 @@ export interface PatchLine {
 	number: string;
 }
 
+/** 文件头与 git 元信息行的前缀；变更文档只保留 hunk 与正文。 */
+const FILE_HEADER_PREFIXES = [
+	"diff --git ",
+	"index ",
+	"--- ",
+	"+++ ",
+	"new file mode ",
+	"deleted file mode ",
+	"old mode ",
+	"new mode ",
+	"similarity index ",
+	"dissimilarity index ",
+	"rename from ",
+	"rename to ",
+	"copy from ",
+	"copy to ",
+	"Binary files ",
+	"\\ No newline at end of file",
+] as const;
+
+/** 这一行是不是补丁的文件头或 git 元信息。 */
+export function isDiffFileHeader(line: string): boolean {
+	return FILE_HEADER_PREFIXES.some((prefix) => line.startsWith(prefix));
+}
+
 /** 补丁按行拆开并带上行号。 */
 export function patchLines(patch: string): readonly PatchLine[] {
 	const lines: PatchLine[] = [];
@@ -73,4 +98,9 @@ export function patchLines(patch: string): readonly PatchLine[] {
 		offset += line.length + 1;
 	}
 	return lines;
+}
+
+/** 变更文档里的补丁正文：去掉文件头、索引、重命名等 git 元信息，只留 hunk 与改动行。 */
+export function patchBodyLines(patch: string): readonly PatchLine[] {
+	return patchLines(patch).filter(({ line }) => !isDiffFileHeader(line));
 }

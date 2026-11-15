@@ -83,6 +83,49 @@
 	/* 聊天正文与输入区共用的内容列宽；输入框和过程组胶囊用同一个边界 */
 	--chat-column-max: 780px;
 	--chat-column-max-narrow: 760px;
+	/* 主区域标签栏：整条高度、单个标签高度、相邻标签间距与标签内边距 */
+	--main-tabs-height: 38px;
+	--main-tabs-edge: 8px;
+	--main-tab-height: 28px;
+	--main-tab-gap: 2px;
+	--main-tab-padding-x: 10px;
+	--main-tab-close-size: 18px;
+	--main-tab-add-size: 26px;
+	--main-tab-add-gap: 8px;
+	--main-tab-drop-width: 2px;
+	--main-tab-drop-inset: 3px;
+	--main-tab-menu-gap: 4px;
+	--main-tab-menu-width: 168px;
+	/* 主区域里文件、变更文档与终端的外边距 */
+	--main-view-padding-y: 14px;
+	--editor-view-padding-y: 4px;
+	--editor-gutter-x: 4px;
+	--editor-head-height: 18px;
+	--editor-head-gap: 4px;
+	/* 文件树：紧凑行高、缩进、图标与右侧留白 */
+	--files-row-height: 22px;
+	--files-row-padding-x: 8px;
+	--files-tree-indent: 12px;
+	--files-trailing: 8px;
+	--files-icon-size: 14px;
+	--files-icon-gap: 6px;
+	/* 变更树与变更文档：行高、缩进、右侧留白、图标与统计间距 */
+	--changes-row-height: 28px;
+	--changes-row-padding-x: 12px;
+	--changes-tree-indent: 12px;
+	--changes-trailing: 8px;
+	--changes-icon-size: 14px;
+	--changes-icon-gap: 8px;
+	--changes-stat-gap: 4px;
+	--changes-header-height: 28px;
+	--changes-line-height: 1.5;
+	--changes-line-number-width: 40px;
+	/* 提交历史：行高、图形槽、短哈希宽度与列表最大高度 */
+	--commit-row-height: 24px;
+	--commit-graph-width: 8px;
+	--commit-sha-width: 64px;
+	--commit-section-max-height: 60%;
+	--main-terminal-padding: 6px 8px;
 	/* 三栏宽度：顶带的格子与下面的正文共用，由界面按当前状态写入 */
 	--sidebar-width: 272px;
 	--panel-width: 0px;

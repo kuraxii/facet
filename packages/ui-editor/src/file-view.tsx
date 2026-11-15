@@ -7,7 +7,7 @@
  */
 import type { FileContent } from "@facet/protocol";
 import { useI18n } from "@facet/ui/i18n";
-import { ArrowLeft, Check, Pencil, X } from "lucide-react";
+import { Check, Pencil, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { CodeSurface } from "./code-surface.tsx";
 
@@ -24,8 +24,6 @@ export interface FileViewProps {
 	path: string;
 	/** 读到的内容；只有文本会进编辑器 */
 	content: FileContent;
-	/** 返回目录 */
-	onClose: () => void;
 	/** 写回磁盘；内容冲突时抛出的错误带 conflict 标记 */
 	onSave: (text: string, expectedRevision: string) => Promise<FileSaveResult>;
 	/** 重新从磁盘读取 */
@@ -39,7 +37,7 @@ function isConflict(error: unknown): boolean {
 	);
 }
 
-export function FileView({ path, content, onClose, onSave, onReload }: FileViewProps) {
+export function FileView({ path, content, onSave, onReload }: FileViewProps) {
 	const { t } = useI18n();
 	/** 编辑器里的当前内容 */
 	const [draft, setDraft] = useState(content.kind === "text" ? content.content : "");
@@ -140,15 +138,6 @@ export function FileView({ path, content, onClose, onSave, onReload }: FileViewP
 	return (
 		<div className="file-view">
 			<div className="file-head">
-				<button
-					type="button"
-					className="ib"
-					aria-label={t("editor.backToDirectory")}
-					title={t("editor.backToDirectory")}
-					onClick={onClose}
-				>
-					<ArrowLeft size={14} strokeWidth={1.5} />
-				</button>
 				<span className="file-path" title={path}>
 					{path}
 				</span>

@@ -7,13 +7,27 @@
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { GitDiff, GitFileChange, GitFileStatus, GitStatus } from "@facet/protocol";
+import type {
+	GitCommit,
+	GitCommitDetail,
+	GitCommits,
+	GitDiff,
+	GitFileChange,
+	GitFileStatus,
+	GitStatus,
+} from "@facet/protocol";
 
 /** 单次 git 命令的超时，毫秒。 */
 const GIT_TIMEOUT_MS = 3000;
 
 /** stdout 的上限，超出按失败处理，避免一个巨大 diff 把内存吃满。 */
 const MAX_BUFFER_BYTES = 8 * 1024 * 1024;
+
+/** 全部提交历史的输出上限，比单次 diff 放宽。 */
+const MAX_LOG_BYTES = 64 * 1024 * 1024;
+
+/** 取提交历史时可以多等一会。 */
+const GIT_LOG_TIMEOUT_MS = 10_000;
 
 /** 补丁内容的返回上限，超出截断。 */
 const MAX_PATCH_BYTES = 400 * 1024;
@@ -35,6 +49,8 @@ export interface GitOptions {
 	cwd: string;
 	/** 超时，毫秒 */
 	timeoutMs?: number;
+	/** stdout 上限，缺省用单次 diff 的上限 */
+	maxBuffer?: number;
 }
 
 /**
@@ -50,7 +66,7 @@ function runGit(args: readonly string[], options: GitOptions): Promise<GitResult
 			["-C", options.cwd, "--no-pager", ...args],
 			{
 				timeout: options.timeoutMs ?? GIT_TIMEOUT_MS,
-				maxBuffer: MAX_BUFFER_BYTES,
+				maxBuffer: options.maxBuffer ?? MAX_BUFFER_BYTES,
 				windowsHide: true,
 				env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" },
 			},
@@ -291,6 +307,173 @@ export async function gitStatus(cwd: string): Promise<GitStatus> {
 	}
 	files.sort((left, right) => left.path.localeCompare(right.path));
 	return { isRepo: true, ...parseBranch(branchResult.stdout), files };
+}
+
+/**
+ * 解析 `git log` 的 NUL 分隔记录。
+ *
+ * 每条一行，字段依次是完整哈希、短哈希、说明第一行、作者时间。说明里不会出现 NUL；空行
+ * 直接跳过。
+ */
+export function parseCommitLog(output: string): GitCommit[] {
+	const commits: GitCommit[] = [];
+	for (const line of output.split("\n")) {
+		if (line.length === 0) {
+			continue;
+		}
+		const [sha, shortSha, subject, authorDate] = line.split("\u0000");
+		if (sha === undefined || shortSha === undefined || subject === undefined || authorDate === undefined) {
+			continue;
+		}
+		commits.push({ sha, shortSha, subject, authorDate });
+	}
+	return commits;
+}
+
+/** 提交里一个文件的状态。 */
+export interface CommitStatusEntry {
+	/** 改动状态 */
+	status: GitFileStatus;
+	/** 重命名前的路径 */
+	oldPath?: string;
+}
+
+/** 提交的 name-status 字母对应的对外状态。 */
+function commitStatusOf(letter: string): GitFileStatus {
+	if (letter === "A") {
+		return "added";
+	}
+	if (letter === "D") {
+		return "deleted";
+	}
+	if (letter === "R" || letter === "C") {
+		return "renamed";
+	}
+	return "modified";
+}
+
+/**
+ * 解析 `git diff-tree --name-status -z`。
+ *
+ * 普通记录是 `状态\0路径\0`，重命名是 `R100\0旧路径\0新路径\0`；返回以新路径为键的表。
+ */
+export function parseCommitNameStatus(output: string): Map<string, CommitStatusEntry> {
+	const tokens = output.split("\u0000");
+	const entries = new Map<string, CommitStatusEntry>();
+	for (let index = 0; index < tokens.length; index += 1) {
+		const statusToken = tokens[index];
+		if (statusToken === undefined || statusToken.length === 0) {
+			continue;
+		}
+		const letter = statusToken[0] ?? "M";
+		if (letter === "R" || letter === "C") {
+			const oldPath = tokens[index + 1];
+			const path = tokens[index + 2];
+			index += 2;
+			if (path !== undefined && path.length > 0) {
+				entries.set(path, {
+					status: "renamed",
+					...(oldPath === undefined ? {} : { oldPath }),
+				});
+			}
+			continue;
+		}
+		const path = tokens[index + 1];
+		index += 1;
+		if (path !== undefined && path.length > 0) {
+			entries.set(path, { status: commitStatusOf(letter) });
+		}
+	}
+	return entries;
+}
+
+/** 当前分支的全部提交，从新到旧；不是仓库时 isRepo 为假。 */
+export async function gitCommits(cwd: string): Promise<GitCommits> {
+	if (!(await isGitRepository(cwd))) {
+		return { isRepo: false, commits: [] };
+	}
+	const result = await runGit(["log", "--format=%H%x00%h%x00%s%x00%aI"], {
+		cwd,
+		timeoutMs: GIT_LOG_TIMEOUT_MS,
+		maxBuffer: MAX_LOG_BYTES,
+	});
+	if (result.code !== 0) {
+		return { isRepo: true, commits: [] };
+	}
+	return { isRepo: true, commits: parseCommitLog(result.stdout) };
+}
+
+/** 校验客户端给来的提交哈希，避免把它当成另一个 git 选项。 */
+function requireCommitSha(sha: string): string {
+	if (!/^[0-9a-f]{4,40}$/i.test(sha)) {
+		throw new Error("invalid commit sha");
+	}
+	return sha;
+}
+
+/** 取一次提交相对第一父提交的改动；根提交按空树比较。 */
+export async function gitCommit(cwd: string, sha: string): Promise<GitCommitDetail> {
+	const safeSha = requireCommitSha(sha);
+	if (!(await isGitRepository(cwd))) {
+		throw new Error("not a git repository");
+	}
+	const [metaResult, statusResult, numstatResult] = await Promise.all([
+		runGit(["show", "-s", "--format=%H%x00%h%x00%s%x00%aI", safeSha], { cwd }),
+		runGit(
+			["diff-tree", "--no-commit-id", "--name-status", "-r", "--root", "--first-parent", "-M", "-z", safeSha],
+			{ cwd },
+		),
+		runGit(
+			["diff-tree", "--no-commit-id", "--numstat", "-r", "--root", "--first-parent", "-M", "-z", safeSha],
+			{ cwd },
+		),
+	]);
+	const commit = parseCommitLog(metaResult.stdout)[0];
+	if (metaResult.code !== 0 || commit === undefined) {
+		throw new Error("commit not found");
+	}
+	const statuses = parseCommitNameStatus(statusResult.code === 0 ? statusResult.stdout : "");
+	const counts = parseNumstat(numstatResult.code === 0 ? numstatResult.stdout : "");
+	const files: GitFileChange[] = [];
+	for (const [path, entry] of statuses) {
+		const count = counts.get(path) ?? { added: 0, removed: 0, binary: false };
+		files.push({
+			path,
+			status: entry.status,
+			...(entry.oldPath === undefined ? {} : { oldPath: entry.oldPath }),
+			...count,
+		});
+	}
+	files.sort((left, right) => left.path.localeCompare(right.path));
+	return { commit, files };
+}
+
+/** 取一次提交里某个文件的补丁；根提交按空树比较。 */
+export async function gitCommitDiff(
+	cwd: string,
+	sha: string,
+	path: string,
+	oldPath?: string,
+): Promise<GitDiff> {
+	const safeSha = requireCommitSha(sha);
+	if (!(await isGitRepository(cwd))) {
+		return { patch: "", truncated: false, binary: false };
+	}
+	const paths = oldPath === undefined ? [path] : [path, oldPath];
+	const result = await runGit(
+		["diff-tree", "--no-commit-id", "--root", "--first-parent", "-p", "-M", safeSha, "--", ...paths],
+		{ cwd },
+	);
+	if (result.code !== 0 && result.stdout.length === 0) {
+		return { patch: "", truncated: false, binary: false };
+	}
+	const binary = /^Binary files .* differ$/m.test(result.stdout);
+	const truncated = Buffer.byteLength(result.stdout, "utf8") > MAX_PATCH_BYTES;
+	return {
+		patch: truncated ? result.stdout.slice(0, MAX_PATCH_BYTES) : result.stdout,
+		truncated,
+		binary,
+	};
 }
 
 /** 未跟踪文件的补丁：整份文件都算新增。 */

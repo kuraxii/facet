@@ -37,9 +37,18 @@ export const en = {
 		clean: "The working tree is clean.",
 		binary: "Binary",
 		loadingDiff: "Loading patch…",
+		openDiff: "Open diff",
 		binaryDiff: "Binary file; no patch to show.",
 		noDiff: "No changes to show.",
 		truncatedDiff: "The patch is too long; showing the first part.",
+		commits: "Commits",
+		noCommits: "No commits yet.",
+		noCommitChanges: "This commit has no file changes.",
+		loadingCommits: "Reading commits…",
+		collapseAllFiles: "Collapse all files",
+		expandAllFiles: "Expand all files",
+		wrapLongLines: "Wrap long lines",
+		scrollLongLines: "Scroll long lines",
 		filesCount_one: "{{count}} file",
 		filesCount_other: "{{count}} files",
 		status: {
@@ -50,6 +59,20 @@ export const en = {
 			untracked: "Untracked",
 			conflicted: "Conflicted",
 		},
+	},
+	mainTabs: {
+		label: "Main area tabs",
+		add: "New tab",
+		closeTab: "Close {{name}}",
+		diff: "Diff",
+		changes: "Changes",
+		commit: "Commit {{sha}}",
+		tabMenu: "Tab actions",
+		close: "Close",
+		closeOther: "Close Other",
+		closeAll: "Close All",
+		copyPath: "Copy Path",
+		copyRelativePath: "Copy Relative Path",
 	},
 	empty: {
 		title: "Start a new session",
@@ -524,9 +547,18 @@ export const zhCN = {
 		clean: "工作树干净，没有未提交的改动。",
 		binary: "二进制",
 		loadingDiff: "正在取补丁…",
+		openDiff: "打开补丁",
 		binaryDiff: "二进制文件，不展示补丁",
 		noDiff: "没有可展示的改动",
 		truncatedDiff: "补丁过长，只显示前半部分",
+		commits: "提交历史",
+		noCommits: "还没有提交。",
+		noCommitChanges: "这次提交没有文件改动。",
+		loadingCommits: "正在读取提交…",
+		collapseAllFiles: "折叠全部文件",
+		expandAllFiles: "展开全部文件",
+		wrapLongLines: "自动折行",
+		scrollLongLines: "长行横向滚动",
 		filesCount_other: "{{count}} 个文件",
 		status: {
 			added: "新增",
@@ -536,6 +568,20 @@ export const zhCN = {
 			untracked: "未跟踪",
 			conflicted: "有冲突",
 		},
+	},
+	mainTabs: {
+		label: "主区域标签",
+		add: "新建标签",
+		closeTab: "关闭 {{name}}",
+		diff: "Diff",
+		changes: "变更",
+		commit: "提交 {{sha}}",
+		tabMenu: "标签操作",
+		close: "关闭",
+		closeOther: "关闭其他",
+		closeAll: "关闭全部",
+		copyPath: "复制路径",
+		copyRelativePath: "复制相对路径",
 	},
 	empty: {
 		title: "开始一个新会话",
@@ -972,3 +1018,23 @@ export const resources = {
 
 /** 源语言资源的形状，供类型检查使用。 */
 export type TranslationResources = typeof en;
+
+/** 拼接两级键；前缀为空时不加分隔点。 */
+type JoinKey<Prefix extends string, Key extends string> = Prefix extends "" ? Key : `${Prefix}.${Key}`;
+
+/** 复数键去掉词尾后也允许直接使用，例如 `filesCount_one` 同时提供 `filesCount`。 */
+type PluralBase<Key extends string> = Key extends `${infer Base}_${"one" | "other" | "zero" | "few" | "many"}`
+	? Base
+	: never;
+
+/** 把嵌套资源展开成点分叶子键。 */
+type TranslationLeafKeys<Value, Prefix extends string = ""> = {
+	[Key in keyof Value & string]: Value[Key] extends string
+		? JoinKey<Prefix, Key> | JoinKey<Prefix, PluralBase<Key>>
+		: Value[Key] extends object
+			? TranslationLeafKeys<Value[Key], JoinKey<Prefix, Key>>
+			: never;
+}[keyof Value & string];
+
+/** 界面可以取的翻译键。 */
+export type TranslationKey = TranslationLeafKeys<typeof en>;

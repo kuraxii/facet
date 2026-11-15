@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DEFAULT_AGENT_DIR, DEV_AGENT_DIR } from "@facet/agent";
-import { createI18n, readLanguageSetting, resolveLanguage } from "@facet/i18n";
+import { createI18n, readLanguageSetting, resolveLanguage, translate } from "@facet/i18n";
 import { app, BrowserWindow, dialog, ipcMain, screen, shell } from "electron";
 import { HostChannels, LOCAL_TARGET } from "./host-channel.ts";
 import {
@@ -68,6 +68,8 @@ let localSettingsFile = "";
 let localSettings: LocalSettings = { version: 1 };
 /** 主进程侧的语言实例，原生弹窗与渲染进程共用同一份资源 */
 let mainI18n = createI18n("en");
+/** 主进程侧的轻量翻译函数，语言实例更换时一起重建 */
+let mainT = translate(mainI18n);
 /** 退出确认已通过，之后的关闭与退出不再询问 */
 let quitConfirmed = false;
 /** 正在确认退出，避免关闭事件与 before-quit 各弹一次对话框 */
@@ -162,11 +164,11 @@ async function confirmQuit(window: BrowserWindow | undefined): Promise<boolean> 
 	}
 	const options = {
 		type: "warning",
-		buttons: [mainI18n.t("dialog.quit.cancel"), mainI18n.t("dialog.quit.close")],
+		buttons: [mainT("dialog.quit.cancel"), mainT("dialog.quit.close")],
 		defaultId: 0,
 		cancelId: 0,
-		message: mainI18n.t("dialog.quit.title"),
-		detail: mainI18n.t("dialog.quit.detail", { count: busy }),
+		message: mainT("dialog.quit.title"),
+		detail: mainT("dialog.quit.detail", { count: busy }),
 	} as const;
 	const choice =
 		window === undefined
@@ -309,7 +311,7 @@ async function waitForHostReady(): Promise<LocalHost | undefined> {
 ipcMain.handle("facet:pick-directory", async (event) => {
 	const window = BrowserWindow.fromWebContents(event.sender);
 	const options = {
-		title: mainI18n.t("dialog.pickDirectory.title"),
+		title: mainT("dialog.pickDirectory.title"),
 		properties: ["openDirectory", "createDirectory"],
 	} as const;
 	const result = window
@@ -321,7 +323,7 @@ ipcMain.handle("facet:pick-directory", async (event) => {
 ipcMain.handle("facet:save-text", async (event, suggestedName: string, text: string) => {
 	const window = BrowserWindow.fromWebContents(event.sender);
 	const options = {
-		title: mainI18n.t("dialog.saveFile.title"),
+		title: mainT("dialog.saveFile.title"),
 		defaultPath: suggestedName,
 	};
 	const result = window ? await dialog.showSaveDialog(window, options) : await dialog.showSaveDialog(options);
@@ -400,7 +402,7 @@ const sshPasswords = new Map<string, string>();
 ipcMain.handle("facet:host-open", async (event, target: string, password?: string) => {
 	const channels = hostChannels;
 	if (channels === undefined) {
-		return { ok: false, code: "not_ready", message: mainI18n.t("host.notReady") };
+		return { ok: false, code: "not_ready", message: mainT("host.notReady") };
 	}
 	const secret = password ?? sshPasswords.get(target);
 	try {
@@ -458,6 +460,7 @@ app.whenReady().then(async () => {
 	localSettingsFile = join(app.getPath("userData"), "desktop.json");
 	localSettings = await readLocalSettings(localSettingsFile);
 	mainI18n = createI18n(resolveLanguage(localSettings.language, app.getLocale()));
+	mainT = translate(mainI18n);
 
 	if (externalEndpoint === undefined) {
 		await mkdir(dataDir, { recursive: true }).catch(() => undefined);

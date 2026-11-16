@@ -71,6 +71,8 @@
 	--sb-row-two-line-height: 44px;
 	--sb-row-meta-gap: 2px;
 	--sb-row-mark-offset: 3px;
+	/* 会话行内部横向内边距：行背景左右各留这么多，文字从留白之后开始 */
+	--sb-row-inset: 8px;
 	/* 侧栏会话行：悬停 4%、选中 8% 的文字色叠加 */
 	--sb-row-hover: color-mix(in srgb, var(--t1) 4%, transparent);
 	--sb-row-selected: color-mix(in srgb, var(--t1) 8%, transparent);
@@ -136,6 +138,8 @@
 	--scrollbar-thumb: 4px;
 	/* 两个面板分隔条的命中区宽度，以及悬停时那条高亮的颜色 */
 	--divider-hit-width: 6px;
+	/* 侧栏分隔条的命中区：右缘还要放滚动条（沟槽 8px、拇指居中 4px），只剩最外的 2px */
+	--sidebar-divider-hit: 2px;
 	--divider-highlight: color-mix(in srgb, var(--acc) 55%, transparent);
 	/* 对话导航的缩放倍数，由设置里的百分比写入；下面每个尺寸都是它的倍数 */
 	--outline-scale: 1;
@@ -168,6 +172,36 @@
  * 才提亮。Chromium 一旦给了 `scrollbar-width` 或 `scrollbar-color` 就按标准画，会带箭头，
  * 所以这里只走 webkit 伪元素；下面再用 `@supports` 给没有伪元素的引擎一份等效的细条。
  */
+
+/**
+ * 滚动区域。
+ *
+ * Chromium 把滚动条画在容器的内边距里：容器只要有横向内边距，滚动条就跟着离开容器边缘。
+ * 所以滚动容器只留纵向内边距，横向留白交给里面的行（见 `.scroll-row`）。
+ *
+ * 始终预留沟槽，滚动条出现时不挤动内容；沟槽也是内容盒的一部分，行的右侧留白因此要减掉
+ * 一份 `--scrollbar-width`（见 `.scroll-row`），左右才对称。
+ */
+.scroll-y {
+	min-height: 0;
+	overflow-x: hidden;
+	overflow-y: auto;
+	/* 缺省始终预留沟槽：滚动条出现时内容不左右跳动；弹层可置 auto */
+	scrollbar-gutter: var(--scroll-gutter, stable);
+	overscroll-behavior: contain;
+}
+
+/**
+ * 滚动区域里的一行。
+ *
+ * `--scroll-inset` 是这一行相对容器边缘的横向留白，行自己设；滚动条沟槽已经占掉右侧
+ * `--scrollbar-width`，所以右内边距要减掉它，文字与背景才会与左侧对称。
+ */
+.scroll-row {
+	padding-left: var(--scroll-inset, 0px);
+	padding-right: calc(var(--scroll-inset, 0px) - var(--scrollbar-width));
+}
+
 *::-webkit-scrollbar {
 	width: var(--scrollbar-width);
 	height: var(--scrollbar-width);

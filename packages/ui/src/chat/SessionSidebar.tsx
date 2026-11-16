@@ -7,6 +7,7 @@
 import type { ProjectInfo, SessionSummary } from "@facet/protocol";
 import { Plus, Search, Settings } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ScrollArea, ScrollRow } from "../common/scroll-area.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { PaneResizer } from "../panel/pane-resizer.tsx";
 import { ChevronIcon } from "../transcript/chevron.tsx";
@@ -602,7 +603,7 @@ export function SessionSidebar({
 				) : null}
 			</div>
 
-			<div className="sb-queue">
+			<ScrollArea className="sb-queue" inset="var(--sidebar-edge)">
 				{data.groups.length === 0 ? <p className="sb-empty">{emptyHint}</p> : null}
 				{data.groups.map((group) => (
 					<section key={group.key} className="sb-group">
@@ -620,7 +621,7 @@ export function SessionSidebar({
 						{group.sessions.map((session) => {
 							const twoLine = scopeCwd === undefined;
 							return (
-								<div key={session.path} className="sb-row-item">
+								<ScrollRow key={session.path} className="sb-row-item">
 									<div className="sb-row-wrap">
 										<button
 											type="button"
@@ -673,12 +674,12 @@ export function SessionSidebar({
 											)}
 										</button>
 									</div>
-								</div>
+								</ScrollRow>
 							);
 						})}
 					</section>
 				))}
-			</div>
+			</ScrollArea>
 
 			{menuProject === undefined ? null : (
 				<div

@@ -9,8 +9,9 @@
 	flex-direction: column;
 	width: var(--sidebar-width);
 	height: 100%;
-	/* 顶带里那行头部自己带 4px 下边距，这里再留 4px，头部控件到新建按钮正好 8px */
-	padding: 4px 10px 8px;
+	/* 横向内边距交给每一行（`.scroll-row`），滚动条才能贴着右缘；
+	   顶带里那行头部自己带 4px 下边距，这里再留 4px，头部控件到新建按钮正好 8px */
+	padding: 4px 0 8px;
 	border-right: 1px solid var(--line);
 	background: var(--sb);
 	overflow: hidden;
@@ -29,7 +30,8 @@
 	bottom: 0;
 	right: 0;
 	z-index: 3;
-	width: var(--divider-hit-width);
+	/* 命中区让开滚动条：拇指在沟槽里居中，最外面 2px 才是空的 */
+	width: var(--sidebar-divider-hit);
 	margin: 0;
 	border: 0;
 	cursor: col-resize;
@@ -77,9 +79,9 @@
 	align-items: center;
 	justify-content: center;
 	gap: 6px;
-	width: 100%;
+	width: auto;
 	height: 32px;
-	margin-bottom: 8px;
+	margin: 0 var(--sidebar-edge) 8px;
 	padding: 0 10px;
 	border: 0;
 	border-radius: 6px;
@@ -103,7 +105,7 @@
 .sb-filter {
 	position: relative;
 	flex: none;
-	margin-bottom: 6px;
+	margin: 0 var(--sidebar-edge) 6px;
 }
 
 .sb-filter-btn {
@@ -189,6 +191,7 @@
 	color: var(--t3);
 }
 
+/* 弹层里的滚动条跟着弹层自己的内边距走，不追求贴窗口边缘 */
 .sb-opts {
 	display: flex;
 	flex-direction: column;
@@ -197,6 +200,7 @@
 	margin: 6px 0;
 	overflow-x: hidden;
 	overflow-y: auto;
+	scrollbar-gutter: stable;
 }
 
 .sb-opt {
@@ -369,16 +373,9 @@
 	display: flex;
 	flex: 1;
 	flex-direction: column;
-	min-height: 0;
-	overflow-x: hidden;
-	overflow-y: auto;
-	scrollbar-width: none;
-	/* 列表滚到筛选栏下方时，顶部 6px 自然消隐，不让会话行硬切 */
+	/* 行相对容器边缘的横向留白由 `ScrollArea` 的 inset 写入，这里只管列表自己的外观；
+	   列表滚到筛选栏下方时，顶部 6px 自然消隐，不让会话行硬切 */
 	mask-image: linear-gradient(to bottom, transparent 0, #000 6px, #000 100%);
-}
-
-.sb-queue::-webkit-scrollbar {
-	display: none;
 }
 
 .sb-group {
@@ -395,7 +392,8 @@
 	align-items: center;
 	justify-content: space-between;
 	margin: 0;
-	padding: 8px 8px 3px;
+	/* 分组标题与行文字对齐：行外侧留白再加行自己那份 */
+	padding: 8px 0 3px calc(var(--sidebar-edge) + var(--sb-row-inset));
 	color: var(--t3);
 	font-size: 11px;
 	font-variant-numeric: tabular-nums;
@@ -411,7 +409,7 @@
 	gap: 8px;
 	width: 100%;
 	height: 28px;
-	padding: 0 8px;
+	padding: 0 var(--sb-row-inset);
 	border: 0;
 	border-radius: 6px;
 	background: transparent;
@@ -441,7 +439,7 @@
 	align-items: flex-start;
 	height: auto;
 	min-height: var(--sb-row-two-line-height);
-	padding: var(--sb-row-padding-y) 8px;
+	padding: var(--sb-row-padding-y) var(--sb-row-inset);
 }
 
 .sb-row-body {
@@ -507,7 +505,6 @@
 	display: flex;
 	flex-direction: column;
 }
-
 .sb-row-wrap {
 	position: relative;
 	display: flex;
@@ -522,7 +519,7 @@
 .sb-empty {
 	flex: none;
 	margin: 0;
-	padding: 10px 8px;
+	padding: 10px 0 10px calc(var(--sidebar-edge) + var(--sb-row-inset));
 	color: var(--t3);
 	font-size: 12.5px;
 }
@@ -533,7 +530,7 @@
 	align-items: center;
 	gap: 6px;
 	margin-top: 6px;
-	padding: 8px 0 0;
+	padding: 8px var(--sidebar-edge) 0;
 	border-top: 1px solid var(--line);
 	color: var(--t3);
 	font-size: 11px;

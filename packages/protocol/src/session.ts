@@ -140,7 +140,6 @@ export interface SessionSummary {
 	/** Unix 毫秒时间戳 */
 	created: number;
 	modified: number;
-	messageCount: number;
 	/** 首条用户消息的摘要，用于列表展示 */
 	firstMessage: string;
 }

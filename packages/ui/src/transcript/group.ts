@@ -10,7 +10,7 @@ import { createI18n, type Translate, translate } from "@facet/i18n";
 import { toolKind } from "./tool-text.ts";
 
 /** 面板里一行的种类。 */
-export type RowKind = "user" | "assistant" | "meta" | "diff" | "error" | "divider" | "fork";
+export type RowKind = "user" | "assistant" | "meta" | "error" | "divider" | "fork";
 
 /** 一轮结束处的分叉点。 */
 export interface ForkPoint {
@@ -18,22 +18,6 @@ export interface ForkPoint {
 	beforeEntryId: string | undefined;
 	/** 最后一轮的分叉要等本轮结束才能用 */
 	needsSettle: boolean;
-}
-
-/** 一次文件改动,来自带补丁的工具结果。 */
-export interface DiffChunk {
-	/** 产生这次改动的工具调用 id */
-	callId: string;
-	/** 工具名,例如 edit */
-	toolName: string;
-	/** 补丁涉及的文件,按补丁里出现的顺序去重 */
-	files: readonly string[];
-	/** unified diff 原文 */
-	patch: string;
-	/** 新增行数 */
-	added: number;
-	/** 删除行数 */
-	removed: number;
 }
 
 /** 一行里各类动作的次数，过程行的标题按它生成。 */
@@ -85,8 +69,6 @@ export interface DisplayRow {
 	durationMs: number | undefined;
 	/** 这一轮开始的时间，回合未结束时界面据此自己计时 */
 	startedAt: number | undefined;
-	/** 组内工具产生的文件改动,排在过程行之后 */
-	diffs: readonly DiffChunk[];
 	/** 这一行是否仍在增长 */
 	isStreaming: boolean;
 }
@@ -95,12 +77,11 @@ export interface DisplayRow {
 interface GroupDraft {
 	items: TranscriptItem[];
 	counts: ToolCounts;
-	diffs: DiffChunk[];
 	isStreaming: boolean;
 }
 
 function createGroup(): GroupDraft {
-	return { items: [], counts: emptyCounts(), diffs: [], isStreaming: false };
+	return { items: [], counts: emptyCounts(), isStreaming: false };
 }
 
 /** 是否含正文。正文是过程行的边界。 */
@@ -114,53 +95,6 @@ function thinkCount(parts: readonly Part[]): number {
 
 function toolParts(parts: readonly Part[]): ToolCallPart[] {
 	return parts.filter((part): part is ToolCallPart => part.kind === "toolCall");
-}
-
-/** 从 unified diff 里取文件名。兼容 a/ b/ 前缀与新增文件。 */
-function filesOfPatch(patch: string): string[] {
-	const files: string[] = [];
-	for (const line of patch.split("\n")) {
-		if (!line.startsWith("+++ ")) {
-			continue;
-		}
-		const raw = line.slice(4).trim();
-		if (raw === "/dev/null") {
-			continue;
-		}
-		const path = raw.startsWith("b/") ? raw.slice(2) : raw;
-		if (!files.includes(path)) {
-			files.push(path);
-		}
-	}
-	return files;
-}
-
-/** 统计补丁的增删行数,文件头不计入。 */
-function countLines(patch: string): { added: number; removed: number } {
-	let added = 0;
-	let removed = 0;
-	for (const line of patch.split("\n")) {
-		if (line.startsWith("+++ ") || line.startsWith("--- ")) {
-			continue;
-		}
-		if (line.startsWith("+")) {
-			added += 1;
-		} else if (line.startsWith("-")) {
-			removed += 1;
-		}
-	}
-	return { added, removed };
-}
-
-/** 工具段里带的补丁转成一次文件改动。没有补丁时返回空。 */
-function diffOf(part: ToolCallPart): DiffChunk | undefined {
-	const details = part.details as { patch?: unknown } | undefined;
-	const patch = details?.patch;
-	if (typeof patch !== "string" || patch.length === 0) {
-		return undefined;
-	}
-	const { added, removed } = countLines(patch);
-	return { callId: part.callId, toolName: part.name, files: filesOfPatch(patch), patch, added, removed };
 }
 
 /** 只取出思考段的那一项,其余段留在原来的行里。 */
@@ -185,10 +119,6 @@ function absorb(draft: GroupDraft, item: TranscriptItem): void {
 	for (const part of toolParts(item.parts)) {
 		draft.counts[COUNT_KEY[toolKind(part.name).category]] += 1;
 		draft.isStreaming = draft.isStreaming || part.status === "running";
-		const diff = diffOf(part);
-		if (diff) {
-			draft.diffs.push(diff);
-		}
 	}
 }
 
@@ -216,27 +146,7 @@ function metaRow(draft: GroupDraft): DisplayRow | undefined {
 		// 时长写在收尾行上,不用工具耗时之和
 		durationMs: undefined,
 		startedAt: undefined,
-		diffs: draft.diffs,
 		isStreaming: draft.isStreaming,
-	};
-}
-
-/** 一轮的文件改动合成一行,标识取第一条改动,后续追加不改标识。 */
-function diffRow(diffs: readonly DiffChunk[]): DisplayRow | undefined {
-	const first = diffs[0];
-	if (!first) {
-		return undefined;
-	}
-	return {
-		kind: "diff",
-		id: `diff:${first.callId}`,
-		items: [],
-		fork: undefined,
-		counts: emptyCounts(),
-		durationMs: undefined,
-		startedAt: undefined,
-		diffs,
-		isStreaming: false,
 	};
 }
 
@@ -254,7 +164,6 @@ function forkRow(
 		counts: emptyCounts(),
 		durationMs: timing.durationMs,
 		startedAt: timing.startedAt,
-		diffs: [],
 		isStreaming: false,
 	};
 }
@@ -271,7 +180,6 @@ function singleton(item: TranscriptItem, kind: RowKind): DisplayRow {
 		counts: draft.counts,
 		durationMs: undefined,
 		startedAt: undefined,
-		diffs: kind === "assistant" ? draft.diffs : [],
 		isStreaming: item.isStreaming,
 	};
 }
@@ -283,10 +191,12 @@ function singleton(item: TranscriptItem, kind: RowKind): DisplayRow {
  * 文件改动统一排在这一轮答复的正文之后;没有正文的回合里,改动行跟在过程行后面收尾。
  * 系统提示与压缩、分支摘要都是一行说明。
  */
-export function groupRows(items: readonly TranscriptItem[]): DisplayRow[] {
+export function groupRows(
+	items: readonly TranscriptItem[],
+	options: { running?: boolean } = {},
+): DisplayRow[] {
 	const rows: DisplayRow[] = [];
 	let group: GroupDraft | undefined;
-	let pending: DiffChunk[] = [];
 	/** 这一轮的开始时间与已见到的结束时间,用来算过程行上的工作时间 */
 	let turnStart: number | undefined;
 	let turnEnd: number | undefined;
@@ -343,25 +253,14 @@ export function groupRows(items: readonly TranscriptItem[]): DisplayRow[] {
 		if (row) {
 			rows.push(row);
 			turnRows += 1;
-			pending.push(...row.diffs);
 		}
 		group = undefined;
-	};
-
-	const flushDiffs = (): void => {
-		const row = diffRow(pending);
-		if (row) {
-			rows.push(row);
-			turnRows += 1;
-		}
-		pending = [];
 	};
 
 	for (const item of items) {
 		if (item.kind === "compaction" || item.kind === "branch" || item.role === "system") {
 			flush();
 			endTurn();
-			flushDiffs();
 			// 压缩与分支摘要是一道分界,不在它们前面放分叉点
 			turnRows = 0;
 			rows.push(singleton(item, "divider"));
@@ -371,7 +270,6 @@ export function groupRows(items: readonly TranscriptItem[]): DisplayRow[] {
 			flush();
 			track(item);
 			endTurn();
-			flushDiffs();
 			rows.push(singleton(item, "error"));
 			turnRows += 1;
 			continue;
@@ -379,7 +277,6 @@ export function groupRows(items: readonly TranscriptItem[]): DisplayRow[] {
 		if (item.role === "user") {
 			flush();
 			endTurn();
-			flushDiffs();
 			// 上一轮已经结束,这一轮还没开始:在这里放这一轮的分叉点
 			if (turnRows > 0 && item.entryId !== undefined) {
 				rows.push(
@@ -411,20 +308,25 @@ export function groupRows(items: readonly TranscriptItem[]): DisplayRow[] {
 			track(item);
 			// 答复行到了,这一轮的时间可以定稿
 			endTurn();
-			const row = singleton(moved ? withoutThinking(item) : item, "assistant");
-			rows.push({ ...row, diffs: [] });
+			rows.push(singleton(moved ? withoutThinking(item) : item, "assistant"));
 			turnRows += 1;
-			pending.push(...row.diffs);
-			flushDiffs();
 			continue;
 		}
 		track(item);
 		group ??= createGroup();
 		absorb(group, item);
 	}
+	// 会话仍在推进时最后一轮不算结束：中间可能没有流式项（两次模型调用之间、工具执行期间），
+	// 只看 isStreaming 会把时长提前定死，计时随之停住，下一段输出再跳一大截。
+	// 过程行的标题同样按这个信号保持呼吸，否则中间那段会静下来。
+	if (options.running === true) {
+		turnStreaming = true;
+		if (group !== undefined) {
+			group.isStreaming = true;
+		}
+	}
 	flush();
 	endTurn();
-	flushDiffs();
 	// 最后一轮的分叉点取会话叶子,要等这一轮结束才能用;还在跑时界面上自己计时
 	if (turnRows > 0) {
 		rows.push(

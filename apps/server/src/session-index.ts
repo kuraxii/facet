@@ -15,12 +15,10 @@ import type { SessionsChannel } from "./sessions-channel.ts";
 /** 一次变化。changed 表示摘要要刷新，removed 表示文件已经不在了。 */
 export type SessionChange = "changed" | "removed";
 
-/** 会话清单的来源：读会话目录、取会话文件的头部、判断会话是否在跑。 */
+/** 会话清单的来源：取会话文件的摘要、判断会话是否在跑。 */
 export interface SessionIndexSource {
-	/** 列出一个目录下的会话摘要 */
-	listSessions(cwd: string): Promise<SessionSummary[]>;
-	/** 读会话文件头部的目录，文件不在了时抛出 */
-	peekSessionCwd(file: string): Promise<string>;
+	/** 取一个会话文件的摘要，读盘与缓存由来源自己负责 */
+	summaryOf(file: string): Promise<SessionSummary | undefined>;
 	/** 还在跑的会话文件 */
 	busyFiles(): string[];
 }
@@ -104,16 +102,19 @@ export class SessionIndex {
 		this.pending.clear();
 	}
 
-	/** 找到这个文件对应的摘要，读一次它所在目录。 */
+	/** 找到这个文件对应的摘要。只读这一个文件，不重扫整个目录。 */
 	private async summaryOf(file: string): Promise<SessionSummary | undefined> {
-		let cwd: string;
+		let summary: SessionSummary | undefined;
 		try {
-			cwd = await this.options.source.peekSessionCwd(file);
-		} catch {
+			summary = await this.options.source.summaryOf(file);
+		} catch (error) {
+			// 读不了就当它不在了：端收到删除后会重新拉一份清单
+			debugLog("sessions", "Failed to read the session summary", { file, error: String(error) });
 			return undefined;
 		}
-		const pool = await this.options.source.listSessions(cwd);
-		this.options.onCwd?.(cwd);
-		return pool.find((item) => item.path === file);
+		if (summary !== undefined) {
+			this.options.onCwd?.(summary.cwd);
+		}
+		return summary;
 	}
 }

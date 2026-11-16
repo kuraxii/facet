@@ -142,7 +142,7 @@ export {
 	UI_THEME_OPTIONS,
 	uiThemeLabel,
 } from "./theme.ts";
-export type { DiffChunk, DisplayRow, ForkPoint, RowKind } from "./transcript/group.ts";
+export type { DisplayRow, ForkPoint, RowKind } from "./transcript/group.ts";
 export { formatDuration, groupLabel, groupRows, turnDurationText } from "./transcript/group.ts";
 export { ArrowDownIcon } from "./transcript/icons.tsx";
 export type { ChatTranscriptProps } from "./transcript/rows.tsx";

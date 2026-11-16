@@ -19,7 +19,6 @@ function summary(overrides: Partial<SessionSummary> = {}): SessionSummary {
 		parentSessionPath: undefined,
 		created: 1,
 		modified: 2,
-		messageCount: 3,
 		firstMessage: "你好",
 		...overrides,
 	};
@@ -27,8 +26,7 @@ function summary(overrides: Partial<SessionSummary> = {}): SessionSummary {
 
 function source(overrides: Partial<SessionIndexSource> = {}): SessionIndexSource {
 	return {
-		listSessions: async () => [summary()],
-		peekSessionCwd: async () => "/work/a",
+		summaryOf: async () => summary(),
 		busyFiles: () => [],
 		...overrides,
 	};
@@ -84,7 +82,7 @@ describe("SessionIndex", () => {
 		const index = new SessionIndex({
 			channel,
 			uri: URI,
-			source: source({ listSessions: async () => [] }),
+			source: source({ summaryOf: async () => undefined }),
 			debounceMs: 0,
 		});
 		index.note("/work/a/s1.jsonl");
@@ -98,7 +96,7 @@ describe("SessionIndex", () => {
 			channel,
 			uri: URI,
 			source: source({
-				peekSessionCwd: async () => {
+				summaryOf: async () => {
 					throw new Error("不存在");
 				},
 			}),

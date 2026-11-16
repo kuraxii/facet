@@ -13,6 +13,8 @@
 	--ease: cubic-bezier(0.2, 0.6, 0.3, 1);
 	--dur-fast: 120ms;
 	--dur-slow: 180ms;
+	/* 运行中动效的周期：文字呼吸、扫光与状态点共用同一个节拍 */
+	--live-cycle: 1.6s;
 	/* 代码字号乘数,由设置里的字号档位写入 */
 	--fs-code-scale: 1;
 	/* 顶部那条带的高度与每个窗口按钮的宽度 */
@@ -285,7 +287,6 @@ svg.fl {
 .session-error-text,
 .file-path,
 .source-path,
-.fc .path,
 .host-addr,
 input,
 textarea,

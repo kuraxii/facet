@@ -26,8 +26,6 @@ export interface SidebarSession {
 	title: string;
 	/** 最后活动时间，Unix 毫秒 */
 	modified: number;
-	/** 消息条数 */
-	messageCount: number;
 	/** 是否正在运行 */
 	isRunning: boolean;
 	/** 行首状态点 */
@@ -231,7 +229,6 @@ function toSession(
 		path: summary.path,
 		title: sessionTitle(summary.name, summary.firstMessage, untitled),
 		modified: summary.modified,
-		messageCount: summary.messageCount,
 		isRunning,
 		dot: isRunning ? (phase ?? "running") : "idle",
 		project: baseName(summary.cwd),

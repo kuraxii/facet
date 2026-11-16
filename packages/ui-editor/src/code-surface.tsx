@@ -78,6 +78,7 @@ export function CodeSurface({
 	/** 语言与只读各占一个隔间，换内容时不重建视图 */
 	const languageSlot = useRef(new Compartment());
 	const readOnlySlot = useRef(new Compartment());
+	const themeSlot = useRef(new Compartment());
 	/** 内容与回调只在建视图时读一次 */
 	const initialText = useRef(text);
 	/** 建视图时的只读状态，后续切换走隔间 */
@@ -108,7 +109,7 @@ export function CodeSurface({
 					foldGutter(),
 					highlightActiveLine(),
 					syntaxHighlighting(HIGHLIGHT_STYLE),
-					editorTheme(readEditorPalette()),
+					themeSlot.current.of(editorTheme(readEditorPalette())),
 					readOnlySlot.current.of([
 						EditorState.readOnly.of(initialReadOnly.current),
 						EditorView.editable.of(!initialReadOnly.current),
@@ -143,8 +144,15 @@ export function CodeSurface({
 			created.requestMeasure();
 		};
 		window.addEventListener("facet:zoom-changed", onZoom);
+		// 字体与字号是 CSS 变量，CodeMirror 不会自己跟着变，换外观时重配一次主题
+		const onAppearance = (): void => {
+			created.dispatch({ effects: themeSlot.current.reconfigure(editorTheme(readEditorPalette())) });
+			created.requestMeasure();
+		};
+		window.addEventListener("facet:appearance-changed", onAppearance);
 		return () => {
 			window.removeEventListener("facet:zoom-changed", onZoom);
+			window.removeEventListener("facet:appearance-changed", onAppearance);
 			created.destroy();
 			view.current = undefined;
 		};

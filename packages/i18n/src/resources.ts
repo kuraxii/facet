@@ -323,7 +323,6 @@ export const en = {
 	transcript: {
 		copy: "Copy text",
 		copied: "Copied",
-		unnamedFile: "Unnamed file",
 		stopped: "Stopped",
 		empty: "No messages yet",
 		fork: "Continue from this turn",
@@ -337,8 +336,6 @@ export const en = {
 		folded_one: "Folded {{count}} line · Show all",
 		folded_other: "Folded {{count}} lines · Show all",
 		imageLabel: "Image {{index}} from the {{tool}} result",
-		filesCount_one: "{{count}} file",
-		filesCount_other: "{{count}} files",
 		retrying: "Retrying…",
 		retryIn: "Retry in {{seconds}}s",
 		retryAttempt: "Retry {{attempt}}/{{max}}",
@@ -828,7 +825,6 @@ export const zhCN = {
 	transcript: {
 		copy: "复制原文",
 		copied: "已复制",
-		unnamedFile: "未命名文件",
 		stopped: "已停止",
 		empty: "还没有消息",
 		fork: "从这一轮往后继续",
@@ -841,7 +837,6 @@ export const zhCN = {
 		process: "过程",
 		folded_other: "已折叠 {{count}} 行 · 显示全部",
 		imageLabel: "{{tool}} 结果里的第 {{index}} 张图片",
-		filesCount_other: "{{count}} 个文件",
 		retrying: "正在重试…",
 		retryIn: "{{seconds}} 秒后重试",
 		retryAttempt: "第 {{attempt}}/{{max}} 次重试",

@@ -150,6 +150,8 @@ interface SessionRuntime {
 	resyncing: { session: boolean; chat: boolean };
 	/** 等待主机确认的输入 */
 	pendingSend: { clientSeq: number; text: string; kind: "turn" | "steering" } | undefined;
+	/** 命令清单缓存，每个会话只取一次；扩展重新初始化或会话释放时丢弃 */
+	commands: SlashCommand[] | undefined;
 	/** 关闭标签后的保留定时器 */
 	retainTimer: ReturnType<typeof setTimeout> | undefined;
 }
@@ -212,6 +214,7 @@ export class SessionClient {
 			olderTask: undefined,
 			resyncing: { session: false, chat: false },
 			pendingSend: undefined,
+			commands: undefined,
 			retainTimer: undefined,
 		};
 	}
@@ -1043,10 +1046,20 @@ export class SessionClient {
 		return accepted;
 	}
 
-	/** 会话里能用的命令：界面自带的几条，加上扩展命令、提示词模板与技能。 */
+	/**
+	 * 会话里能用的命令：界面自带的几条，加上扩展命令、提示词模板与技能。
+	 *
+	 * 每个会话只请求一次，切换标签不再重取；扩展重新初始化或会话释放后缓存作废。
+	 */
 	async listCommands(): Promise<SlashCommand[]> {
-		const opened = this.requireOpened();
-		const result = await this.transport.request("listCommands", { sessionId: opened.snapshot.id });
+		const runtime = this.requireRuntime();
+		if (runtime.commands !== undefined) {
+			return runtime.commands;
+		}
+		const result = await this.transport.request("listCommands", { sessionId: runtime.opened.snapshot.id });
+		if (this.runtimes.get(runtime.opened.sessionId) === runtime) {
+			runtime.commands = result.commands;
+		}
 		return result.commands;
 	}
 
@@ -1224,6 +1237,11 @@ export class SessionClient {
 	 */
 	private observe(frame: ActionFrame, wasCompacting: boolean, runtime: SessionRuntime): void {
 		const opened = runtime.opened;
+		// 扩展重新初始化会改变可用命令，下次取命令列表时重新请求
+		if (frame.channel === opened.sessionChannel && frame.action.type === "session/initialized") {
+			runtime.commands = undefined;
+			return;
+		}
 		if (frame.channel === opened.sessionChannel && frame.action.type === "session/phase") {
 			if (wasCompacting && frame.action.maintenance?.kind !== "compaction") {
 				runtime.commitChain = runtime.commitChain

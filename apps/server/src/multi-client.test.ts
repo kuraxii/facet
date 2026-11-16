@@ -261,7 +261,6 @@ function fakeFactory(dataDir: string) {
 				parentSessionPath: undefined,
 				created: 1,
 				modified: 2,
-				messageCount: 0,
 				firstMessage: "",
 			},
 		],

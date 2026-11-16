@@ -323,6 +323,29 @@ function applyAppearance(appearance: FacetSettings["appearance"]): void {
 	root.style.setProperty("--editor-size", `${appearance.editorFontSize}px`);
 	root.style.setProperty("--terminal-size", `${appearance.terminalFontSize}px`);
 	localStorage.setItem(THEME_KEY, appearance.theme);
+	// 编辑器与终端读的是计算后的变量值，换外观时要显式告诉它们重新取
+	window.dispatchEvent(new Event("facet:appearance-changed"));
+}
+
+/**
+ * 读一份终端外观。
+ *
+ * 字体与字号是 CSS 变量，xterm 只吃具体值，所以每次外观变化都要重新读一次计算样式；
+ * 主题切换时前景、光标与选区色也跟着变，一并重读。
+ */
+function readTerminalAppearance(): TerminalAppearance {
+	const styles = getComputedStyle(document.documentElement);
+	const read = (name: string, fallback: string): string => styles.getPropertyValue(name).trim() || fallback;
+	return {
+		fontFamily: read("--font-terminal", "ui-monospace, monospace"),
+		fontSize: Number.parseFloat(read("--terminal-size", "12.5")),
+		lineHeight: 1.35,
+		cursorBlink: true,
+		scrollback: 5000,
+		foreground: read("--t1", "#1a1a1e"),
+		cursor: read("--acc", "#239956"),
+		selection: read("--surface3", "#e4e4e7"),
+	};
 }
 
 /** 把设置里的主题换成实际生效的深浅色，侧栏的切换按钮按它决定图标与文案。 */
@@ -685,6 +708,14 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 	/** 正在进行的重连,重复触发时共用同一次 */
 	const reconnecting = useRef<Promise<void> | undefined>(undefined);
 
+	// 外观变化（含设置页里的预览）后重读终端那份计算样式。
+	// 这段要排在下面应用外观的 effect 之前：启动时那次也要能接到。
+	useEffect(() => {
+		const onAppearance = (): void => setTerminalAppearance(readTerminalAppearance());
+		window.addEventListener("facet:appearance-changed", onAppearance);
+		return () => window.removeEventListener("facet:appearance-changed", onAppearance);
+	}, []);
+
 	// 设置变化时应用外观，并把有效主题同步给侧栏的切换按钮
 	useEffect(() => {
 		applyAppearance(settings.appearance);
@@ -940,21 +971,12 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 	/** 终端不能用的原因，能用时为空 */
 	const terminalDisabledReason = canUseTerminal ? undefined : t("app.terminalUnavailable");
 
-	/** 终端外观：跟着界面配色与等宽字体走，主题一换就重算 */
-	const terminalAppearance = useMemo<TerminalAppearance>(() => {
-		const styles = getComputedStyle(document.documentElement);
-		const read = (name: string, fallback: string): string => styles.getPropertyValue(name).trim() || fallback;
-		return {
-			fontFamily: read("--font-terminal", "ui-monospace, monospace"),
-			fontSize: Number.parseFloat(read("--terminal-size", "12.5")),
-			lineHeight: 1.35,
-			cursorBlink: true,
-			scrollback: 5000,
-			foreground: read("--t1", "#1a1a1e"),
-			cursor: read("--acc", "#239956"),
-			selection: read("--surface3", "#e4e4e7"),
-		};
-	}, []);
+	/**
+	 * 终端外观：跟着界面配色与等宽字体走。
+	 *
+	 * 值只能从计算样式里读，所以每次换外观都要重新读一次；变化由 `facet:appearance-changed` 通知。
+	 */
+	const [terminalAppearance, setTerminalAppearance] = useState<TerminalAppearance>(readTerminalAppearance);
 
 	/** 在当前目录开一个终端，并把它设成当前标签。 */
 	const openTerminal = useCallback(async (): Promise<void> => {
@@ -2403,6 +2425,7 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 												canRevert={canFork}
 												onRevert={revertTo}
 												maintenance={session.state.maintenance}
+												isRunning={activity !== "idle"}
 												onRetryTurn={retryTurn}
 												onCopyDetails={(text) => {
 													void navigator.clipboard.writeText(text).catch(() => undefined);

@@ -15,6 +15,7 @@ import { ProjectExistsError, ProjectStore } from "./project-store.ts";
 import { ChildPtyBackend } from "./pty-server.ts";
 import { SessionHub } from "./session-hub.ts";
 import { SessionIndex } from "./session-index.ts";
+import { SessionWatch } from "./session-watch.ts";
 import { SessionsChannel } from "./sessions-channel.ts";
 import { SettingsStore } from "./settings-store.ts";
 import { TerminalService } from "./terminals.ts";
@@ -84,12 +85,44 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 		channel: sessions,
 		uri: sessionsChannelFor(hostId),
 		source: {
-			listSessions: (cwd) => factory.listSessions(cwd),
-			peekSessionCwd: (file) => factory.peekSessionCwd(file),
+			summaryOf: (file) => factory.sessionSummary(file),
 			busyFiles: () => hub.busyFiles(),
 		},
 		onCwd: (cwd) => void ensureProject(cwd),
 	});
+	// 会话文件由主机与命令行工具共同写入，监听目录比定时扫描及时得多；
+	// 变化先丢掉摘要缓存，再交给索引推一条新的
+	const sessionWatch = new SessionWatch({
+		sessionsDir: factory.sessionsDir,
+		onChange: (changes) => {
+			for (const change of changes) {
+				factory.invalidateSession(change.file);
+				sessionIndex?.note(change.file, change.kind);
+			}
+		},
+	});
+	void sessionWatch.start();
+	/** 名字没定下来的会话在背景里补齐，补到一条推一条，不阻塞清单请求。 */
+	let fillingNames = false;
+	const fillSessionNames = (): void => {
+		if (fillingNames) {
+			return;
+		}
+		fillingNames = true;
+		void factory
+			.fillSessionNames()
+			.then((changed) => {
+				for (const summary of changed) {
+					sessionIndex?.note(summary.path);
+				}
+			})
+			.catch((error: unknown) => {
+				debugLog("sessions", "Failed to fill session names", { error: String(error) });
+			})
+			.finally(() => {
+				fillingNames = false;
+			});
+	};
 	const projects = new ProjectCatalog(factory);
 	await projects.refresh().catch((error: unknown) => {
 		console.error("Project scan failed", error);
@@ -131,6 +164,7 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 		hostSource: hostIdentity.source,
 		sessions,
 		terminals,
+		onSessionsListed: fillSessionNames,
 	});
 	debugLog("server", "Host endpoint ready", {
 		endpoint: `ws://${endpoint.host}:${endpoint.port}/endpoint`,
@@ -151,6 +185,7 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 		close: async () => {
 			clearInterval(evictionTimer);
 			sessionIndex?.stop();
+			sessionWatch.stop();
 			await endpoint.close();
 			terminals.dispose();
 			hub.dispose();
@@ -193,6 +228,8 @@ export {
 } from "./session-hub.ts";
 export type { SessionChange, SessionIndexSource } from "./session-index.ts";
 export { SessionIndex } from "./session-index.ts";
+export type { SessionFileChange, SessionWatchOptions } from "./session-watch.ts";
+export { SessionWatch } from "./session-watch.ts";
 export { SessionsChannel } from "./sessions-channel.ts";
 export type { CreateTerminalOptions, TerminalSink, TerminalSnapshot } from "./terminals.ts";
 export { TerminalService } from "./terminals.ts";

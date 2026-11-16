@@ -11,7 +11,12 @@ export { pageOf } from "./paging.ts";
 export { DEFAULT_AGENT_DIR, DEV_AGENT_DIR } from "./paths.ts";
 export { FACET_COMMANDS, PiAgent } from "./pi-agent.ts";
 export type { ScanSessionProjectsOptions, SessionProject } from "./projects.ts";
-export { normalizeProjectPath, projectIdOf, scanSessionProjects } from "./projects.ts";
+export {
+	listSessionFiles,
+	normalizeProjectPath,
+	projectIdOf,
+	scanSessionProjects,
+} from "./projects.ts";
 export type {
 	ForkPiAgentOptions,
 	OpenPiAgentOptions,
@@ -19,4 +24,14 @@ export type {
 	PiAgentLaunchOptions,
 } from "./runtime.ts";
 export { PiAgentFactory } from "./runtime.ts";
+export type { SessionCatalogOptions } from "./session-catalog.ts";
+export { SessionCatalog } from "./session-catalog.ts";
+export type { SessionFileHeader, SessionFileStats } from "./session-scan.ts";
+export {
+	readFirstUserMessage,
+	readSessionHeader,
+	readSessionName,
+	readSessionSummary,
+	statSessionFile,
+} from "./session-scan.ts";
 export type * from "./types.ts";

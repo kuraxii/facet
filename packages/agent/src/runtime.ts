@@ -5,7 +5,6 @@
  * 每个会话自己的资源加载器按工作目录单独构造。这里不登记建好的会话，
  * 谁活着、何时回收由主机侧决定。
  */
-import { open } from "node:fs/promises";
 import { join } from "node:path";
 import {
 	createAgentSession,
@@ -36,6 +35,8 @@ import {
 import { applyAgentDir } from "./paths.ts";
 import { PiAgent } from "./pi-agent.ts";
 import { normalizeProjectPath, type SessionProject, scanSessionProjects } from "./projects.ts";
+import { SessionCatalog } from "./session-catalog.ts";
+import { readSessionHeader } from "./session-scan.ts";
 
 /** 工厂的进程级配置。 */
 export interface PiAgentFactoryOptions {
@@ -182,6 +183,8 @@ export class PiAgentFactory {
 	readonly agentDir: string;
 	/** 会话文件目录，未指定时按工作目录分组 */
 	readonly sessionDir: string | undefined;
+	/** 会话根目录：未指定 sessionDir 时落在 agentDir 下的 sessions */
+	readonly sessionsDir: string;
 	private readonly modelRuntime: ModelRuntime;
 	private readonly onError: ((error: unknown) => void) | undefined;
 	/** 项目信任记录，与 pi 命令行共用同一份 */
@@ -194,6 +197,8 @@ export class PiAgentFactory {
 	private baseUrlOverrides: Record<string, string>;
 	/** 自定义提供方配置里的地址，键为提供方 id；它们的模型不一定带地址，列表要能显示 */
 	private customBaseUrls: Record<string, string>;
+	/** 会话清单与摘要缓存，按文件缓存读取结果 */
+	private readonly sessionCatalog: SessionCatalog;
 	private disposed = false;
 
 	private constructor(
@@ -212,8 +217,10 @@ export class PiAgentFactory {
 		this.customBaseUrls = customBaseUrls;
 		this.agentDir = agentDir;
 		this.sessionDir = options.sessionDir;
+		this.sessionsDir = options.sessionDir ?? join(agentDir, "sessions");
 		this.onError = options.onError;
 		this.trustStore = new ProjectTrustStore(agentDir);
+		this.sessionCatalog = new SessionCatalog({ sessionsDir: this.sessionsDir });
 	}
 
 	/** 建立共享资源。凭证与模型配置的路径由 agentDir 推出。 */
@@ -452,29 +459,32 @@ export class PiAgentFactory {
 	 */
 	async scanProjects(): Promise<SessionProject[]> {
 		return await scanSessionProjects({
-			sessionsDir: this.sessionDir ?? join(this.agentDir, "sessions"),
+			sessionsDir: this.sessionsDir,
 		});
 	}
 
-	/** 列出会话。指定 cwd 时只列该目录的会话，否则列出全部。 */
+	/**
+	 * 列出会话。指定 cwd 时只列该目录的会话，否则列出全部。
+	 *
+	 * 摘要由缓存给出：没变过的文件不重读，会话目录到 GB 级时也不会卡住。
+	 */
 	async listSessions(cwd?: string): Promise<SessionSummary[]> {
-		const infos = cwd
-			? await SessionManager.list(cwd, this.sessionDir)
-			: this.sessionDir
-				? await SessionManager.listAll(this.sessionDir)
-				: await SessionManager.listAll();
-		return infos.map((info) => ({
-			id: info.id,
-			path: info.path,
-			cwd: normalizeProjectPath(info.cwd),
-			// pi 会用 null 表示没有名字，协议里缺省就是 undefined
-			name: info.name ?? undefined,
-			parentSessionPath: info.parentSessionPath,
-			created: info.created.getTime(),
-			modified: info.modified.getTime(),
-			messageCount: info.messageCount,
-			firstMessage: info.firstMessage,
-		}));
+		return await this.sessionCatalog.list(cwd);
+	}
+
+	/** 会话文件变了，丢掉它的摘要缓存，下次取时重读。 */
+	invalidateSession(file: string): void {
+		this.sessionCatalog.invalidate(file);
+	}
+
+	/** 单个会话文件的摘要，读盘结果进缓存。文件不是会话文件时为空。 */
+	async sessionSummary(file: string): Promise<SessionSummary | undefined> {
+		return await this.sessionCatalog.summaryOf(file);
+	}
+
+	/** 背景补齐名字没定下来的会话，返回变得不一样的几条。 */
+	async fillSessionNames(): Promise<SessionSummary[]> {
+		return await this.sessionCatalog.fillNames();
 	}
 
 	/** 新建会话。会话文件立即建立，后续每条完成的消息追加写盘。 */
@@ -494,51 +504,18 @@ export class PiAgentFactory {
 	}
 
 	/**
-	 * 只读会话文件的第一行,取出会话 id。
+	 * 会话文件里的会话标识。
 	 *
-	 * 建立会话要先知道它的 id 才能确定登记键,而 id 在文件头部,这里只读一小段。
+	 * 建立会话要先知道它的 id 才能确定登记键，而 id 在文件头部，这里只读一小段。
 	 * 文件不是会话文件时抛错。
 	 */
-	/** 读会话文件的头部：会话标识与创建时的工作目录。 */
-	private async readSessionHeader(file: string): Promise<{ id: string; cwd: string }> {
-		let handle: Awaited<ReturnType<typeof open>>;
-		try {
-			handle = await open(file, "r");
-		} catch (error) {
-			// 文件被删或路径写错是最常见的原因,给一句能看懂的说明
-			if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-				throw new Error(`Session file does not exist: ${file}`);
-			}
-			throw error;
-		}
-		try {
-			const buffer = Buffer.alloc(4096);
-			const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-			const text = buffer.subarray(0, bytesRead).toString("utf8");
-			const line = text.slice(0, text.indexOf("\n") < 0 ? text.length : text.indexOf("\n"));
-			let header: { type?: unknown; id?: unknown; cwd?: unknown };
-			try {
-				header = JSON.parse(line) as { type?: unknown; id?: unknown; cwd?: unknown };
-			} catch {
-				throw new Error(`Not a session file: ${file}`);
-			}
-			if (header.type !== "session" || typeof header.id !== "string" || typeof header.cwd !== "string") {
-				throw new Error(`Not a session file: ${file}`);
-			}
-			return { id: header.id, cwd: header.cwd };
-		} finally {
-			await handle.close();
-		}
-	}
-
-	/** 会话文件里的会话标识。 */
 	async peekSessionId(file: string): Promise<string> {
-		return (await this.readSessionHeader(file)).id;
+		return (await readSessionHeader(file)).id;
 	}
 
-	/** 会话文件头部的目录。会话清单推送据此决定读哪个项目的会话，文件不在了时抛出。 */
+	/** 会话文件头部的目录，文件不在了时抛出。 */
 	async peekSessionCwd(file: string): Promise<string> {
-		return normalizeProjectPath((await this.readSessionHeader(file)).cwd);
+		return normalizeProjectPath((await readSessionHeader(file)).cwd);
 	}
 
 	/** 打开已有会话。模型回退等提示通过 PiAgent 的 fallbackNotice 取得。 */

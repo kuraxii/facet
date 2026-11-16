@@ -19,7 +19,6 @@ function summary(overrides: Partial<SessionSummary> & Pick<SessionSummary, "id" 
 		parentSessionPath: undefined,
 		created: 0,
 		modified: NOW - 60_000,
-		messageCount: 3,
 		firstMessage: "",
 		...overrides,
 	};
@@ -37,7 +36,6 @@ function session(overrides: Partial<SidebarSession> & Pick<SidebarSession, "path
 	return {
 		title: "会话",
 		modified: NOW - 60_000,
-		messageCount: 1,
 		isRunning: false,
 		dot: "idle",
 		project: "facet",
@@ -187,7 +185,6 @@ describe("状态点", () => {
 		parentSessionPath: undefined,
 		created: 1,
 		modified: 2,
-		messageCount: 1,
 		firstMessage: "你好",
 	});
 

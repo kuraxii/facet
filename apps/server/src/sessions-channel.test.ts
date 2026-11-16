@@ -16,7 +16,6 @@ function summary(path: string): SessionSummary {
 		parentSessionPath: undefined,
 		created: 1,
 		modified: 1,
-		messageCount: 1,
 		firstMessage: "你好",
 	};
 }

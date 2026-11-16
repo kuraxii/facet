@@ -25,15 +25,7 @@ import { createPortal } from "react-dom";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { Markdown } from "../markdown/Markdown.tsx";
 import { ChevronIcon, TreeChevron } from "./chevron.tsx";
-import { lineClass, patchLines } from "./diff-lines.ts";
-import {
-	type DiffChunk,
-	type DisplayRow,
-	groupLabel,
-	groupRows,
-	isTurnTimingLive,
-	turnDurationText,
-} from "./group.ts";
+import { type DisplayRow, groupLabel, groupRows, isTurnTimingLive, turnDurationText } from "./group.ts";
 import { foldOutput, type ToolCategory, toolDetail, toolKind, toolTarget } from "./tool-text.ts";
 
 /** 面板参数。 */
@@ -59,6 +51,8 @@ export interface ChatTranscriptProps {
 	emptyHint?: string;
 	/** 实时消息提升为历史消息时的标识迁移，用来搬动按行标识保存的收起状态 */
 	renames?: Readonly<Record<string, string>> | undefined;
+	/** 会话是否仍在推进；为真时最后一轮的时长持续计时 */
+	isRunning?: boolean;
 }
 
 /**
@@ -97,7 +91,7 @@ function useNow(isTicking: boolean): number | undefined {
 
 /** 默认收起的行。 */
 function isCollapsedByDefault(kind: DisplayRow["kind"]): boolean {
-	return kind === "meta" || kind === "diff";
+	return kind === "meta";
 }
 
 function textOf(parts: readonly Part[]): string {
@@ -152,11 +146,6 @@ function categoryIcon(category: ToolCategory): ReactNode {
 		default:
 			return <Wrench size={14} strokeWidth={1.5} />;
 	}
-}
-
-function shortPath(path: string): string {
-	const parts = path.split("/").filter((segment) => segment.length > 0);
-	return parts.length <= 2 ? parts.join("/") : parts.slice(-2).join("/");
 }
 
 /**
@@ -336,62 +325,6 @@ function PartView({ part, isStreaming }: { part: Part; isStreaming: boolean }) {
 	return <ToolRow part={part} />;
 }
 
-/** 一轮的文件改动。文件是按钮,点开看这一段补丁。 */
-function FilesRow({ diffs }: { diffs: readonly DiffChunk[] }) {
-	const { t } = useI18n();
-	const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set());
-	const toggle = useCallback((callId: string) => {
-		setOpened((previous) => {
-			const next = new Set(previous);
-			if (next.has(callId)) {
-				next.delete(callId);
-			} else {
-				next.add(callId);
-			}
-			return next;
-		});
-	}, []);
-	const totalAdded = diffs.reduce((sum, diff) => sum + diff.added, 0);
-	const totalRemoved = diffs.reduce((sum, diff) => sum + diff.removed, 0);
-
-	return (
-		<>
-			<div className="files">
-				{diffs.map((diff) => {
-					const file = diff.files[0];
-					const isOpen = opened.has(diff.callId);
-					return (
-						<button key={diff.callId} type="button" className="fc" onClick={() => toggle(diff.callId)}>
-							<ChevronIcon isOpen={isOpen} />
-							<span className="path" title={file ?? ""}>
-								{file === undefined ? t("transcript.unnamedFile") : shortPath(file)}
-							</span>
-							<b className="add">+{diff.added}</b>
-							<b className="del">−{diff.removed}</b>
-						</button>
-					);
-				})}
-				<span className="files-meta">
-					{t("transcript.filesCount", { count: diffs.length })} · <b className="add">+{totalAdded}</b>{" "}
-					<b className="del">−{totalRemoved}</b>
-				</span>
-			</div>
-			{diffs
-				.filter((diff) => opened.has(diff.callId))
-				.map((diff) => (
-					<div key={`patch:${diff.callId}`} className="diff-body">
-						{patchLines(diff.patch).map(({ key, line, number }) => (
-							<div key={key} className={`diff-line ${lineClass(line)}`}>
-								<i>{number}</i>
-								<span>{line}</span>
-							</div>
-						))}
-					</div>
-				))}
-		</>
-	);
-}
-
 /** 这一行是否被用户中止。 */
 function isAborted(row: DisplayRow): boolean {
 	return row.items.some((item) => item.stopReason === "aborted");
@@ -478,9 +411,10 @@ export function ChatTranscript({
 	onCopyText,
 	emptyHint,
 	renames,
+	isRunning = false,
 }: ChatTranscriptProps) {
 	const { t } = useI18n();
-	const rows = useMemo(() => groupRows(items), [items]);
+	const rows = useMemo(() => groupRows(items, { running: isRunning }), [items, isRunning]);
 	const retry = maintenance?.kind === "retry" ? maintenance : undefined;
 	const isCompacting = maintenance?.kind === "compaction";
 	// 第一条用户消息之前没有可回退的轮次
@@ -540,14 +474,6 @@ export function ChatTranscript({
 
 				if (row.kind === "assistant") {
 					lastAnswerText = textOf(row.items.flatMap((item) => item.parts));
-				}
-
-				if (row.kind === "diff") {
-					return (
-						<Shell key={row.id} className="is-files">
-							<FilesRow diffs={row.diffs} />
-						</Shell>
-					);
 				}
 
 				if (row.kind === "fork") {

@@ -363,7 +363,6 @@ describe("会话清单", () => {
 			parentSessionPath: undefined,
 			created: 1,
 			modified,
-			messageCount: 1,
 			firstMessage: "你好",
 		};
 	}

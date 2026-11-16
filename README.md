@@ -4,7 +4,7 @@
 
 ## 环境要求
 
-- Node.js ≥ 22.19，npm（仓库用 npm workspaces）
+- Node.js 26（当前 LTS，版本写在 `.node-version`），npm（仓库用 npm workspaces）；server 产物打包的是同一个版本
 - Electron 由 `postinstall` 脚本准备；Linux 上如果 `node-pty` 需要现编，系统要装有编译工具链（`gcc`、`make`、`python3`）
 
 ## 安装

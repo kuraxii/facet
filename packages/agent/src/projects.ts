@@ -8,6 +8,7 @@ import { createHash } from "node:crypto";
 import type { Dirent } from "node:fs";
 import { type FileHandle, open, readdir, stat } from "node:fs/promises";
 import { join, normalize } from "node:path";
+import { mapLimit } from "./limit.ts";
 
 /** 会话头最大读取字节数，头部只有少量字段。 */
 const HEADER_BYTES = 4096;
@@ -49,25 +50,6 @@ export function projectIdOf(cwd: string): string {
 	return createHash("sha1").update(cwd).digest("hex").slice(0, 16);
 }
 
-/** 按上限并发执行，保持结果顺序。 */
-async function mapLimit<T, R>(
-	items: readonly T[],
-	limit: number,
-	task: (item: T) => Promise<R>,
-): Promise<R[]> {
-	const results = new Array<R>(items.length);
-	let next = 0;
-	const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-		while (next < items.length) {
-			const index = next;
-			next += 1;
-			results[index] = await task(items[index] as T);
-		}
-	});
-	await Promise.all(workers);
-	return results;
-}
-
 /** 读会话文件第一行里的 cwd，读不到或格式不符时返回空。 */
 async function readSessionCwd(file: string): Promise<string | undefined> {
 	let handle: FileHandle | undefined;
@@ -91,8 +73,13 @@ async function readSessionCwd(file: string): Promise<string | undefined> {
 	}
 }
 
-/** 列出会话根目录下每个子目录里的会话文件。 */
-async function listSessionFiles(sessionsDir: string): Promise<string[]> {
+/**
+ * 列出会话目录里的会话文件。
+ *
+ * 缺省布局是一层项目目录，会话文件在子目录里；指定了会话目录时文件可能直接铺在根
+ * 上，两种都收进来。
+ */
+export async function listSessionFiles(sessionsDir: string): Promise<string[]> {
 	let entries: Dirent[];
 	try {
 		entries = await readdir(sessionsDir, { withFileTypes: true });
@@ -101,6 +88,10 @@ async function listSessionFiles(sessionsDir: string): Promise<string[]> {
 	}
 	const files: string[] = [];
 	for (const entry of entries) {
+		if (entry.isFile() && entry.name.endsWith(".jsonl")) {
+			files.push(join(sessionsDir, entry.name));
+			continue;
+		}
 		// 会话目录是真实目录或指向它的符号链接，其余条目不是会话
 		if (!entry.isDirectory() && !entry.isSymbolicLink()) {
 			continue;

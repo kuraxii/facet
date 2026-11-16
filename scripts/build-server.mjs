@@ -4,7 +4,7 @@
  * 产物是一个自带官方 Node 运行时的目录：
  *
  *   dist-server/
- *     bin/node            官方 Node（与 engines 要求一致的 LTS）
+ *     bin/node            官方 Node（当前 LTS，随发行包分发）
  *     lib/server.mjs      server 入口，esbuild 打成单个 ES 模块（源码里有顶层 await）
  *     lib/pty-server.mjs  终端子进程入口
  *     lib/worker.js       codemode 脚本的沙箱 worker（pi 的沙箱在自己的线程里跑脚本）
@@ -14,11 +14,11 @@
  * 桌面打包后把整个目录放进 `resources/server`；server 用 `bin/node lib/server.mjs` 启动，
  * 与桌面那份 Electron 运行时互不相干。
  *
- * 用法：node scripts/build-server.mjs [--node 22.21.0]
+ * 用法：node scripts/build-server.mjs [--node 26.13.1]
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { chmod, copyFile, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -29,8 +29,12 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 const outDir = join(root, "apps/desktop/dist-server");
 const cacheDir = join(homedir(), ".cache", "facet-node");
 
-/** 自带的 Node 版本。要换版本改这里，或传 `--node <版本>`。 */
-const DEFAULT_NODE_VERSION = "22.21.0";
+/**
+ * 自带的 Node 版本。
+ *
+ * 以仓库根的 `.node-version` 为准，开发机与发行包因此用同一个版本；命令行参数优先生效。
+ */
+const DEFAULT_NODE_VERSION = "26.13.1";
 
 const nodeVersion = readNodeVersion() ?? DEFAULT_NODE_VERSION;
 
@@ -77,7 +81,7 @@ async function bundle(entry, outfile) {
 		bundle: true,
 		platform: "node",
 		format: "esm",
-		target: "node22",
+		target: "node26",
 		// 原生模块只能外置，跟着产物一起拷过去
 		external: ["node-pty"],
 		// 源码里的 .ts 相对导入由 esbuild 直接处理
@@ -174,11 +178,19 @@ async function main() {
 
 function readNodeVersion() {
 	const index = process.argv.indexOf("--node");
-	if (index < 0) {
+	if (index >= 0) {
+		const value = process.argv[index + 1]?.trim();
+		if (value !== undefined && value.length > 0) {
+			return value;
+		}
+	}
+	// .node-version 是开发机与发行包的共同版本号，读不到时用内置的缺省值
+	try {
+		const value = readFileSync(join(root, ".node-version"), "utf8").trim();
+		return value.length > 0 ? value : undefined;
+	} catch {
 		return undefined;
 	}
-	const value = process.argv[index + 1]?.trim();
-	return value !== undefined && value.length > 0 ? value : undefined;
 }
 
 await main();

@@ -170,6 +170,8 @@ interface EndpointContext {
 	readonly terminals: TerminalService;
 	/** 远程操作审计 */
 	readonly audit: AuditLog;
+	/** 一次清单请求处理完之后的回调，用来在背景里补齐还没定下来的数据 */
+	readonly onSessionsListed?: () => void;
 }
 
 /** 这个对端地址是否是回环地址。IPv4、IPv6 与 IPv4 映射地址都算。 */
@@ -533,7 +535,10 @@ async function handleRequest(
 		}
 		case "listSessions": {
 			const source = asObject(params ?? {});
-			return { sessions: await context.factory.listSessions(optionalString(source, "cwd")) };
+			const sessions = await context.factory.listSessions(optionalString(source, "cwd"));
+			// 清单已经回给端了，可以在背景里补齐剩下的摘要
+			context.onSessionsListed?.();
+			return { sessions };
 		}
 		case "createSession":
 			return await createSession(context, params);
@@ -1070,6 +1075,8 @@ export async function startEndpoint(options: {
 	terminals?: TerminalService;
 	/** 远程操作审计，缺省写到数据目录的 audit.log */
 	audit?: AuditLog;
+	/** 清单请求之后的回调，主机用它补齐背景数据 */
+	onSessionsListed?: () => void;
 }): Promise<EndpointHandle> {
 	const context: EndpointContext = {
 		config: options.config,
@@ -1085,6 +1092,7 @@ export async function startEndpoint(options: {
 			options.terminals ??
 			new TerminalService({ backend: new DisabledPtyBackend("This host has no terminal backend") }),
 		audit: options.audit ?? new AuditLog(join(options.config.dataDir, "audit.log")),
+		onSessionsListed: options.onSessionsListed,
 	};
 
 	/** 连接关闭时的清理：退掉订阅、从表里摘掉。 */

@@ -141,6 +141,12 @@ class FakeTransport implements SessionTransport {
 							},
 						],
 					};
+				case "listCommands":
+					return {
+						commands: [
+							{ name: "compact", description: "压缩", source: "builtin" as const, handler: "facet" as const },
+						],
+					};
 				case "listProjects":
 					return {
 						projects: [{ id: "p1", cwd: "/work/a", name: "A", createdAt: 1 }],
@@ -417,6 +423,32 @@ describe("SessionClient", () => {
 		expect(last.file).toBe("/tmp/c.jsonl");
 		expect(client.current?.file).toBe("/tmp/c.jsonl");
 		expect(client.current?.sessionId).toBe("c");
+	});
+
+	it("命令清单每个会话只取一次", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/a.jsonl");
+		const first = await client.listCommands();
+		expect(await client.listCommands()).toEqual(first);
+		expect(transport.calls.filter((call) => call.method === "listCommands")).toHaveLength(1);
+		await client.switchSession("/tmp/b.jsonl");
+		await client.listCommands();
+		expect(transport.calls.filter((call) => call.method === "listCommands")).toHaveLength(2);
+		await client.switchSession("/tmp/a.jsonl");
+		expect(await client.listCommands()).toEqual(first);
+		expect(transport.calls.filter((call) => call.method === "listCommands")).toHaveLength(2);
+	});
+
+	it("扩展重新初始化后重取命令清单", async () => {
+		const { transport, client } = createClient(2);
+		const opened = await client.openSession("/tmp/a.jsonl");
+		await client.listCommands();
+		transport.emit(opened.sessionChannel, {
+			type: "session/initialized",
+			initialization: { kind: "ready" },
+		});
+		await client.listCommands();
+		expect(transport.calls.filter((call) => call.method === "listCommands")).toHaveLength(2);
 	});
 
 	it("切回已缓存的会话不再重新打开", async () => {
@@ -1275,7 +1307,6 @@ describe("SessionClient", () => {
 				parentSessionPath: undefined,
 				created: 1,
 				modified: 2,
-				messageCount: 1,
 				firstMessage: "你好",
 			},
 			busy: true,

@@ -124,3 +124,45 @@ describe("内置扩展", () => {
 		expect(tools.some((tool) => tool.name === "tool_search")).toBe(true);
 	});
 });
+
+describe("会话清单", () => {
+	it("列出指定会话目录下的会话，摘要取文件内容", async () => {
+		const sessionDir = join(root, "custom-sessions");
+		await mkdir(sessionDir, { recursive: true });
+		await writeFile(
+			join(sessionDir, "s1.jsonl"),
+			`${JSON.stringify({ type: "session", version: 3, id: "s1", timestamp: "2026-01-01T00:00:00.000Z", cwd: "/work/a" })}\n${JSON.stringify(
+				{ type: "message", id: "m1", parentId: null, message: { role: "user", content: "第一句" } },
+			)}\n`,
+			"utf8",
+		);
+		const scoped = await PiAgentFactory.create({ agentDir: join(root, "agent"), sessionDir });
+		const sessions = await scoped.listSessions();
+		expect(sessions.map((item) => item.id)).toEqual(["s1"]);
+		expect(sessions[0]?.firstMessage).toBe("第一句");
+		expect(sessions[0]?.cwd).toBe("/work/a");
+		scoped.dispose();
+	});
+
+	it("invalidateSession 之后重读文件", async () => {
+		const sessionDir = join(root, "custom-sessions-2");
+		await mkdir(sessionDir, { recursive: true });
+		const file = join(sessionDir, "s1.jsonl");
+		const header = JSON.stringify({ type: "session", version: 3, id: "s1", cwd: "/work/a" });
+		await writeFile(
+			file,
+			`${header}\n${JSON.stringify({ type: "message", id: "m1", parentId: null, message: { role: "user", content: "旧" } })}\n`,
+			"utf8",
+		);
+		const scoped = await PiAgentFactory.create({ agentDir: join(root, "agent"), sessionDir });
+		expect((await scoped.listSessions())[0]?.firstMessage).toBe("旧");
+		await writeFile(
+			file,
+			`${header}\n${JSON.stringify({ type: "message", id: "m1", parentId: null, message: { role: "user", content: "新的内容" } })}\n`,
+			"utf8",
+		);
+		scoped.invalidateSession(file);
+		expect((await scoped.listSessions())[0]?.firstMessage).toBe("新的内容");
+		scoped.dispose();
+	});
+});

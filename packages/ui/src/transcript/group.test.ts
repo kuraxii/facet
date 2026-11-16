@@ -137,49 +137,13 @@ describe("分行", () => {
 		expect(after[1]?.isStreaming).toBe(true);
 	});
 
-	it("文件改动行排在正文之后", () => {
-		const patch = ["--- a/src/a.ts", "+++ b/src/a.ts", "@@ -1 +1 @@", "-old", "+next", "+more"].join("\n");
-		const rows = groupRows([
-			item({ id: "m1", role: "assistant", parts: [tool("tool:c1", "c1", 40, { patch })] }),
-			item({ id: "m2", role: "assistant", parts: [text("text:0", "改好了")] }),
-		]);
-		expect(rows.map((row) => row.kind)).toEqual(["meta", "assistant", "diff", "fork"]);
-		expect(rows[2]?.id).toBe("diff:c1");
-		expect(rows[2]?.diffs[0]?.files).toEqual(["src/a.ts"]);
-		expect(rows[2]?.diffs[0]?.added).toBe(2);
-		expect(rows[2]?.diffs[0]?.removed).toBe(1);
-	});
-
-	it("没有正文的回合,改动行跟在过程行之后收尾", () => {
+	it("工具结果里的补丁不再单独成行", () => {
 		const patch = ["--- a/b.ts", "+++ b/b.ts", "@@", "-x", "+y"].join("\n");
 		const rows = groupRows([
 			item({ id: "m1", role: "user", parts: [text("text:0", "改一下")] }),
 			item({ id: "m2", role: "assistant", parts: [tool("tool:c1", "c1", 5, { patch })] }),
 		]);
-		expect(rows.map((row) => row.kind)).toEqual(["user", "meta", "diff", "fork"]);
-	});
-
-	it("下一轮开始时先收尾上一轮未显示完的改动行", () => {
-		const patch = ["--- a/c.ts", "+++ b/c.ts", "@@", "-x", "+y"].join("\n");
-		const rows = groupRows([
-			item({ id: "m1", role: "assistant", parts: [tool("tool:c1", "c1", 5, { patch })] }),
-			item({ id: "m2", role: "user", parts: [text("text:0", "再来")] }),
-			item({ id: "m3", role: "assistant", parts: [text("text:0", "好")] }),
-		]);
-		expect(rows.map((row) => row.kind)).toEqual(["meta", "diff", "user", "assistant", "fork"]);
-	});
-
-	it("带正文的答复携带工具时,改动行排在答复行之后", () => {
-		const patch = ["--- a/b.ts", "+++ b/b.ts", "@@", "-x", "+y"].join("\n");
-		const rows = groupRows([
-			item({
-				id: "m1",
-				role: "assistant",
-				parts: [text("text:0", "改好了"), tool("tool:c1", "c1", 10, { patch })],
-			}),
-		]);
-		expect(rows.map((row) => row.kind)).toEqual(["assistant", "diff", "fork"]);
-		expect(rows[0]?.counts.reads).toBe(1);
+		expect(rows.map((row) => row.kind)).toEqual(["user", "meta", "fork"]);
 	});
 
 	it("每一轮末尾各有一个分叉点", () => {
@@ -295,6 +259,46 @@ describe("工作时长", () => {
 		expect(meta.startedAt).toBe(1_000);
 		expect(isTurnTimingLive(rows)).toBe(true);
 		expect(turnDurationText(meta, 4_500)).toBe("工作了 3s");
+	});
+
+	it("会话推进时过程行标题保持呼吸", () => {
+		const rows = groupRows(
+			[
+				item({ id: "m1", role: "user", parts: [text("text:0", "问")], startedAt: 1_000, endedAt: 1_000 }),
+				item({
+					id: "m2",
+					role: "assistant",
+					parts: [tool("tool:c1", "c1")],
+					startedAt: 1_000,
+					endedAt: 2_000,
+				}),
+			],
+			{ running: true },
+		);
+		const meta = rows.find((row) => row.kind === "meta");
+		expect(meta?.isStreaming).toBe(true);
+	});
+
+	it("两次模型调用之间没有流式项时仍然持续计时", () => {
+		// 工具执行期间没有任何 isStreaming 项；只要会话还在推进，最后一轮就不能定死时长
+		const rows = groupRows(
+			[
+				item({ id: "m1", role: "user", parts: [text("text:0", "问")], startedAt: 1_000, endedAt: 1_000 }),
+				item({
+					id: "m2",
+					role: "assistant",
+					parts: [tool("tool:c1", "c1")],
+					startedAt: 1_000,
+					endedAt: 2_000,
+				}),
+			],
+			{ running: true },
+		);
+		const meta = rows.at(-1) as (typeof rows)[number];
+		expect(meta.durationMs).toBeUndefined();
+		expect(meta.startedAt).toBe(1_000);
+		expect(isTurnTimingLive(rows)).toBe(true);
+		expect(turnDurationText(meta, 12_000)).toBe("工作了 11s");
 	});
 
 	it("结束后用主机记录的起止时间,不再随时间走", () => {

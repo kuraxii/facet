@@ -15,18 +15,67 @@ export interface TurnState {
 }
 
 /**
- * 由 pi 事件推出新的阶段与维护动作。
+ * 状态转移的输入。
  *
- * 返回 undefined 表示这条事件不改变它们;返回新状态表示需要对外发一次 phase 事件。
- * starting 与 stopping 由 prompt 与 abort 直接设定,不在这里推导。
+ * pi 的会话事件与命令侧的生命周期节点（开始、中止、收尾）走同一张表：状态只由这里输入，
+ * 不在命令实现里各自赋值。
  */
-export function nextTurnState(event: AgentSessionEvent, current: TurnState): TurnState | undefined {
+export type TurnInput =
+	/** 底层 pi 事件 */
+	| { readonly kind: "event"; readonly event: AgentSessionEvent }
+	/** 准备开始一轮；streaming 为真表示上一轮还在跑，这一条只是投递 */
+	| { readonly kind: "prompt_requested"; readonly streaming: boolean }
+	/** 收到停止请求 */
+	| { readonly kind: "abort_requested" }
+	/** 命令侧收尾；streaming 为真时交给 settled 收尾 */
+	| { readonly kind: "command_finally"; readonly streaming: boolean };
+
+/** 两个状态是否相同。外壳据此决定要不要对外发一次 phase 事件。 */
+export function sameTurnState(left: TurnState, right: TurnState): boolean {
+	return left.phase === right.phase && left.maintenance === right.maintenance;
+}
+
+/**
+ * 状态转移的唯一实现。
+ *
+ * 纯函数：同样的当前状态与输入永远得到同样的结果，不读时间、不读会话。pi 事件与命令侧节点
+ * 在下面各走一段，但合并成一张表，谁先到、重不重复都只影响落点，不影响合法性：
+ *
+ * - `agent_start` 进入 running，已经在 running 时原样返回；
+ * - `agent_settled` 收回 idle，已经停在 idle 且没有维护动作时原样返回（重复到达不会发事件）；
+ * - `prompt_requested` 只在空闲且不在流式时进入 starting；
+ * - `abort_requested` 只在 running / starting 时进入 stopping；
+ * - `command_finally` 在不再流式时把 starting / stopping 收回 idle；settled 先到时它已经是
+ *   idle，原样返回。
+ */
+export function reduceTurnState(current: TurnState, input: TurnInput): TurnState {
+	switch (input.kind) {
+		case "prompt_requested":
+			return !input.streaming && current.phase === "idle" ? { ...current, phase: "starting" } : current;
+		case "abort_requested":
+			return current.phase === "running" || current.phase === "starting"
+				? { ...current, phase: "stopping" }
+				: current;
+		case "command_finally":
+			if (input.streaming) {
+				return current;
+			}
+			return current.phase === "starting" || current.phase === "stopping"
+				? { ...current, phase: "idle" }
+				: current;
+		case "event":
+			return reduceTurnEvent(current, input.event);
+	}
+}
+
+/** pi 事件这一段转移表：阶段与维护动作。 */
+function reduceTurnEvent(current: TurnState, event: AgentSessionEvent): TurnState {
 	switch (event.type) {
 		case "agent_start":
-			return current.phase === "running" ? undefined : { ...current, phase: "running" };
+			return current.phase === "running" ? current : { ...current, phase: "running" };
 		case "agent_settled":
 			return current.phase === "idle" && current.maintenance === undefined
-				? undefined
+				? current
 				: { phase: "idle", maintenance: undefined };
 		case "compaction_start":
 			return {
@@ -39,7 +88,7 @@ export function nextTurnState(event: AgentSessionEvent, current: TurnState): Tur
 				},
 			};
 		case "compaction_end":
-			return current.maintenance === undefined ? undefined : { ...current, maintenance: undefined };
+			return current.maintenance === undefined ? current : { ...current, maintenance: undefined };
 		case "auto_retry_start":
 			return {
 				...current,
@@ -52,7 +101,7 @@ export function nextTurnState(event: AgentSessionEvent, current: TurnState): Tur
 			};
 		case "summarization_retry_scheduled":
 			if (current.maintenance?.kind === "compaction") {
-				return undefined;
+				return current;
 			}
 			return {
 				...current,
@@ -64,11 +113,11 @@ export function nextTurnState(event: AgentSessionEvent, current: TurnState): Tur
 				},
 			};
 		case "auto_retry_end":
-			return current.maintenance === undefined ? undefined : { ...current, maintenance: undefined };
+			return current.maintenance === undefined ? current : { ...current, maintenance: undefined };
 		case "summarization_retry_finished":
-			return current.maintenance?.kind === "retry" ? { ...current, maintenance: undefined } : undefined;
+			return current.maintenance?.kind === "retry" ? { ...current, maintenance: undefined } : current;
 		default:
-			return undefined;
+			return current;
 	}
 }
 
@@ -198,7 +247,7 @@ export function toSessionEvents(event: AgentSessionEvent): SessionEvent[] {
 			return [{ type: "thinking_level", level: event.level }];
 		case "bash_execution_update":
 			return [{ type: "bash_output", id: event.id, delta: event.delta }];
-		// 阶段与维护动作由 nextTurnState 单独推导;其余尚无映射的变体不对外输出
+		// 阶段与维护动作由 reduceTurnState 单独推导;其余尚无映射的变体不对外输出
 		default:
 			return [];
 	}

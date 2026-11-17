@@ -5,21 +5,16 @@
  * 状态变更一律走 action 帧,按通道定序并可回放;请求只用于查询与生命周期,写操作没有响应,
  * 被拒时以带 rejectionReason 的 action 帧回给发起方。
  */
+
+import type { Static, TSchema } from "typebox";
 import type { Action, ActionOrigin } from "./action.ts";
 import type { Channel } from "./channel.ts";
 import type { SlashCommand } from "./command.ts";
-import type { UiResponse } from "./extension-ui.ts";
 import type { FileContent, FileEntry, FileWriteResult } from "./file.ts";
 import type { GitCommitDetail, GitCommits, GitDiff, GitStatus } from "./git.ts";
-import type {
-	CustomProviderInfo,
-	CustomProviderInput,
-	ModelInfo,
-	ModelRef,
-	ProviderInfo,
-	ThinkingLevel,
-} from "./model.ts";
+import type { CustomProviderInfo, ModelInfo, ProviderInfo } from "./model.ts";
 import type { ProjectInfo } from "./project.ts";
+import type { REQUEST_SCHEMAS } from "./schema/contracts.ts";
 import type { Entry, SessionListItem, SessionSnapshot } from "./session.ts";
 import type { FacetSettings } from "./settings.ts";
 import type { TerminalInfo } from "./terminal.ts";
@@ -166,6 +161,37 @@ export interface ActionFrame {
 /** 主机发往端点的帧。 */
 export type ServerFrame = HelloFrame | ResponseFrame | ActionFrame;
 
+/**
+ * 被拒动作的回显。
+ *
+ * 主机拒绝一条派发时把客户端发来的动作原样带回，端点只读 `type` 认出是哪一类动作、
+ * 并按 `origin` 核销自己的发送。被拒的动作不保证符合契约，因此这里只声明它是一个
+ * 带 `type` 的对象。
+ */
+export interface ActionEcho {
+	/** 动作种类，原样回显 */
+	type: string;
+}
+
+/** 主机发出的一条被拒动作帧：动作原样回显，`rejectionReason` 一定在。 */
+export interface RejectedActionFrame {
+	type: "action";
+	channel: Channel;
+	action: ActionEcho;
+	/** 通道内的序号，取该通道当前已发的最后一个 */
+	serverSeq: number;
+	/** 动作来源，缺省表示主机侧产生 */
+	origin: ActionOrigin | undefined;
+	/** 拒绝原因 */
+	rejectionReason: string;
+}
+
+/** 一条动作帧：正常动作，或被拒时回显动作的那一种。 */
+export type ServerActionFrame = ActionFrame | RejectedActionFrame;
+
+/** 主机写出的帧：正常帧，加上拒绝时回显动作的那一种。 */
+export type OutboundFrame = ServerFrame | RejectedActionFrame;
+
 /** 端点发往主机的帧。 */
 export type ClientFrame = AuthFrame | RequestFrame | DispatchFrame;
 
@@ -179,171 +205,18 @@ export interface SubscribeResult {
 	session?: SessionSnapshot;
 }
 
-/** 每条请求的参数。 */
-export interface RequestParams {
-	respondUi: { sessionId: string; requestId: string; response: UiResponse };
-	/** 列出会话。指定 cwd 时只列该目录。 */
-	listSessions: { cwd?: string };
-	/** 列出某个会话里能用的命令：界面自带的几条，加上扩展命令、提示词模板与技能。 */
-	listCommands: { sessionId: string };
-	/** 列出正在运行的会话文件。退出前确认有没有任务会被带走。 */
-	busySessions: Record<string, never>;
-	/** 结束主机：应答后关闭端点并退出进程。只接受来自回环地址的连接。 */
-	/** 新建会话并返回初始快照。 */
-	createSession: {
-		cwd?: string;
-		model?: ModelRef;
-		thinkingLevel?: ThinkingLevel;
-		tools?: string[];
-		excludeTools?: string[];
-		name?: string;
-	};
-	/** 打开已有会话并返回初始快照。 */
-	openSession: { sessionFile: string; cwd?: string };
-	/**
-	 * 分叉出新会话，返回新会话的初始快照。
-	 *
-	 * beforeEntryId 给出时复制到它之前的那个条目为止，界面用它按轮分叉；缺省时复制整条
-	 * 活动分支，也就是把当前对话整段带到新会话。
-	 */
-	forkSession: { sessionFile: string; beforeEntryId?: string; cwd?: string };
-	/** 取会话当前状态。 */
-	snapshot: { sessionId: string };
-	/**
-	 * 分页读取历史,从 cursor 指向的条目往更早取 limit 条。
-	 *
-	 * 点对点请求,不广播:一个端点拉历史不影响到其他端点,主机侧也不必为此增长状态。
-	 * nextCursor 缺省表示已经到最早。limit 缺省由主机决定。
-	 */
-	entries: { sessionId: string; cursor?: string; limit?: number };
-	/**
-	 * 取 afterEntryId 之后到叶子的条目,按从早到晚排列。
-	 *
-	 * 端点在本轮 settled 之后用它把实时消息提升为历史消息:主机从叶子沿 parentId 往回
-	 * 走到 afterEntryId,再把这一段反转返回。afterEntryId 缺省表示整条分支。
-	 * afterEntryId 不在活动分支上时主机侧拒绝,端点据此重新装载历史。
-	 */
-	entriesAfter: { sessionId: string; afterEntryId?: string };
-	/** 订阅通道。since 为该通道上一条已收到的序号。 */
-	subscribe: { channel: Channel; since?: number };
-	/** 取消订阅。 */
-	unsubscribe: { channel: Channel };
-	/** 列出模型。 */
-	models: { providerId?: string };
-	/** 列出当前可用的模型：只来自已配置凭证的提供方，并按凭证收窄过清单。 */
-	availableModels: Record<string, never>;
-	/** 列出提供方及其凭证状态。 */
-	providers: Record<string, never>;
-	/** 列出项目里的一个目录。path 为空串表示项目根。 */
-	listDirectory: { cwd: string; path: string };
-	/**
-	 * 读一个文件；文本按 UTF-8 解码，二进制与超大文件只给类型与大小。
-	 */
-	readFile: { cwd: string; path: string };
-	/**
-	 * 写回一个文本文件。
-	 *
-	 * expectedRevision 是读或上次写拿到的摘要；磁盘上的内容已经变过时主机拒绝写入并回
-	 * `file_conflict`，由界面决定重新加载还是覆盖。
-	 */
-	writeFile: { cwd: string; path: string; content: string; expectedRevision: string };
-	/** 列出项目工作树相对 HEAD 的改动。 */
-	gitStatus: { cwd: string };
-	/** 取单个文件的补丁。untracked 为真时按「从空文件新增」合成补丁。 */
-	gitDiff: { cwd: string; path: string; untracked?: boolean };
-	/** 列出当前分支的全部提交。 */
-	gitCommits: { cwd: string };
-	/** 取一次提交相对第一父提交的改动清单。 */
-	gitCommit: { cwd: string; sha: string };
-	/** 取一次提交里某个文件的补丁。 */
-	gitCommitDiff: { cwd: string; sha: string; path: string; oldPath?: string };
-	/** 列出用户添加的项目。 */
-	listProjects: Record<string, never>;
-	/** 添加项目，目录重复时主机侧拒绝。 */
-	addProject: { cwd: string; name?: string };
-	/** 重命名项目，名称为空时恢复目录名。 */
-	renameProject: { id: string; name?: string };
-	/** 移除项目。 */
-	removeProject: { id: string };
-	/**
-	 * 查某个目录的项目级资源需不需要信任。
-	 *
-	 * hasProjectResources 为假时目录里没有需要信任的资源，直接打开即可；为真而 trusted 缺省
-	 * 表示还没做过决定，界面要先问一次。
-	 */
-	projectTrust: { cwd: string };
-	/** 记下某个目录的信任决定。 */
-	setProjectTrust: { cwd: string; trusted: boolean };
-	/** 在主机的文件管理器里打开某个已添加项目的目录。 */
-	revealProject: { id: string };
-	/**
-	 * 会话改名。
-	 *
-	 * 已打开的会话直接改运行态；没有打开的会话离线追加一条会话信息条目，不为此启动会话。
-	 * 名称为空时去掉自定义名。
-	 */
-	renameSession: { sessionFile: string; name?: string };
-	/** 删除会话文件。不可恢复。 */
-	deleteSession: { sessionFile: string };
-	/**
-	 * 把这些会话标记为已读。
-	 *
-	 * 只记水位，不读会话文件；主机收到后广播新的状态，多端看到同一份未读结果。
-	 */
-	markSessionsSeen: { sessionFiles: string[] };
-	/** 读一整份界面偏好设置。 */
-	getSettings: Record<string, never>;
-	/** 整份替换界面偏好设置，返回主机实际存下的那份。 */
-	updateSettings: { settings: FacetSettings };
-	/**
-	 * 保存提供方凭证。
-	 *
-	 * 只接受 API key 形式的凭证，密钥写入 pi 的凭证文件，读回来时只给出是否已配置与来源，
-	 * 不回传密钥内容。
-	 */
-	saveCredential: { providerId: string; apiKey: string };
-	/** 删除提供方凭证。 */
-	deleteCredential: { providerId: string };
-	/** 生成一份诊断文本，用于附在问题反馈里。凭证与令牌不在其中。 */
-	diagnostics: Record<string, never>;
-	/** 用指定模型发一次最小请求，确认凭证、地址与网络是否可用。 */
-	testModel: { provider: string; id: string };
-	/** 设置提供方的接口地址，空串恢复默认。返回更新后的提供方清单。 */
-	setProviderBaseUrl: { providerId: string; baseUrl: string };
-	/** 列出用户自己添加的提供方。 */
-	listCustomProviders: Record<string, never>;
-	/** 新增或修改一个自定义提供方，返回更新后的清单。 */
-	saveCustomProvider: { provider: CustomProviderInput };
-	/** 删除一个自定义提供方，连同它的凭证，返回更新后的清单。 */
-	removeCustomProvider: { providerId: string };
-	/** 列出主机上的终端，含已结束的与主机重启前留下的。 */
-	listTerminals: Record<string, never>;
-	/**
-	 * 开一个终端。
-	 *
-	 * cwd 为空串时用主机用户的 home，界面还没打开会话或项目时也能开；cols 与 rows 由界面的
-	 * xterm 实例给出，挂载之后会按 fit 出来的真实尺寸再报一次。
-	 */
-	createTerminal: { cwd: string; cols: number; rows: number; shell?: string };
-	/** 往终端里写入按键。多个端同时写时按到达顺序执行。 */
-	writeTerminal: { id: string; data: string };
-	/** 改终端尺寸。 */
-	resizeTerminal: { id: string; cols: number; rows: number };
-	/** 关掉终端，进程收到挂断。 */
-	killTerminal: { id: string };
-	/**
-	 * 确认已收到的输出。
-	 *
-	 * seq 是端已处理到的通道序号，主机据此扣减未确认字符数，水位降下来再恢复 pty。
-	 */
-	ackTerminal: { id: string; seq: number };
-	/**
-	 * 取回滚内容与当前序号。
-	 *
-	 * 端挂载或断线重连时先取一次，再按 since 订阅增量。
-	 */
-	serializeTerminal: { id: string };
-}
+/** 一条参数 Schema 推导出来的静态类型。 */
+type ParamsOf<Entry> = Entry extends { params: infer Schema extends TSchema } ? Static<Schema> : never;
+
+/**
+ * 每条请求的参数。
+ *
+ * 形状来自 `schema/contracts.ts` 里的参数 Schema：同一个定义既是运行时的校验（经
+ * `generated/checks.ts`），也是这里的类型。手写一份平行声明会和校验漂开。
+ */
+export type RequestParams = {
+	[K in keyof typeof REQUEST_SCHEMAS]: ParamsOf<(typeof REQUEST_SCHEMAS)[K]>;
+};
 
 /** 每条请求的应答数据。 */
 export interface RequestResults {

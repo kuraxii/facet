@@ -330,13 +330,57 @@ describe("SessionStore", () => {
 		const store = new SessionStore();
 		const versions: number[] = [];
 		const stop = store.subscribe((version) => versions.push(version));
-		store.apply(frame(chatChannel, 1, { type: "chat/turnStarted", text: "hi" }));
-		store.apply(frame(chatChannel, 2, { type: "chat/settled", aborted: false }));
+		store.apply(
+			frame(chatChannel, 1, { type: "chat/messageAppended", messageId: "m1", message: assistant("一") }),
+		);
+		store.apply(
+			frame(chatChannel, 2, { type: "chat/messageAppended", messageId: "m2", message: assistant("二") }),
+		);
 		expect(versions.length).toBe(2);
 		expect(store.getVersion()).toBe(2);
 		stop();
-		store.apply(frame(chatChannel, 3, { type: "chat/turnStarted", text: "再来" }));
+		store.apply(
+			frame(chatChannel, 3, { type: "chat/messageAppended", messageId: "m3", message: assistant("三") }),
+		);
 		expect(versions.length).toBe(2);
+	});
+
+	it("不改变视图的帧不推进版本号", () => {
+		const store = new SessionStore();
+		const versions: number[] = [];
+		store.subscribe((version) => versions.push(version));
+		store.apply(
+			frame(chatChannel, 1, { type: "chat/messageAppended", messageId: "m1", message: assistant("一") }),
+		);
+		expect(store.getVersion()).toBe(1);
+		// 回执、轮次起止与重复的收尾都不改视图
+		store.apply(frame(chatChannel, 2, { type: "chat/inputHandled" }));
+		store.apply(frame(chatChannel, 3, { type: "chat/turnStarted", text: "hi" }));
+		store.apply(frame(chatChannel, 4, { type: "chat/settled", aborted: false }));
+		store.apply(frame(chatChannel, 5, { type: "chat/turnCancelled" }));
+		expect(store.getVersion()).toBe(1);
+		expect(versions).toEqual([1]);
+	});
+
+	it("会话通道里值没变的帧不推进版本号", () => {
+		const store = new SessionStore();
+		store.ensureSession(sessionChannel, _snapshot());
+		store.flush();
+		const before = store.getVersion();
+		store.apply(
+			frame(sessionChannel, 1, { type: "session/phase", phase: "running", maintenance: undefined }),
+		);
+		expect(store.getVersion()).toBe(before + 1);
+		// 同一份阶段再来一次：值没变，视图还是同一个对象
+		const view = store.sessionView(sessionChannel);
+		store.apply(
+			frame(sessionChannel, 2, { type: "session/phase", phase: "running", maintenance: undefined }),
+		);
+		expect(store.getVersion()).toBe(before + 1);
+		expect(store.sessionView(sessionChannel)).toBe(view);
+		// 档位本来就不是 off，这一帧仍然是变化
+		store.apply(frame(sessionChannel, 3, { type: "session/thinkingLevelChanged", level: "off" }));
+		expect(store.getVersion()).toBe(before + 2);
 	});
 
 	it("同一帧内的多条动作只通知一次", () => {
@@ -345,7 +389,9 @@ describe("SessionStore", () => {
 		const versions: number[] = [];
 		store.subscribe((version) => versions.push(version));
 		store.apply(frame(chatChannel, 1, { type: "chat/turnStarted", text: "hi" }));
-		store.apply(frame(chatChannel, 2, { type: "chat/settled", aborted: false }));
+		store.apply(
+			frame(chatChannel, 2, { type: "chat/delta", messageId: "m1", partIndex: 0, kind: "text", delta: "答" }),
+		);
 		store.apply(
 			frame(chatChannel, 3, { type: "chat/messageAppended", messageId: "m1", message: assistant("答") }),
 		);
@@ -364,9 +410,13 @@ describe("SessionStore", () => {
 		const store = new SessionStore({ schedule: (flush) => scheduled.push(flush) });
 		const versions: number[] = [];
 		store.subscribe((version) => versions.push(version));
-		store.apply(frame(chatChannel, 1, { type: "chat/turnStarted", text: "hi" }));
+		store.apply(
+			frame(chatChannel, 1, { type: "chat/messageAppended", messageId: "m1", message: assistant("一") }),
+		);
 		scheduled[0]?.();
-		store.apply(frame(chatChannel, 2, { type: "chat/settled", aborted: false }));
+		store.apply(
+			frame(chatChannel, 2, { type: "chat/messageAppended", messageId: "m2", message: assistant("二") }),
+		);
 		expect(scheduled).toHaveLength(2);
 		scheduled[1]?.();
 		expect(versions).toEqual([1, 2]);
@@ -377,7 +427,9 @@ describe("SessionStore", () => {
 		const store = new SessionStore({ schedule: (flush) => scheduled.push(flush) });
 		const versions: number[] = [];
 		store.subscribe((version) => versions.push(version));
-		store.apply(frame(chatChannel, 1, { type: "chat/turnStarted", text: "hi" }));
+		store.apply(
+			frame(chatChannel, 1, { type: "chat/messageAppended", messageId: "m1", message: assistant("一") }),
+		);
 		store.flush();
 		expect(versions).toEqual([1]);
 		// 调度回调随后到达,没有待广播的变化时不重复通知

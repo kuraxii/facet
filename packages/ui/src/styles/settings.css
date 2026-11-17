@@ -226,6 +226,8 @@
 .set-list-scroll {
 	max-height: 320px;
 	overflow-y: auto;
+	/* 超过 320px 才滚动，滚动条出现时行宽不变 */
+	scrollbar-gutter: stable;
 }
 
 .set-toggle {

@@ -40,6 +40,15 @@ function patchMessage(
 	return copy;
 }
 
+/**
+ * 两份纯数据是否等价。
+ *
+ * 动作里带的都是字段不多的纯数据，序列化比较比逐字段写一遍更不容易漏掉新加的字段。
+ */
+function same(left: unknown, right: unknown): boolean {
+	return left === right || JSON.stringify(left) === JSON.stringify(right);
+}
+
 /** 列出某个动作类型没被处理的情况,由类型系统保证穷尽。 */
 function unhandled(value: never): never {
 	throw new Error(`Unhandled action: ${JSON.stringify(value)}`);
@@ -49,14 +58,33 @@ function unhandled(value: never): never {
 export function reduceSession(view: SessionView, action: Action): SessionView {
 	switch (action.type) {
 		case "session/initialized":
+			if (same(view.state.initialization, action.initialization)) {
+				return view;
+			}
 			return { ...view, state: { ...view.state, initialization: action.initialization } };
 		case "session/uiChanged":
+			if (same(view.state.extensionUi, action.ui)) {
+				return view;
+			}
 			return { ...view, state: { ...view.state, extensionUi: action.ui } };
 		case "session/phase":
+			// 阶段帧每轮都会来几条，值没变就不换引用，界面因此不必重绘
+			if (view.state.phase === action.phase && same(view.state.maintenance, action.maintenance)) {
+				return view;
+			}
 			return { ...view, state: { ...view.state, phase: action.phase, maintenance: action.maintenance } };
 		case "session/usageChanged":
+			if (same(view.state.contextUsage, action.usage)) {
+				return view;
+			}
 			return { ...view, state: { ...view.state, contextUsage: action.usage } };
 		case "session/modelChanged":
+			if (
+				same(view.state.model, action.model) &&
+				same(view.state.availableThinkingLevels, action.availableThinkingLevels)
+			) {
+				return view;
+			}
 			return {
 				...view,
 				state: {
@@ -66,16 +94,28 @@ export function reduceSession(view: SessionView, action: Action): SessionView {
 				},
 			};
 		case "session/thinkingLevelChanged":
+			if (view.state.thinkingLevel === action.level) {
+				return view;
+			}
 			return { ...view, state: { ...view.state, thinkingLevel: action.level } };
 		case "session/queueChanged":
+			if (
+				same(view.state.queued.steering, action.steering) &&
+				same(view.state.queued.followUp, action.followUp)
+			) {
+				return view;
+			}
 			return {
 				...view,
 				state: { ...view.state, queued: { steering: action.steering, followUp: action.followUp } },
 			};
 		case "session/titleChanged":
+			if (view.state.title === action.title) {
+				return view;
+			}
 			return { ...view, state: { ...view.state, title: action.title } };
 		case "session/configChanged":
-			return action.thinkingLevel === undefined
+			return action.thinkingLevel === undefined || view.state.thinkingLevel === action.thinkingLevel
 				? view
 				: { ...view, state: { ...view.state, thinkingLevel: action.thinkingLevel } };
 		case "session/pendingMessageSet":
@@ -115,6 +155,10 @@ export function reduceChat(view: ChatView, action: Action): ChatView {
 	switch (action.type) {
 		case "chat/messageAppended": {
 			const existing = view.items.find((item) => item.id === action.messageId);
+			if (existing?.message === action.message) {
+				// 同一条消息又推了一遍：内容还是那一份，视图不必动
+				return view;
+			}
 			const next: EntryView = {
 				id: action.messageId,
 				entry: existing?.entry,
@@ -126,6 +170,9 @@ export function reduceChat(view: ChatView, action: Action): ChatView {
 		}
 		case "chat/messageUpdated": {
 			const existing = view.items.find((item) => item.id === action.messageId);
+			if (existing?.message === action.message) {
+				return view;
+			}
 			const next: EntryView = {
 				id: action.messageId,
 				entry: existing?.entry,
@@ -151,6 +198,9 @@ export function reduceChat(view: ChatView, action: Action): ChatView {
 		}
 		case "chat/toolCallStarted": {
 			const existing = view.toolCalls[action.callId];
+			if (existing?.isRunning === true && same(existing.input, action.input)) {
+				return view;
+			}
 			return {
 				...view,
 				toolCalls: {

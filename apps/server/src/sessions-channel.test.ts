@@ -65,12 +65,23 @@ describe("SessionsChannel", () => {
 		expect(seen).toHaveLength(0);
 	});
 
-	it("clear 之后一个订阅者都不剩", () => {
+	it("dropSubscribers 之后一个订阅者都不剩", () => {
 		const channel = new SessionsChannel(8);
 		const seen: unknown[] = [];
 		channel.subscribe(URI, undefined, { id: "c1", send: (frame) => seen.push(frame.action) });
-		channel.clear();
+		channel.dropSubscribers();
 		channel.publish(URI, { type: "sessions/removed", path: "/a/s1.jsonl" });
 		expect(seen).toHaveLength(0);
+	});
+
+	it("dropSubscribers 保留序号：再订阅的端仍按 since 接得上", () => {
+		const channel = new SessionsChannel(8);
+		channel.publish(URI, { type: "sessions/removed", path: "/a/s1.jsonl" });
+		channel.dropSubscribers();
+		expect(channel.lastSeq).toBe(1);
+		const seen: unknown[] = [];
+		const result = channel.subscribe(URI, 0, { id: "c2", send: (frame) => seen.push(frame.action) });
+		expect(result).toEqual({ seq: 1, resync: false });
+		expect(seen).toHaveLength(1);
 	});
 });

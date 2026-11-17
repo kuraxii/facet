@@ -2,7 +2,7 @@
  * 会话行首的状态标记。
  *
  * 槽位尺寸固定，只有里面的画法随状态变，所以标题不会因为状态切换而左右跳动。
- * 颜色都在 `session-status.ts` 里映射，这里只管画。
+ * 颜色在 `styles/chat.css` 里取 `--dot-*`，这里只管画。
  */
 
 import { CircleAlert } from "lucide-react";
@@ -37,12 +37,21 @@ export function SessionStatusMark({ bucket }: SessionStatusMarkProps) {
 /**
  * 运行中的环。
  *
- * 两层圆环叠出来：闭合的轨道环（30% 透明）+ 只留上边框的弧（90% 透明），中间再放一个与
- * 其他状态同尺寸的实心点。弧用 Web Animations API 转，`startTime = 0` 让所有环共用文档时间
- * 轴的起点，后插入的环与在转的环对得上。
+ * 轨道、弧与中心的点画在一个 SVG 里，描边是几何路径：边框画法在缩放不是 1 的屏幕上四侧
+ * 厚度不一，弧的端头也会因为相邻边框抗锯齿过渡变成渐隐的楔形。
+ *
+ * 转的是虚线的偏移量。`strokeDashoffset` 是绘制属性，每帧重画这一小块，弧在任何角度都保持
+ * 同样的粗细；`transform: rotate()` 会被当作纹理旋转采样，12px 的图会糊一档。
+ *
+ * `pathLength` 把周长归一成 100，虚线就是百分数：`25 75` 是四分之一圈加四分之三空档，
+ * 偏移走满 100 正好回到起点，一圈下来接缝处不跳。用 `getTotalLength()` 取不到这个数：
+ * 它返回的是浏览器内部拉直的路径长度，比几何周长短一截，偏移走满它每个周期会错开一点。
+ * 虚线写在属性上，不动效时也是一个完整的弧。
+ *
+ * `startTime = 0` 让所有环共用文档时间轴的起点，后插入的环与在转的环对得上。
  */
 function StatusRing() {
-	const arcRef = useRef<HTMLSpanElement>(null);
+	const arcRef = useRef<SVGCircleElement>(null);
 
 	useEffect(() => {
 		const arc = arcRef.current;
@@ -54,7 +63,7 @@ function StatusRing() {
 			return;
 		}
 		const animation = arc.animate(
-			{ transform: ["rotate(0deg)", "rotate(360deg)"] },
+			{ strokeDashoffset: ["0", "-100px"] },
 			{ duration: STATUS_RING_PERIOD_MS, easing: "linear", iterations: Number.POSITIVE_INFINITY },
 		);
 		animation.startTime = 0;
@@ -62,10 +71,10 @@ function StatusRing() {
 	}, []);
 
 	return (
-		<span className="status-ring" aria-hidden="true">
-			<span className="status-ring-track" />
-			<span className="status-ring-arc" ref={arcRef} />
-			<span className="status-ring-dot" />
-		</span>
+		<svg className="status-ring" aria-hidden="true">
+			<circle className="status-ring-track" />
+			<circle className="status-ring-arc" ref={arcRef} pathLength={100} strokeDasharray="25 75" />
+			<circle className="status-ring-dot" />
+		</svg>
 	);
 }

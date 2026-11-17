@@ -219,6 +219,10 @@ export class SessionStore {
 	 *
 	 * 序号不大于已应用序号的帧直接丢弃,避免重连补发时同一条生效两次;序号跳跃时不拦,
 	 * 照常应用并报出缺口,由调用方决定是否重新拉取。
+	 *
+	 * 归约之后只有视图换了引用才算变化。回执、轮次起止这类不改变视图的帧因此不会推进
+	 * 版本号，界面也就不必为它们重绘；等待确认的发送有自己的通知（`onSent`），被拒的
+	 * 发送会落到对话视图的一条提示上，两者都不依赖这里的版本号。
 	 */
 	apply(frame: ActionFrame): void {
 		// 拒绝帧不占通道序号,也没有被应用过,不能进入归约
@@ -243,9 +247,12 @@ export class SessionStore {
 				return;
 			}
 			this.reportGap(frame, slot.lastSeq);
-			slot.view = reduceSession(slot.view, frame.action);
+			const session = reduceSession(slot.view, frame.action);
 			slot.lastSeq = Math.max(slot.lastSeq, frame.serverSeq);
-			this.markChanged();
+			if (session !== slot.view) {
+				slot.view = session;
+				this.markChanged();
+			}
 			return;
 		}
 		if (parsed.kind === "chat") {
@@ -254,9 +261,12 @@ export class SessionStore {
 				return;
 			}
 			this.reportGap(frame, slot.lastSeq);
-			slot.view = reduceChat(slot.view, frame.action);
+			const chat = reduceChat(slot.view, frame.action);
 			slot.lastSeq = Math.max(slot.lastSeq, frame.serverSeq);
-			this.markChanged();
+			if (chat !== slot.view) {
+				slot.view = chat;
+				this.markChanged();
+			}
 		}
 	}
 

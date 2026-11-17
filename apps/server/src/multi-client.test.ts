@@ -217,8 +217,14 @@ class TestClient {
 		};
 	}
 
-	dispatch(channel: Channel, action: unknown): void {
-		this.socket.write(encodeFrame({ type: "dispatch", channel, action } as never));
+	dispatch(channel: Channel, action: unknown, clientSeq?: number): void {
+		this.socket.write(
+			encodeFrame(
+				(clientSeq === undefined
+					? { type: "dispatch", channel, action }
+					: { type: "dispatch", channel, action, clientSeq }) as never,
+			),
+		);
 	}
 
 	close(): void {
@@ -439,6 +445,17 @@ describe("两个端接同一台主机", () => {
 		expect(agent.compactCalls).toBe(1);
 		const rejected = peer.frames.filter((frame) => frame.rejectionReason !== undefined);
 		expect(rejected.at(-1)?.rejectionReason).toContain("wait for it to stop");
+	});
+
+	it("同一个 clientSeq 重复投递只执行一次", async () => {
+		const peer = await openClient();
+		await peer.subscribe(CHAT);
+		// 界面重试时会把同一条动作再发一遍，主机按 (clientId, clientSeq) 认出来
+		peer.dispatch(CHAT, { type: "chat/turnStarted", text: "只发一次" }, 1);
+		await settle();
+		peer.dispatch(CHAT, { type: "chat/turnStarted", text: "只发一次" }, 1);
+		await settle();
+		expect(agent.prompts).toEqual(["只发一次"]);
 	});
 
 	it("断线重连按序号补齐中间的动作", async () => {

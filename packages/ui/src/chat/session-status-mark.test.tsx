@@ -16,6 +16,12 @@ describe("会话行状态标记", () => {
 		expect(html).toContain("status-ring-dot");
 	});
 
+	it("弧的虚线按归一化周长给，四分之一圈正好走满一个周期", () => {
+		const html = render("running");
+		expect(html).toContain('pathLength="100"');
+		expect(html).toContain('stroke-dasharray="25 75"');
+	});
+
 	it("等待输入画告警图标，不画点", () => {
 		const html = render("needs_input");
 		expect(html).toContain("<svg");

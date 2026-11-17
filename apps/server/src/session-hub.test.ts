@@ -690,6 +690,32 @@ describe("动作的持有与串行", () => {
 		expect(order).toEqual(["第一个开始", "第一个结束", "第二个开始"]);
 	});
 
+	it("排队期间被取消的回合，票会告诉它别启动", async () => {
+		const snapshot = await hub.createSession();
+		let release!: () => void;
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		// 先把队列占住，让后面那一轮排在里面
+		const blocking = hub.withSession(snapshot.id, async () => {
+			await gate;
+		});
+		let started = false;
+		const ticket = hub.turnTicket(snapshot.id);
+		const queued = hub.withSession(snapshot.id, async () => {
+			if (ticket.cancelled()) {
+				return;
+			}
+			started = true;
+		});
+		// 出队之前取消
+		hub.cancelPendingTurns(snapshot.id);
+		expect(ticket.cancelled()).toBe(true);
+		release();
+		await Promise.all([blocking, queued]);
+		expect(started).toBe(false);
+	});
+
 	it("执行期间持有会话,到点也不回收", async () => {
 		const snapshot = await hub.createSession();
 		const agent = hub.agent(snapshot.id);

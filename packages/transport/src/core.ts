@@ -5,15 +5,16 @@
  * 字节流按行切帧，两者都只提供「发一段文本」「收到一帧」「连上」「断开」四件事。
  * 这里把其余逻辑收在一处，具体传输只做适配。
  */
-import type {
-	Action,
-	ActionFrame,
-	Channel,
-	ClientEntry,
-	HelloFrame,
-	RequestMethod,
-	RequestParams,
-	RequestResults,
+import {
+	type Action,
+	type ActionFrame,
+	type Channel,
+	type ClientEntry,
+	type HelloFrame,
+	type RequestMethod,
+	type RequestParams,
+	type RequestResults,
+	SERVER_FRAME_CONTRACTS,
 } from "@facet/protocol";
 import type { ConnectionState, Handshake } from "./types.ts";
 import { TransportError } from "./types.ts";
@@ -201,8 +202,13 @@ export class TransportCore {
 			return;
 		}
 		if (frame.type === "action") {
+			// 上来先过一遍信封契约：形状不对的帧不该进 store，也不该让监听方各自再判一次
+			if (!SERVER_FRAME_CONTRACTS.actionFrame(frame)) {
+				return;
+			}
+			const actionFrame: ActionFrame = frame;
 			for (const listener of [...this.actionListeners]) {
-				listener(frame as unknown as ActionFrame);
+				listener(actionFrame);
 			}
 		}
 	}

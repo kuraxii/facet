@@ -6,12 +6,12 @@
  */
 
 /** 通道的种类。每种对应一类可独立定序、独立订阅的资源。 */
-export type ChannelKind = "session" | "chat" | "diff" | "terminal" | "sessions";
+export type ChannelKind = "session" | "chat" | "terminal" | "sessions";
 
 /** 通道 URI,形如 `chat:/<sessionId>`。 */
 export type Channel = `${ChannelKind}:/${string}`;
 
-const CHANNEL_PATTERN = /^(session|chat|diff|terminal|sessions):\/(.+)$/;
+const CHANNEL_PATTERN = /^(session|chat|terminal|sessions):\/(.+)$/;
 
 /** 拼出通道 URI。 */
 export function makeChannel(kind: ChannelKind, id: string): Channel {

@@ -14,7 +14,7 @@ import { readFile } from "node:fs/promises";
 import { connect as connectSocket } from "node:net";
 import { homedir } from "node:os";
 import { basename, isAbsolute, join } from "node:path";
-import { type DiscoveryRecord, parseDiscovery } from "@facet/server";
+import { type DiscoveryRecord, parseDiscovery } from "@facet/protocol";
 import { StreamTransport } from "@facet/transport";
 
 /** 发现文件名，与主机侧独立入口的约定一致；只用于排障，不参与连接。 */

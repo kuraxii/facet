@@ -112,10 +112,6 @@ export const en = {
 			yesterday: "Yesterday",
 			earlier: "Earlier",
 		},
-		theme: {
-			toLight: "Switch to light theme",
-			toDark: "Switch to dark theme",
-		},
 		settings: "Settings",
 	},
 	composer: {
@@ -620,10 +616,6 @@ export const zhCN = {
 			today: "今天",
 			yesterday: "昨天",
 			earlier: "更早",
-		},
-		theme: {
-			toLight: "切换到浅色主题",
-			toDark: "切换到深色主题",
 		},
 		settings: "设置",
 	},

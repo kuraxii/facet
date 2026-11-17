@@ -4,9 +4,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { SessionSidebar, type SessionSidebarProps } from "./SessionSidebar.tsx";
-
-type ThemeName = SessionSidebarProps["theme"];
+import { SessionSidebar } from "./SessionSidebar.tsx";
 
 function render(isOpen: boolean | undefined): string {
 	return renderToStaticMarkup(
@@ -16,7 +14,6 @@ function render(isOpen: boolean | undefined): string {
 			activeFile: undefined,
 			statuses: new Map(),
 			createCwd: "/work/a",
-			theme: "zinc" as ThemeName,
 			onSelect: () => {},
 			onCreate: () => {},
 			canCreate: true,
@@ -30,7 +27,6 @@ function render(isOpen: boolean | undefined): string {
 			onRevealProject: async () => {},
 			onRenameSession: async () => {},
 			onDeleteSession: async () => {},
-			onToggleTheme: () => {},
 			onOpenSettings: () => {},
 			isSettingsOpen: false,
 			...(isOpen === undefined ? {} : { isOpen }),

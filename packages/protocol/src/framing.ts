@@ -4,7 +4,7 @@
  * 一条帧是一行 JSON：JSON 会把换行转义，所以按行切分不会切坏内容。WebSocket 一条消息
  * 就是一帧，用不到切分；跑在字节流上的传输（unix socket、SSH 通道）按行切。
  */
-import type { ClientFrame, ServerFrame } from "./wire.ts";
+import type { ClientFrame, OutboundFrame } from "./wire.ts";
 
 /**
  * 一行帧的长度上限，超过按协议错误处理，避免对端用超长行占满内存。
@@ -14,7 +14,7 @@ import type { ClientFrame, ServerFrame } from "./wire.ts";
 export const MAX_FRAME_LENGTH = 32 * 1024 * 1024;
 
 /** 把一帧编成一行文本，含结尾换行。 */
-export function encodeFrame(frame: ClientFrame | ServerFrame): string {
+export function encodeFrame(frame: ClientFrame | OutboundFrame): string {
 	return `${JSON.stringify(frame)}\n`;
 }
 

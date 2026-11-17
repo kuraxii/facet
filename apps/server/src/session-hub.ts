@@ -11,8 +11,13 @@
 
 import { rm, stat } from "node:fs/promises";
 import { resolve } from "node:path";
-import { SessionManager } from "@earendil-works/pi-coding-agent";
-import type { ForkPiAgentOptions, OpenPiAgentOptions, PiAgent, PiAgentLaunchOptions } from "@facet/agent";
+import {
+	type ForkPiAgentOptions,
+	type OpenPiAgentOptions,
+	type PiAgent,
+	type PiAgentLaunchOptions,
+	renamePersistedSession,
+} from "@facet/agent";
 import type {
 	Action,
 	ActionFrame,
@@ -25,7 +30,7 @@ import type {
 } from "@facet/protocol";
 import { makeChannel, parseChannel } from "@facet/protocol";
 import { ActionProjector } from "./action-projector.ts";
-import { EventLog } from "./event-log.ts";
+import { EventLog, replayAndSubscribe } from "./event-log.ts";
 import { debugLog, errorLog } from "./log.ts";
 
 /** 会话登记表用到的 agent 能力,收窄成结构类型以便测试注入假实现。 */
@@ -151,12 +156,18 @@ export class SessionConflictError extends Error {
 }
 
 interface ChannelState {
-	log: EventLog;
+	log: EventLog<Action>;
 	sinks: Set<ActionSink>;
 }
 
 /** 会话的寿命阶段。opening 表示正在建立,此时还没有 agent。 */
 type SessionPhase = "opening" | "open" | "draining";
+
+/** 排队回合的票：出队时据此判断这期间有没有被取消。 */
+export interface TurnTicket {
+	/** 入队之后来过取消即为真 */
+	cancelled(): boolean;
+}
 
 /** 动作执行期间的持有。取得与登记同步完成,不需要 await。 */
 export interface SessionLease {
@@ -184,6 +195,13 @@ interface SessionState<A extends HubAgent> {
 	opening: Promise<void> | undefined;
 	/** 待关闭的倒计时 */
 	closeTimer: ReturnType<typeof setTimeout> | undefined;
+	/**
+	 * 取消水位。
+	 *
+	 * 排队中的回合在入队时记下它，出队时比对：期间来过 `chat/turnCancelled` 就不再启动运行。
+	 * 没有这一层，取消会先跑完，随后出队的 prompt 又拉起一个没人停的运行。
+	 */
+	cancelEpoch: number;
 	/** 上一次事件是不是压缩中，压缩结束的那一下要重算用量 */
 	wasCompacting: boolean;
 	/** 最近一轮的收尾，新一轮开始时清空 */
@@ -343,6 +361,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 			phase: "opening",
 			opening: undefined,
 			closeTimer: undefined,
+			cancelEpoch: 0,
 			wasCompacting: false,
 			settle: undefined,
 			seenAt: 0,
@@ -444,6 +463,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 			phase: "open",
 			opening: undefined,
 			closeTimer: undefined,
+			cancelEpoch: 0,
 			wasCompacting: false,
 			settle: undefined,
 			seenAt: 0,
@@ -531,8 +551,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 			this.noteSessions(key, "changed");
 			return;
 		}
-		const manager = SessionManager.open(key);
-		manager.appendSessionInfo(trimmed);
+		renamePersistedSession(key, trimmed);
 		this.noteSessions(key, "changed");
 	}
 
@@ -750,16 +769,18 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		const parsed = this.requireChannel(channel);
 		const row = await this.requireReady(parsed.id);
 		const target = this.ensureChannel(row, channel);
-		const { actions, resync } = target.log.replay(since ?? target.log.lastSeq);
-		target.sinks.add(sink);
+		const { seq, resync } = replayAndSubscribe(
+			target.log,
+			target.sinks,
+			sink,
+			(item) => this.toFrame(channel, item.action, item.seq),
+			since,
+		);
 		row.holders.add(sink.id);
 		row.lastUsedAt = Date.now();
 		this.settle(row);
-		for (const item of actions) {
-			sink.send(this.toFrame(channel, item.action, item.seq));
-		}
 		return {
-			seq: target.log.lastSeq,
+			seq,
 			resync,
 			session: parsed.kind === "session" ? row.agent?.snapshot() : undefined,
 		};
@@ -877,6 +898,23 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 			finish();
 			lease.release();
 		}
+	}
+
+	/**
+	 * 领一张排队回合的票。
+	 *
+	 * 票在入队之前领：出队时用 `cancelled()` 判断这期间有没有来过取消。会话行不存在时
+	 * 直接抛出，调用方按未知会话处理。
+	 */
+	turnTicket(sessionId: string): TurnTicket {
+		const row = this.requireRow(sessionId);
+		const epoch = row.cancelEpoch;
+		return { cancelled: () => row.cancelEpoch !== epoch };
+	}
+
+	/** 记一次取消：排队中的回合出队时会看到水位变了，放弃启动。 */
+	cancelPendingTurns(sessionId: string): void {
+		this.requireRow(sessionId).cancelEpoch += 1;
 	}
 
 	/** 等会话建好并取运行态。 */
@@ -1088,7 +1126,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		if (existing) {
 			return existing;
 		}
-		const created: ChannelState = { log: new EventLog(this.replayLimit), sinks: new Set() };
+		const created: ChannelState = { log: new EventLog<Action>(this.replayLimit), sinks: new Set() };
 		row.channels.set(channel, created);
 		return created;
 	}

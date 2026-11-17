@@ -21,7 +21,7 @@ import type {
 	TerminalInfo,
 } from "@facet/protocol";
 import { terminalChannelFor } from "@facet/protocol";
-import { EventLog } from "./event-log.ts";
+import { EventLog, replayAndSubscribe } from "./event-log.ts";
 import type { PtyBackend, PtyHandle, PtySpawnOptions } from "./pty-server.ts";
 
 /** 单帧最大字符数，超出就切开，避免一帧撑爆对端的解析缓冲。 */
@@ -82,7 +82,7 @@ interface TerminalRow {
 	info: TerminalInfo;
 	/** 进程句柄，已结束或重启前留下的终端没有 */
 	handle: PtyHandle | undefined;
-	log: EventLog;
+	log: EventLog<Action>;
 	sinks: Set<TerminalSink>;
 	/** 回滚文本，超过上限时从头部切掉 */
 	scrollback: string;
@@ -174,7 +174,7 @@ export class TerminalService {
 					restored: true,
 				},
 				handle: undefined,
-				log: new EventLog(REPLAY_FRAMES),
+				log: new EventLog<Action>(REPLAY_FRAMES),
 				sinks: new Set(),
 				scrollback: "",
 				sentChars: 0,
@@ -228,7 +228,7 @@ export class TerminalService {
 				restored: false,
 			},
 			handle: undefined,
-			log: new EventLog(REPLAY_FRAMES),
+			log: new EventLog<Action>(REPLAY_FRAMES),
 			sinks: new Set(),
 			scrollback: "",
 			sentChars: 0,
@@ -350,19 +350,21 @@ export class TerminalService {
 		return row === undefined ? 0 : row.sentChars - row.ackedChars;
 	}
 
-	/** 订阅一个终端通道，先补发缓冲里的动作再收实时动作。 */
+	/** 订阅一个终端通道，先补发缓冲里的动作再收实时动作，顺序见 `replayAndSubscribe`。 */
 	subscribe(channel: Channel, since: number | undefined, sink: TerminalSink): SubscribeResult {
 		const row = this.rows.get(terminalIdFromChannel(channel) ?? "");
 		if (row === undefined) {
 			return { seq: 0, resync: true };
 		}
-		const { actions, resync } = row.log.replay(since ?? row.log.lastSeq);
 		row.info.lastUsedAt = Date.now();
-		row.sinks.add(sink);
-		for (const item of actions) {
-			sink.send(toFrame(channel, item.action, item.seq));
-		}
-		return { seq: row.log.lastSeq, resync };
+		const { seq, resync } = replayAndSubscribe(
+			row.log,
+			row.sinks,
+			sink,
+			(item) => toFrame(channel, item.action, item.seq),
+			since,
+		);
+		return { seq, resync };
 	}
 
 	/** 取消订阅。 */

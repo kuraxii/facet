@@ -26,6 +26,7 @@ export type {
 export { PiAgentFactory } from "./runtime.ts";
 export type { SessionCatalogOptions } from "./session-catalog.ts";
 export { SessionCatalog } from "./session-catalog.ts";
+export { renamePersistedSession } from "./session-rename.ts";
 export type { SessionFileHeader, SessionFileStats } from "./session-scan.ts";
 export {
 	readFirstUserMessage,

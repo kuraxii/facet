@@ -5,9 +5,9 @@
  * 队列按「进行中 / 今天 / 昨天 / 更早」分组。这里只做纯函数变换，组件负责渲染。
  */
 
-import { deriveBucket, type SessionBucket } from "@facet/client-core";
 import type { SupportedLanguage } from "@facet/i18n";
 import type { ProjectInfo, SessionStatus, SessionSummary } from "@facet/protocol";
+import { deriveBucket, type SessionStatusBucket } from "./session-status.ts";
 
 /** 队列分组的键，数组顺序即展示顺序。 */
 export type GroupKey = "running" | "today" | "yesterday" | "earlier";
@@ -25,7 +25,7 @@ export interface SidebarSession {
 	/** 是否正在运行，用于「进行中」分组 */
 	isRunning: boolean;
 	/** 行首状态点，由主机状态与已读水位推出来 */
-	bucket: SessionBucket;
+	bucket: SessionStatusBucket;
 	/** 所属项目名，队列过滤到单个项目时不重复显示 */
 	project: string;
 	/** 所属项目目录 */

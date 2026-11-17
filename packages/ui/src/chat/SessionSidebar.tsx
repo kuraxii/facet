@@ -11,7 +11,7 @@ import { ScrollArea, ScrollRow } from "../common/scroll-area.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { PaneResizer } from "../panel/pane-resizer.tsx";
 import { ChevronIcon } from "../transcript/chevron.tsx";
-import { FolderIcon, MoonIcon, SunIcon } from "../transcript/icons.tsx";
+import { FolderIcon } from "../transcript/icons.tsx";
 import { SessionStatusMark } from "./session-status-mark.tsx";
 import { SidebarHeader } from "./sidebar-header.tsx";
 import {
@@ -22,9 +22,6 @@ import {
 	samePath,
 } from "./sidebar-model.ts";
 import { SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "./sidebar-state.ts";
-
-/** 界面主题。切换写入根节点的 data-theme，样式按此选择变量组。 */
-export type ThemeName = "dark" | "light";
 
 /** 侧栏参数。 */
 export interface SessionSidebarProps {
@@ -39,8 +36,6 @@ export interface SessionSidebarProps {
 	statuses: ReadonlyMap<string, SessionStatus>;
 	/** 没有选中项目时新建会话落在的目录 */
 	createCwd: string;
-	/** 当前主题 */
-	theme: ThemeName;
 	/** 选择一条会话 */
 	onSelect: (path: string) => void;
 	/** 在指定目录新建会话 */
@@ -75,8 +70,6 @@ export interface SessionSidebarProps {
 	onRenameSession?: (path: string, name: string | undefined) => Promise<void>;
 	/** 删除会话，失败时抛错 */
 	onDeleteSession?: (path: string) => Promise<void>;
-	/** 切换深浅色 */
-	onToggleTheme: () => void;
 	/** 打开设置页 */
 	onOpenSettings?: () => void;
 	/** 当前是否停在设置页 */
@@ -130,7 +123,6 @@ export const SessionSidebar = memo(function SessionSidebar({
 	activeFile,
 	statuses,
 	createCwd,
-	theme,
 	onSelect,
 	onCreate,
 	canCreate,
@@ -148,7 +140,6 @@ export const SessionSidebar = memo(function SessionSidebar({
 	onRevealProject,
 	onRenameSession,
 	onDeleteSession,
-	onToggleTheme,
 	onOpenSettings,
 	isSettingsOpen = false,
 	hostSwitcher,
@@ -851,15 +842,6 @@ export const SessionSidebar = memo(function SessionSidebar({
 
 			<footer className="sb-foot">
 				{hostSwitcher}
-				<button
-					type="button"
-					className="sb-foot-btn is-icon"
-					aria-label={theme === "dark" ? t("sidebar.theme.toLight") : t("sidebar.theme.toDark")}
-					title={theme === "dark" ? t("sidebar.theme.toLight") : t("sidebar.theme.toDark")}
-					onClick={onToggleTheme}
-				>
-					{theme === "dark" ? <SunIcon size={14} /> : <MoonIcon size={14} />}
-				</button>
 				{hostStatus === undefined ? null : <span className="sb-foot-status">{hostStatus}</span>}
 				<button
 					type="button"

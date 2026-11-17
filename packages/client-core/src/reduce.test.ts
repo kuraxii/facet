@@ -109,6 +109,13 @@ describe("reduceChat", () => {
 		expect(reduceChat(base, { type: "session/phase", phase: "running", maintenance: undefined })).toBe(base);
 	});
 
+	it("同一份消息再推一遍时沿用原视图", () => {
+		const message = assistantMessage("答", "stop");
+		const base = reduceChat(chat(), { type: "chat/messageAppended", messageId: "m1", message });
+		expect(reduceChat(base, { type: "chat/messageAppended", messageId: "m1", message })).toBe(base);
+		expect(reduceChat(base, { type: "chat/messageUpdated", messageId: "m1", message })).toBe(base);
+	});
+
 	it("归约不改动入参", () => {
 		const base = reduceChat(chat(), {
 			type: "chat/messageAppended",
@@ -202,6 +209,72 @@ describe("扩展交互生命周期", () => {
 		expect(chatActivity(view)).toBe("compacting");
 		view = reduceSession(view, { type: "session/phase", phase: "stopping", maintenance: undefined });
 		expect(chatActivity(view)).toBe("stopping");
+	});
+});
+
+describe("无变化的动作保持引用", () => {
+	it("回执与轮次起止不换视图", () => {
+		const base = chat();
+		expect(reduceChat(base, { type: "chat/inputHandled" })).toBe(base);
+		expect(reduceChat(base, { type: "chat/turnStarted", text: "hi" })).toBe(base);
+		expect(reduceChat(base, { type: "chat/turnCancelled" })).toBe(base);
+	});
+
+	it("会话通道里值没变就不换视图", () => {
+		const base = reduceSession(session(), {
+			type: "session/phase",
+			phase: "running",
+			maintenance: undefined,
+		});
+		expect(reduceSession(base, { type: "session/phase", phase: "running", maintenance: undefined })).toBe(
+			base,
+		);
+		expect(reduceSession(base, { type: "session/thinkingLevelChanged", level: "off" })).toBe(base);
+		expect(
+			reduceSession(
+				{ ...base, state: { ...base.state, title: "同名" } },
+				{
+					type: "session/titleChanged",
+					title: "同名",
+				},
+			).state.title,
+		).toBe("同名");
+		expect(reduceSession(base, { type: "session/queueChanged", steering: [], followUp: [] })).toBe(base);
+		expect(reduceSession(base, { type: "session/configChanged", persist: true })).toBe(base);
+	});
+
+	it("值变了才换视图", () => {
+		const base = session();
+		expect(reduceSession(base, { type: "session/phase", phase: "running", maintenance: undefined })).not.toBe(
+			base,
+		);
+		expect(reduceSession(base, { type: "session/titleChanged", title: "新名字" })).not.toBe(base);
+		expect(reduceSession(base, { type: "session/queueChanged", steering: ["排队"], followUp: [] })).not.toBe(
+			base,
+		);
+	});
+
+	it("维护动作按字段比对", () => {
+		const compacting = reduceSession(session(), {
+			type: "session/phase",
+			phase: "running",
+			maintenance: { kind: "compaction", reason: "manual", tokensBefore: 1, estimatedTokensAfter: 2 },
+		});
+		// 同样的维护动作是新对象，但内容一样
+		expect(
+			reduceSession(compacting, {
+				type: "session/phase",
+				phase: "running",
+				maintenance: { kind: "compaction", reason: "manual", tokensBefore: 1, estimatedTokensAfter: 2 },
+			}),
+		).toBe(compacting);
+		expect(
+			reduceSession(compacting, {
+				type: "session/phase",
+				phase: "running",
+				maintenance: { kind: "compaction", reason: "overflow", tokensBefore: 1, estimatedTokensAfter: 2 },
+			}),
+		).not.toBe(compacting);
 	});
 });
 

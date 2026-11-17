@@ -288,8 +288,7 @@ npm run dist -w @facet/desktop
 - `docs/requirements.md`：需求与取舍
 - `docs/ui_design_specification.md`：界面设计说明
 - `docs/i18n.md`：界面语言与文案规则
-- `docs/backlog.md`：进度、设计取舍与遗留项
-- `todo.md`：按优先级排的功能推进顺序
+- `docs/backlog.md`：还没做完的能力、验收项、设计取舍与建议顺序
 - `AGENTS.md`：分支、提交与注释规范
 
 ## 插件与 skill

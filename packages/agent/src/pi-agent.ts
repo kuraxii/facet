@@ -28,7 +28,14 @@ import type {
 	UiResponse,
 } from "@facet/protocol";
 import { toMessage, toMessages, toModelInfo } from "./convert.ts";
-import { nextTurnState, type TurnState, toSessionEvents, turnFailure } from "./events.ts";
+import {
+	reduceTurnState,
+	sameTurnState,
+	type TurnInput,
+	type TurnState,
+	toSessionEvents,
+	turnFailure,
+} from "./events.ts";
 import type { ExtensionUi } from "./extension-ui.ts";
 import { type BranchSnapshot, branchSnapshot, pageOf } from "./paging.ts";
 import type { ModelMutationOptions, PromptOptions } from "./types.ts";
@@ -123,10 +130,8 @@ export class PiAgent {
 	private readonly onError: ((error: unknown) => void) | undefined;
 	private readonly listeners = new Set<SessionEventListener>();
 	private readonly unsubscribeSession: () => void;
-	/** 本轮的生命周期,只在变化时对外发事件 */
-	private phase: TurnPhase = "idle";
-	/** 与本轮并行的维护动作 */
-	private maintenance: Maintenance | undefined;
+	/** 本轮的生命周期与维护动作，只在变化时对外发事件；变更一律经 `dispatchTurn` */
+	private turnState: TurnState = { phase: "idle", maintenance: undefined };
 	private disposed = false;
 	private readonly ui: ExtensionUi | undefined;
 	/** 最后一个 turn 的失败原因，settled 到达时取走 */
@@ -174,12 +179,12 @@ export class PiAgent {
 
 	/** 本轮的生命周期 */
 	get currentPhase(): TurnPhase {
-		return this.phase;
+		return this.turnState.phase;
 	}
 
 	/** 与本轮并行的维护动作 */
 	get currentMaintenance(): Maintenance | undefined {
-		return this.maintenance;
+		return this.turnState.maintenance;
 	}
 
 	/** 恢复会话时模型回退的提示，需要展示给用户 */
@@ -209,8 +214,8 @@ export class PiAgent {
 	get isBusy(): boolean {
 		return (
 			this.initialization.kind === "starting" ||
-			this.phase !== "idle" ||
-			this.maintenance !== undefined ||
+			this.turnState.phase !== "idle" ||
+			this.turnState.maintenance !== undefined ||
 			(this.ui?.snapshot().prompts.length ?? 0) > 0
 		);
 	}
@@ -278,9 +283,7 @@ export class PiAgent {
 			throw new Error("prompt rejected: the session is streaming and no streamingBehavior was given");
 		}
 		// 运行开始之前就置成 starting:界面立刻看到忙碌,空闲回收也会等到这一段落定
-		if (!this.session.isStreaming && this.phase === "idle") {
-			this.applyTurnState({ phase: "starting", maintenance: this.maintenance });
-		}
+		this.dispatchTurn({ kind: "prompt_requested", streaming: this.session.isStreaming });
 		let disposition: PromptDisposition | undefined;
 		let acceptRun!: (value: PromptDisposition) => void;
 		const started = new Promise<PromptDisposition>((resolve) => {
@@ -309,15 +312,15 @@ export class PiAgent {
 		]);
 		if (first.kind === "failed") {
 			// 没能进入运行,阶段退回空闲
-			if (!this.session.isStreaming) this.applyTurnState({ phase: "idle", maintenance: this.maintenance });
+			this.dispatchTurn({ kind: "command_finally", streaming: this.session.isStreaming });
 			if (first.error === undefined) {
 				return disposition ?? "started";
 			}
 			throw first.error;
 		}
-		if (first.value !== "started" && !this.session.isStreaming) {
+		if (first.value !== "started") {
 			// 被扩展消费或排队,这一轮没有开始
-			this.applyTurnState({ phase: "idle", maintenance: this.maintenance });
+			this.dispatchTurn({ kind: "command_finally", streaming: this.session.isStreaming });
 		}
 		void failure.then((error) => {
 			if (error !== undefined && first.value === "started") {
@@ -346,16 +349,12 @@ export class PiAgent {
 	 */
 	async abort(): Promise<void> {
 		this.cancelUi();
-		const wasActive = this.phase === "running" || this.phase === "starting";
-		if (wasActive) {
-			this.applyTurnState({ phase: "stopping", maintenance: this.maintenance });
-		}
+		this.dispatchTurn({ kind: "abort_requested" });
 		try {
 			await this.session.abort();
 		} finally {
-			if (wasActive && this.phase === "stopping") {
-				this.applyTurnState({ phase: "idle", maintenance: this.maintenance });
-			}
+			// settled 先到的话这里已经是 idle，转移函数原样返回，不会把阶段推回去
+			this.dispatchTurn({ kind: "command_finally", streaming: this.session.isStreaming });
 		}
 	}
 
@@ -616,8 +615,8 @@ export class PiAgent {
 			file: this.file,
 			cwd: this.cwd,
 			name: this.name,
-			phase: this.phase,
-			maintenance: this.maintenance,
+			phase: this.turnState.phase,
+			maintenance: this.turnState.maintenance,
 			model: this.model(),
 			thinkingLevel: this.thinkingLevel(),
 			availableThinkingLevels: this.availableThinkingLevels(),
@@ -656,22 +655,19 @@ export class PiAgent {
 		}
 	}
 
-	/** 设定阶段与维护动作,并对外发一次 phase 事件。 */
-	private applyTurnState(next: TurnState): void {
-		if (next.phase === this.phase && next.maintenance === this.maintenance) {
+	/**
+	 * 状态变更的唯一入口。
+	 *
+	 * 转移由 `reduceTurnState` 给出，这里只做两件事：比一下有没有变、变了就对外发一次 phase。
+	 * 重复或乱序的输入落点相同，于是不会多发出事件。
+	 */
+	private dispatchTurn(input: TurnInput): void {
+		const next = reduceTurnState(this.turnState, input);
+		if (sameTurnState(next, this.turnState)) {
 			return;
 		}
-		this.phase = next.phase;
-		this.maintenance = next.maintenance;
+		this.turnState = next;
 		this.emit({ type: "phase", phase: next.phase, maintenance: next.maintenance });
-	}
-
-	/** 由 pi 事件推出阶段与维护动作。 */
-	private refreshTurnState(event: AgentSessionEvent): void {
-		const next = nextTurnState(event, { phase: this.phase, maintenance: this.maintenance });
-		if (next) {
-			this.applyTurnState(next);
-		}
 	}
 
 	/** 一个 pi 事件可能转成多条对外事件，也可能只用于触发状态刷新。 */
@@ -680,7 +676,7 @@ export class PiAgent {
 		for (const mapped of toSessionEvents(event)) {
 			this.emit(mapped.type === "settled" ? { ...mapped, failure } : mapped);
 		}
-		this.refreshTurnState(event);
+		this.dispatchTurn({ kind: "event", event });
 	}
 
 	/**

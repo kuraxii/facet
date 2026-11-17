@@ -8,6 +8,14 @@ import { fileURLToPath } from "node:url";
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const groups = ["apps", "packages", join("plugins", "extensions")];
 
+/**
+ * 不在工作区清单里的独立 TS 项目。
+ *
+ * `tools/` 下没有 package.json，假主机这类脚本不参与 npm workspaces，这里按各自的
+ * tsconfig 单独检查，免得成为类型检查的盲区。
+ */
+const projects = [join("tools", "mock-server", "tsconfig.json")];
+
 function collectWorkspaces() {
 	const workspaces = [];
 	for (const group of groups) {
@@ -29,6 +37,29 @@ function collectWorkspaces() {
 	return workspaces;
 }
 
+function runProject(project) {
+	const tsc = join(root, "node_modules", "typescript", "bin", "tsc");
+	return new Promise((resolve) => {
+		const child = spawn(process.execPath, [tsc, "--noEmit", "-p", join(root, project)], {
+			cwd: root,
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+		let output = "";
+		child.stdout.on("data", (chunk) => {
+			output += chunk;
+		});
+		child.stderr.on("data", (chunk) => {
+			output += chunk;
+		});
+		child.on("close", (code) => {
+			resolve({ name: project, code: code ?? 1, output });
+		});
+		child.on("error", (error) => {
+			resolve({ name: project, code: 1, output: `${output}${error.message}\n` });
+		});
+	});
+}
+
 function runWorkspace(workspace) {
 	return new Promise((resolve) => {
 		const command = process.platform === "win32" ? "npm.cmd" : "npm";
@@ -44,42 +75,47 @@ function runWorkspace(workspace) {
 			output += chunk;
 		});
 		child.on("close", (code) => {
-			resolve({ workspace, code: code ?? 1, output });
+			resolve({ name: workspace.name, code: code ?? 1, output });
 		});
 		child.on("error", (error) => {
-			resolve({ workspace, code: 1, output: `${output}${error.message}\n` });
+			resolve({ name: workspace.name, code: 1, output: `${output}${error.message}\n` });
 		});
 	});
 }
 
 const workspaces = collectWorkspaces();
 const concurrency = Math.max(2, Math.min(4, availableParallelism()));
-const queue = [...workspaces];
+const queue = [...workspaces.map((workspace) => ({ kind: "workspace", workspace }))];
 const failures = [];
 
 async function worker() {
 	for (;;) {
-		const workspace = queue.shift();
-		if (workspace === undefined) {
+		const next = queue.shift();
+		if (next === undefined) {
 			return;
 		}
-		const result = await runWorkspace(workspace);
+		const result =
+			next.kind === "workspace" ? await runWorkspace(next.workspace) : await runProject(next.project);
 		if (result.code === 0) {
-			process.stdout.write(`ok ${workspace.name}\n`);
+			process.stdout.write(`ok ${result.name}\n`);
 			continue;
 		}
 		failures.push(result);
-		process.stdout.write(`failed ${workspace.name}\n`);
+		process.stdout.write(`failed ${result.name}\n`);
 	}
 }
 
-await Promise.all(Array.from({ length: Math.min(concurrency, workspaces.length) }, worker));
+for (const project of projects) {
+	queue.push({ kind: "project", project });
+}
+
+await Promise.all(Array.from({ length: Math.min(concurrency, queue.length) }, worker));
 
 if (failures.length > 0) {
 	for (const failure of failures) {
-		process.stderr.write(`\n${failure.workspace.name}\n${failure.output}`);
+		process.stderr.write(`\n${failure.name}\n${failure.output}`);
 	}
 	process.exitCode = 1;
 } else {
-	process.stdout.write(`${workspaces.length} workspaces passed\n`);
+	process.stdout.write(`${workspaces.length} workspaces + ${projects.length} projects passed\n`);
 }

@@ -448,54 +448,82 @@
 	opacity: 0.3;
 }
 
-/* 失败：点大一圈，用行底色描一圈边，压在背景上不糊边 */
+/*
+ * 失败：点外面留一圈空隙，空隙是透明的，透出下面行自己的底色。
+ * 用固定底色描一圈边的话，行悬停与选中变亮时会多出一圈暗环。
+ */
 .status-mark.is-failed .status-dot {
-	width: var(--status-dot-failed);
-	height: var(--status-dot-failed);
+	width: calc(var(--status-dot) + 2 * var(--status-dot-gap));
+	height: calc(var(--status-dot) + 2 * var(--status-dot-gap));
+	padding: var(--status-dot-gap);
 	background: var(--dot-err);
-	box-shadow: 0 0 0 1px var(--sb);
+	background-clip: content-box;
 }
 
+/*
+ * 等待输入：填色的告警图标。描边取侧栏底色，圆的轮廓与感叹号从这个颜色里挖出来，
+ * 比一圈细线在同一尺寸下更清楚。
+ */
 .status-mark.is-needs_input {
 	color: var(--dot-warn);
+}
+
+.status-mark.is-needs_input svg {
+	fill: currentColor;
+	stroke: var(--sb);
 }
 
 .sb-row.is-two-line .status-mark {
 	margin-top: var(--sb-row-mark-offset);
 }
 
+/*
+ * 运行中的环。
+ *
+ * 圆、弧与中心的点都画在一个 SVG 里。边框画出来的环，描边在缩放不是 1 的屏幕上逐边取整，
+ * 四侧厚度不一样；弧靠只给一条边上色拼出来，两条边框在 45° 交界处做抗锯齿过渡，两端是
+ * 渐隐的楔形。SVG 的描边是几何路径，缩放与角度都不改变厚度。
+ */
 .status-ring {
-	position: relative;
-	display: grid;
-	place-items: center;
+	display: block;
 	width: var(--status-ring-size);
 	height: var(--status-ring-size);
 }
 
+/* 圆心与半径依然只从变量算：SVG 的 cx/cy/r 在 CSS 里当属性写 */
+.status-ring-track,
+.status-ring-arc,
+.status-ring-dot {
+	cx: calc(var(--status-ring-size) / 2);
+	cy: calc(var(--status-ring-size) / 2);
+	fill: none;
+}
+
 .status-ring-track,
 .status-ring-arc {
-	position: absolute;
-	inset: 0;
-	border: var(--status-ring-stroke) solid transparent;
-	border-radius: 50%;
+	r: var(--status-ring-radius);
+	stroke: var(--dot-run);
+	stroke-width: var(--status-ring-stroke);
 }
 
 .status-ring-track {
-	border-color: var(--dot-run);
 	opacity: 0.3;
 }
 
-/* 只留上边框：圆角盒子上看起来就是一段 90° 弧 */
+/*
+ * 弧是虚线的一段，长度为整个周长的四分之一（`pathLength` 归一成 100，所以属性里写 25 75），
+ * 端头用圆头，弧在任何角度都是同样的粗细。
+ */
 .status-ring-arc {
-	border-top-color: var(--dot-run);
 	opacity: 0.9;
+	stroke-linecap: round;
 }
 
 .status-ring-dot {
-	width: var(--status-dot);
-	height: var(--status-dot);
-	border-radius: 50%;
-	background: var(--dot-run);
+	r: calc(var(--status-dot) / 2);
+	fill: var(--dot-run);
+	/* base.css 给所有 svg 一份描边缺省，点只需要一块填色 */
+	stroke: none;
 }
 
 .pulse {

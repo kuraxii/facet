@@ -1,105 +1,47 @@
 /**
  * 端点接入。
  *
- * 一条 WebSocket 连接对应一个端。连接建立后主机先发 hello(带本次连接的端标识),
+ * 一条 WebSocket 连接对应一个端。连接建立后主机先发 hello(带本次连接的端标识)，
  * 之后端点发请求、主机回响应;状态变更走 action 帧,按通道定序推给订阅者。
  * 断线时该端的订阅全部解除,会话本身继续在主机上运行。
+ *
+ * 这个文件只负责承载：切帧、认证、心跳与监听。请求与动作的分发在 `rpc/gateway.ts`，
+ * 各领域的实现在 `rpc/handlers/`，Web 静态资源在 `http/static.ts`。
  */
 import { randomUUID } from "node:crypto";
-import { chmod, mkdir, realpath, rm, stat } from "node:fs/promises";
+import { chmod, mkdir, rm } from "node:fs/promises";
 import { createServer as createHttpServer } from "node:http";
 import { createServer as createSocketServer, type Socket } from "node:net";
-import { homedir } from "node:os";
-import { dirname, isAbsolute, join } from "node:path";
-import { InvalidProviderError, type PiAgentFactory } from "@facet/agent";
+import { dirname, join } from "node:path";
+import type { PiAgentFactory } from "@facet/agent";
 import {
-	type Action,
-	type ActionFrame,
-	type Capability,
-	type Channel,
-	type ClientEntry,
 	type ClientRole,
-	type CustomProviderInfo,
-	type ErrorCode,
 	encodeFrame,
-	type FacetSettings,
 	FrameDecoder,
 	type HelloFrame,
-	makeChannel,
+	type OutboundFrame,
 	PROTOCOL_VERSION,
-	parseChannel,
-	type RequestParams,
-	type ResponseFrame,
-	type ServerFrame,
-	type SessionSnapshot,
-	type UiResponse,
 } from "@facet/protocol";
 import { WebSocket, WebSocketServer } from "ws";
 import { AuditLog } from "./audit.ts";
 import type { ServerConfig } from "./config.ts";
-import { buildDiagnostics } from "./diagnostics.ts";
-import { FileAccessError, listDirectory, readTextFile, writeTextFile } from "./files.ts";
-import { gitCommit, gitCommitDiff, gitCommits, gitDiff, gitStatus } from "./git.ts";
 import type { HostSource } from "./host-identity.ts";
-import { ProjectExistsError, ProjectNotFoundError, type ProjectStore } from "./project-store.ts";
+import { serveWebRequest } from "./http/static.ts";
+import type { ProjectStore } from "./project-store.ts";
 import { DisabledPtyBackend } from "./pty-server.ts";
-import { RevealFailedError, revealInFileManager } from "./reveal.ts";
-import {
-	type ActionSink,
-	ChannelNotFoundError,
-	SessionBoundaryNotFoundError,
-	SessionBusyError,
-	SessionEntryNotFoundError,
-	SessionFileMissingError,
-	type SessionHub,
-	SessionNotFoundError,
-} from "./session-hub.ts";
+import { type Connection, canManage, RequestError, type RpcContext, toProtocolError } from "./rpc/context.ts";
+import { grantedRole, handleDispatch, handleRequest, matchesToken } from "./rpc/gateway.ts";
+import { unsubscribeChannel } from "./rpc/helpers.ts";
+import type { SessionHub } from "./session-hub.ts";
 import type { SessionsChannel } from "./sessions-channel.ts";
 import type { SettingsStore } from "./settings-store.ts";
 import { TerminalService } from "./terminals.ts";
-import { serveWebRequest } from "./web.ts";
 
 /** Web 接入的 WebSocket 路径，与字节流那条共用同一套帧。 */
 const ENDPOINT_PATH = "/endpoint";
 
-/**
- * 只允许本机连接的请求。
- *
- * 凭证、设置、提供方、项目增删与信任、诊断与结束主机都属于主机管理，远程连接即使是
- * 操作档也不放行。
- */
-const ADMIN_ONLY_REQUESTS = new Set<string>([
-	"saveCredential",
-	"deleteCredential",
-	"updateSettings",
-	"saveCustomProvider",
-	"removeCustomProvider",
-	"setProviderBaseUrl",
-	"testModel",
-	"addProject",
-	"removeProject",
-	"renameProject",
-	"setProjectTrust",
-	"revealProject",
-	"diagnostics",
-]);
-
-/** 只读连接不能做的请求：会改会话或文件。 */
-const WRITE_REQUESTS = new Set<string>([
-	"respondUi",
-	"createSession",
-	"forkSession",
-	"renameSession",
-	"deleteSession",
-	"writeFile",
-	"createTerminal",
-	"writeTerminal",
-	"resizeTerminal",
-	"killTerminal",
-]);
-
 /** 当前主机已实现的能力。未列入的入口由端点隐藏。 */
-const BASE_CAPABILITIES: Capability[] = ["dispatch", "tools", "compaction", "extensionUi"];
+const BASE_CAPABILITIES = ["dispatch", "tools", "compaction", "extensionUi"] as const;
 
 /**
  * 本次连接能用的能力。
@@ -107,71 +49,10 @@ const BASE_CAPABILITIES: Capability[] = ["dispatch", "tools", "compaction", "ext
  * 终端依赖 pty 子进程里的原生模块，加载不起来（运行时版本不匹配、缺编译产物）时如实报缺，
  * 界面据此隐藏终端入口并显示原因，而不是让它连上再报错。
  */
-function capabilitiesFor(context: EndpointContext): Capability[] {
+function capabilitiesFor(context: RpcContext): HelloFrame["capabilities"] {
 	return context.terminals.unavailable === undefined
 		? [...BASE_CAPABILITIES, "terminal"]
 		: [...BASE_CAPABILITIES];
-}
-
-/** 请求被拒绝时带出的错误。未捕获的其他错误统一归类为内部错误。 */
-class RequestError extends Error {
-	readonly code: ErrorCode;
-
-	constructor(code: ErrorCode, message: string) {
-		super(message);
-		this.code = code;
-	}
-}
-
-/**
- * 一条连接。
- *
- * 承载方式（WebSocket 或字节流）只影响怎么收发字节，连接本身只认「发一帧」与「关掉」。
- */
-interface Connection {
-	/** 本次连接的端标识,写进回放动作的 origin */
-	readonly clientId: string;
-	/** 对端地址，只有回环地址能结束主机 */
-	readonly remoteAddress: string | undefined;
-	/** 已订阅的通道与其转发函数,用于取消订阅与断线清理 */
-	readonly subscriptions: Map<Channel, ActionSink>;
-	/** 令牌是否已校验通过，通过之后才发 hello 并接受请求 */
-	authenticated: boolean;
-	/**
-	 * 这条连接是否已经由内核确认过身份。
-	 *
-	 * unix socket 是 `0600`、所在目录 `0700`，别的用户连不上，能连上就说明是本用户，
-	 * 应用层不再要令牌；TCP 与 Web 入口拿不到对端身份，仍按令牌校验。
-	 */
-	readonly trusted: boolean;
-	/** 这条连接能做什么：认证帧里声明的档位，主机会按配置收窄 */
-	role: ClientRole;
-	/** 这条连接从哪来：桌面主进程的通道，或浏览器页面 */
-	entry: ClientEntry;
-	/** 发一帧给对端 */
-	send(frame: ServerFrame): void;
-	/** 关掉连接，参数是给对端看的说明 */
-	close(code: number, reason: string): void;
-}
-
-interface EndpointContext {
-	readonly config: ServerConfig;
-	readonly factory: PiAgentFactory;
-	readonly hub: SessionHub;
-	readonly projectStore: ProjectStore;
-	readonly settingsStore: SettingsStore;
-	readonly hostId: string;
-	/** 主机标识的派生来源，诊断里说明这台机器有没有 machine-id */
-	readonly hostSource: HostSource;
-	readonly connections: Set<Connection>;
-	/** 会话清单通道，所有端订阅同一条 */
-	readonly sessions: SessionsChannel;
-	/** 终端登记与终端通道 */
-	readonly terminals: TerminalService;
-	/** 远程操作审计 */
-	readonly audit: AuditLog;
-	/** 一次清单请求处理完之后的回调，用来在背景里补齐还没定下来的数据 */
-	readonly onSessionsListed?: () => void;
 }
 
 /** 这个对端地址是否是回环地址。IPv4、IPv6 与 IPv4 映射地址都算。 */
@@ -195,808 +76,27 @@ export interface EndpointHandle {
 	close(): Promise<void>;
 }
 
-function asObject(value: unknown): Record<string, unknown> {
-	if (typeof value !== "object" || value === null || Array.isArray(value)) {
-		throw new RequestError("bad_params", "params must be an object");
-	}
-	return value as Record<string, unknown>;
-}
-
-function requiredString(source: Record<string, unknown>, key: string, allowEmpty = false): string {
-	const value = source[key];
-	if (typeof value !== "string" || (!allowEmpty && value.length === 0)) {
-		throw new RequestError("bad_params", `missing string param: ${key}`);
-	}
-	return value;
-}
-
-function requiredNumber(source: Record<string, unknown>, key: string): number {
-	const value = source[key];
-	if (typeof value !== "number" || !Number.isFinite(value)) {
-		throw new RequestError("bad_params", `missing number param: ${key}`);
-	}
-	return value;
-}
-
-function optionalString(source: Record<string, unknown>, key: string): string | undefined {
-	const value = source[key];
-	if (value === undefined || value === null) {
-		return undefined;
-	}
-	if (typeof value !== "string") {
-		throw new RequestError("bad_params", `${key} must be a string`);
-	}
-	return value;
-}
-
-function optionalNumber(source: Record<string, unknown>, key: string): number | undefined {
-	const value = source[key];
-	if (value === undefined || value === null) {
-		return undefined;
-	}
-	if (typeof value !== "number" || !Number.isFinite(value)) {
-		throw new RequestError("bad_params", `${key} must be a number`);
-	}
-	return value;
-}
-
-function optionalStringArray(source: Record<string, unknown>, key: string): string[] | undefined {
-	const value = source[key];
-	if (value === undefined || value === null) {
-		return undefined;
-	}
-	if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
-		throw new RequestError("bad_params", `${key} must be a string array`);
-	}
-	return value as string[];
-}
-
-function requiredChannel(source: Record<string, unknown>, key: string): Channel {
-	const raw = requiredString(source, key);
-	const parsed = parseChannel(raw);
-	if (!parsed || (parsed.kind !== "session" && parsed.kind !== "chat")) {
-		throw new RequestError("unknown_channel", `unsupported channel: ${raw}`);
-	}
-	return raw as Channel;
-}
-
-/** 订阅与退订接受会话清单通道，写操作只针对会话与对话通道。 */
-function subscribableChannel(source: Record<string, unknown>, key: string): Channel {
-	const raw = requiredString(source, key);
-	const kind = parseChannel(raw)?.kind;
-	if (kind === "sessions" || kind === "terminal") {
-		return raw as Channel;
-	}
-	return requiredChannel(source, key);
-}
-
-/** 退掉一个通道的订阅，会话、对话与清单通道各走各的表。 */
-function unsubscribeChannel(context: EndpointContext, channel: Channel, sink: ActionSink): void {
-	const kind = parseChannel(channel)?.kind;
-	if (kind === "sessions") {
-		context.sessions.unsubscribe(sink);
-		return;
-	}
-	if (kind === "terminal") {
-		context.terminals.unsubscribe(channel, sink);
-		return;
-	}
-	context.hub.unsubscribe(channel, sink);
-}
-
-function toSink(connection: Connection): ActionSink {
-	return { id: connection.clientId, send: (frame) => connection.send(frame) };
+/** 一条帧的粗形状，认证与前级分发只认这几个字段。 */
+interface RawFrame {
+	type?: unknown;
+	id?: unknown;
+	method?: unknown;
+	params?: unknown;
+	token?: unknown;
+	role?: unknown;
+	entry?: unknown;
+	channel?: unknown;
+	action?: unknown;
+	clientSeq?: unknown;
 }
 
 /**
- * 终端启动目录。
+ * 处理一条帧。
  *
- * 必须是真实存在的目录：终端以主机用户身份跑 shell，界面上给的路径先在这里核对一遍，
- * 软链接也按实际指向判断。
+ * 未认证时只认认证帧；认证之后请求走 `handleRequest`，动作走 `handleDispatch`。
+ * 帧本身解不出来或形状不对时按协议约定断开连接。
  */
-async function resolveTerminalCwd(cwd: string): Promise<string> {
-	let real: string;
-	try {
-		real = await realpath(cwd);
-	} catch {
-		throw new RequestError("file_not_found", `Startup directory does not exist: ${cwd}`);
-	}
-	const info = await stat(real).catch(() => undefined);
-	if (info === undefined || !info.isDirectory()) {
-		throw new RequestError("bad_params", `Startup directory is not a directory: ${cwd}`);
-	}
-	return real;
-}
-
-/** 建立会话并把审批应答接到该会话的中转上。 */
-async function createSession(context: EndpointContext, params: unknown): Promise<SessionSnapshot> {
-	const source = asObject(params ?? {});
-	const model = source.model;
-	if (model !== undefined && typeof model !== "object") {
-		throw new RequestError("bad_params", "model must be an object");
-	}
-	const modelRecord = model === undefined ? undefined : asObject(model);
-	return await context.hub.createSession({
-		cwd: optionalString(source, "cwd"),
-		model: modelRecord
-			? { provider: requiredString(modelRecord, "provider"), id: requiredString(modelRecord, "id") }
-			: undefined,
-		thinkingLevel: optionalString(source, "thinkingLevel") as RequestParams["createSession"]["thinkingLevel"],
-		tools: optionalStringArray(source, "tools"),
-		excludeTools: optionalStringArray(source, "excludeTools"),
-		name: optionalString(source, "name"),
-	});
-}
-
-/** 打开已有会话,模型与工具集从会话记录恢复。 */
-async function openSession(context: EndpointContext, params: unknown): Promise<SessionSnapshot> {
-	const source = asObject(params);
-	return await context.hub.openSession(requiredString(source, "sessionFile"), optionalString(source, "cwd"));
-}
-
-/** 应用一条端点派发的动作。返回即表示已受理,主机产生的动作随后从通道推出。 */
-async function applyAction(
-	context: EndpointContext,
-	channel: Channel,
-	action: Action,
-): Promise<"handled" | undefined> {
-	const parsed = parseChannel(channel);
-	if (!parsed) {
-		throw new RequestError("unknown_channel", `unsupported channel: ${channel}`);
-	}
-	// UI 等待可能占用串行队列，停止入口必须直接解除等待。
-	if (action.type === "chat/turnCancelled") {
-		const lease = context.hub.hold(parsed.id);
-		try {
-			await context.hub.agent(parsed.id).abort();
-		} finally {
-			lease.release();
-		}
-		return;
-	}
-	// 回退要挪分支指针,还得往外广播,自己持有会话,不走下面那段串行执行
-	if (action.type === "chat/revertTo") {
-		await context.hub.revertTo(parsed.id, action.entryId);
-		return;
-	}
-	let handled = false;
-	// 同一会话的动作串行执行,执行期间持有会话,不会被空闲回收
-	await context.hub.withSession(parsed.id, async (agent) => {
-		switch (action.type) {
-			case "chat/turnStarted":
-				if (agent.isStreaming && action.streamingBehavior === undefined) {
-					throw new RequestError("rejected", "session is running, streamingBehavior is required");
-				}
-				// prompt 在运行开始后返回,这里不会挂到整轮结束
-				handled =
-					(await agent.prompt(action.text, {
-						images: action.images,
-						streamingBehavior: action.streamingBehavior,
-					})) === "handled";
-				return;
-			case "session/compact":
-				// 压缩要读整条分支写摘要，与运行中的回合不能同时进行
-				if (agent.isBusy) {
-					throw new RequestError(
-						"rejected",
-						"This turn has not finished; wait for it to stop before compacting context",
-					);
-				}
-				await agent.compact();
-				return;
-			case "session/pendingMessageSet":
-				if (action.kind === "steering") {
-					handled = (await agent.steer(action.text)) === "handled";
-				} else {
-					handled = (await agent.followUp(action.text)) === "handled";
-				}
-				return;
-			case "session/queueCleared":
-				agent.clearQueue();
-				return;
-			case "session/titleChanged":
-				agent.setName(action.title);
-				return;
-			case "session/configChanged":
-				if (action.model) {
-					await agent.setModel(action.model, { persist: action.persist });
-				}
-				if (action.thinkingLevel) {
-					agent.setThinkingLevel(action.thinkingLevel, { persist: action.persist });
-				}
-				if (action.activeToolNames) {
-					agent.setActiveTools(action.activeToolNames);
-				}
-				return;
-			default:
-				throw new RequestError("unknown_method", `action is produced by the host: ${action.type}`);
-		}
-	});
-	return handled ? "handled" : undefined;
-}
-
-/**
- * 这条连接能不能改主机配置：设置、凭证、项目清单与诊断导出。
- *
- * 桌面入口放行：本机 socket 与 SSH 隧道都算，SSH 本身已经是一道认证。浏览器入口只有一个
- * 令牌，不放行。只读档什么时候都不放行。
- */
-function canManage(connection: Connection): boolean {
-	return connection.entry === "desktop" && connection.role !== "viewer";
-}
-
-/**
- * 按连接的权限档判定能不能做这个请求。
- *
- * 桌面入口放行主机管理；浏览器入口不能碰主机管理；只读档连会话与文件都改不了。
- */
-function assertRequestAllowed(connection: Connection, method: string): void {
-	if (connection.role === "admin") {
-		return;
-	}
-	if (ADMIN_ONLY_REQUESTS.has(method) && !canManage(connection)) {
-		throw new RequestError("rejected", "This operation is only available in the desktop app");
-	}
-	if (connection.role === "viewer" && WRITE_REQUESTS.has(method)) {
-		throw new RequestError("rejected", "This connection is read-only");
-	}
-}
-
-/** 远程连接的写操作记一笔，本机连接不记。 */
-function auditRemote(context: EndpointContext, connection: Connection, name: string, failure?: string): void {
-	if (connection.role === "admin") {
-		return;
-	}
-	context.audit.record({
-		at: Date.now(),
-		clientId: connection.clientId,
-		role: connection.role,
-		name,
-		ok: failure === undefined,
-		...(failure === undefined ? {} : { reason: failure }),
-	});
-}
-
-function parseUiResponse(value: unknown): UiResponse {
-	const source = asObject(value);
-	switch (source.kind) {
-		case "cancel":
-			return { kind: "cancel" };
-		case "confirm":
-			if (typeof source.confirmed !== "boolean")
-				throw new RequestError("bad_params", "confirmed must be a boolean");
-			return { kind: "confirm", confirmed: source.confirmed };
-		case "select":
-		case "input":
-		case "editor": {
-			if (typeof source.value !== "string") throw new RequestError("bad_params", "value must be a string");
-			return { kind: source.kind, value: source.value };
-		}
-		case "form": {
-			if (!Array.isArray(source.answers)) throw new RequestError("bad_params", "answers must be an array");
-			return {
-				kind: "form",
-				answers: source.answers.map((value) => {
-					const answer = asObject(value);
-					if (typeof answer.id !== "string")
-						throw new RequestError("bad_params", "answer id must be a string");
-					if (
-						!Array.isArray(answer.selections) ||
-						answer.selections.some((item) => typeof item !== "string")
-					) {
-						throw new RequestError("bad_params", "selections must be a string array");
-					}
-					if (answer.comment !== undefined && typeof answer.comment !== "string") {
-						throw new RequestError("bad_params", "comment must be a string");
-					}
-					if (answer.custom !== undefined && typeof answer.custom !== "string") {
-						throw new RequestError("bad_params", "custom must be a string");
-					}
-					return {
-						id: answer.id,
-						selections: answer.selections as string[],
-						...(answer.custom === undefined ? {} : { custom: answer.custom }),
-						...(answer.comment === undefined ? {} : { comment: answer.comment }),
-					};
-				}),
-			};
-		}
-		default:
-			throw new RequestError("bad_params", "unsupported UI response");
-	}
-}
-
-async function handleRequest(
-	context: EndpointContext,
-	connection: Connection,
-	method: string,
-	params: unknown,
-): Promise<unknown> {
-	try {
-		assertRequestAllowed(connection, method);
-	} catch (error) {
-		auditRemote(context, connection, method, toProtocolError(error).message);
-		throw error;
-	}
-	if (connection.role !== "admin" && WRITE_REQUESTS.has(method)) {
-		auditRemote(context, connection, method);
-	}
-	switch (method) {
-		// 不经过 withSession，正在等待这份应答的初始化或命令才能继续。
-		case "respondUi": {
-			const source = asObject(params);
-			const response = parseUiResponse(source.response);
-			const agent = context.hub.agent(requiredString(source, "sessionId"));
-			return { accepted: agent.respondUi(requiredString(source, "requestId"), response) };
-		}
-		case "listCommands": {
-			const source = asObject(params);
-			return { commands: await context.hub.commands(requiredString(source, "sessionId")) };
-		}
-		case "listSessions": {
-			const source = asObject(params ?? {});
-			const sessions = await context.factory.listSessions(optionalString(source, "cwd"));
-			// 清单已经回给端了，可以在背景里补齐剩下的摘要
-			context.onSessionsListed?.();
-			// 每条带上主机侧此刻的状态，端重连之后一次往返就能把本地那份对齐
-			return {
-				sessions: sessions.map((summary) => ({
-					summary,
-					status: context.hub.statusOf(summary.path),
-				})),
-			};
-		}
-		case "createSession":
-			return await createSession(context, params);
-		case "openSession":
-			return await openSession(context, params);
-		case "forkSession": {
-			const source = asObject(params);
-			const beforeEntryId = optionalString(source, "beforeEntryId");
-			return await context.hub.forkSession({
-				sessionFile: requiredString(source, "sessionFile"),
-				...(beforeEntryId === undefined ? {} : { beforeEntryId }),
-				cwd: optionalString(source, "cwd"),
-			});
-		}
-		case "snapshot": {
-			const source = asObject(params);
-			return await context.hub.snapshot(requiredString(source, "sessionId"));
-		}
-		case "entries": {
-			const source = asObject(params);
-			return await context.hub.entries(
-				requiredString(source, "sessionId"),
-				optionalString(source, "cursor"),
-				optionalNumber(source, "limit"),
-			);
-		}
-		case "entriesAfter": {
-			const source = asObject(params);
-			return await context.hub.entriesAfter(
-				requiredString(source, "sessionId"),
-				optionalString(source, "afterEntryId") ?? null,
-			);
-		}
-		case "subscribe": {
-			const source = asObject(params);
-			const channel = subscribableChannel(source, "channel");
-			const previous = connection.subscriptions.get(channel);
-			if (previous) {
-				unsubscribeChannel(context, channel, previous);
-			}
-			const sink = toSink(connection);
-			connection.subscriptions.set(channel, sink);
-			const parsed = parseChannel(channel);
-			if (parsed?.kind === "sessions") {
-				// 清单通道只有一条，标识对不上的按未知通道拒绝
-				if (parsed.id !== context.hostId) {
-					throw new RequestError("unknown_channel", `unsupported channel: ${channel}`);
-				}
-				return context.sessions.subscribe(channel, optionalNumber(source, "since"), sink);
-			}
-			if (parsed?.kind === "terminal") {
-				// 终端通道按标识对号，登记里没有的按未知通道拒绝
-				if (context.terminals.get(parsed.id) === undefined) {
-					throw new RequestError("unknown_channel", `unsupported channel: ${channel}`);
-				}
-				return context.terminals.subscribe(channel, optionalNumber(source, "since"), sink);
-			}
-			return await context.hub.subscribe(channel, optionalNumber(source, "since"), sink);
-		}
-		case "unsubscribe": {
-			const source = asObject(params);
-			const channel = subscribableChannel(source, "channel");
-			const sink = connection.subscriptions.get(channel);
-			if (sink) {
-				unsubscribeChannel(context, channel, sink);
-				connection.subscriptions.delete(channel);
-			}
-			return {};
-		}
-		case "models": {
-			const source = asObject(params ?? {});
-			return { models: context.factory.models(optionalString(source, "providerId")) };
-		}
-		case "availableModels":
-			return { models: await context.factory.availableModels() };
-		case "providers":
-			return { providers: context.factory.providers() };
-		case "listDirectory": {
-			const source = asObject(params);
-			const cwd = await resolveProjectDirectory(requiredString(source, "cwd"));
-			return { entries: await asFileError(listDirectory(cwd, optionalString(source, "path") ?? "")) };
-		}
-		case "readFile": {
-			const source = asObject(params);
-			const cwd = await resolveProjectDirectory(requiredString(source, "cwd"));
-			return await asFileError(readTextFile(cwd, requiredString(source, "path")));
-		}
-		case "writeFile": {
-			const source = asObject(params);
-			const cwd = await resolveProjectDirectory(requiredString(source, "cwd"));
-			return await asFileError(
-				writeTextFile(
-					cwd,
-					requiredString(source, "path"),
-					requiredString(source, "content"),
-					requiredString(source, "expectedRevision"),
-				),
-			);
-		}
-		case "gitStatus":
-			return await gitStatus(await resolveProjectDirectory(requiredString(asObject(params), "cwd")));
-		case "gitDiff": {
-			const source = asObject(params);
-			const cwd = await resolveProjectDirectory(requiredString(source, "cwd"));
-			return await gitDiff(cwd, requiredString(source, "path"), source.untracked === true);
-		}
-		case "gitCommits":
-			return await gitCommits(await resolveProjectDirectory(requiredString(asObject(params), "cwd")));
-		case "gitCommit": {
-			const source = asObject(params);
-			const cwd = await resolveProjectDirectory(requiredString(source, "cwd"));
-			return await gitCommit(cwd, requiredString(source, "sha"));
-		}
-		case "gitCommitDiff": {
-			const source = asObject(params);
-			const cwd = await resolveProjectDirectory(requiredString(source, "cwd"));
-			return await gitCommitDiff(
-				cwd,
-				requiredString(source, "sha"),
-				requiredString(source, "path"),
-				optionalString(source, "oldPath"),
-			);
-		}
-		case "listProjects":
-			return { projects: [...context.projectStore.list()] };
-		case "addProject": {
-			const source = asObject(params);
-			const cwd = await resolveProjectDirectory(requiredString(source, "cwd"));
-			return await context.projectStore.add({ cwd, name: optionalString(source, "name") });
-		}
-		case "renameProject": {
-			const source = asObject(params);
-			return await context.projectStore.rename(requiredString(source, "id"), optionalString(source, "name"));
-		}
-		case "removeProject": {
-			const source = asObject(params);
-			await context.projectStore.remove(requiredString(source, "id"));
-			return {};
-		}
-		case "projectTrust": {
-			const source = asObject(params);
-			return context.factory.projectTrust(await resolveProjectDirectory(requiredString(source, "cwd")));
-		}
-		case "setProjectTrust": {
-			const source = asObject(params);
-			const trusted = source.trusted;
-			if (typeof trusted !== "boolean") {
-				throw new RequestError("bad_params", "trusted must be a boolean");
-			}
-			context.factory.setProjectTrust(await resolveProjectDirectory(requiredString(source, "cwd")), trusted);
-			return {};
-		}
-		case "getSettings":
-			return { settings: context.settingsStore.get() };
-		case "updateSettings": {
-			const source = asObject(params);
-			const settings = source.settings;
-			if (typeof settings !== "object" || settings === null) {
-				throw new RequestError("bad_params", "settings must be an object");
-			}
-			return { settings: await context.settingsStore.save(settings as FacetSettings) };
-		}
-		case "busySessions":
-			return { files: context.hub.busyFiles() };
-		case "diagnostics": {
-			const [sessions, settings] = await Promise.all([
-				context.factory.listSessions(),
-				Promise.resolve(context.settingsStore.get()),
-			]);
-			return {
-				text: await buildDiagnostics({
-					protocolVersion: PROTOCOL_VERSION,
-					hostId: context.hostId,
-					hostSource: context.hostSource,
-					hostName: context.config.hostName,
-					agentDir: context.factory.agentDir,
-					dataDir: context.config.dataDir,
-					sessionDir: context.factory.sessionDir,
-					sessionCount: sessions.length,
-					projects: context.projectStore.list().map((project) => ({ cwd: project.cwd, name: project.name })),
-					providers: context.factory.providers(),
-					settings,
-					now: Date.now(),
-				}),
-			};
-		}
-		case "listCustomProviders":
-			return { providers: await context.factory.customProviders() };
-		case "saveCustomProvider": {
-			const source = asObject(params);
-			const provider = asObject(source.provider);
-			await context.factory.saveCustomProvider({
-				id: requiredString(provider, "id"),
-				name: requiredString(provider, "name"),
-				baseUrl: requiredString(provider, "baseUrl"),
-				api: requiredString(provider, "api"),
-				models: Array.isArray(provider.models) ? (provider.models as CustomProviderInfo["models"]) : [],
-			});
-			return { providers: await context.factory.customProviders() };
-		}
-		case "listTerminals": {
-			return { terminals: context.terminals.list() };
-		}
-		case "createTerminal": {
-			const source = asObject(params);
-			// cwd 为空时落在主机用户的 home：界面还没有打开会话或项目时也能开终端
-			const requested = optionalString(source, "cwd")?.trim() ?? "";
-			const cwd = await resolveTerminalCwd(requested.length > 0 ? requested : homedir());
-			const terminal = await context.terminals.create({
-				cwd,
-				cols: requiredNumber(source, "cols"),
-				rows: requiredNumber(source, "rows"),
-				shell: optionalString(source, "shell"),
-			});
-			return { terminal };
-		}
-		case "writeTerminal": {
-			const source = asObject(params);
-			context.terminals.write(requiredString(source, "id"), requiredString(source, "data", true));
-			return {};
-		}
-		case "resizeTerminal": {
-			const source = asObject(params);
-			context.terminals.resize(
-				requiredString(source, "id"),
-				requiredNumber(source, "cols"),
-				requiredNumber(source, "rows"),
-			);
-			return {};
-		}
-		case "killTerminal": {
-			const source = asObject(params);
-			context.terminals.kill(requiredString(source, "id"));
-			return {};
-		}
-		case "ackTerminal": {
-			const source = asObject(params);
-			context.terminals.ack(requiredString(source, "id"), requiredNumber(source, "seq"));
-			return {};
-		}
-		case "serializeTerminal": {
-			const source = asObject(params);
-			return context.terminals.serialize(requiredString(source, "id"));
-		}
-		case "removeCustomProvider": {
-			const source = asObject(params);
-			await context.factory.removeCustomProvider(requiredString(source, "providerId"));
-			return { providers: await context.factory.customProviders() };
-		}
-		case "setProviderBaseUrl": {
-			const source = asObject(params);
-			await context.factory.setProviderBaseUrl(
-				requiredString(source, "providerId"),
-				optionalString(source, "baseUrl") ?? "",
-			);
-			return { providers: context.factory.providers() };
-		}
-		case "testModel": {
-			const source = asObject(params);
-			return await context.factory.testModel({
-				provider: requiredString(source, "provider"),
-				id: requiredString(source, "id"),
-			});
-		}
-		case "saveCredential": {
-			const source = asObject(params);
-			await context.factory.saveCredential(
-				requiredString(source, "providerId"),
-				requiredString(source, "apiKey"),
-			);
-			return { providers: context.factory.providers() };
-		}
-		case "deleteCredential": {
-			const source = asObject(params);
-			await context.factory.deleteCredential(requiredString(source, "providerId"));
-			return { providers: context.factory.providers() };
-		}
-		case "renameSession": {
-			const source = asObject(params);
-			await context.hub.renameSession(requiredString(source, "sessionFile"), optionalString(source, "name"));
-			return {};
-		}
-		case "deleteSession": {
-			const source = asObject(params);
-			await context.hub.deleteSession(requiredString(source, "sessionFile"));
-			return {};
-		}
-		case "markSessionsSeen": {
-			const source = asObject(params);
-			for (const file of optionalStringArray(source, "sessionFiles") ?? []) {
-				context.hub.markSeen(file);
-			}
-			return {};
-		}
-		case "revealProject": {
-			const source = asObject(params);
-			const id = requiredString(source, "id");
-			const project = context.projectStore.get(id);
-			if (project === undefined) {
-				throw new ProjectNotFoundError(id);
-			}
-			await revealInFileManager(project.cwd);
-			return {};
-		}
-		default:
-			throw new RequestError("unknown_method", `unknown method: ${method}`);
-	}
-}
-
-/**
- * 校验并统一项目目录。
- *
- * 目录不存在或不是目录时直接拒绝；符号链接与 `..` 一律换成实际路径，同一个目录只认一个标识。
- */
-/** 把文件操作的失败换成端点统一的错误码，界面据此给出不同提示。 */
-async function asFileError<T>(work: Promise<T>): Promise<T> {
-	try {
-		return await work;
-	} catch (error) {
-		if (error instanceof FileAccessError) {
-			throw new RequestError(error.code, error.message);
-		}
-		throw error;
-	}
-}
-
-async function resolveProjectDirectory(cwd: string): Promise<string> {
-	if (!isAbsolute(cwd)) {
-		throw new RequestError("bad_params", `Project directory must be absolute: ${cwd}`);
-	}
-	let target: string;
-	try {
-		target = await realpath(cwd);
-	} catch {
-		throw new RequestError("rejected", `Project directory does not exist: ${cwd}`);
-	}
-	const info = await stat(target).catch(() => undefined);
-	if (info === undefined || !info.isDirectory()) {
-		throw new RequestError("rejected", `Not a directory: ${cwd}`);
-	}
-	return target;
-}
-
-function toProtocolError(error: unknown): { code: ErrorCode; message: string } {
-	if (error instanceof RequestError) {
-		return { code: error.code, message: error.message };
-	}
-	if (error instanceof SessionNotFoundError) {
-		return { code: "unknown_session", message: error.message };
-	}
-	if (error instanceof ChannelNotFoundError) {
-		return { code: "unknown_channel", message: error.message };
-	}
-	if (error instanceof InvalidProviderError) {
-		return { code: "rejected", message: error.message };
-	}
-	if (
-		error instanceof ProjectExistsError ||
-		error instanceof ProjectNotFoundError ||
-		error instanceof RevealFailedError
-	) {
-		return { code: "rejected", message: error.message };
-	}
-	if (
-		error instanceof SessionEntryNotFoundError ||
-		error instanceof SessionBoundaryNotFoundError ||
-		error instanceof SessionBusyError ||
-		error instanceof SessionFileMissingError
-	) {
-		return { code: "rejected", message: error.message };
-	}
-	return { code: "internal", message: error instanceof Error ? error.message : String(error) };
-}
-
-/** 拒绝一条端点派发的动作:回一个带 rejectionReason 的帧给发起方,不写进通道序号流。 */
-async function handleDispatch(context: EndpointContext, connection: Connection, raw: unknown): Promise<void> {
-	const source = asObject(raw);
-	const channel = requiredChannel(source, "channel");
-	const action = source.action as Action;
-	const clientSeq = optionalNumber(source, "clientSeq") ?? 0;
-	if (connection.role === "viewer") {
-		// 只读连接派发动作直接拒绝：回一条带原因的帧，不写任何东西
-		const reason = "This connection is read-only";
-		auditRemote(context, connection, action.type, reason);
-		connection.send({
-			type: "action",
-			channel,
-			action,
-			serverSeq: context.hub.lastSeq(channel),
-			origin: { clientId: connection.clientId, clientSeq },
-			rejectionReason: reason,
-		} satisfies ActionFrame);
-		return;
-	}
-	auditRemote(context, connection, action.type);
-	if (typeof action !== "object" || action === null || typeof action.type !== "string") {
-		throw new RequestError("bad_params", "action must carry a type");
-	}
-	// 受理后立即返回:动作的执行结果由通道上的动作反映,拒绝才回一个带原因的帧。
-	// 不等待执行完成,否则同一端连续发出的动作会被前一条阻塞。
-	void applyAction(context, channel, action)
-		.then((result) => {
-			if (result !== "handled") return;
-			const parsed = parseChannel(channel);
-			if (parsed === undefined) return;
-			const chatChannel = makeChannel("chat", parsed.id);
-			connection.send({
-				type: "action",
-				channel: chatChannel,
-				action: { type: "chat/inputHandled" },
-				serverSeq: context.hub.lastSeq(chatChannel),
-				origin: { clientId: connection.clientId, clientSeq },
-			});
-		})
-		.catch((error) => {
-			const failure = toProtocolError(error);
-			connection.send({
-				type: "action",
-				channel,
-				action,
-				serverSeq: context.hub.lastSeq(channel),
-				origin: { clientId: connection.clientId, clientSeq },
-				rejectionReason: failure.message,
-			} satisfies ActionFrame);
-		});
-}
-
-/**
- * 认证帧里声明的档位换算成实际授予的档位。
- *
- * 不声明就是管理档（本机连接）；声明操作档时按主机配置收窄，配置为只读时一律给只读。
- */
-function grantedRole(context: EndpointContext, requested: unknown, fallback: ClientRole): ClientRole {
-	if (requested === undefined) {
-		return fallback;
-	}
-	if (requested === "operator") {
-		return context.config.remotePermission === "operate" ? "operator" : "viewer";
-	}
-	return "viewer";
-}
-
-/** 令牌是否与主机配置一致。主机没设令牌时放行，只用于本机调试环境。 */
-function matchesToken(context: EndpointContext, token: string): boolean {
-	const expected = context.config.token;
-	if (expected === undefined || expected.length === 0) {
-		return true;
-	}
-	return token === expected;
-}
-
-async function handleFrame(context: EndpointContext, connection: Connection, text: string): Promise<void> {
+async function handleFrame(context: RpcContext, connection: Connection, text: string): Promise<void> {
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(text);
@@ -1008,15 +108,7 @@ async function handleFrame(context: EndpointContext, connection: Connection, tex
 		connection.close(1003, "invalid frame");
 		return;
 	}
-	const frame = parsed as {
-		type?: unknown;
-		id?: unknown;
-		method?: unknown;
-		params?: unknown;
-		token?: unknown;
-		role?: unknown;
-		entry?: unknown;
-	};
+	const frame = parsed as RawFrame;
 	if (!connection.authenticated) {
 		// 首帧必须是认证帧；TCP 与 Web 入口还要带上正确令牌，unix socket 已由内核确认身份
 		if (frame.type !== "auth") {
@@ -1056,20 +148,14 @@ async function handleFrame(context: EndpointContext, connection: Connection, tex
 		connection.close(1003, "invalid frame");
 		return;
 	}
-	const response: ResponseFrame = await (async () => {
-		try {
-			const data = await handleRequest(context, connection, frame.method as string, frame.params);
-			return { type: "response", id: frame.id as string, ok: true, data } as ResponseFrame;
-		} catch (error) {
-			return {
-				type: "response",
-				id: frame.id as string,
-				ok: false,
-				error: toProtocolError(error),
-			} satisfies ResponseFrame;
-		}
-	})();
-	connection.send(response);
+	const id = frame.id;
+	const method = frame.method;
+	try {
+		const data = await handleRequest(context, connection, method, frame.params);
+		connection.send({ type: "response", id, ok: true, data });
+	} catch (error) {
+		connection.send({ type: "response", id, ok: false, error: toProtocolError(error) });
+	}
 }
 
 /** 启动端点监听。返回实际端口,供嵌入方写入自己的握手信息。 */
@@ -1091,7 +177,7 @@ export async function startEndpoint(options: {
 	/** 清单请求之后的回调，主机用它补齐背景数据 */
 	onSessionsListed?: () => void;
 }): Promise<EndpointHandle> {
-	const context: EndpointContext = {
+	const context: RpcContext = {
 		config: options.config,
 		factory: options.factory,
 		hub: options.hub,
@@ -1119,11 +205,10 @@ export async function startEndpoint(options: {
 		connection.subscriptions.clear();
 	};
 
-	/** 一条新连接：按行切帧，首帧认令牌，通过后发 hello。 */
 	/** 建一条连接：收发交给具体承载，其余逻辑各条连接一致。 */
 	const makeConnection = (
 		remoteAddress: string | undefined,
-		send: (frame: ServerFrame) => void,
+		send: (frame: OutboundFrame) => void,
 		close: (code: number, reason: string) => void,
 		/** 认证帧没声明档位时用的档位：Web 连接缺省只读 */
 		defaultRole: ClientRole = "admin",
@@ -1148,6 +233,9 @@ export async function startEndpoint(options: {
 		context.connections.add(connection);
 		return connection;
 	};
+
+	// 只有 unix 监听器能由内核证明对端身份，先在这里定好，accept 时带进每条连接
+	const useUnixSocket = options.config.socketPath !== undefined && options.config.socketPath.length > 0;
 
 	const accept = (socket: Socket): void => {
 		const connection = makeConnection(
@@ -1182,8 +270,6 @@ export async function startEndpoint(options: {
 		socket.on("error", () => cleanup(connection));
 	};
 
-	// 只有 unix 监听器能由内核证明对端身份，先在这里定好，accept 时带进每条连接
-	const useUnixSocket = options.config.socketPath !== undefined && options.config.socketPath.length > 0;
 	const socketServer = createSocketServer((socket) => accept(socket));
 
 	if (useUnixSocket) {
@@ -1277,10 +363,13 @@ export async function startEndpoint(options: {
 				connection.close(1001, "host shutting down");
 			}
 			context.connections.clear();
-			context.sessions.clear();
+			context.sessions.dropSubscribers();
 			await new Promise<void>((resolve) => {
 				socketServer.close(() => resolve());
 			});
 		},
 	};
 }
+
+/** 端点里仍在用的错误类型，导出给测试与调用方判断拒绝原因。 */
+export { RequestError };

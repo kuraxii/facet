@@ -84,10 +84,13 @@
 	/* 会话标题溢出时右侧渐隐的宽度 */
 	--sb-title-fade: 24px;
 	--status-dot: 6px;
-	--status-dot-failed: 8px;
+	/* 失败的点外面留的一圈空隙，透出行底色 */
+	--status-dot-gap: 1px;
 	--status-ring-stroke: 1.5px;
 	--status-ring-gap: 1.5px;
 	--status-ring-size: calc(var(--status-dot) + (var(--status-ring-stroke) + var(--status-ring-gap)) * 2);
+	/* 环的半径：外缘落在环的尺寸上，描边以这条半径居中画 */
+	--status-ring-radius: calc(var(--status-ring-size) / 2 - var(--status-ring-stroke) / 2);
 	--sidebar-edge: 10px;
 	/* 聊天正文与输入区共用的内容列宽；输入框和过程组胶囊用同一个边界 */
 	--chat-column-max: 780px;

@@ -12,10 +12,17 @@ export type {
 	SessionTransport,
 } from "./client.ts";
 export { SessionClient } from "./client.ts";
+export type {
+	ConnectionLinkOptions,
+	LinkHooks,
+	LinkSession,
+	LinkSnapshot,
+	LinkStatus,
+	LinkTransport,
+} from "./link.ts";
+export { ConnectionLink } from "./link.ts";
 export { historyMessageId, isHistoryMessageId } from "./message-id.ts";
 export { reduceChat, reduceSession } from "./reduce.ts";
-export type { SessionBucket } from "./session-status.ts";
-export { deriveBucket } from "./session-status.ts";
 export type {
 	ChatActivity,
 	ChatView,

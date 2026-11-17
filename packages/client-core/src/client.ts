@@ -141,6 +141,16 @@ const DEFAULT_PAGE_SIZE = 50;
 const DEFAULT_INITIAL_PAGES = 2;
 const DEFAULT_SESSION_RETENTION_MS = 3 * 60 * 1000;
 
+/** 一条等待主机确认的发送。 */
+interface PendingSend {
+	/** 端点派发时分配的序号，确认与拒绝都按它核销 */
+	clientSeq: number;
+	/** 发出去的文本，界面收起草稿时按它回调 */
+	text: string;
+	/** 走的是起一轮还是排队 */
+	kind: "turn" | "steering";
+}
+
 /** 一条已建立订阅的会话，切换标签时保留这些状态。 */
 interface SessionRuntime {
 	readonly opened: OpenedSession;
@@ -158,8 +168,13 @@ interface SessionRuntime {
 	olderTask: Promise<{ loaded: number; hasMore: boolean }> | undefined;
 	/** 缺口补齐进行中的通道 */
 	resyncing: { session: boolean; chat: boolean };
-	/** 等待主机确认的输入 */
-	pendingSend: { clientSeq: number; text: string; kind: "turn" | "steering" } | undefined;
+	/**
+	 * 等待主机确认的输入，按 clientSeq 索引。
+	 *
+	 * 同一会话可以连着发多条，各自等各自的确认；用单槽会在第二条发出时把第一条挤掉，
+	 * 那条消息的确认回来时找不到记录，草稿就永远收不起来。
+	 */
+	pendingSend: Map<number, PendingSend>;
 	/** 命令清单缓存，每个会话只取一次；扩展重新初始化或会话释放时丢弃 */
 	commands: SlashCommand[] | undefined;
 	/** 关闭标签后的保留定时器 */
@@ -183,6 +198,8 @@ export class SessionClient {
 	private readonly pageSize: number;
 	private readonly sessionRetentionMs: number;
 	private readonly state = new SessionStore();
+	/** 正在进行的续订，重复触发时共用同一次 */
+	private resuming: Promise<void> | undefined;
 	private readonly stops: (() => void)[] = [];
 	/** 动作订阅,重连时替换 */
 	private stopActions: (() => void) | undefined;
@@ -223,7 +240,7 @@ export class SessionClient {
 			historyEpoch: 0,
 			olderTask: undefined,
 			resyncing: { session: false, chat: false },
-			pendingSend: undefined,
+			pendingSend: new Map(),
 			commands: undefined,
 			retainTimer: undefined,
 		};
@@ -259,6 +276,7 @@ export class SessionClient {
 			runtime.retainTimer = undefined;
 		}
 		this.runtimes.delete(runtime.opened.sessionId);
+		runtime.pendingSend.clear();
 		if (this.active === runtime) {
 			this.activeId = undefined;
 		}
@@ -275,14 +293,6 @@ export class SessionClient {
 
 	private get olderCursor(): string | undefined {
 		return this.active?.olderCursor;
-	}
-
-	private get pendingSend(): SessionRuntime["pendingSend"] {
-		return this.active?.pendingSend;
-	}
-
-	private set pendingSend(value: SessionRuntime["pendingSend"]) {
-		if (this.active !== undefined) this.active.pendingSend = value;
 	}
 
 	/** 状态持有者,界面从这里读视图并订阅变化。 */
@@ -315,6 +325,7 @@ export class SessionClient {
 		if (runtime.retainTimer !== undefined) clearTimeout(runtime.retainTimer);
 		runtime.retainTimer = setTimeout(() => {
 			runtime.retainTimer = undefined;
+			runtime.pendingSend.clear();
 			if (this.active === runtime) {
 				this.closeSession(file);
 				return;
@@ -865,12 +876,21 @@ export class SessionClient {
 	}
 
 	/**
-	 * 断线重连之后续订。
+	 * 断线重连之后续订，迟到的重复调用共用同一次。
 	 *
 	 * 新连接是新的一端,主机那边没有任何订阅记录。按已收到的最后序号续订,
 	 * 缓冲能补齐就只补发,补不上就整体重新对齐。
 	 */
 	async resume(): Promise<void> {
+		// 连接就绪会同时惊动连接链路与传输状态监听，两边都来续订一次；重复的请求没有意义
+		this.resuming ??= this.resumeOnce().finally(() => {
+			this.resuming = undefined;
+		});
+		return this.resuming;
+	}
+
+	/** 续订的实际流程，同一时刻只跑一份。 */
+	private async resumeOnce(): Promise<void> {
 		// 清单通道与打开的会话无关，重连后总要续订一次
 		await this.followSessionList().catch((error: unknown) => {
 			debugLog("client", "Failed to subscribe to the session list after reconnect", { error: String(error) });
@@ -879,6 +899,9 @@ export class SessionClient {
 		if (runtime === undefined) {
 			return;
 		}
+		// 新连接的主机给了新的 clientId，旧连接的确认回执不会再回来：悬挂的发送就此作废，
+		// 否则草稿永远收不起来，界面一直停在「发送中」
+		runtime.pendingSend.clear();
 		// 新连接没有旧订阅，非当前会话的缓存无法继续接收动作；切回时重新打开
 		for (const inactive of [...this.runtimes.values()]) {
 			if (inactive !== runtime) await this.releaseRuntime(inactive);
@@ -935,13 +958,14 @@ export class SessionClient {
 	 * 直接改或重发。图片随消息一起发，主机侧会把它交给会话。
 	 */
 	send(text: string, options: SendOptions = {}): number {
-		const clientSeq = this.transport.dispatch(this.requireOpened().chatChannel, {
+		const runtime = this.requireRuntime();
+		const clientSeq = this.transport.dispatch(runtime.opened.chatChannel, {
 			type: "chat/turnStarted",
 			text,
 			...(options.images === undefined || options.images.length === 0 ? {} : { images: [...options.images] }),
 			...(options.streamingBehavior === undefined ? {} : { streamingBehavior: options.streamingBehavior }),
 		});
-		this.pendingSend = { clientSeq, text, kind: "turn" };
+		runtime.pendingSend.set(clientSeq, { clientSeq, text, kind: "turn" });
 		return clientSeq;
 	}
 
@@ -952,12 +976,13 @@ export class SessionClient {
 	 * 模型之前生效,不用等整轮结束。主机把这条文字记进队列后回 session/queueChanged。
 	 */
 	enqueue(text: string): number {
-		const clientSeq = this.transport.dispatch(this.requireOpened().sessionChannel, {
+		const runtime = this.requireRuntime();
+		const clientSeq = this.transport.dispatch(runtime.opened.sessionChannel, {
 			type: "session/pendingMessageSet",
 			kind: "steering",
 			text,
 		});
-		this.pendingSend = { clientSeq, text, kind: "steering" };
+		runtime.pendingSend.set(clientSeq, { clientSeq, text, kind: "steering" });
 		return clientSeq;
 	}
 
@@ -974,33 +999,72 @@ export class SessionClient {
 		};
 	}
 
-	/** 主机确认消息已进入对话或已进队列,通知界面收起草稿。 */
+	/**
+	 * 主机确认消息已进入对话或已进队列,通知界面收起草稿。
+	 *
+	 * 认哪一条由帧自己说了算：带 `origin.clientSeq` 的回执精确核销那一条，其余的同会话
+	 * 待确认记录一条不动；没有序号的确认（用户消息落库、排队内容变化）按先发先销，
+	 * 只销同类里最早的一条。
+	 */
 	private confirmSend(frame: ActionFrame): void {
-		const opened = this.opened;
-		const pending = this.pendingSend;
-		if (opened === undefined || pending === undefined) {
+		const runtime = this.runtimeForChannel(frame.channel);
+		if (runtime === undefined || runtime.pendingSend.size === 0) {
 			return;
 		}
-		const handled =
-			frame.action.type === "chat/inputHandled" &&
-			frame.channel === opened.chatChannel &&
-			frame.origin?.clientId === this.handshake?.clientId &&
-			frame.origin?.clientSeq === pending.clientSeq;
-		const accepted =
-			handled ||
-			(pending.kind === "turn"
-				? frame.channel === opened.chatChannel &&
-					frame.action.type === "chat/messageAppended" &&
-					frame.action.message.role === "user"
-				: frame.channel === opened.sessionChannel &&
-					frame.action.type === "session/queueChanged" &&
-					[...frame.action.steering, ...frame.action.followUp].includes(pending.text));
-		if (!accepted) {
+		const opened = runtime.opened;
+		const origin = frame.origin;
+		if (frame.action.type === "chat/inputHandled") {
+			if (origin === undefined || origin.clientId !== this.handshake?.clientId) {
+				return;
+			}
+			const pending = runtime.pendingSend.get(origin.clientSeq);
+			if (pending === undefined) {
+				return;
+			}
+			runtime.pendingSend.delete(pending.clientSeq);
+			this.notifySent(pending.text);
 			return;
 		}
-		this.pendingSend = undefined;
+		const fallbackSeq =
+			frame.channel === opened.chatChannel && frame.action.type === "chat/messageAppended"
+				? frame.action.message.role === "user"
+					? this.oldestPending(runtime, "turn")
+					: undefined
+				: frame.channel === opened.sessionChannel && frame.action.type === "session/queueChanged"
+					? this.oldestPending(runtime, "steering", [...frame.action.steering, ...frame.action.followUp])
+					: undefined;
+		if (fallbackSeq === undefined) {
+			return;
+		}
+		const pending = runtime.pendingSend.get(fallbackSeq);
+		runtime.pendingSend.delete(fallbackSeq);
+		if (pending !== undefined) {
+			this.notifySent(pending.text);
+		}
+	}
+
+	/** 同类待确认记录里最早的一条；给了 texts 时还要求文本在其中。 */
+	private oldestPending(
+		runtime: SessionRuntime,
+		kind: PendingSend["kind"],
+		texts?: readonly string[],
+	): number | undefined {
+		for (const pending of runtime.pendingSend.values()) {
+			if (pending.kind !== kind) {
+				continue;
+			}
+			if (texts !== undefined && !texts.includes(pending.text)) {
+				continue;
+			}
+			return pending.clientSeq;
+		}
+		return undefined;
+	}
+
+	/** 通知界面收起草稿。 */
+	private notifySent(text: string): void {
 		for (const listener of [...this.sentListeners]) {
-			listener(pending.text);
+			listener(text);
 		}
 	}
 
@@ -1012,8 +1076,9 @@ export class SessionClient {
 	 */
 	private handleRejection(frame: ActionFrame, reason: string): void {
 		const clientSeq = frame.origin?.clientSeq;
-		if (clientSeq !== undefined && this.pendingSend?.clientSeq === clientSeq) {
-			this.pendingSend = undefined;
+		const runtime = this.runtimeForChannel(frame.channel);
+		if (clientSeq !== undefined && runtime !== undefined) {
+			runtime.pendingSend.delete(clientSeq);
 		}
 		const label =
 			frame.action.type === "chat/turnStarted" || frame.action.type === "session/pendingMessageSet"
@@ -1196,6 +1261,8 @@ export class SessionClient {
 		if (runtime === undefined) {
 			return;
 		}
+		// 缺口里可能就有这条发送的确认回执，重新对齐之前先作废，免得永远等下去
+		runtime.pendingSend.clear();
 		const opened = runtime.opened;
 		if (gap.channel === opened.sessionChannel) {
 			if (runtime.resyncing.session) {

@@ -314,6 +314,8 @@
 	flex: 1;
 	min-height: 0;
 	overflow: auto;
+	/* 滚动条出现时不影响行宽；横向那条在内容下方，不占这一份沟槽 */
+	scrollbar-gutter: stable;
 }
 
 .diff-scroll .diff-body {

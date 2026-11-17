@@ -13,14 +13,15 @@
 		"dev": "node scripts/dev-split.mjs",
 		"dev:desktop": "npm run dev -w @facet/desktop",
 		"dev:host": "node scripts/dev-host.mjs",
-		"mock": "node tools/mock-server/index.mjs",
+		"mock": "node tools/mock-server/index.ts",
 		"dev:split": "node scripts/dev-split.mjs",
 		"build": "npm run build --workspaces --if-present",
 		"typecheck": "node scripts/typecheck.mjs",
 		"test": "npm run test --workspaces --if-present",
 		"lint": "biome check .",
 		"dist": "npm run build:server && npm run dist -w @facet/desktop",
-		"build:server": "node scripts/build-server.mjs"
+		"build:server": "node scripts/build-server.mjs",
+		"mock:check": "node tools/mock-server/check.ts"
 	},
 	"engines": {
 		"node": ">=26"

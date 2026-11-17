@@ -133,6 +133,8 @@
 	gap: 1px;
 	max-height: 320px;
 	overflow-y: auto;
+	/* 超过八条才滚动，滚动条出现时每行宽度不变 */
+	scrollbar-gutter: stable;
 	padding: 6px;
 	border: 1px solid var(--line2);
 	border-radius: 12px;
@@ -383,6 +385,8 @@
 	min-width: 240px;
 	max-height: 320px;
 	overflow-y: auto;
+	/* 超过这个高度才滚动，滚动条出现时每行宽度不变 */
+	scrollbar-gutter: stable;
 	padding: 6px;
 	border: 1px solid var(--line2);
 	border-radius: 10px;

@@ -387,7 +387,7 @@ describe("pi 扩展交互完整链路", () => {
 				requestId: pending.requestId,
 				response: { kind: "confirm", confirmed: "true" },
 			} as never),
-		).rejects.toThrow("boolean");
+		).rejects.toThrow("invalid params for respondUi");
 		await expect(client.respondUi(pending.requestId, { kind: "confirm", confirmed: true })).rejects.toThrow(
 			"Response type",
 		);

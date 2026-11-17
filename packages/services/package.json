@@ -12,10 +12,6 @@
 		"typecheck": "tsc --noEmit",
 		"test": "vitest run --passWithNoTests"
 	},
-	"dependencies": {
-		"@facet/protocol": "*",
-		"node-pty": "^1.1.0"
-	},
 	"devDependencies": {
 		"typescript": "^5.9.0",
 		"vitest": "^3.2.0"

@@ -376,6 +376,51 @@ describe("SessionClient", () => {
 		expect(client.sessionView()?.state.queued.steering).toEqual(["补充一句"]);
 	});
 
+	it("连续发两条时按 clientSeq 逐条核销，不互相覆盖", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		const sent: string[] = [];
+		client.onSent((text) => sent.push(text));
+		const first = client.send("第一条");
+		const second = client.send("第二条");
+		expect([first, second]).toEqual([1, 2]);
+
+		transport.handled(first);
+		expect(sent).toEqual(["第一条"]);
+		// 第二条还挂着，重复的旧回执不再触发通知
+		transport.handled(first);
+		expect(sent).toEqual(["第一条"]);
+
+		transport.handled(second);
+		expect(sent).toEqual(["第一条", "第二条"]);
+	});
+
+	it("发送之后切走会话，确认仍然记回原来那个会话", async () => {
+		const { transport, client } = createClient(2);
+		// 用 s1：假传输的 handled() 固定在 chat:/s1 上推送
+		await client.openSession("/tmp/s1.jsonl");
+		const sent: string[] = [];
+		client.onSent((text) => sent.push(text));
+		const clientSeq = client.send("发给 a 的");
+		await client.switchSession("/tmp/b.jsonl");
+		expect(client.chatView()?.channel).toBe("chat:/b");
+
+		transport.handled(clientSeq);
+		expect(sent).toEqual(["发给 a 的"]);
+	});
+
+	it("重连后悬挂的发送作废，不会一直等下去", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		const sent: string[] = [];
+		client.onSent((text) => sent.push(text));
+		const clientSeq = client.send("断线前发的");
+		await client.resume();
+		// 旧连接的回执迟到也不再生效
+		transport.handled(clientSeq);
+		expect(sent).toEqual([]);
+	});
+
 	it("清空排队走会话通道", async () => {
 		const { transport, client } = createClient(2);
 		await client.openSession("/tmp/s1.jsonl");
@@ -1286,6 +1331,20 @@ describe("SessionClient", () => {
 			.map((call) => call.params as { channel: Channel; since?: number })
 			.filter((call) => !call.channel.startsWith("sessions:"));
 		expect(subscriptions.map((call) => call.since)).toEqual([2, 1]);
+	});
+
+	it("同时到达的两次续订只跑一遍", async () => {
+		const { transport, client } = createClient(4, { initialPages: 1, pageSize: 5 });
+		await client.openSession("/tmp/s1.jsonl");
+		const before = transport.calls.length;
+		await Promise.all([client.resume(), client.resume()]);
+		const subscribes = transport.calls
+			.slice(before)
+			.filter((call) => call.method === "subscribe")
+			.map((call) => (call.params as { channel: Channel }).channel)
+			.filter((channel) => !channel.startsWith("sessions:"));
+		// 两个通道各订阅一次，重复的那次并在同一个流程里
+		expect(subscribes).toEqual([SESSION, CHAT]);
 	});
 
 	it("attach 之后订阅清单，收到推送就更新列表", async () => {

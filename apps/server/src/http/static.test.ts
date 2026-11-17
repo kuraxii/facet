@@ -10,14 +10,14 @@ import { join } from "node:path";
 import { encodeFrame } from "@facet/protocol";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
-import { AuditLog } from "./audit.ts";
-import type { ServerConfig } from "./config.ts";
-import { startEndpoint } from "./endpoint.ts";
-import { ProjectStore } from "./project-store.ts";
-import { SessionHub } from "./session-hub.ts";
-import { SessionsChannel } from "./sessions-channel.ts";
-import { SettingsStore } from "./settings-store.ts";
-import { serveWebRequest } from "./web.ts";
+import { AuditLog } from "../audit.ts";
+import type { ServerConfig } from "../config.ts";
+import { startEndpoint } from "../endpoint.ts";
+import { ProjectStore } from "../project-store.ts";
+import { SessionHub } from "../session-hub.ts";
+import { SessionsChannel } from "../sessions-channel.ts";
+import { SettingsStore } from "../settings-store.ts";
+import { serveWebRequest } from "./static.ts";
 
 let dir: string;
 

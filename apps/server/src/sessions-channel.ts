@@ -6,7 +6,7 @@
  * since 补齐，缺口用 resync 告知端点重新取一份完整清单。
  */
 import type { Action, ActionFrame, Channel, SubscribeResult } from "@facet/protocol";
-import { EventLog } from "./event-log.ts";
+import { EventLog, replayAndSubscribe } from "./event-log.ts";
 
 /** 订阅者。id 是端标识，send 把一帧推给它。 */
 export interface SessionsSink {
@@ -15,7 +15,7 @@ export interface SessionsSink {
 }
 
 export class SessionsChannel {
-	private readonly log: EventLog;
+	private readonly log: EventLog<Action>;
 	private readonly sinks = new Set<SessionsSink>();
 
 	/** replayLimit 是回放缓冲条数，断线期间的变化要落在缓冲内。 */
@@ -28,14 +28,16 @@ export class SessionsChannel {
 		return this.log.lastSeq;
 	}
 
-	/** 订阅并在返回前补发缓冲内的动作，实时动作不会插到补发中间。 */
+	/** 订阅并在返回前补发缓冲内的动作，顺序见 `replayAndSubscribe`。 */
 	subscribe(channel: Channel, since: number | undefined, sink: SessionsSink): SubscribeResult {
-		const { actions, resync } = this.log.replay(since ?? this.log.lastSeq);
-		this.sinks.add(sink);
-		for (const item of actions) {
-			sink.send(this.toFrame(channel, item.action, item.seq));
-		}
-		return { seq: this.log.lastSeq, resync };
+		const { seq, resync } = replayAndSubscribe(
+			this.log,
+			this.sinks,
+			sink,
+			(item) => this.toFrame(channel, item.action, item.seq),
+			since,
+		);
+		return { seq, resync };
 	}
 
 	/** 取消订阅，sink 不在时无副作用。 */
@@ -52,8 +54,13 @@ export class SessionsChannel {
 		}
 	}
 
-	/** 清掉全部订阅者，端点关闭时用。 */
-	clear(): void {
+	/**
+	 * 摘掉全部订阅者，端点关闭时用。
+	 *
+	 * 只动订阅者：日志与序号留着，主机还活着，新端点按旧 since 续订仍然接得上。
+	 * 通道整体销毁（终端结束、会话关闭）走各自行的丢弃，不经过这里。
+	 */
+	dropSubscribers(): void {
 		this.sinks.clear();
 	}
 

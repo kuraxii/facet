@@ -4,13 +4,15 @@ import type { ExtensionUiState, SessionInitialization } from "./extension-ui.ts"
 import type { Message } from "./message.ts";
 import type { ModelInfo, ModelRef, ThinkingLevel } from "./model.ts";
 import type { StreamingBehavior } from "./request.ts";
-import type { ContextUsage, Maintenance, SessionSummary, TurnPhase } from "./session.ts";
+import type { ContextUsage, Maintenance, SessionActivity, SessionSummary, TurnPhase } from "./session.ts";
 import type { TerminalAction } from "./terminal.ts";
 
 /** 会话清单动作。主机推给所有订阅清单通道的端,多端看到同一份列表。 */
 export type SessionsAction =
 	/** 新建、改名或一轮结束之后,用新的摘要覆盖同路径的那一条 */
-	| { type: "sessions/changed"; summary: SessionSummary; busy: boolean }
+	| { type: "sessions/changed"; summary: SessionSummary; activity: SessionActivity }
+	/** 活动状态迁移，只改状态不动摘要：主机为此不读会话文件 */
+	| { type: "sessions/status"; path: string; activity: SessionActivity }
 	/** 会话文件被删掉 */
 	| { type: "sessions/removed"; path: string };
 

@@ -8,7 +8,7 @@
  * 只在会话有变化时读盘，没有定时扫描：命令行工具在同一个会话目录里新建的会话，要等到
  * 下一次变化或端主动刷新才出现。
  */
-import type { Channel, SessionSummary } from "@facet/protocol";
+import type { Channel, SessionActivity, SessionSummary } from "@facet/protocol";
 import { debugLog } from "./log.ts";
 import type { SessionsChannel } from "./sessions-channel.ts";
 
@@ -19,8 +19,8 @@ export type SessionChange = "changed" | "removed";
 export interface SessionIndexSource {
 	/** 取一个会话文件的摘要，读盘与缓存由来源自己负责 */
 	summaryOf(file: string): Promise<SessionSummary | undefined>;
-	/** 还在跑的会话文件 */
-	busyFiles(): string[];
+	/** 会话文件此刻的活动状态，没装载的会话是 idle */
+	activityOf(file: string): SessionActivity;
 }
 
 export interface SessionIndexOptions {
@@ -63,6 +63,16 @@ export class SessionIndex {
 		this.timer.unref?.();
 	}
 
+	/**
+	 * 推一条活动状态。
+	 *
+	 * 不走时间片也不读会话文件：状态迁移本来就频繁，走摘要那条路会为一次枚举变化读盘。
+	 * 清单里还没有这个文件时端会忽略，等摘要到了自然对齐。
+	 */
+	noteActivity(file: string, activity: SessionActivity): void {
+		this.options.channel.publish(this.options.uri, { type: "sessions/status", path: file, activity });
+	}
+
 	/** 立即处理攒下的变化，测试与关闭前用。 */
 	async flush(): Promise<void> {
 		if (this.flushing) {
@@ -82,8 +92,8 @@ export class SessionIndex {
 					this.options.channel.publish(this.options.uri, { type: "sessions/removed", path: file });
 					continue;
 				}
-				const busy = this.options.source.busyFiles().includes(file);
-				this.options.channel.publish(this.options.uri, { type: "sessions/changed", summary, busy });
+				const activity = this.options.source.activityOf(file);
+				this.options.channel.publish(this.options.uri, { type: "sessions/changed", summary, activity });
 			}
 		} catch (error) {
 			// 推送失败不该影响会话本身，端还能手工刷新

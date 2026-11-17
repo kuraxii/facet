@@ -243,121 +243,72 @@ function mergeToolResult(item: TranscriptItem, message: Message): TranscriptItem
 }
 
 /**
+ * 投影缓存。
+ *
+ * 条目视图对象只在它自己变化时换新，因此可以拿它当缓存键：没变的条目沿用上一次的
+ * 渲染单元，行组件就能跳过重渲染。缓存跟着一条对话通道的视图走，会话切换或历史重装
+ * 之后条目对象全部换新，旧条目自然失效。
+ */
+export interface TranscriptCache {
+	/** 条目视图 → 渲染单元（工具结果尚未合并） */
+	readonly entries: WeakMap<EntryView, CachedItem>;
+	/** 工具结果条目 → 并入目标与合并后的单元，目标没变就复用 */
+	readonly merges: WeakMap<EntryView, { readonly target: TranscriptItem; readonly item: TranscriptItem }>;
+}
+
+/** 缓存的渲染单元，以及重建它依赖的工具视图。 */
+interface CachedItem {
+	/** 渲染单元；这条条目不占行时为空 */
+	readonly item: TranscriptItem | undefined;
+	/** 构建时读到的工具视图，其中任一换了对象就要重建 */
+	readonly sources: readonly (ToolCallView | undefined)[];
+}
+
+/** 建一份投影缓存。 */
+export function createTranscriptCache(): TranscriptCache {
+	return { entries: new WeakMap(), merges: new WeakMap() };
+}
+
+/**
  * 把对话视图投影成渲染单元。
  *
  * 历史消息与实时消息的标识不同,条目 id 从标识里还原;工具调用按调用 id 与结果配对,
- * 配不上的单独成项,不静默丢弃。
+ * 配不上的单独成项,不静默丢弃。传入 cache 时未变的条目沿用上一次的单元。
  */
-export function toTranscript(view: ChatView): TranscriptItem[] {
+export function toTranscript(view: ChatView, cache?: TranscriptCache): TranscriptItem[] {
+	const store = cache ?? createTranscriptCache();
 	const items: TranscriptItem[] = [];
 	const merged = new Map<string, number>();
 	for (const entryView of view.items) {
-		const entry = entryView.entry;
-		if (entry?.kind === "compaction" || entry?.kind === "branch_summary") {
-			const timestamp = Date.parse(entry.timestamp);
-			const time = Number.isFinite(timestamp) ? timestamp : undefined;
-			items.push({
-				kind: entry.kind === "compaction" ? "compaction" : "branch",
-				id: entryView.id,
-				entryId: entry.id,
-				role: undefined,
-				stopReason: undefined,
-				parts: [{ kind: "text", partId: "text:0", text: entry.summary ?? "" }],
-				isStreaming: false,
-				startedAt: time,
-				endedAt: time,
-			});
-			continue;
-		}
-		if (entryView.message === undefined) {
-			continue;
-		}
-		const startedAt = entryView.message.timestamp > 0 ? entryView.message.timestamp : undefined;
-		const callDuration = entryView.message.role === "assistant" ? (entryView.message.durationMs ?? 0) : 0;
-		const base: TranscriptItem = {
-			kind: "message",
-			id: entryView.id,
-			entryId: entryView.entry?.id,
-			role: entryView.message.role === "toolResult" ? "tool" : roleOf(entryView.message),
-			stopReason: entryView.message.role === "assistant" ? entryView.message.stopReason : undefined,
-			parts: [],
-			isStreaming: entryView.isStreaming,
-			startedAt,
-			endedAt: startedAt === undefined ? undefined : startedAt + callDuration,
-		};
-
-		if (entryView.message.role === "toolResult") {
-			const targetIndex = merged.get(entryView.message.callId);
+		const message = entryView.message;
+		if (message?.role === "toolResult") {
+			const targetIndex = merged.get(message.callId);
 			const target = targetIndex === undefined ? undefined : items[targetIndex];
-			const patched = target ? mergeToolResult(target, entryView.message) : undefined;
-			if (patched && targetIndex !== undefined) {
+			const patched = target === undefined ? undefined : mergedItem(entryView, target, store);
+			if (patched !== undefined && targetIndex !== undefined) {
 				items[targetIndex] = patched;
 				continue;
 			}
-			items.push({ ...base, parts: [orphanToolPart(entryView.message)] });
-			continue;
-		}
-
-		if (entryView.message.role === "compactionSummary") {
 			items.push({
-				...base,
-				kind: "compaction",
-				role: undefined,
-				parts: [{ kind: "text", partId: "text:0", text: entryView.message.summary }],
-			});
-			continue;
-		}
-		if (entryView.message.role === "branchSummary") {
-			items.push({
-				...base,
-				kind: "branch",
-				role: undefined,
-				parts: [{ kind: "text", partId: "text:0", text: entryView.message.summary }],
-			});
-			continue;
-		}
-		if (entryView.message.role === "bashExecution") {
-			items.push({
-				...base,
+				kind: "message",
+				id: entryView.id,
+				entryId: entryView.entry?.id,
 				role: "tool",
-				parts: [{ kind: "text", partId: "text:0", text: commandText(entryView.message) }],
+				stopReason: undefined,
+				parts: [orphanToolPart(message)],
+				isStreaming: entryView.isStreaming,
+				startedAt: timestampOf(message),
+				endedAt: timestampOf(message),
 			});
 			continue;
 		}
-		if (entryView.message.role === "custom") {
-			if (entryView.message.display) {
-				items.push({
-					...base,
-					role: "system",
-					parts: [{ kind: "text", partId: "text:0", text: entryView.message.content }],
-				});
-			}
-			continue;
-		}
-		if (entryView.message.role === "system" || entryView.message.role === "unknown") {
-			continue;
-		}
-
-		if (entryView.message.role === "assistant" && entryView.message.stopReason === "error") {
-			items.push({
-				...base,
-				kind: "error",
-				parts: [{ kind: "text", partId: "text:0", text: entryView.message.errorMessage ?? "Run failed" }],
-			});
-			continue;
-		}
-
-		const parts =
-			entryView.message.role === "assistant"
-				? assistantParts(entryView, view.toolCalls)
-				: userParts(entryView);
-		// 流刚开始就被打断的中止消息没有内容,不占一行
-		if (entryView.message.role === "assistant" && parts.length === 0) {
+		const item = entryItem(entryView, view, store);
+		if (item === undefined) {
 			continue;
 		}
 		const index = items.length;
-		items.push({ ...base, parts });
-		for (const part of parts) {
+		items.push(item);
+		for (const part of item.parts) {
 			if (part.kind === "toolCall") {
 				merged.set(part.callId, index);
 			}
@@ -383,6 +334,158 @@ export function toTranscript(view: ChatView): TranscriptItem[] {
 		});
 	}
 	return items;
+}
+
+/** 消息上的 Unix 毫秒时间戳,没有则为空。 */
+function timestampOf(message: Message): number | undefined {
+	return message.timestamp > 0 ? message.timestamp : undefined;
+}
+
+/** 条目里引用到的工具视图。工具输出变化时，引用到的视图换新，单元随之重建。 */
+function callSources(
+	entryView: EntryView,
+	calls: Readonly<Record<string, ToolCallView>>,
+): (ToolCallView | undefined)[] {
+	const message = entryView.message;
+	if (message === undefined || message.role !== "assistant") {
+		return [];
+	}
+	const sources: (ToolCallView | undefined)[] = [];
+	for (const block of message.content) {
+		if (block.type === "toolCall") {
+			sources.push(calls[block.id]);
+		}
+	}
+	return sources;
+}
+
+/** 两次引用是否指向同一批工具视图。 */
+function sameSources(
+	left: readonly (ToolCallView | undefined)[],
+	right: readonly (ToolCallView | undefined)[],
+): boolean {
+	if (left.length !== right.length) {
+		return false;
+	}
+	for (let index = 0; index < left.length; index += 1) {
+		if (left[index] !== right[index]) {
+			return false;
+		}
+	}
+	return true;
+}
+
+/** 把工具结果并入目标单元，同一个结果条目重复处理时复用上一次的结果。 */
+function mergedItem(
+	entryView: EntryView,
+	target: TranscriptItem,
+	cache: TranscriptCache,
+): TranscriptItem | undefined {
+	const message = entryView.message;
+	if (message === undefined) {
+		return undefined;
+	}
+	const cached = cache.merges.get(entryView);
+	if (cached !== undefined && cached.target === target) {
+		return cached.item;
+	}
+	const item = mergeToolResult(target, message);
+	if (item !== undefined) {
+		cache.merges.set(entryView, { target, item });
+	}
+	return item;
+}
+
+/** 取一条条目的渲染单元，条目与它引用的工具视图都没变时沿用缓存。 */
+function entryItem(entryView: EntryView, view: ChatView, cache: TranscriptCache): TranscriptItem | undefined {
+	const sources = callSources(entryView, view.toolCalls);
+	const cached = cache.entries.get(entryView);
+	if (cached !== undefined && sameSources(cached.sources, sources)) {
+		return cached.item;
+	}
+	const item = buildEntryItem(entryView, view);
+	cache.entries.set(entryView, { item, sources });
+	return item;
+}
+
+/** 按条目类型造出渲染单元。不占行的条目返回 undefined。 */
+function buildEntryItem(entryView: EntryView, view: ChatView): TranscriptItem | undefined {
+	const entry = entryView.entry;
+	if (entry?.kind === "compaction" || entry?.kind === "branch_summary") {
+		const timestamp = Date.parse(entry.timestamp);
+		const time = Number.isFinite(timestamp) ? timestamp : undefined;
+		return {
+			kind: entry.kind === "compaction" ? "compaction" : "branch",
+			id: entryView.id,
+			entryId: entry.id,
+			role: undefined,
+			stopReason: undefined,
+			parts: [{ kind: "text", partId: "text:0", text: entry.summary ?? "" }],
+			isStreaming: false,
+			startedAt: time,
+			endedAt: time,
+		};
+	}
+	const message = entryView.message;
+	if (message === undefined) {
+		return undefined;
+	}
+	const startedAt = timestampOf(message);
+	const callDuration = message.role === "assistant" ? (message.durationMs ?? 0) : 0;
+	const base: TranscriptItem = {
+		kind: "message",
+		id: entryView.id,
+		entryId: entryView.entry?.id,
+		role: message.role === "toolResult" ? "tool" : roleOf(message),
+		stopReason: message.role === "assistant" ? message.stopReason : undefined,
+		parts: [],
+		isStreaming: entryView.isStreaming,
+		startedAt,
+		endedAt: startedAt === undefined ? undefined : startedAt + callDuration,
+	};
+
+	if (message.role === "compactionSummary") {
+		return {
+			...base,
+			kind: "compaction",
+			role: undefined,
+			parts: [{ kind: "text", partId: "text:0", text: message.summary }],
+		};
+	}
+	if (message.role === "branchSummary") {
+		return {
+			...base,
+			kind: "branch",
+			role: undefined,
+			parts: [{ kind: "text", partId: "text:0", text: message.summary }],
+		};
+	}
+	if (message.role === "bashExecution") {
+		return { ...base, role: "tool", parts: [{ kind: "text", partId: "text:0", text: commandText(message) }] };
+	}
+	if (message.role === "custom") {
+		if (!message.display) {
+			return undefined;
+		}
+		return { ...base, role: "system", parts: [{ kind: "text", partId: "text:0", text: message.content }] };
+	}
+	if (message.role === "system" || message.role === "unknown") {
+		return undefined;
+	}
+	if (message.role === "assistant" && message.stopReason === "error") {
+		return {
+			...base,
+			kind: "error",
+			parts: [{ kind: "text", partId: "text:0", text: message.errorMessage ?? "Run failed" }],
+		};
+	}
+	const parts =
+		message.role === "assistant" ? assistantParts(entryView, view.toolCalls) : userParts(entryView);
+	// 流刚开始就被打断的中止消息没有内容,不占一行
+	if (message.role === "assistant" && parts.length === 0) {
+		return undefined;
+	}
+	return { ...base, parts };
 }
 
 /** 消息角色映射到渲染角色,工具结果与命令记录统一算 tool。 */

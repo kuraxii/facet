@@ -538,7 +538,13 @@ async function handleRequest(
 			const sessions = await context.factory.listSessions(optionalString(source, "cwd"));
 			// 清单已经回给端了，可以在背景里补齐剩下的摘要
 			context.onSessionsListed?.();
-			return { sessions };
+			// 每条带上主机侧此刻的状态，端重连之后一次往返就能把本地那份对齐
+			return {
+				sessions: sessions.map((summary) => ({
+					summary,
+					activity: context.hub.activityOf(summary.path),
+				})),
+			};
 		}
 		case "createSession":
 			return await createSession(context, params);

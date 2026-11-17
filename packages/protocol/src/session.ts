@@ -152,6 +152,26 @@ export interface ToolInfo {
 	active: boolean;
 }
 
+/**
+ * 会话此刻在主机上的活动状态。
+ *
+ * 与界面的 ChatActivity 对齐，只少了客户端才有的 stopping：主机侧收到停止请求之后、
+ * 一轮真正结束之前，它对其它端仍然是运行中。
+ */
+export type SessionActivity = "idle" | "running" | "compacting";
+
+/**
+ * 清单里的一条：会话摘要加上它此刻的活动状态。
+ *
+ * 状态跟摘要分开，是因为两者的变化频率不同：状态一轮里要变好几次，摘要却很少动。
+ */
+export interface SessionListItem {
+	/** 会话摘要，字段与会话文件一致 */
+	summary: SessionSummary;
+	/** 主机上此刻的活动状态 */
+	activity: SessionActivity;
+}
+
 /** 接入方一次拿到的完整会话状态，用于对齐界面。消息体与历史走条目读取。 */
 export interface SessionSnapshot {
 	id: string;

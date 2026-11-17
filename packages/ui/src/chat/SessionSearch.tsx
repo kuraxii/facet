@@ -4,7 +4,7 @@
  * 居中偏上的一层，输入即按标题过滤；上下键选、回车打开、Esc 或点遮罩关闭。会话队列本身不
  * 参与过滤，浮窗关掉之后侧栏还是完整的一份列表。
  */
-import type { SessionSummary } from "@facet/protocol";
+import type { SessionActivity, SessionSummary } from "@facet/protocol";
 import { Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
@@ -20,8 +20,8 @@ export interface SessionSearchProps {
 	sessions: readonly SessionSummary[];
 	/** 当前会话文件路径，用来标出这一条 */
 	activeFile: string | undefined;
-	/** 正在运行的会话文件路径 */
-	runningFile: string | undefined;
+	/** 各会话此刻的活动状态，按会话文件路径索引 */
+	activities: ReadonlyMap<string, SessionActivity>;
 	/** 关闭浮窗 */
 	onClose: () => void;
 	/** 选中一条会话 */
@@ -32,7 +32,7 @@ export function SessionSearch({
 	isOpen,
 	sessions,
 	activeFile,
-	runningFile,
+	activities,
 	onClose,
 	onSelect,
 }: SessionSearchProps) {
@@ -48,12 +48,12 @@ export function SessionSearch({
 		return searchSessions({
 			sessions,
 			projects: [],
-			runningFile,
+			activities,
 			keyword,
 			limit: RESULT_LIMIT,
 			untitled: t("sidebar.untitled"),
 		});
-	}, [isOpen, sessions, runningFile, keyword, t]);
+	}, [isOpen, sessions, activities, keyword, t]);
 
 	// 每次打开都从空关键词、第一条结果开始
 	useEffect(() => {
@@ -152,7 +152,7 @@ export function SessionSearch({
 								onClick={() => open(session)}
 								disabled={session.isPlaceholder === true}
 							>
-								<i className={session.dot === "running" ? "dot is-run pulse" : "dot is-off"} />
+								<i className={session.activity === "running" ? "dot is-run pulse" : "dot is-off"} />
 								<span className="search-row-title ell">{session.title}</span>
 								<span className="search-row-proj ell">{session.project}</span>
 								<span

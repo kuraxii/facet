@@ -185,6 +185,67 @@ function singleton(item: TranscriptItem, kind: RowKind): DisplayRow {
 }
 
 /**
+ * 复用上一帧的行对象。
+ *
+ * 分组每帧都会重建，内容没变的行沿用上一帧的对象，行组件才能按对象身份跳过重渲染；
+ * 流式期间只有最后那几行会真的变化。
+ */
+export function reuseRows(previous: readonly DisplayRow[], next: DisplayRow[]): DisplayRow[] {
+	return next.map((row, index) => {
+		const before = previous[index];
+		return before !== undefined && sameRow(before, row) ? before : row;
+	});
+}
+
+/** 两行是否完全一样：种类、标志、计数与组成它的项目都要对齐。 */
+function sameRow(left: DisplayRow, right: DisplayRow): boolean {
+	if (left === right) {
+		return true;
+	}
+	if (left.kind !== right.kind || left.id !== right.id || left.isStreaming !== right.isStreaming) {
+		return false;
+	}
+	if (left.durationMs !== right.durationMs || left.startedAt !== right.startedAt) {
+		return false;
+	}
+	if (!sameFork(left.fork, right.fork) || !sameCounts(left.counts, right.counts)) {
+		return false;
+	}
+	return sameItems(left.items, right.items);
+}
+
+function sameFork(left: ForkPoint | undefined, right: ForkPoint | undefined): boolean {
+	if (left === undefined || right === undefined) {
+		return left === right;
+	}
+	return left.beforeEntryId === right.beforeEntryId && left.needsSettle === right.needsSettle;
+}
+
+function sameCounts(left: ToolCounts, right: ToolCounts): boolean {
+	return (
+		left.commands === right.commands &&
+		left.reads === right.reads &&
+		left.edits === right.edits &&
+		left.searches === right.searches &&
+		left.others === right.others &&
+		left.thoughts === right.thoughts
+	);
+}
+
+/** 行内项目逐项比对象身份：投影没变时它就是同一个对象。 */
+function sameItems(left: readonly TranscriptItem[], right: readonly TranscriptItem[]): boolean {
+	if (left.length !== right.length) {
+		return false;
+	}
+	for (let index = 0; index < left.length; index += 1) {
+		if (left[index] !== right[index]) {
+			return false;
+		}
+	}
+	return true;
+}
+
+/**
  * 把渲染单元聚合成面板行。
  *
  * 顺序保持与消息一致:用户消息与带正文的答复各自成行,夹在中间的无正文项并入同一过程行。

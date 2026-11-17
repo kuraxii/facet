@@ -27,7 +27,7 @@ function summary(overrides: Partial<SessionSummary> = {}): SessionSummary {
 function source(overrides: Partial<SessionIndexSource> = {}): SessionIndexSource {
 	return {
 		summaryOf: async () => summary(),
-		busyFiles: () => [],
+		activityOf: () => "idle",
 		...overrides,
 	};
 }
@@ -50,21 +50,21 @@ describe("SessionIndex", () => {
 		index.note("/work/a/s1.jsonl");
 		await index.flush();
 		expect(frames).toEqual([
-			{ channel: URI, action: { type: "sessions/changed", summary: summary(), busy: false } },
+			{ channel: URI, action: { type: "sessions/changed", summary: summary(), activity: "idle" } },
 		]);
 	});
 
-	it("主机上正在跑时带上运行标记", async () => {
+	it("主机上正在跑时带上运行状态", async () => {
 		const { channel, frames } = collector();
 		const index = new SessionIndex({
 			channel,
 			uri: URI,
-			source: source({ busyFiles: () => ["/work/a/s1.jsonl"] }),
+			source: source({ activityOf: () => "running" }),
 			debounceMs: 0,
 		});
 		index.note("/work/a/s1.jsonl");
 		await index.flush();
-		expect(frames[0]?.action).toMatchObject({ type: "sessions/changed", busy: true });
+		expect(frames[0]?.action).toMatchObject({ type: "sessions/changed", activity: "running" });
 	});
 
 	it("文件已经不在了就推删除", async () => {

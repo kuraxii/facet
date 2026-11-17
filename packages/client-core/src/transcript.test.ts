@@ -1,8 +1,8 @@
 import type { AssistantMessage, Entry, ToolResultMessage } from "@facet/protocol";
 import { describe, expect, it } from "vitest";
 import { historyMessageId } from "./message-id.ts";
-import { createChatView, type EntryView } from "./state.ts";
-import { toTranscript } from "./transcript.ts";
+import { type ChatView, createChatView, type EntryView } from "./state.ts";
+import { createTranscriptCache, toTranscript } from "./transcript.ts";
 
 function assistant(
 	content: AssistantMessage["content"],
@@ -38,7 +38,8 @@ function toolResult(callId: string, text: string, isError = false): ToolResultMe
 	};
 }
 
-function viewWith(items: EntryView[], toolCalls = {}) {
+/** 造一个对话视图。toolCalls 给出工具调用的当前状态，按调用 id 索引。 */
+function viewWith(items: EntryView[], toolCalls: ChatView["toolCalls"] = {}) {
 	return { ...createChatView("chat:/s1"), items, toolCalls };
 }
 
@@ -292,7 +293,6 @@ describe("toTranscript", () => {
 					callId: "c9",
 					toolName: "grep",
 					input: {},
-					parentCallId: undefined,
 					output: undefined,
 					isError: false,
 					isRunning: true,
@@ -483,5 +483,76 @@ describe("条目顺序", () => {
 		const items = toTranscript(view);
 		expect(items.map((item) => item.entryId)).toEqual(["e1", "e3"]);
 		expect(items[1]?.parts).toEqual([{ kind: "text", partId: "text:0", text: "完成" }]);
+	});
+});
+
+describe("投影缓存", () => {
+	it("未变的条目沿用上一次的渲染单元", () => {
+		const entries: Entry[] = [
+			{
+				id: "e1",
+				parentId: null,
+				kind: "message",
+				timestamp: "t1",
+				message: assistant([{ type: "text", text: "第一段" }]),
+			},
+			{
+				id: "e2",
+				parentId: "e1",
+				kind: "message",
+				timestamp: "t2",
+				message: assistant([{ type: "text", text: "第二段" }]),
+			},
+		];
+		const first = entries.map((entry) => historyItem(entry.id, entry.message as EntryView["message"]));
+		const cache = createTranscriptCache();
+		const before = toTranscript(viewWith(first), cache);
+		// 第二条消息还在流式：视图里只有它的对象换了,第一条原样沿用
+		const second = [
+			first[0] as EntryView,
+			{ ...(first[1] as EntryView), message: assistant([{ type: "text", text: "第二段续写" }]) },
+		];
+		const after = toTranscript(viewWith(second), cache);
+		expect(after[0]).toBe(before[0]);
+		expect(after[1]).not.toBe(before[1]);
+	});
+
+	it("工具输出变化时重建引用它的单元", () => {
+		const entries: Entry[] = [
+			{
+				id: "e1",
+				parentId: null,
+				kind: "message",
+				timestamp: "t1",
+				message: assistant([{ type: "toolCall", id: "c1", name: "bash", arguments: {} }]),
+			},
+		];
+		const items = entries.map((entry) => historyItem(entry.id, entry.message as EntryView["message"]));
+		const cache = createTranscriptCache();
+		const running = viewWith(items, {
+			c1: {
+				callId: "c1",
+				toolName: "bash",
+				input: {},
+				output: { content: [{ type: "text", text: "半截" }] },
+				isError: false,
+				isRunning: true,
+				durationMs: undefined,
+				// 这里的字段与 ToolCallView 一致
+			},
+		});
+		expect(toTranscript(running, cache)[0]?.parts).toMatchObject([{ status: "running" }]);
+		const done = viewWith(items, {
+			c1: {
+				callId: "c1",
+				toolName: "bash",
+				input: {},
+				output: { content: [{ type: "text", text: "结果" }] },
+				isError: false,
+				isRunning: false,
+				durationMs: 5,
+			},
+		});
+		expect(toTranscript(done, cache)[0]?.parts).toMatchObject([{ status: "done", output: "结果" }]);
 	});
 });

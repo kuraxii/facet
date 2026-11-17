@@ -1,5 +1,6 @@
 import {
 	chatActivity,
+	createTranscriptCache,
 	type HostHandshake,
 	SessionClient,
 	TerminalClient,
@@ -22,6 +23,7 @@ import {
 	type FacetSettings,
 	type ModelInfo,
 	type ProjectInfo,
+	type SessionActivity,
 	type SessionSummary,
 } from "@facet/protocol";
 import {
@@ -154,6 +156,11 @@ function subscribeResize(listener: () => void): () => void {
 
 function readIsNarrow(): boolean {
 	return narrowQuery.matches;
+}
+
+/** 取出各会话此刻的活动状态，侧栏按会话文件路径索引。 */
+function activitiesOf(client: SessionClient): ReadonlyMap<string, SessionActivity> {
+	return new Map(client.store.sessionList().map((entry) => [entry.summary.path, entry.activity]));
 }
 
 /** 外壳类名：抽屉展开时给 has-drawer，宽屏收起侧栏时给 is-sb-hidden。 */
@@ -432,6 +439,8 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 	const [isReconnecting, setIsReconnecting] = useState(false);
 	const [failure, setFailure] = useState<string | undefined>(undefined);
 	const [sessions, setSessions] = useState<readonly SessionSummary[]>([]);
+	/** 各会话在主机上的活动状态，侧栏的行首状态点用它 */
+	const [activities, setActivities] = useState<ReadonlyMap<string, SessionActivity>>(() => new Map());
 	const [activeFile, setActiveFile] = useState<string | undefined>(undefined);
 	const [host, setHost] = useState<HostHandshake | undefined>(undefined);
 	const [projects, setProjects] = useState<readonly ProjectInfo[]>([]);
@@ -755,6 +764,7 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 			const pool = await client.refreshSessionList();
 			if (seq === listSeq.current) {
 				setSessions(pool);
+				setActivities(activitiesOf(client));
 			}
 			return pool;
 		} catch {
@@ -771,6 +781,8 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 				if (pushed.length > 0) {
 					setSessions(pushed.map((entry) => entry.summary));
 				}
+				// 状态可能只变了其中一个会话，表要跟着换
+				setActivities(activitiesOf(client));
 			}),
 		[],
 	);
@@ -1938,7 +1950,9 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 			]),
 		).values(),
 	];
-	const transcript = useMemo(() => (chat ? toTranscript(chat) : []), [chat]);
+	// 投影缓存按条目对象记忆：流式期间每帧只有末尾那条消息换新，其余条目直接沿用
+	const transcriptCache = useRef(createTranscriptCache());
+	const transcript = useMemo(() => (chat ? toTranscript(chat, transcriptCache.current) : []), [chat]);
 	const restoreScroll = useCallback(
 		(key: unknown): ScrollRestore | undefined =>
 			typeof key === "string" ? scrollPositions.current.get(key) : undefined,
@@ -2243,8 +2257,7 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 						sessions={sessions}
 						projects={projects}
 						activeFile={activeFile}
-						runningFile={activity === "idle" ? undefined : activeFile}
-						runningDot={activity === "compacting" ? "compacting" : "running"}
+						activities={activities}
 						createCwd={createCwd}
 						theme={theme}
 						onSelect={(path) => void openSession(path)}
@@ -2427,12 +2440,8 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 												maintenance={session.state.maintenance}
 												isRunning={activity !== "idle"}
 												onRetryTurn={retryTurn}
-												onCopyDetails={(text) => {
-													void navigator.clipboard.writeText(text).catch(() => undefined);
-												}}
-												onCopyText={(text) => {
-													void navigator.clipboard.writeText(text).catch(() => undefined);
-												}}
+												onCopyDetails={copyText}
+												onCopyText={copyText}
 												renames={chat?.renames}
 												emptyHint={t("app.emptyHint")}
 											/>
@@ -2562,7 +2571,7 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 						isOpen={isSearchOpen}
 						sessions={sessions}
 						activeFile={activeFile}
-						runningFile={activity === "idle" ? undefined : activeFile}
+						activities={activities}
 						onClose={() => setIsSearchOpen(false)}
 						onSelect={(path) => void openSession(path)}
 					/>

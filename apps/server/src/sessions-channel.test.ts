@@ -27,7 +27,7 @@ describe("SessionsChannel", () => {
 		const second: unknown[] = [];
 		channel.subscribe(URI, undefined, { id: "c1", send: (frame) => first.push(frame.action) });
 		channel.subscribe(URI, undefined, { id: "c2", send: (frame) => second.push(frame.action) });
-		channel.publish(URI, { type: "sessions/changed", summary: summary("/a/s1.jsonl"), busy: false });
+		channel.publish(URI, { type: "sessions/changed", summary: summary("/a/s1.jsonl"), activity: "idle" });
 		expect(first).toEqual(second);
 		expect(first).toHaveLength(1);
 	});

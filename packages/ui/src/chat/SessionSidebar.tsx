@@ -4,7 +4,7 @@
  * 自上而下四块：标题与全局操作、新建会话、项目过滤器、会话队列；底部是页脚。
  * 项目过滤器同时决定队列的范围与新建会话的目录，队列按时间分组，分组规则见 sidebar-model。
  */
-import type { ProjectInfo, SessionSummary } from "@facet/protocol";
+import type { ProjectInfo, SessionActivity, SessionSummary } from "@facet/protocol";
 import { Plus, Search, Settings } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ScrollArea, ScrollRow } from "../common/scroll-area.tsx";
@@ -18,7 +18,6 @@ import { SidebarHeader } from "./sidebar-header.tsx";
 import {
 	baseName,
 	buildSidebar,
-	type SessionDot,
 	type SidebarProject,
 	type SidebarSession,
 	samePath,
@@ -38,10 +37,8 @@ export interface SessionSidebarProps {
 	projects: readonly ProjectInfo[];
 	/** 当前会话的文件路径，没有打开会话时为空 */
 	activeFile: string | undefined;
-	/** 正在运行的会话文件路径 */
-	runningFile: string | undefined;
-	/** 这个会话此刻的状态点：运行中或压缩中 */
-	runningDot?: SessionDot | undefined;
+	/** 各会话此刻的活动状态，按会话文件路径索引 */
+	activities: ReadonlyMap<string, SessionActivity>;
 	/** 没有选中项目时新建会话落在的目录 */
 	createCwd: string;
 	/** 当前主题 */
@@ -133,8 +130,7 @@ export function SessionSidebar({
 	sessions,
 	projects: storedProjects,
 	activeFile,
-	runningFile,
-	runningDot,
+	activities,
 	createCwd,
 	theme,
 	onSelect,
@@ -211,12 +207,11 @@ export function SessionSidebar({
 			buildSidebar({
 				sessions,
 				projects: storedProjects,
-				runningFile,
-				runningDot,
+				activities,
 				projectCwd: scopeCwd,
 				untitled: t("sidebar.untitled"),
 			}),
-		[sessions, storedProjects, runningFile, runningDot, scopeCwd, t],
+		[sessions, storedProjects, activities, scopeCwd, t],
 	);
 
 	const currentProject: SidebarProject | undefined =
@@ -643,7 +638,7 @@ export function SessionSidebar({
 											disabled={session.isPlaceholder === true}
 											title={session.title}
 										>
-											<SessionStatusMark bucket={statusBucketOfDot(session.dot)} />
+											<SessionStatusMark bucket={statusBucketOfDot(session.activity)} />
 											{twoLine ? (
 												<span className="sb-row-body">
 													<span className="sb-row-title ell">{session.title}</span>

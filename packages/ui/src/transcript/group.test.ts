@@ -1,6 +1,6 @@
 import type { TranscriptItem } from "@facet/client-core";
 import { describe, expect, it } from "vitest";
-import { groupLabel, groupRows, isTurnTimingLive, turnDurationText } from "./group.ts";
+import { groupLabel, groupRows, isTurnTimingLive, reuseRows, turnDurationText } from "./group.ts";
 
 function item(overrides: Partial<TranscriptItem> & Pick<TranscriptItem, "id" | "role">): TranscriptItem {
 	return {
@@ -311,5 +311,28 @@ describe("工作时长", () => {
 		expect(meta.durationMs).toBe(3_000);
 		expect(isTurnTimingLive(rows)).toBe(false);
 		expect(turnDurationText(meta, 99_000)).toBe("工作了 3s");
+	});
+});
+
+describe("行复用", () => {
+	it("内容没变的行沿用上一帧的对象", () => {
+		const items = [
+			item({ id: "u1", role: "user", parts: [text("text:0", "提问")] }),
+			item({ id: "a1", role: "assistant", parts: [text("text:0", "答复")] }),
+		];
+		const before = groupRows(items);
+		const after = reuseRows(before, groupRows(items));
+		expect(after[0]).toBe(before[0]);
+		expect(after[1]).toBe(before[1]);
+	});
+
+	it("流式那一行变化时只换那一行", () => {
+		const head = item({ id: "u1", role: "user", parts: [text("text:0", "提问")] });
+		const streaming = item({ id: "a1", role: "assistant", parts: [text("text:0", "答")], isStreaming: true });
+		const before = groupRows([head, streaming]);
+		const next = item({ id: "a1", role: "assistant", parts: [text("text:0", "答完")], isStreaming: true });
+		const after = reuseRows(before, groupRows([head, next]));
+		expect(after[0]).toBe(before[0]);
+		expect(after[1]).not.toBe(before[1]);
 	});
 });

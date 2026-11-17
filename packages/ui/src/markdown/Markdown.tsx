@@ -5,7 +5,7 @@
  * 表格、链接在流式期间不会闪成空白。代码块走本项目的悬浮卡,公式与流程图是可选的。
  */
 import MarkdownRender, { type SmoothMarkdownStreamOptions } from "markstream-react";
-import { useMemo, useRef } from "react";
+import { memo, useMemo, useRef } from "react";
 import "markstream-react/index.css";
 import "katex/dist/katex.min.css";
 import { codeThemeName } from "../theme.ts";
@@ -78,7 +78,13 @@ export interface MarkdownProps {
 	indexKey?: number | string;
 }
 
-export function Markdown({ text, isStreaming, indexKey }: MarkdownProps) {
+/**
+ * Markdown 正文。
+ *
+ * 按内容记忆：流式期间每一帧都会把整段对话重新投影一遍，同一段正文的字符串值不变，
+ * 这里就跳过重渲染，不必让 markstream 把每一段历史消息重新解析、重新分词。
+ */
+export const Markdown = memo(function Markdown({ text, isStreaming, indexKey }: MarkdownProps) {
 	// 平滑只看挂载时的状态:历史消息挂载时不是流式,就不该重播一遍打字机
 	const smoothRef = useRef(isStreaming && !prefersReducedMotion());
 	const codeTheme = useCodeTheme();
@@ -112,4 +118,4 @@ export function Markdown({ text, isStreaming, indexKey }: MarkdownProps) {
 			/>
 		</div>
 	);
-}
+});

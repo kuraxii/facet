@@ -5,6 +5,7 @@
  * 已完成是弱化的点。颜色只在这里映射一次，行、角标、分组头都从这里取。
  */
 import { createI18n, type Translate, translate } from "@facet/i18n";
+import type { SessionActivity } from "@facet/protocol";
 
 const fallbackI18n = createI18n("zh-CN");
 const fallbackT = translate(fallbackI18n);
@@ -63,7 +64,7 @@ export function statusBucketLabel(bucket: SessionStatusBucket, t: Translate = fa
 }
 
 /** 会话列表里已有的状态点取值，换算成画法分档。 */
-export function statusBucketOfDot(dot: "running" | "compacting" | "idle"): SessionStatusBucket {
+export function statusBucketOfDot(activity: SessionActivity): SessionStatusBucket {
 	// 压缩上下文也是这台会话在忙，画同一个环
-	return dot === "idle" ? "done" : "running";
+	return activity === "idle" ? "done" : "running";
 }

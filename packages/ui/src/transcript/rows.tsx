@@ -20,12 +20,19 @@ import {
 	Undo2,
 	Wrench,
 } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { Markdown } from "../markdown/Markdown.tsx";
 import { ChevronIcon, TreeChevron } from "./chevron.tsx";
-import { type DisplayRow, groupLabel, groupRows, isTurnTimingLive, turnDurationText } from "./group.ts";
+import {
+	type DisplayRow,
+	groupLabel,
+	groupRows,
+	isTurnTimingLive,
+	reuseRows,
+	turnDurationText,
+} from "./group.ts";
 import { foldOutput, type ToolCategory, toolDetail, toolKind, toolTarget } from "./tool-text.ts";
 
 /** 面板参数。 */
@@ -378,23 +385,258 @@ function bodyOf(row: DisplayRow): ReactNode[] {
 	return nodes;
 }
 
-/** 一行外壳。 */
+/**
+ * 一行外壳。
+ *
+ * 正在流式写入的行带上 is-streaming：样式据此把它排除在视口裁剪之外，
+ * 新增内容始终有真实的布局盒模型。
+ */
 function Shell({
 	className,
 	children,
 	outlineKey,
+	isStreaming = false,
 }: {
 	className: string;
 	children: ReactNode;
 	/** 对话导航的定位键，只在用户消息行上给 */
 	outlineKey?: string;
+	/** 这一行是否仍在增长 */
+	isStreaming?: boolean;
 }) {
 	return (
-		<div className={`row ${className}`} data-outline-key={outlineKey}>
+		<div
+			className={isStreaming ? `row ${className} is-streaming` : `row ${className}`}
+			data-outline-key={outlineKey}
+		>
 			{children}
 		</div>
 	);
 }
+
+/** 一行要用到的状态与回调。 */
+interface RowViewProps {
+	/** 这一行 */
+	row: DisplayRow;
+	/** 用户收起过这一行，缺省按行的种类决定 */
+	isCollapsed: boolean;
+	/** 第一条用户消息的行标识，它前面没有可回退的轮次 */
+	firstUserRowId: string | undefined;
+	/** 分叉行要复制的原文：这一轮最后一条答复 */
+	forkText: string;
+	/** 最后一条用户消息的条目 id，重试按它重发 */
+	retryEntryId: string | undefined;
+	/** 最后一条用户消息的原文 */
+	retryText: string;
+	/** 计时的当前时刻，只有分叉行需要 */
+	now: number | undefined;
+	/** 是否允许分叉 */
+	canFork: boolean;
+	/** 是否允许回退 */
+	canRevert: boolean;
+	/** 切换这一行的收起状态 */
+	onToggle: (row: DisplayRow) => void;
+	onFork: (beforeEntryId: string | undefined) => void;
+	onRevert: (entryId: string, text: string) => void;
+	onRetryTurn?: ((entryId: string, text: string) => void) | undefined;
+	onCopyDetails?: ((text: string) => void) | undefined;
+	onCopyText?: ((text: string) => void) | undefined;
+}
+
+/**
+ * 面板里的一行。
+ *
+ * 内容没变时行对象沿用的是同一个，回调身份也不变，这里直接跳过重渲染：流式期间每帧
+ * 只有末尾那一两行真的重建。
+ */
+const RowView = memo(function RowView({
+	row,
+	isCollapsed,
+	firstUserRowId,
+	forkText,
+	retryEntryId,
+	retryText,
+	now,
+	canFork,
+	canRevert,
+	onToggle,
+	onFork,
+	onRevert,
+	onRetryTurn,
+	onCopyDetails,
+	onCopyText,
+}: RowViewProps): ReactNode {
+	const { t } = useI18n();
+
+	if (row.kind === "fork") {
+		const fork = row.fork;
+		if (fork === undefined) {
+			return null;
+		}
+		// 收在这一轮的末尾：复制、分叉，右边是这一轮工作了多久；悬停才显形
+		return (
+			<Shell className="is-fork">
+				<div className="turn-foot">
+					<div className="turn-actions">
+						{onCopyText === undefined || forkText.length === 0 || row.isStreaming ? null : (
+							<CopyButton text={forkText} onCopy={onCopyText} />
+						)}
+						<button
+							type="button"
+							className="fork-btn"
+							aria-label={t("transcript.fork")}
+							title={t("transcript.fork")}
+							disabled={fork.needsSettle && !canFork}
+							onClick={() => onFork(fork.beforeEntryId)}
+						>
+							<Split size={14} strokeWidth={1.5} />
+						</button>
+					</div>
+					{turnDurationText(row, now, t).length === 0 ? null : (
+						<span className="turn-time">{turnDurationText(row, now, t)}</span>
+					)}
+				</div>
+			</Shell>
+		);
+	}
+
+	if (row.kind === "divider") {
+		const text = row.items
+			.flatMap((item) => item.parts)
+			.map((part) => (part.kind === "text" ? part.text : ""))
+			.join("");
+		const label =
+			row.items[0]?.kind === "compaction" ? t("transcript.compactionSummary") : t("transcript.branchSummary");
+		return (
+			<Shell className="is-divider">
+				<details className="context-summary">
+					<summary className="divider">
+						<span className="line" />
+						<ListCollapse size={14} strokeWidth={1.5} aria-hidden="true" />
+						<span>{label}</span>
+						<span className="context-summary-chevron" aria-hidden="true">
+							<ChevronIcon isOpen={false} />
+						</span>
+						<span className="line" />
+					</summary>
+					<div className="context-summary-body">
+						<Markdown text={text} isStreaming={false} indexKey={`summary:${row.id}`} />
+					</div>
+				</details>
+			</Shell>
+		);
+	}
+
+	if (row.kind === "error") {
+		const text = textOf(row.items.flatMap((item) => item.parts));
+		const message = text.length > 0 ? text : t("transcript.runError");
+		// 重试按最后一条用户消息重发一次,失败的那条助手消息留在历史里
+		const canRetry = onRetryTurn !== undefined && canRevert && retryEntryId !== undefined;
+		// 一条带色底的提示：图标固定在左上，正文自己换行，动作是文字按钮
+		return (
+			<Shell className="is-error">
+				<div className="error-line" role="alert">
+					<CircleAlert className="error-mark" size={16} strokeWidth={1.5} />
+					<div className="error-body">
+						<div className="error-text">{message}</div>
+						{!canRetry && onCopyDetails === undefined ? null : (
+							<div className="error-actions">
+								{canRetry ? (
+									<button
+										type="button"
+										className="error-btn"
+										onClick={() => onRetryTurn(retryEntryId as string, retryText)}
+									>
+										{t("transcript.retry")}
+									</button>
+								) : null}
+								{onCopyDetails === undefined ? null : (
+									<button type="button" className="error-btn" onClick={() => onCopyDetails(message)}>
+										{t("transcript.copyDetails")}
+									</button>
+								)}
+							</div>
+						)}
+					</div>
+				</div>
+			</Shell>
+		);
+	}
+
+	if (row.kind === "user") {
+		const text = textOf(row.items.flatMap((item) => item.parts));
+		// 回退要有落地过的条目:实时消息在提升之前没有条目 id
+		const entryId = row.items[0]?.entryId;
+		// 第一条用户消息之前没有可回退的轮次
+		const canRevertThis = canRevert && entryId !== undefined && row.id !== firstUserRowId;
+		return (
+			<Shell className="is-user" outlineKey={entryId ?? row.id}>
+				<div className="user-line">
+					<div className="bub">{text}</div>
+				</div>
+				{!canRevertThis && onCopyText === undefined ? null : (
+					<div className="user-foot">
+						{onCopyText === undefined ? null : <CopyButton text={text} onCopy={onCopyText} />}
+						{canRevertThis ? (
+							<button
+								type="button"
+								className="revert-btn"
+								aria-label={t("transcript.revert")}
+								title={t("transcript.revert")}
+								onClick={() => onRevert(entryId, text)}
+							>
+								<Undo2 size={12} strokeWidth={1.5} />
+							</button>
+						) : null}
+					</div>
+				)}
+			</Shell>
+		);
+	}
+
+	if (row.kind === "meta") {
+		// 收起时是一行图标加标题，展开时标题变成药丸底、左侧换成下箭头
+		return (
+			<Shell className="is-process" isStreaming={row.isStreaming}>
+				<div className="group">
+					<button
+						type="button"
+						className={isCollapsed ? "group-head" : "group-head is-open"}
+						onClick={() => onToggle(row)}
+						aria-expanded={!isCollapsed}
+						aria-label={t("transcript.process")}
+					>
+						<span className="group-icon">
+							{isCollapsed ? <Wrench size={14} strokeWidth={1.5} /> : <TreeChevron isOpen />}
+						</span>
+						<span className={row.isStreaming ? "group-label is-live" : "group-label"}>
+							{groupLabel(row, t)}
+						</span>
+					</button>
+					{isCollapsed ? null : (
+						<div className="group-body">
+							{row.items.flatMap((item) =>
+								item.parts.map((part) => (
+									<PartView key={`${item.id}-${part.partId}`} part={part} isStreaming={item.isStreaming} />
+								)),
+							)}
+						</div>
+					)}
+					{isAborted(row) ? <StoppedNote /> : null}
+				</div>
+			</Shell>
+		);
+	}
+
+	return (
+		<Shell className="is-assistant" isStreaming={row.isStreaming}>
+			<div className="assistant-body">
+				{bodyOf(row)}
+				{isAborted(row) ? <StoppedNote /> : null}
+			</div>
+		</Shell>
+	);
+});
 
 /**
  * 对话面板。把渲染单元聚合成分行,并维护每行的收起状态。
@@ -414,7 +656,13 @@ export function ChatTranscript({
 	isRunning = false,
 }: ChatTranscriptProps) {
 	const { t } = useI18n();
-	const rows = useMemo(() => groupRows(items, { running: isRunning }), [items, isRunning]);
+	// 分组每帧都会重算，内容没变的行沿用上一帧的对象，行组件据此跳过重渲染
+	const lastRows = useRef<DisplayRow[]>([]);
+	const rows = useMemo(() => {
+		const next = reuseRows(lastRows.current, groupRows(items, { running: isRunning }));
+		lastRows.current = next;
+		return next;
+	}, [items, isRunning]);
 	const retry = maintenance?.kind === "retry" ? maintenance : undefined;
 	const isCompacting = maintenance?.kind === "compaction";
 	// 第一条用户消息之前没有可回退的轮次
@@ -460,205 +708,70 @@ export function ChatTranscript({
 		});
 	}, []);
 
+	// 行文本按行对象缓存：行没换就不必重新拼接正文，流式期间只算变化的那一行
+	const rowTexts = useRef(new WeakMap<DisplayRow, string>());
+	const textFor = useCallback((row: DisplayRow): string => {
+		const cached = rowTexts.current.get(row);
+		if (cached !== undefined) {
+			return cached;
+		}
+		const text = textOf(row.items.flatMap((item) => item.parts));
+		rowTexts.current.set(row, text);
+		return text;
+	}, []);
+
+	// 分叉行要复制的是这一轮最后一条答复，重试要的是最后一条用户消息，都先配好，
+	// 行组件就不依赖渲染顺序
+	const { forkTexts, retryEntryId, retryText } = useMemo(() => {
+		const texts = new Map<string, string>();
+		let lastAnswer = "";
+		let lastUser: DisplayRow | undefined;
+		for (const row of rows) {
+			if (row.kind === "assistant") {
+				lastAnswer = textFor(row);
+				continue;
+			}
+			if (row.kind === "user") {
+				lastUser = row;
+				continue;
+			}
+			if (row.kind === "fork") {
+				texts.set(row.id, lastAnswer);
+			}
+		}
+		return {
+			forkTexts: texts,
+			retryEntryId: lastUser?.items[0]?.entryId,
+			retryText: lastUser === undefined ? "" : textFor(lastUser),
+		};
+	}, [rows, textFor]);
+
 	if (rows.length === 0 && maintenance === undefined) {
 		return <div className="empty">{emptyHint ?? t("transcript.empty")}</div>;
 	}
 
-	/** 这一轮最后一条助手答复的原文，分叉行上的复制按钮用它 */
-	let lastAnswerText = "";
-
 	return (
 		<>
-			{rows.map((row) => {
-				const isCollapsed = overrides.get(row.id) ?? isCollapsedByDefault(row.kind);
-
-				if (row.kind === "assistant") {
-					lastAnswerText = textOf(row.items.flatMap((item) => item.parts));
-				}
-
-				if (row.kind === "fork") {
-					const fork = row.fork;
-					if (fork === undefined) {
-						return null;
-					}
-					// 收在这一轮的末尾：复制、分叉，右边是这一轮工作了多久；悬停才显形
-					return (
-						<Shell key={row.id} className="is-fork">
-							<div className="turn-foot">
-								<div className="turn-actions">
-									{onCopyText === undefined || lastAnswerText.length === 0 || row.isStreaming ? null : (
-										<CopyButton text={lastAnswerText} onCopy={onCopyText} />
-									)}
-									<button
-										type="button"
-										className="fork-btn"
-										aria-label={t("transcript.fork")}
-										title={t("transcript.fork")}
-										disabled={fork.needsSettle && !canFork}
-										onClick={() => onFork(fork.beforeEntryId)}
-									>
-										<Split size={14} strokeWidth={1.5} />
-									</button>
-								</div>
-								{turnDurationText(row, now, t).length === 0 ? null : (
-									<span className="turn-time">{turnDurationText(row, now, t)}</span>
-								)}
-							</div>
-						</Shell>
-					);
-				}
-
-				if (row.kind === "divider") {
-					const text = row.items
-						.flatMap((item) => item.parts)
-						.map((part) => (part.kind === "text" ? part.text : ""))
-						.join("");
-					const label =
-						row.items[0]?.kind === "compaction"
-							? t("transcript.compactionSummary")
-							: t("transcript.branchSummary");
-					return (
-						<Shell key={row.id} className="is-divider">
-							<details className="context-summary">
-								<summary className="divider">
-									<span className="line" />
-									<ListCollapse size={14} strokeWidth={1.5} aria-hidden="true" />
-									<span>{label}</span>
-									<span className="context-summary-chevron" aria-hidden="true">
-										<ChevronIcon isOpen={false} />
-									</span>
-									<span className="line" />
-								</summary>
-								<div className="context-summary-body">
-									<Markdown text={text} isStreaming={false} indexKey={`summary:${row.id}`} />
-								</div>
-							</details>
-						</Shell>
-					);
-				}
-
-				if (row.kind === "error") {
-					const text = textOf(row.items.flatMap((item) => item.parts));
-					const message = text.length > 0 ? text : t("transcript.runError");
-					// 重试按最后一条用户消息重发一次,失败的那条助手消息留在历史里
-					const lastUser = [...rows].reverse().find((item) => item.kind === "user");
-					const retryTarget =
-						lastUser === undefined
-							? undefined
-							: {
-									entryId: lastUser.items[0]?.entryId,
-									text: textOf(lastUser.items.flatMap((item) => item.parts)),
-								};
-					const canRetry = onRetryTurn !== undefined && canRevert && retryTarget?.entryId !== undefined;
-					// 一条带色底的提示：图标固定在左上，正文自己换行，动作是文字按钮
-					return (
-						<Shell key={row.id} className="is-error">
-							<div className="error-line" role="alert">
-								<CircleAlert className="error-mark" size={16} strokeWidth={1.5} />
-								<div className="error-body">
-									<div className="error-text">{message}</div>
-									{!canRetry && onCopyDetails === undefined ? null : (
-										<div className="error-actions">
-											{canRetry ? (
-												<button
-													type="button"
-													className="error-btn"
-													onClick={() => onRetryTurn(retryTarget.entryId as string, retryTarget.text)}
-												>
-													{t("transcript.retry")}
-												</button>
-											) : null}
-											{onCopyDetails === undefined ? null : (
-												<button type="button" className="error-btn" onClick={() => onCopyDetails(message)}>
-													{t("transcript.copyDetails")}
-												</button>
-											)}
-										</div>
-									)}
-								</div>
-							</div>
-						</Shell>
-					);
-				}
-
-				if (row.kind === "user") {
-					const text = textOf(row.items.flatMap((item) => item.parts));
-					// 回退要有落地过的条目:实时消息在提升之前没有条目 id
-					const entryId = row.items[0]?.entryId;
-					// 第一条用户消息之前没有可回退的轮次
-					const canRevertThis = canRevert && entryId !== undefined && row.id !== firstUserRowId;
-					return (
-						<Shell key={row.id} className="is-user" outlineKey={entryId ?? row.id}>
-							<div className="user-line">
-								<div className="bub">{text}</div>
-							</div>
-							{!canRevertThis && onCopyText === undefined ? null : (
-								<div className="user-foot">
-									{onCopyText === undefined ? null : <CopyButton text={text} onCopy={onCopyText} />}
-									{canRevertThis ? (
-										<button
-											type="button"
-											className="revert-btn"
-											aria-label={t("transcript.revert")}
-											title={t("transcript.revert")}
-											onClick={() => onRevert(entryId, text)}
-										>
-											<Undo2 size={12} strokeWidth={1.5} />
-										</button>
-									) : null}
-								</div>
-							)}
-						</Shell>
-					);
-				}
-
-				if (row.kind === "meta") {
-					// 收起时是一行图标加标题，展开时标题变成药丸底、左侧换成下箭头
-					return (
-						<Shell key={row.id} className="is-process">
-							<div className="group">
-								<button
-									type="button"
-									className={isCollapsed ? "group-head" : "group-head is-open"}
-									onClick={() => toggle(row)}
-									aria-expanded={!isCollapsed}
-									aria-label={t("transcript.process")}
-								>
-									<span className="group-icon">
-										{isCollapsed ? <Wrench size={14} strokeWidth={1.5} /> : <TreeChevron isOpen />}
-									</span>
-									<span className={row.isStreaming ? "group-label is-live" : "group-label"}>
-										{groupLabel(row, t)}
-									</span>
-								</button>
-								{isCollapsed ? null : (
-									<div className="group-body">
-										{row.items.flatMap((item) =>
-											item.parts.map((part) => (
-												<PartView
-													key={`${item.id}-${part.partId}`}
-													part={part}
-													isStreaming={item.isStreaming}
-												/>
-											)),
-										)}
-									</div>
-								)}
-								{isAborted(row) ? <StoppedNote /> : null}
-							</div>
-						</Shell>
-					);
-				}
-
-				return (
-					<Shell key={row.id} className="is-assistant">
-						<div className="assistant-body">
-							{bodyOf(row)}
-							{isAborted(row) ? <StoppedNote /> : null}
-						</div>
-					</Shell>
-				);
-			})}
+			{rows.map((row) => (
+				<RowView
+					key={row.id}
+					row={row}
+					isCollapsed={overrides.get(row.id) ?? isCollapsedByDefault(row.kind)}
+					firstUserRowId={firstUserRowId}
+					forkText={forkTexts.get(row.id) ?? ""}
+					retryEntryId={retryEntryId}
+					retryText={retryText}
+					now={row.kind === "fork" ? now : undefined}
+					canFork={canFork}
+					canRevert={canRevert}
+					onToggle={toggle}
+					onFork={onFork}
+					onRevert={onRevert}
+					onRetryTurn={onRetryTurn}
+					onCopyDetails={onCopyDetails}
+					onCopyText={onCopyText}
+				/>
+			))}
 
 			{isCompacting ? (
 				<Shell className="is-divider">

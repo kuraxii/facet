@@ -20,12 +20,12 @@ import type {
 	ThinkingLevel,
 } from "./model.ts";
 import type { ProjectInfo } from "./project.ts";
-import type { Entry, SessionSnapshot, SessionSummary } from "./session.ts";
+import type { Entry, SessionListItem, SessionSnapshot } from "./session.ts";
 import type { FacetSettings } from "./settings.ts";
 import type { TerminalInfo } from "./terminal.ts";
 
 /** 线格式版本。不兼容的改动递增此值,端点据此拒绝握手。 */
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 /** 主机上报的能力标记,端点据此隐藏不可用的入口。 */
 export type Capability = "dispatch" | "tools" | "compaction" | "terminal" | "extensionUi";
@@ -342,7 +342,8 @@ export interface RequestParams {
 /** 每条请求的应答数据。 */
 export interface RequestResults {
 	respondUi: { accepted: boolean };
-	listSessions: { sessions: SessionSummary[] };
+	/** 每条带上主机侧此刻的活动状态，重连后一次往返就能把本地的状态对齐 */
+	listSessions: { sessions: SessionListItem[] };
 	listCommands: { commands: SlashCommand[] };
 	busySessions: { files: string[] };
 	createSession: SessionSnapshot;

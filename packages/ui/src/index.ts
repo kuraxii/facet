@@ -54,7 +54,6 @@ export type { SidebarHeaderProps } from "./chat/sidebar-header.tsx";
 export { SidebarHeader } from "./chat/sidebar-header.tsx";
 export type {
 	GroupKey,
-	SessionDot,
 	SidebarData,
 	SidebarGroup,
 	SidebarProject,

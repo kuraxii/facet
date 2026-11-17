@@ -31,6 +31,7 @@ import type {
 	RequestMethod,
 	RequestParams,
 	RequestResults,
+	SessionListItem,
 	SessionSnapshot,
 	SessionSummary,
 	SlashCommand,
@@ -394,17 +395,20 @@ export class SessionClient {
 		}
 	}
 
-	/** 重取一份完整清单替换本地这份，重连与补齐缺口之后用。 */
+	/**
+	 * 重取一份完整清单替换本地这份，重连与补齐缺口之后用。
+	 *
+	 * 替换用的是主机回的摘要与状态，不保留本地那份：断线期间本地可能停在运行中，
+	 * 只按本地补状态会让它一直卡在那里。
+	 */
 	async refreshSessionList(cwd?: string): Promise<readonly SessionSummary[]> {
-		const sessions = await this.listSessions(cwd);
-		this.state.replaceSessionList(
-			sessions.map((summary) => ({ summary, busy: this.state.isSessionBusy(summary.path) })),
-		);
-		return sessions;
+		const items = await this.listSessions(cwd);
+		this.state.replaceSessionList(items);
+		return items.map((item) => item.summary);
 	}
 
 	/** 列出会话。指定 cwd 时只列该目录,主机上的全部会话用空参数。 */
-	async listSessions(cwd?: string): Promise<SessionSummary[]> {
+	async listSessions(cwd?: string): Promise<readonly SessionListItem[]> {
 		const result = await this.transport.request("listSessions", cwd === undefined ? {} : { cwd });
 		return result.sessions;
 	}

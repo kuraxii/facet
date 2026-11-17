@@ -10,8 +10,9 @@ import type {
 	Channel,
 	Entry,
 	Message,
+	SessionActivity,
+	SessionListItem,
 	SessionSnapshot,
-	SessionSummary,
 } from "@facet/protocol";
 import { makeChannel, parseChannel } from "@facet/protocol";
 import { historyMessageId, isHistoryMessageId } from "./message-id.ts";
@@ -45,26 +46,50 @@ interface ChatSlot {
 	lastSeq: number;
 }
 
-/** 清单里的一条：会话摘要加上它在主机上是否跑着。 */
-export interface SessionListEntry {
-	/** 会话摘要，字段与会话文件一致 */
-	summary: SessionSummary;
-	/** 主机上是否有正在进行的任务 */
-	busy: boolean;
-}
+/** 广播调度：把一次通知交给调用方安排，何时真正通知订阅者由它决定。 */
+export type NotifyScheduler = (flush: () => void) => void;
+
+/**
+ * 缺省的广播调度。
+ *
+ * 有 requestAnimationFrame 时把通知排到下一帧：界面按帧重绘，同一帧内处理的多条动作
+ * 合起来只触发一次重绘，通知频率以帧频率为上限而不是以动作频率为上限。没有它（Node、
+ * 测试）时同步通知，行为与逐条通知一致。
+ */
+const scheduleOnFrame: NotifyScheduler = (() => {
+	const frame = (globalThis as { requestAnimationFrame?: (callback: () => void) => unknown })
+		.requestAnimationFrame;
+	if (typeof frame !== "function") {
+		return (flush) => flush();
+	}
+	// 浏览器里 requestAnimationFrame 依赖 this 为 window，取出后要显式绑回去
+	return (flush) => {
+		void frame.call(globalThis, flush);
+	};
+})();
 
 export class SessionStore {
 	private readonly sessions = new Map<Channel, SessionSlot>();
 	private readonly chats = new Map<Channel, ChatSlot>();
 	/** 会话清单，按会话文件路径索引；多个端拿到的是主机推的同一份 */
-	private readonly sessionIndex = new Map<string, SessionListEntry>();
+	private readonly sessionIndex = new Map<string, SessionListItem>();
 	/** 清单通道已应用的序号 */
 	private sessionIndexSeq = 0;
 	private readonly listeners = new Set<(version: number) => void>();
 	private readonly gapListeners = new Set<(gap: ChannelGap) => void>();
+	/** 通知订阅者的调度方式 */
+	private readonly schedule: NotifyScheduler;
+	/** 有视图变化尚未通知 */
+	private isPending = false;
+	/** 已排上一次通知，期间再来的变化并到那一次里 */
+	private isScheduled = false;
 	private version = 0;
 
-	/** 版本号,每次视图变化递增,供界面判断是否需要重绘。 */
+	constructor(options: { schedule?: NotifyScheduler } = {}) {
+		this.schedule = options.schedule ?? scheduleOnFrame;
+	}
+
+	/** 版本号,每次通知时递增,供界面判断是否需要重绘。 */
 	getVersion(): number {
 		return this.version;
 	}
@@ -104,7 +129,7 @@ export class SessionStore {
 	 *
 	 * 界面直接用它渲染侧栏，不再自己扫盘：主机推什么就是什么，多个端因此一致。
 	 */
-	sessionList(): readonly SessionListEntry[] {
+	sessionList(): readonly SessionListItem[] {
 		return [...this.sessionIndex.values()].sort(
 			(left, right) => right.summary.modified - left.summary.modified,
 		);
@@ -121,7 +146,7 @@ export class SessionStore {
 	}
 
 	/** 用一份完整清单替换本地这份，重连或补齐缺口之后用。 */
-	replaceSessionList(entries: readonly SessionListEntry[]): void {
+	replaceSessionList(entries: readonly SessionListItem[]): void {
 		this.sessionIndex.clear();
 		for (const entry of entries) {
 			this.sessionIndex.set(entry.summary.path, entry);
@@ -129,9 +154,9 @@ export class SessionStore {
 		this.markChanged();
 	}
 
-	/** 清单里某个会话是否在主机上跑着。 */
-	isSessionBusy(path: string): boolean {
-		return this.sessionIndex.get(path)?.busy === true;
+	/** 清单里某个会话此刻的活动状态，清单里没有时按空闲算。 */
+	sessionActivity(path: string): SessionActivity {
+		return this.sessionIndex.get(path)?.activity ?? "idle";
 	}
 
 	sessionView(channel: Channel): SessionView | undefined {
@@ -211,7 +236,17 @@ export class SessionStore {
 	/** 归约一条清单动作。认不出的动作原样跳过，清单仍然可用。 */
 	private applySessionList(action: Action): void {
 		if (action.type === "sessions/changed") {
-			this.sessionIndex.set(action.summary.path, { summary: action.summary, busy: action.busy });
+			this.sessionIndex.set(action.summary.path, { summary: action.summary, activity: action.activity });
+			this.markChanged();
+			return;
+		}
+		if (action.type === "sessions/status") {
+			// 清单里还没有这条摘要时先忽略：摘要到了会连同当时的状态一起带上
+			const current = this.sessionIndex.get(action.path);
+			if (current === undefined || current.activity === action.activity) {
+				return;
+			}
+			this.sessionIndex.set(action.path, { ...current, activity: action.activity });
 			this.markChanged();
 			return;
 		}
@@ -401,7 +436,30 @@ export class SessionStore {
 		}
 	}
 
+	/** 登记一次视图变化，交给调度决定这次（或与同帧其它变化合并后）何时通知。 */
 	private markChanged(): void {
+		this.isPending = true;
+		if (this.isScheduled) {
+			return;
+		}
+		this.isScheduled = true;
+		this.schedule(() => {
+			this.isScheduled = false;
+			this.flush();
+		});
+	}
+
+	/**
+	 * 立刻通知尚未广播的变化。
+	 *
+	 * 版本号在这里才递增，同一次调度内到达的多条动作因此只算一次变化。视图本身早就在
+	 * 归约时就地改好了，读视图的调用方不必等通知。重复调用没有副作用。
+	 */
+	flush(): void {
+		if (!this.isPending) {
+			return;
+		}
+		this.isPending = false;
 		this.version += 1;
 		for (const listener of [...this.listeners]) {
 			listener(this.version);

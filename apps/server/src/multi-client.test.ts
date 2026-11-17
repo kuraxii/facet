@@ -48,6 +48,11 @@ class FakeAgent implements HubAgent {
 		return this.busy;
 	}
 
+	/** 假 agent 不跑压缩，维护动作恒为空。 */
+	get currentMaintenance(): undefined {
+		return undefined;
+	}
+
 	get isStreaming(): boolean {
 		return this.streaming;
 	}

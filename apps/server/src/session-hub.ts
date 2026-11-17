@@ -13,7 +13,14 @@ import { rm, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import type { ForkPiAgentOptions, OpenPiAgentOptions, PiAgent, PiAgentLaunchOptions } from "@facet/agent";
-import type { Action, ActionFrame, Channel, SessionSnapshot, SlashCommand } from "@facet/protocol";
+import type {
+	Action,
+	ActionFrame,
+	Channel,
+	SessionActivity,
+	SessionSnapshot,
+	SlashCommand,
+} from "@facet/protocol";
 import { makeChannel, parseChannel } from "@facet/protocol";
 import { ActionProjector } from "./action-projector.ts";
 import { EventLog } from "./event-log.ts";
@@ -25,6 +32,7 @@ export type HubAgent = Pick<
 	| "id"
 	| "file"
 	| "isBusy"
+	| "currentMaintenance"
 	| "initialize"
 	| "respondUi"
 	| "cancelUi"
@@ -175,6 +183,8 @@ interface SessionState<A extends HubAgent> {
 	closeTimer: ReturnType<typeof setTimeout> | undefined;
 	/** 上一次事件是不是压缩中，压缩结束的那一下要重算用量 */
 	wasCompacting: boolean;
+	/** 上一次广播给清单的活动状态，比对它才知道要不要再推 */
+	lastActivity: SessionActivity;
 	/** 最近一次被用到的时间，按内存水位回收时从最旧的开始 */
 	lastUsedAt: number;
 	readonly channels: Map<Channel, ChannelState>;
@@ -199,6 +209,12 @@ export interface SessionHubOptions<A extends HubAgent> {
 	 * 会话文件为空的内存会话不通知。
 	 */
 	readonly onSessionChanged?: (file: string, change: "changed" | "removed") => void;
+	/**
+	 * 会话的活动状态迁移了。
+	 *
+	 * 与 onSessionChanged 分开：状态一轮里要变好几次，每次都不该去读会话文件。
+	 */
+	readonly onActivityChanged?: (file: string, activity: SessionActivity) => void;
 }
 
 /** 文件是否存在。 */
@@ -236,10 +252,14 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		};
 		this.idleCloseMs = options.idleCloseMs ?? DEFAULT_IDLE_CLOSE_MS;
 		this.onSessionChanged = options.onSessionChanged;
+		this.onActivityChanged = options.onActivityChanged;
 	}
 
 	/** 通知清单变化的回调，没有接的时候什么都不做。 */
 	private readonly onSessionChanged: ((file: string, change: "changed" | "removed") => void) | undefined;
+
+	/** 通知活动状态迁移的回调，没有接的时候什么都不做。 */
+	private readonly onActivityChanged: ((file: string, activity: SessionActivity) => void) | undefined;
 
 	/** 会话文件的清单有变化，通知外面。 */
 	private noteSessions(file: string | undefined, change: "changed" | "removed"): void {
@@ -291,6 +311,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 			opening: undefined,
 			closeTimer: undefined,
 			wasCompacting: false,
+			lastActivity: "idle",
 			lastUsedAt: Date.now(),
 			channels: new Map(),
 			projector: new ActionProjector(sessionId),
@@ -389,6 +410,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 			opening: undefined,
 			closeTimer: undefined,
 			wasCompacting: false,
+			lastActivity: "idle",
 			lastUsedAt: Date.now(),
 			channels: new Map(),
 			projector: new ActionProjector(sessionId),
@@ -563,6 +585,17 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		return { loaded: this.table.size, busy };
 	}
 
+	/**
+	 * 会话文件此刻的活动状态，没有装载的会话是 idle。
+	 *
+	 * 清单与重连对齐都读它，因此不必让客户端另算一遍。
+	 */
+	activityOf(file: string): SessionActivity {
+		const sessionId = this.sessionIdByFile(file);
+		const row = sessionId === undefined ? undefined : this.table.get(sessionId);
+		return row === undefined ? "idle" : this.activityOfRow(row);
+	}
+
 	/** 还在跑的会话文件。退出应用前用来判断会话会不会被连带终止。 */
 	busyFiles(): string[] {
 		const files: string[] = [];
@@ -714,6 +747,11 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 	}
 
 	private drop(row: SessionState<A>): void {
+		// 释放之后这一行就没了，别的端不会再有事件告诉它这个会话已经停下
+		if (row.lastActivity !== "idle" && row.file !== undefined) {
+			row.lastActivity = "idle";
+			this.onActivityChanged?.(row.file, "idle");
+		}
 		this.table.delete(row.sessionId);
 		this.clearCloseTimer(row);
 		row.unsubscribe?.();
@@ -801,6 +839,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		row.phase = "open";
 		row.unsubscribe = agent.subscribe((event) => this.onAgentEvent(row, event));
 		this.startInitialization(row);
+		this.noteActivity(row);
 		this.settle(row);
 	}
 
@@ -837,7 +876,38 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 				this.publishUsage(row);
 			}
 		}
+		this.noteActivity(row);
 		this.settle(row);
+	}
+
+	/**
+	 * 由运行态推活动状态。
+	 *
+	 * 压缩中优先于运行中；其余按 agent 是否在忙分两档，它与界面的活动状态同构：
+	 * 初始化中、等重试、等待扩展交互都算在忙。
+	 */
+	private activityOfRow(row: SessionState<A>): SessionActivity {
+		const agent = row.agent;
+		if (agent === undefined) {
+			return "idle";
+		}
+		if (agent.currentMaintenance?.kind === "compaction") {
+			return "compacting";
+		}
+		return agent.isBusy ? "running" : "idle";
+	}
+
+	/** 状态真的迁移了才通知外面，摘要没变就不推。 */
+	private noteActivity(row: SessionState<A>): void {
+		if (row.file === undefined) {
+			return;
+		}
+		const activity = this.activityOfRow(row);
+		if (activity === row.lastActivity) {
+			return;
+		}
+		row.lastActivity = activity;
+		this.onActivityChanged?.(row.file, activity);
 	}
 
 	/** 推一份当前的上下文用量。用量可能为空（刚压缩完要等下一次响应才有），空也照实推。 */

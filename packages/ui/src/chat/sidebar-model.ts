@@ -5,15 +5,7 @@
  * 队列按「进行中 / 今天 / 昨天 / 更早」分组。这里只做纯函数变换，组件负责渲染。
  */
 import type { SupportedLanguage } from "@facet/i18n";
-import type { ProjectInfo, SessionSummary } from "@facet/protocol";
-
-/**
- * 会话行左侧的状态点。
- *
- * 设计稿上的完成与未读两态需要主机侧的未读标记与待应答信息，当前有运行、压缩与空闲三态，
- * 取值确定后才加入新值。
- */
-export type SessionDot = "running" | "compacting" | "idle";
+import type { ProjectInfo, SessionActivity, SessionSummary } from "@facet/protocol";
 
 /** 队列分组的键，数组顺序即展示顺序。 */
 export type GroupKey = "running" | "today" | "yesterday" | "earlier";
@@ -28,8 +20,8 @@ export interface SidebarSession {
 	modified: number;
 	/** 是否正在运行 */
 	isRunning: boolean;
-	/** 行首状态点 */
-	dot: SessionDot;
+	/** 行首状态点，直接取主机推来的活动状态 */
+	activity: SessionActivity;
 	/** 所属项目名，队列过滤到单个项目时不重复显示 */
 	project: string;
 	/** 所属项目目录 */
@@ -71,10 +63,8 @@ export interface SidebarInput {
 	sessions: readonly SessionSummary[];
 	/** 用户添加的项目 */
 	projects: readonly ProjectInfo[];
-	/** 正在运行的会话文件路径 */
-	runningFile: string | undefined;
-	/** 这个会话此刻的状态点，缺省按运行中显示 */
-	runningDot?: SessionDot | undefined;
+	/** 各会话此刻的活动状态，按会话文件路径索引，缺省都按空闲算 */
+	activities?: ReadonlyMap<string, SessionActivity> | undefined;
 	/** 队列的范围：给出时只列该目录的会话，缺省列出全部 */
 	projectCwd?: string | undefined;
 	/** 会话标题关键词，空串表示不过滤 */
@@ -216,21 +206,22 @@ function shiftDay(dayStart: number, days: number): number {
 /**
  * 一条会话的展示数据。
  *
- * 只有当前打开的会话才有运行态:主机上的会话只有被打开时才可能跑一轮,其余都按空闲显示。
+ * 运行状态只看主机推来的那一份：同一台主机上的会话可能有别的端在跑，本地只知道当前
+ * 打开的那一个，按本地算会让切走之后的状态失真。
  */
 function toSession(
 	summary: SessionSummary,
-	runningFile: string | undefined,
-	phase: SessionDot | undefined,
+	activities: ReadonlyMap<string, SessionActivity> | undefined,
 	untitled: string | undefined,
 ): SidebarSession {
-	const isRunning = summary.path === runningFile;
+	const activity = activities?.get(summary.path) ?? "idle";
+	const isRunning = activity !== "idle";
 	return {
 		path: summary.path,
 		title: sessionTitle(summary.name, summary.firstMessage, untitled),
 		modified: summary.modified,
 		isRunning,
-		dot: isRunning ? (phase ?? "running") : "idle",
+		activity,
 		project: baseName(summary.cwd),
 		cwd: summary.cwd,
 		host: undefined,
@@ -330,7 +321,7 @@ export function buildSidebar(input: SidebarInput): SidebarData {
 	const now = input.now ?? Date.now();
 	const keyword = (input.keyword ?? "").trim().toLowerCase();
 	const all = input.sessions
-		.map((summary) => toSession(summary, input.runningFile, input.runningDot, input.untitled))
+		.map((summary) => toSession(summary, input.activities, input.untitled))
 		.sort((left, right) => right.modified - left.modified);
 
 	const inScope =

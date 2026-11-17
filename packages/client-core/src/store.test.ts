@@ -339,6 +339,52 @@ describe("SessionStore", () => {
 		expect(versions.length).toBe(2);
 	});
 
+	it("同一帧内的多条动作只通知一次", () => {
+		const scheduled: Array<() => void> = [];
+		const store = new SessionStore({ schedule: (flush) => scheduled.push(flush) });
+		const versions: number[] = [];
+		store.subscribe((version) => versions.push(version));
+		store.apply(frame(chatChannel, 1, { type: "chat/turnStarted", text: "hi" }));
+		store.apply(frame(chatChannel, 2, { type: "chat/settled", aborted: false }));
+		store.apply(
+			frame(chatChannel, 3, { type: "chat/messageAppended", messageId: "m1", message: assistant("答") }),
+		);
+		// 视图在归约时就改好了,通知还没到
+		expect(store.chatView(chatChannel)?.items.map((item) => item.id)).toEqual(["m1"]);
+		expect(versions).toEqual([]);
+		expect(store.getVersion()).toBe(0);
+		expect(scheduled).toHaveLength(1);
+		scheduled[0]?.();
+		expect(versions).toEqual([1]);
+		expect(store.getVersion()).toBe(1);
+	});
+
+	it("通知过后再次变化会重新排一次", () => {
+		const scheduled: Array<() => void> = [];
+		const store = new SessionStore({ schedule: (flush) => scheduled.push(flush) });
+		const versions: number[] = [];
+		store.subscribe((version) => versions.push(version));
+		store.apply(frame(chatChannel, 1, { type: "chat/turnStarted", text: "hi" }));
+		scheduled[0]?.();
+		store.apply(frame(chatChannel, 2, { type: "chat/settled", aborted: false }));
+		expect(scheduled).toHaveLength(2);
+		scheduled[1]?.();
+		expect(versions).toEqual([1, 2]);
+	});
+
+	it("flush 立刻通知尚未广播的变化", () => {
+		const scheduled: Array<() => void> = [];
+		const store = new SessionStore({ schedule: (flush) => scheduled.push(flush) });
+		const versions: number[] = [];
+		store.subscribe((version) => versions.push(version));
+		store.apply(frame(chatChannel, 1, { type: "chat/turnStarted", text: "hi" }));
+		store.flush();
+		expect(versions).toEqual([1]);
+		// 调度回调随后到达,没有待广播的变化时不重复通知
+		scheduled[0]?.();
+		expect(versions).toEqual([1]);
+	});
+
 	it("drop 清掉通道状态", () => {
 		const store = new SessionStore();
 		store.apply(frame(chatChannel, 1, { type: "chat/turnStarted", text: "hi" }));
@@ -374,17 +420,17 @@ describe("会话清单", () => {
 			channel: listChannel,
 			serverSeq: 1,
 			origin: undefined,
-			action: { type: "sessions/changed", summary: summary("/a/s1.jsonl", 2), busy: false },
+			action: { type: "sessions/changed", summary: summary("/a/s1.jsonl", 2), activity: "idle" },
 		});
 		store.apply({
 			type: "action",
 			channel: listChannel,
 			serverSeq: 2,
 			origin: undefined,
-			action: { type: "sessions/changed", summary: summary("/a/s2.jsonl", 5), busy: true },
+			action: { type: "sessions/changed", summary: summary("/a/s2.jsonl", 5), activity: "running" },
 		});
 		expect(store.sessionList().map((entry) => entry.summary.path)).toEqual(["/a/s2.jsonl", "/a/s1.jsonl"]);
-		expect(store.isSessionBusy("/a/s2.jsonl")).toBe(true);
+		expect(store.sessionActivity("/a/s2.jsonl")).toBe("running");
 	});
 
 	it("同路径的新摘要覆盖旧的", () => {
@@ -394,7 +440,7 @@ describe("会话清单", () => {
 			channel: listChannel,
 			serverSeq: 1,
 			origin: undefined,
-			action: { type: "sessions/changed", summary: summary("/a/s1.jsonl", 1), busy: false },
+			action: { type: "sessions/changed", summary: summary("/a/s1.jsonl", 1), activity: "idle" },
 		});
 		store.apply({
 			type: "action",
@@ -404,7 +450,7 @@ describe("会话清单", () => {
 			action: {
 				type: "sessions/changed",
 				summary: { ...summary("/a/s1.jsonl", 9), name: "改过" },
-				busy: false,
+				activity: "idle",
 			},
 		});
 		expect(store.sessionList()).toHaveLength(1);
@@ -418,7 +464,7 @@ describe("会话清单", () => {
 			channel: listChannel,
 			serverSeq: 1,
 			origin: undefined,
-			action: { type: "sessions/changed", summary: summary("/a/s1.jsonl", 1), busy: false },
+			action: { type: "sessions/changed", summary: summary("/a/s1.jsonl", 1), activity: "idle" },
 		});
 		store.apply({
 			type: "action",
@@ -445,7 +491,7 @@ describe("会话清单", () => {
 
 	it("完整清单替换掉本地这份", () => {
 		const store = new SessionStore();
-		store.replaceSessionList([{ summary: summary("/a/s1.jsonl", 1), busy: false }]);
+		store.replaceSessionList([{ summary: summary("/a/s1.jsonl", 1), activity: "idle" }]);
 		expect(store.sessionList()).toHaveLength(1);
 		store.replaceSessionList([]);
 		expect(store.sessionList()).toEqual([]);

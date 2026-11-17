@@ -96,8 +96,9 @@ export function useStickToBottom(
 		jumpToBottom();
 	}, [resetKey, element, applyPinned, jumpToBottom]);
 
-	// 内容变化时跟随
-	// biome-ignore lint/correctness/useExhaustiveDependencies: 内容标识只作跟随信号,不参与计算
+	// 内容变化时跟随。写在这里而不是帧回调里：提交已改完 DOM，此刻读高度、写 scrollTop
+	// 与这次内容变化处在同一帧，绘制时新文字已经在正确位置；排到下一帧会多出一帧错位。
+	// biome-ignore lint/correctness/useExhaustiveDependencies: 内容标识只作跟随信号，不参与计算
 	useLayoutEffect(() => {
 		if (pinnedRef.current) {
 			jumpToBottom();

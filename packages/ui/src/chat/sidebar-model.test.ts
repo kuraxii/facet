@@ -37,7 +37,7 @@ function session(overrides: Partial<SidebarSession> & Pick<SidebarSession, "path
 		title: "会话",
 		modified: NOW - 60_000,
 		isRunning: false,
-		dot: "idle",
+		activity: "idle",
 		project: "facet",
 		cwd: "/work/facet",
 		host: undefined,
@@ -133,16 +133,16 @@ describe("组装侧栏", () => {
 	const base = {
 		sessions,
 		projects: [],
-		runningFile: "/s/a.jsonl",
+		activities: new Map([["/s/a.jsonl", "running" as const]]),
 		now: NOW,
 	};
 
 	it("运行中的会话单独成组并带运行状态点", () => {
 		const data = buildSidebar(base);
 		expect(data.groups[0]?.sessions.map((item) => item.path)).toEqual(["/s/a.jsonl"]);
-		expect(data.groups[0]?.sessions[0]?.dot).toBe("running");
+		expect(data.groups[0]?.sessions[0]?.activity).toBe("running");
 		expect(data.groups[0]?.sessions[0]?.isRunning).toBe(true);
-		expect(data.groups[1]?.sessions[0]?.dot).toBe("idle");
+		expect(data.groups[1]?.sessions[0]?.activity).toBe("idle");
 	});
 
 	it("项目选项合并已添加的项目与会话目录，按会话数倒序", () => {
@@ -188,26 +188,29 @@ describe("状态点", () => {
 		firstMessage: "你好",
 	});
 
-	it("只有当前会话带运行态,其余按空闲", () => {
+	it("运行状态按清单取，压缩中与运行中都算在跑", () => {
 		const data = buildSidebar({
 			sessions: [summary("/s1.jsonl"), summary("/s2.jsonl")],
 			projects: [],
-			runningFile: "/s1.jsonl",
-			runningDot: "compacting",
+			activities: new Map([
+				["/s1.jsonl", "compacting"],
+				["/s2.jsonl", "running"],
+			]),
 		});
-		const dots = data.groups.flatMap((group) => group.sessions).map((session) => [session.path, session.dot]);
+		const dots = data.groups
+			.flatMap((group) => group.sessions)
+			.map((session) => [session.path, session.activity]);
 		expect(dots).toEqual([
 			["/s1.jsonl", "compacting"],
-			["/s2.jsonl", "idle"],
+			["/s2.jsonl", "running"],
 		]);
 	});
 
-	it("没给状态点时按运行中显示", () => {
+	it("没给清单状态时按空闲算", () => {
 		const data = buildSidebar({
 			sessions: [summary("/s1.jsonl")],
 			projects: [],
-			runningFile: "/s1.jsonl",
 		});
-		expect(data.groups[0]?.sessions[0]?.dot).toBe("running");
+		expect(data.groups[0]?.sessions[0]?.activity).toBe("idle");
 	});
 });

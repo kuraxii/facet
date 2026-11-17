@@ -24,6 +24,7 @@ import type {
 	GitCommits,
 	GitDiff,
 	GitStatus,
+	ImageBlock,
 	ModelInfo,
 	ModelRef,
 	ProjectInfo,
@@ -84,6 +85,14 @@ export function formatCommitLog(
 		`view ${items.length} items, ${raised} promoted`,
 	].join(" · ");
 	return lines.length === 0 ? head : `${head}\n${lines.join("\n")}`;
+}
+
+/** 发一条消息时的选项。 */
+export interface SendOptions {
+	/** 随消息一起发出去的图片，按用户选择的顺序 */
+	images?: readonly ImageBlock[];
+	/** 会话正在运行时用什么方式投递：插入当前回合，或排到本轮之后 */
+	streamingBehavior?: "steer" | "followUp";
 }
 
 /** 握手结果,与 hello 帧去掉判别字段后的形状一致。 */
@@ -909,13 +918,14 @@ export class SessionClient {
 	 * 发一条消息。
 	 *
 	 * 界面在主机把这条用户消息放进对话之后才算发出:那之前草稿留在输入框,被拒时用户可以
-	 * 直接改或重发。
+	 * 直接改或重发。图片随消息一起发，主机侧会把它交给会话。
 	 */
-	send(text: string, streamingBehavior?: "steer" | "followUp"): number {
+	send(text: string, options: SendOptions = {}): number {
 		const clientSeq = this.transport.dispatch(this.requireOpened().chatChannel, {
 			type: "chat/turnStarted",
 			text,
-			...(streamingBehavior === undefined ? {} : { streamingBehavior }),
+			...(options.images === undefined || options.images.length === 0 ? {} : { images: [...options.images] }),
+			...(options.streamingBehavior === undefined ? {} : { streamingBehavior: options.streamingBehavior }),
 		});
 		this.pendingSend = { clientSeq, text, kind: "turn" };
 		return clientSeq;

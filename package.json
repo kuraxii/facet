@@ -13,6 +13,7 @@
 		"dev": "node scripts/dev-split.mjs",
 		"dev:desktop": "npm run dev -w @facet/desktop",
 		"dev:host": "node scripts/dev-host.mjs",
+		"mock": "node tools/mock-server/index.mjs",
 		"dev:split": "node scripts/dev-split.mjs",
 		"build": "npm run build --workspaces --if-present",
 		"typecheck": "node scripts/typecheck.mjs",

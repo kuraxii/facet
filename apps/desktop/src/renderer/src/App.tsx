@@ -102,7 +102,16 @@ import {
 	useSyncExternalStore,
 } from "react";
 import { type HostChannelBridge, LOCAL_TARGET, makeTransport } from "./host-connection.ts";
+import { blobFromBase64, encodeImage, IMAGE_MAX_BYTES, IMAGE_MIME_TYPES } from "./image-encode.ts";
 import { readWindowControls, WindowControls } from "./WindowControls.tsx";
+
+/** 一张选中的图片，字节以 base64 交回界面 */
+interface PickedImageFile {
+	readonly name: string;
+	readonly mimeType: string;
+	readonly data: string;
+	readonly byteSize: number;
+}
 
 /** 预加载脚本注入的启动参数 */
 interface FacetBridge extends HostChannelBridge {
@@ -124,6 +133,8 @@ interface FacetBridge extends HostChannelBridge {
 	hostMode: string;
 	/** 打开系统的目录选择窗口,取消时返回空 */
 	pickDirectory: () => Promise<string | undefined>;
+	/** 打开系统的选图窗口，取消时返回空数组 */
+	pickImages: () => Promise<readonly PickedImageFile[]>;
 	/** 用系统的保存窗口写一段文本,取消时返回 false */
 	saveText: (suggestedName: string, text: string) => Promise<boolean>;
 	/** 最小化窗口；浏览器端没有 */
@@ -272,6 +283,28 @@ const THEME_KEY = "facet.theme";
 const DRAFTS_KEY = "facet.drafts";
 /** 还没打开会话时草稿用的键 */
 const NEW_DRAFT_KEY = "__new__";
+
+/** 一张已经放进输入框、还没发出去的图片。 */
+interface DraftImage {
+	/** 本次输入内的稳定标识 */
+	readonly id: string;
+	/** 文件名，来自选择窗口、粘贴或拖拽 */
+	readonly name: string;
+	/** 媒体类型，发送时原样写进图片块 */
+	readonly mimeType: string;
+	/** 图片字节，发送那一刻才读成 base64 */
+	readonly blob: Blob;
+	/** 预览地址，objectURL */
+	readonly previewUrl: string;
+}
+
+/** 没有待发图片时用的空列表，避免每帧新建数组 */
+const EMPTY_IMAGES: readonly DraftImage[] = [];
+
+/** 生成一张待发图片的标识。 */
+function draftImageId(): string {
+	return `img_${Math.random().toString(36).slice(2, 10)}`;
+}
 
 /** 读出保存的各会话草稿；读不懂时当作没有草稿。 */
 function readDrafts(): Record<string, string> {
@@ -450,6 +483,12 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 	const [createCwd, setCreateCwd] = useState(bridge.projectDir);
 	/** 各会话的草稿，键为会话文件路径，新会话页面用 NEW_DRAFT_KEY */
 	const [drafts, setDrafts] = useState<Record<string, string>>(readDrafts);
+	/** 各草稿待发的图片，与文本草稿分开存：字节不进 localStorage */
+	const [draftImages, setDraftImages] = useState<ReadonlyMap<string, readonly DraftImage[]>>(() => new Map());
+	/** 被拒的图片给出的事实，例如超出大小上限 */
+	const [imageNotice, setImageNotice] = useState<string | undefined>(undefined);
+	/** 刚发出去那一批图片属于哪个草稿，主机确认后按它清空 */
+	const sentImagesKey = useRef<string | undefined>(undefined);
 	const [theme, setTheme] = useState<ThemeName>(readTheme);
 	/** 主机上的偏好设置；没读到之前先用缺省值 */
 	const [settings, setSettings] = useState<FacetSettings>(DEFAULT_SETTINGS);
@@ -1404,6 +1443,8 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 	 */
 	const draftKey = activeFile ?? NEW_DRAFT_KEY;
 	const draft = drafts[draftKey] ?? "";
+	/** 各草稿待发的图片，切回来还在；字节只在内存里，刷新即失效 */
+	const pendingImages = draftImages.get(draftKey) ?? EMPTY_IMAGES;
 	const draftCommand = parseCommand(draft.trim());
 	const isExtensionCommand =
 		draftCommand !== undefined &&
@@ -1721,13 +1762,105 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 		[activeFile, refreshSessions, session?.state.availableThinkingLevels, t],
 	);
 
+	/** 把一批文件加入当前草稿的待发图片，越界与不受支持的逐个报出来。 */
+	const addImages = useCallback(
+		(files: readonly File[]) => {
+			const accepted: DraftImage[] = [];
+			const rejected: string[] = [];
+			for (const file of files) {
+				if (!(IMAGE_MIME_TYPES as readonly string[]).includes(file.type)) {
+					rejected.push(t("composer.imageUnsupported", { name: file.name }));
+					continue;
+				}
+				if (file.size > IMAGE_MAX_BYTES) {
+					rejected.push(
+						t("composer.imageTooLarge", { name: file.name, limit: Math.round(IMAGE_MAX_BYTES / 1048576) }),
+					);
+					continue;
+				}
+				accepted.push({
+					id: draftImageId(),
+					name: file.name,
+					mimeType: file.type,
+					blob: file,
+					previewUrl: URL.createObjectURL(file),
+				});
+			}
+			setImageNotice(rejected.length === 0 ? undefined : rejected.join("、"));
+			if (accepted.length === 0) {
+				return;
+			}
+			setDraftImages((current) => {
+				const next = new Map(current);
+				next.set(draftKey, [...(next.get(draftKey) ?? []), ...accepted]);
+				return next;
+			});
+		},
+		[draftKey, t],
+	);
+
+	/** 打开系统的选图窗口，选中的内容在主进程已经读成 base64。 */
+	const pickImages = useCallback(() => {
+		void (async () => {
+			const picked = await window.facet.pickImages().catch(() => []);
+			if (picked.length === 0) {
+				return;
+			}
+			addImages(
+				picked.map(
+					(item) => new File([blobFromBase64(item.data, item.mimeType)], item.name, { type: item.mimeType }),
+				),
+			);
+		})();
+	}, [addImages]);
+
+	/** 丢掉一张待发图片，顺带释放它的预览地址。 */
+	const removeImage = useCallback(
+		(id: string) => {
+			setDraftImages((current) => {
+				const list = current.get(draftKey);
+				const target = list?.find((item) => item.id === id);
+				if (list === undefined || target === undefined) {
+					return current;
+				}
+				URL.revokeObjectURL(target.previewUrl);
+				const next = new Map(current);
+				const rest = list.filter((item) => item.id !== id);
+				if (rest.length === 0) {
+					next.delete(draftKey);
+				} else {
+					next.set(draftKey, rest);
+				}
+				return next;
+			});
+			setImageNotice(undefined);
+		},
+		[draftKey],
+	);
+
+	/** 清掉某个草稿的全部待发图片，发送确认后调用。 */
+	const clearImages = useCallback((key: string) => {
+		setDraftImages((current) => {
+			const list = current.get(key);
+			if (list === undefined) {
+				return current;
+			}
+			for (const item of list) {
+				URL.revokeObjectURL(item.previewUrl);
+			}
+			const next = new Map(current);
+			next.delete(key);
+			return next;
+		});
+	}, []);
+
 	const send = useCallback(() => {
 		const text = draft.trim();
-		if (text.length === 0) {
+		if (text.length === 0 && pendingImages.length === 0) {
 			return;
 		}
-		// 界面自己处理的命令就地执行，不当消息发出去
-		const command = parseCommand(text);
+		// 界面自己处理的命令就地执行，不当消息发出去；图片不参与命令
+		const command = pendingImages.length === 0 ? parseCommand(text) : undefined;
 		if (
 			command !== undefined &&
 			commands.some((item) => item.name === command.name && item.handler === "facet")
@@ -1738,19 +1871,21 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 			return;
 		}
 		// 草稿留到主机确认再收,发送被拒时不用重打
-		if (activity === "running") {
-			if (
-				command !== undefined &&
-				commands.some((item) => item.source === "extension" && item.name === command.name)
-			) {
-				client.send(text, "steer");
-			} else {
-				client.enqueue(text);
+		const key = draftKey;
+		sentImagesKey.current = pendingImages.length === 0 ? undefined : key;
+		void (async () => {
+			const images = await Promise.all(pendingImages.map((item) => encodeImage(item)));
+			if (activity === "running") {
+				// 排队那条路只有文本，带图片时改走插入当前回合
+				client.send(text, {
+					streamingBehavior: "steer",
+					...(images.length === 0 ? {} : { images }),
+				});
+				return;
 			}
-			return;
-		}
-		client.send(text);
-	}, [activity, commands, draft, runFacetCommand, updateDraft]);
+			client.send(text, images.length === 0 ? {} : { images });
+		})();
+	}, [activity, commands, draft, draftKey, pendingImages, runFacetCommand, updateDraft]);
 
 	/**
 	 * 收回排队内容:清空主机侧队列,把文字拼回输入框。
@@ -1773,8 +1908,13 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 		return client.onSent((text) => {
 			// 只收掉刚发出的那段,等待期间新输入的内容保留
 			updateDraft((current) => (current.trim() === text ? "" : current));
+			const key = sentImagesKey.current;
+			if (key !== undefined) {
+				sentImagesKey.current = undefined;
+				clearImages(key);
+			}
 		});
-	}, [updateDraft]);
+	}, [clearImages, updateDraft]);
 
 	/**
 	 * 回退到某条用户消息之前:从那一轮末尾分出新会话并切过去,把这条消息的文本放回输入框。
@@ -2483,6 +2623,16 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 												value={draft}
 												onChange={updateDraft}
 												onSend={send}
+												attachments={pendingImages.map((item) => ({
+													id: item.id,
+													name: item.name,
+													previewUrl: item.previewUrl,
+												}))}
+												onPickImages={pickImages}
+												onAddImages={addImages}
+												canAddImages={session.state.model?.input.includes("image") ?? false}
+												onRemoveAttachment={removeImage}
+												attachmentNotice={imageNotice}
 												onStop={() => client.cancel()}
 												activity={activity}
 												model={session.state.model}

@@ -130,6 +130,9 @@ export const en = {
 		addImage: "Add image",
 		uploadFile: "Upload file",
 		notAvailable: "Not available yet",
+		removeImage: "Remove image",
+		imageTooLarge: "{{name}} is over {{limit}} MB",
+		imageUnsupported: "{{name}} is not a supported image",
 		switchModel: "Switch model",
 		currentModel: "Current model",
 		chooseModel: "Choose model",
@@ -446,6 +449,9 @@ export const en = {
 		pickDirectory: {
 			title: "Choose project folder",
 		},
+		pickImages: {
+			title: "Choose images",
+		},
 		saveFile: {
 			title: "Save file",
 		},
@@ -633,6 +639,9 @@ export const zhCN = {
 		addImage: "添加图片",
 		uploadFile: "上传文件",
 		notAvailable: "尚未接入",
+		removeImage: "移除图片",
+		imageTooLarge: "{{name}} 超过 {{limit}} MB",
+		imageUnsupported: "{{name}} 不是支持的图片",
 		switchModel: "切换模型",
 		currentModel: "当前模型",
 		chooseModel: "选择模型",
@@ -939,6 +948,9 @@ export const zhCN = {
 		},
 		pickDirectory: {
 			title: "选择项目文件夹",
+		},
+		pickImages: {
+			title: "选择图片",
 		},
 		saveFile: {
 			title: "保存文件",

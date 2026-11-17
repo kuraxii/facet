@@ -2,6 +2,14 @@ import type { LanguageSetting, SupportedLanguage } from "@facet/i18n";
 import type { ClientEntry } from "@facet/protocol";
 import { contextBridge, ipcRenderer } from "electron";
 
+/** 一张选中的图片，字节以 base64 交回界面。 */
+export interface PickedImageFile {
+	readonly name: string;
+	readonly mimeType: string;
+	readonly data: string;
+	readonly byteSize: number;
+}
+
 /** 从主进程传进来的启动参数,预加载脚本读命令行拿到后再交给界面 */
 function readArgument(name: string): string {
 	const prefix = `--${name}=`;
@@ -130,6 +138,8 @@ const api = {
 	},
 	/** 打开系统的目录选择窗口,取消时返回空 */
 	pickDirectory: (): Promise<string | undefined> => ipcRenderer.invoke("facet:pick-directory"),
+	/** 打开系统的选图窗口，取消时返回空数组；给了内容的图片以 base64 交回 */
+	pickImages: (): Promise<readonly PickedImageFile[]> => ipcRenderer.invoke("facet:pick-images"),
 	/** 用系统的保存窗口把一段文本写到文件,取消时返回 false */
 	saveText: (suggestedName: string, text: string): Promise<boolean> =>
 		ipcRenderer.invoke("facet:save-text", suggestedName, text),

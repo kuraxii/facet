@@ -24,6 +24,11 @@
 	--icon-button-size: 28px;
 	/* 会话行首状态标记：槽位尺寸固定，环由 6 的点加内外各一圈描边与留白算出来 */
 	--status-slot: 12px;
+	/* 输入区的待发图片：缩略图边长、两张之间的距离、圆角与移除按钮的边长 */
+	--attach-thumb-size: 56px;
+	--attach-thumb-gap: 8px;
+	--attach-thumb-radius: 10px;
+	--attach-remove-size: 18px;
 	/* 工具结果里的图片：收起时的最大高度，与多张之间的间距 */
 	--tool-image-height: 320px;
 	--tool-image-gap: 8px;

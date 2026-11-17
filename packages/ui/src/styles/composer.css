@@ -63,6 +63,64 @@
 	color: var(--t3);
 }
 
+/* 有文件悬在输入区上方时整块亮起来，说明可以放进来 */
+.composer.is-drop {
+	border-color: var(--acc);
+}
+
+/* 待发的图片：缩略图排成一行放不下就换行，贴在输入框上方 */
+.composer-files {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--attach-thumb-gap);
+	margin-bottom: var(--attach-thumb-gap);
+}
+
+.att {
+	position: relative;
+	width: var(--attach-thumb-size);
+	height: var(--attach-thumb-size);
+	margin: 0;
+	border-radius: var(--attach-thumb-radius);
+	overflow: hidden;
+	background: var(--card2);
+}
+
+.att img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+/* 移除按钮贴在缩略图右上角，深色底保证在亮图上也能看清 */
+.att-x {
+	position: absolute;
+	top: 2px;
+	right: 2px;
+	display: grid;
+	place-items: center;
+	width: var(--attach-remove-size);
+	height: var(--attach-remove-size);
+	padding: 0;
+	border: 0;
+	border-radius: 50%;
+	background: rgba(0, 0, 0, 0.55);
+	color: var(--t1);
+	cursor: pointer;
+}
+
+.att-x:hover {
+	background: rgba(0, 0, 0, 0.75);
+}
+
+/* 有图片没被收下时的一行事实：文件名与大小上限，放在图片下方 */
+.composer-note {
+	margin: 0 0 var(--attach-thumb-gap);
+	color: var(--t3);
+	font-size: 12px;
+}
+
 /* 命令列表：贴在输入框上沿，最多八条，超出在列表内滚动 */
 .cmd-pop {
 	position: absolute;

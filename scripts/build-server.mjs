@@ -82,8 +82,9 @@ async function bundle(entry, outfile) {
 		platform: "node",
 		format: "esm",
 		target: "node26",
-		// 原生模块只能外置，跟着产物一起拷过去
-		external: ["node-pty"],
+		// 需要读自己目录里文件的模块只能外置，跟着产物一起拷过去：node-pty 找 .node，
+		// photon 找与自身同目录的 wasm
+		external: ["node-pty", "@silvia-odwyer/photon-node"],
 		// 源码里的 .ts 相对导入由 esbuild 直接处理
 		resolveExtensions: [".ts", ".js", ".json"],
 		// 依赖里还有 CJS 包（cross-spawn 之类）用 require 取内置模块，ES 输出下要给它们一个
@@ -143,6 +144,21 @@ async function copyQuickJs(target) {
 	}
 }
 
+/**
+ * 拷图片缩放用的 Photon。
+ *
+ * pi 把消息里的图片缩到内联上限要用 Photon（Rust 编译成 wasm）。它按自己所在目录读
+ * photon_rs_bg.wasm，esbuild 打成一个文件之后这个目录就没了；整包外置再原样拷过来，
+ * 它才能按包内路径找到 wasm。缺了它，图片会被替换成一行说明文字，模型看不到图。
+ */
+async function copyPhoton(target) {
+	const source = join(root, "node_modules", "@silvia-odwyer", "photon-node");
+	await mkdir(target, { recursive: true });
+	for (const item of ["package.json", "photon_rs.js", "photon_rs_bg.js", "photon_rs_bg.wasm", "LICENSE.md"]) {
+		await copyFile(join(source, item), join(target, item));
+	}
+}
+
 async function main() {
 	console.log(`[server] 目标目录 ${outDir}`);
 	await rm(outDir, { recursive: true, force: true });
@@ -165,6 +181,7 @@ async function main() {
 	await bundle(join(piCodemode, "worker.js"), join(outDir, "lib", "worker.js"));
 	await copyQuickJs(join(outDir, "lib", "node_modules", "quickjs-wasi"));
 	await copyCodemodeRuntime(join(outDir, "lib"));
+	await copyPhoton(join(outDir, "lib", "node_modules", "@silvia-odwyer", "photon-node"));
 
 	const version = JSON.parse(await readFile(join(root, "package.json"), "utf8")).version;
 	await writeFile(

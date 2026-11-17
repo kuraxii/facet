@@ -1561,7 +1561,7 @@ describe("扩展交互状态", () => {
 		await client.openSession("/tmp/s1.jsonl");
 		const sent = vi.fn();
 		client.onSent(sent);
-		const seq = client.send("/ask", "steer");
+		const seq = client.send("/ask", { streamingBehavior: "steer" });
 		expect(transport.dispatched.at(-1)?.action).toEqual({
 			type: "chat/turnStarted",
 			text: "/ask",

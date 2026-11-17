@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { basename, extname, join } from "node:path";
 import { DEFAULT_AGENT_DIR, DEV_AGENT_DIR } from "@facet/agent";
 import { createI18n, readLanguageSetting, resolveLanguage, translate } from "@facet/i18n";
 import { app, BrowserWindow, dialog, ipcMain, screen, shell } from "electron";
@@ -318,6 +318,60 @@ ipcMain.handle("facet:pick-directory", async (event) => {
 		? await dialog.showOpenDialog(window, { ...options, properties: [...options.properties] })
 		: await dialog.showOpenDialog({ ...options, properties: [...options.properties] });
 	return result.canceled ? undefined : result.filePaths[0];
+});
+
+/** 选图窗口接受的扩展名。只做光栅图，矢量图与动图之外的格式交给会话自己判断。 */
+const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "gif"];
+
+/** 扩展名到媒体类型。选中的文件可能没有正确扩展名，这里只按扩展名给。 */
+const IMAGE_MIME_TYPES: Record<string, string> = {
+	png: "image/png",
+	jpg: "image/jpeg",
+	jpeg: "image/jpeg",
+	webp: "image/webp",
+	gif: "image/gif",
+};
+
+/** 一张选中的图片。字节以 base64 交给界面，界面侧不必再碰文件系统。 */
+interface PickedImage {
+	name: string;
+	mimeType: string;
+	data: string;
+	byteSize: number;
+}
+
+ipcMain.handle("facet:pick-images", async (event): Promise<PickedImage[]> => {
+	const window = BrowserWindow.fromWebContents(event.sender);
+	const options = {
+		title: mainT("dialog.pickImages.title"),
+		properties: ["openFile", "multiSelections"] as const,
+		filters: [{ name: "Images", extensions: IMAGE_EXTENSIONS }],
+	};
+	const mutable = { ...options, properties: [...options.properties] };
+	const result = window ? await dialog.showOpenDialog(window, mutable) : await dialog.showOpenDialog(mutable);
+	if (result.canceled) {
+		return [];
+	}
+	const picked: PickedImage[] = [];
+	for (const path of result.filePaths) {
+		const mimeType = IMAGE_MIME_TYPES[extname(path).slice(1).toLowerCase()];
+		if (mimeType === undefined) {
+			continue;
+		}
+		// 读之前先看大小：整张图要经 IPC 传成 base64，几十兆的文件不该往这条路上塞
+		const info = await stat(path);
+		if (!info.isFile()) {
+			continue;
+		}
+		const bytes = await readFile(path);
+		picked.push({
+			name: basename(path),
+			mimeType,
+			data: bytes.toString("base64"),
+			byteSize: info.size,
+		});
+	}
+	return picked;
 });
 
 ipcMain.handle("facet:save-text", async (event, suggestedName: string, text: string) => {

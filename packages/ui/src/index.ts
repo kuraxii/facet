@@ -6,7 +6,7 @@
 
 export type { ChatOutlineProps } from "./chat/ChatOutline.tsx";
 export { ChatOutline } from "./chat/ChatOutline.tsx";
-export type { ComposerProps } from "./chat/Composer.tsx";
+export type { ComposerAttachment, ComposerProps } from "./chat/Composer.tsx";
 export { Composer } from "./chat/Composer.tsx";
 export type { ContextRingProps, UsageLevel } from "./chat/ContextRing.tsx";
 export { ContextRing, formatTokens, usageLabel, usageLevel } from "./chat/ContextRing.tsx";

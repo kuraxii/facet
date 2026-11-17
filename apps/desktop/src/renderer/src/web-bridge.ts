@@ -32,6 +32,16 @@ function readWebLanguageSetting(): LanguageSetting {
 }
 
 /** 连接的 WebSocket 地址：与页面同源，路径固定。 */
+/** 一段字节转 base64。浏览器里没有 Buffer，分段拼避免一次展开成超长参数。 */
+export function bytesToBase64(bytes: Uint8Array): string {
+	let text = "";
+	const chunk = 0x8000;
+	for (let index = 0; index < bytes.length; index += chunk) {
+		text += String.fromCharCode(...bytes.subarray(index, index + chunk));
+	}
+	return btoa(text);
+}
+
 function socketUrl(): string {
 	const scheme = location.protocol === "https:" ? "wss" : "ws";
 	return `${scheme}://${location.host}/endpoint`;
@@ -97,6 +107,26 @@ export function installWebBridge(): void {
 		},
 		// 浏览器里没有原生的目录选择与保存窗口，用最接近的替代
 		pickDirectory: async () => window.prompt(t("web.projectDirPrompt")) ?? undefined,
+		// 选图用隐藏的文件输入框；用户取消时浏览器不一定给事件，这里按空结果收尾
+		pickImages: async () => {
+			const input = document.createElement("input");
+			input.type = "file";
+			input.accept = "image/*";
+			input.multiple = true;
+			const files = await new Promise<File[]>((resolve) => {
+				input.addEventListener("change", () => resolve([...(input.files ?? [])]), { once: true });
+				input.addEventListener("cancel", () => resolve([]), { once: true });
+				input.click();
+			});
+			return await Promise.all(
+				files.map(async (file) => ({
+					name: file.name,
+					mimeType: file.type,
+					data: bytesToBase64(new Uint8Array(await file.arrayBuffer())),
+					byteSize: file.size,
+				})),
+			);
+		},
 		saveText: async (suggestedName, text) => {
 			const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
 			const url = URL.createObjectURL(blob);

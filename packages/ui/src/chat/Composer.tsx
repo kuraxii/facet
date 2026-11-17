@@ -4,17 +4,32 @@
  * 输入框、发送与停止，以及当前模型与思考档位两个芯片。模型芯片按提供方分组列出可选模型，
  * 思考芯片只列出当前模型支持的档位；两个芯片都能把当前选择存成新建会话的默认值。
  * 动作行右侧是上下文用量环与发送按钮，用量环点开有具体数值和手动压缩入口。
- * 附件与引用还没有实现，按钮保持可见但不可点。
+ * 待发的图片贴在输入框上沿，可以点添加按钮选、粘贴或直接拖进来。
  */
 import type { ChatActivity } from "@facet/client-core";
 import type { ContextUsage, ModelInfo, SlashCommand, ThinkingLevel } from "@facet/protocol";
-import { Brain, FileUp, ImagePlus, Plus } from "lucide-react";
+import { Brain, FileUp, ImagePlus, Plus, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { ChevronIcon } from "../transcript/chevron.tsx";
 import { SendIcon, StopIcon } from "../transcript/icons.tsx";
 import { ContextRing, usageDetailText, usageLabel, usagePercentText } from "./ContextRing.tsx";
 import { commandQuery, filterCommands, isFacetCommand, SOURCE_LABEL_KEYS } from "./command-palette.ts";
+
+/** 输入区里一张待发的图片。 */
+export interface ComposerAttachment {
+	/** 本次输入内的稳定标识，移除与预览都按它定位 */
+	id: string;
+	/** 文件名，来自选择窗口、粘贴或拖拽 */
+	name: string;
+	/** 预览地址，objectURL 或 data URL */
+	previewUrl: string;
+}
+
+/** 一份文件列表里的文件。拖拽与粘贴给的列表里可能混着别的类型，收下之后交给宿主判断。 */
+function pickedFiles(list: FileList | null | undefined): File[] {
+	return [...(list ?? [])];
+}
 
 /** 输入区参数。 */
 export interface ComposerProps {
@@ -24,6 +39,18 @@ export interface ComposerProps {
 	onChange: (value: string) => void;
 	/** 发送当前内容 */
 	onSend: () => void;
+	/** 待发的图片，按添加顺序显示在输入框上方 */
+	attachments?: readonly ComposerAttachment[];
+	/** 打开系统的选图窗口 */
+	onPickImages?: (() => void) | undefined;
+	/** 加入一批图片：粘贴与拖拽都走这里 */
+	onAddImages?: ((files: readonly File[]) => void) | undefined;
+	/** 当前模型能否接收图片；不能时选图项置灰，拖拽与粘贴也不接 */
+	canAddImages?: boolean;
+	/** 移除一张待发图片 */
+	onRemoveAttachment?: ((id: string) => void) | undefined;
+	/** 有图片没被收下时给出的事实，例如文件名与大小上限 */
+	attachmentNotice?: string | undefined;
 	/** 停止运行 */
 	onStop: () => void;
 	/** 对话此刻的状态 */
@@ -112,6 +139,12 @@ export function Composer({
 	onChange,
 	onSend,
 	onStop,
+	attachments = [],
+	onPickImages,
+	onAddImages,
+	canAddImages = true,
+	onRemoveAttachment,
+	attachmentNotice,
 	activity,
 	model,
 	thinkingLevel,
@@ -132,13 +165,18 @@ export function Composer({
 }: ComposerProps) {
 	const { t } = useI18n();
 
-	// 运行中发送走排队，插入当前轮次；压缩、停止中与连接断开时不接受新输入
+	// 运行中发送走排队，插入当前轮次；压缩、停止中与连接断开时不接受新输入。
+	// 只有图片没有文字也算一条要发的内容。
 	const canSend =
-		isBlocked !== true && value.trim().length > 0 && (activity === "idle" || activity === "running");
+		isBlocked !== true &&
+		(value.trim().length > 0 || attachments.length > 0) &&
+		(activity === "idle" || activity === "running");
 	const isQueuing = activity === "running";
 	/** 这一轮还在跑且没内容要发时，按钮换成停止；有内容时按钮换回发送（排队）。 */
 	const showsStop = activity !== "idle" && !canSend;
 	const [openMenu, setOpenMenu] = useState<"model" | "level" | "attach" | "context" | undefined>(undefined);
+	/** 有文件悬在输入区上方，界面据此给出可投放的样子 */
+	const [isDropping, setIsDropping] = useState(false);
 	const modelRef = useDismiss(openMenu === "model", () => setOpenMenu(undefined));
 	const attachRef = useDismiss(openMenu === "attach", () => setOpenMenu(undefined));
 	const levelRef = useDismiss(openMenu === "level", () => setOpenMenu(undefined));
@@ -196,7 +234,64 @@ export function Composer({
 	const sendsOnEnter = !shiftEnterToSend;
 
 	return (
-		<div className="composer">
+		// biome-ignore lint/a11y/noStaticElementInteractions: 拖拽与粘贴是浏览器原生行为，这块只做事件委托，不承担键盘操作
+		<div
+			className={isDropping ? "composer is-drop" : "composer"}
+			onDragOver={(event) => {
+				if (onAddImages === undefined || !canAddImages || !event.dataTransfer.types.includes("Files")) {
+					return;
+				}
+				// 不拦下 dragover 的话浏览器会当成「打开这个文件」，drop 也不会触发
+				event.preventDefault();
+				setIsDropping(true);
+			}}
+			onDragLeave={() => setIsDropping(false)}
+			onDrop={(event) => {
+				if (onAddImages === undefined || !canAddImages) {
+					return;
+				}
+				const files = pickedFiles(event.dataTransfer.files);
+				setIsDropping(false);
+				if (files.length === 0) {
+					return;
+				}
+				event.preventDefault();
+				onAddImages(files);
+			}}
+			onPaste={(event) => {
+				if (onAddImages === undefined || !canAddImages) {
+					return;
+				}
+				const files = pickedFiles(event.clipboardData.files);
+				if (files.length === 0) {
+					// 剪贴板里没有图片，交回给输入框自己处理文字
+					return;
+				}
+				event.preventDefault();
+				onAddImages(files);
+			}}
+		>
+			{attachments.length === 0 ? null : (
+				<div className="composer-files">
+					{attachments.map((item) => (
+						<figure className="att" key={item.id}>
+							<img src={item.previewUrl} alt={item.name} />
+							{onRemoveAttachment === undefined ? null : (
+								<button
+									type="button"
+									className="att-x"
+									aria-label={t("composer.removeImage", { name: item.name })}
+									title={t("composer.removeImage", { name: item.name })}
+									onClick={() => onRemoveAttachment(item.id)}
+								>
+									<X size={12} strokeWidth={1.5} />
+								</button>
+							)}
+						</figure>
+					))}
+				</div>
+			)}
+			{attachmentNotice === undefined ? null : <p className="composer-note">{attachmentNotice}</p>}
 			<textarea
 				rows={2}
 				value={value}
@@ -289,8 +384,15 @@ export function Composer({
 								type="button"
 								className="chip-pop-item is-row"
 								role="menuitem"
-								disabled
-								title={t("composer.notAvailable")}
+								disabled={onPickImages === undefined || !canAddImages}
+								title={onPickImages === undefined ? t("composer.notAvailable") : t("composer.addImage")}
+								onClick={() => {
+									if (onPickImages === undefined || !canAddImages) {
+										return;
+									}
+									setOpenMenu(undefined);
+									onPickImages();
+								}}
 							>
 								<ImagePlus size={14} strokeWidth={1.5} />
 								<span className="ell">{t("composer.addImage")}</span>

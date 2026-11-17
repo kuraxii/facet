@@ -23,7 +23,7 @@ import {
 	type FacetSettings,
 	type ModelInfo,
 	type ProjectInfo,
-	type SessionActivity,
+	type SessionStatus,
 	type SessionSummary,
 } from "@facet/protocol";
 import {
@@ -169,9 +169,63 @@ function readIsNarrow(): boolean {
 	return narrowQuery.matches;
 }
 
-/** 取出各会话此刻的活动状态，侧栏按会话文件路径索引。 */
-function activitiesOf(client: SessionClient): ReadonlyMap<string, SessionActivity> {
-	return new Map(client.store.sessionList().map((entry) => [entry.summary.path, entry.activity]));
+/** 取出各会话此刻的状态，侧栏按会话文件路径索引。 */
+function statusesOf(client: SessionClient): ReadonlyMap<string, SessionStatus> {
+	return new Map(client.store.sessionList().map((entry) => [entry.summary.path, entry.status]));
+}
+
+/**
+ * 两份状态是否一样。
+ *
+ * 状态是对象，引用比不出版本差别，得逐字段比：流式期间这里每帧都会走到，判不等就会把
+ * 侧栏的 memo 打断，等于没做优化。
+ */
+function sameStatus(left: SessionStatus, right: SessionStatus): boolean {
+	if (
+		left.activity !== right.activity ||
+		left.pendingInput !== right.pendingInput ||
+		left.seenAt !== right.seenAt
+	) {
+		return false;
+	}
+	if (left.settle === undefined || right.settle === undefined) {
+		return left.settle === right.settle;
+	}
+	return (
+		left.settle.at === right.settle.at &&
+		left.settle.outcome === right.settle.outcome &&
+		left.settle.message === right.settle.message
+	);
+}
+
+/** 两份状态表是否一样。内容没变时沿用旧的引用，下游的 memo 才不会被无谓地打断。 */
+function sameStatuses(
+	left: ReadonlyMap<string, SessionStatus>,
+	right: ReadonlyMap<string, SessionStatus>,
+): boolean {
+	if (left.size !== right.size) {
+		return false;
+	}
+	for (const [key, value] of right) {
+		const current = left.get(key);
+		if (current === undefined || !sameStatus(current, value)) {
+			return false;
+		}
+	}
+	return true;
+}
+
+/** 两份会话清单是否一样。摘要对象在没变时是同一个引用，逐项比引用即可。 */
+function sameSessions(left: readonly SessionSummary[], right: readonly SessionSummary[]): boolean {
+	if (left.length !== right.length) {
+		return false;
+	}
+	for (let index = 0; index < right.length; index += 1) {
+		if (left[index] !== right[index]) {
+			return false;
+		}
+	}
+	return true;
 }
 
 /** 外壳类名：抽屉展开时给 has-drawer，宽屏收起侧栏时给 is-sb-hidden。 */
@@ -473,7 +527,7 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 	const [failure, setFailure] = useState<string | undefined>(undefined);
 	const [sessions, setSessions] = useState<readonly SessionSummary[]>([]);
 	/** 各会话在主机上的活动状态，侧栏的行首状态点用它 */
-	const [activities, setActivities] = useState<ReadonlyMap<string, SessionActivity>>(() => new Map());
+	const [statuses, setStatuses] = useState<ReadonlyMap<string, SessionStatus>>(() => new Map());
 	const [activeFile, setActiveFile] = useState<string | undefined>(undefined);
 	const [host, setHost] = useState<HostHandshake | undefined>(undefined);
 	const [projects, setProjects] = useState<readonly ProjectInfo[]>([]);
@@ -802,8 +856,9 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 		try {
 			const pool = await client.refreshSessionList();
 			if (seq === listSeq.current) {
-				setSessions(pool);
-				setActivities(activitiesOf(client));
+				setSessions((current) => (sameSessions(current, pool) ? current : pool));
+				const nextStatuses = statusesOf(client);
+				setStatuses((current) => (sameStatuses(current, nextStatuses) ? current : nextStatuses));
 			}
 			return pool;
 		} catch {
@@ -818,10 +873,12 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 			client.store.subscribe(() => {
 				const pushed = client.store.sessionList();
 				if (pushed.length > 0) {
-					setSessions(pushed.map((entry) => entry.summary));
+					const next = pushed.map((entry) => entry.summary);
+					setSessions((current) => (sameSessions(current, next) ? current : next));
 				}
-				// 状态可能只变了其中一个会话，表要跟着换
-				setActivities(activitiesOf(client));
+				// 流式期间每帧都会走到这里，状态没变就不换引用，侧栏因此不必重渲染
+				const nextStatuses = statusesOf(client);
+				setStatuses((current) => (sameStatuses(current, nextStatuses) ? current : nextStatuses));
 			}),
 		[],
 	);
@@ -1265,11 +1322,29 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 	// 一轮结束之后工作树可能变了，顺手再取一次
 	const lastActivity = useRef(activity);
 	useEffect(() => {
-		if (lastActivity.current !== "idle" && activity === "idle" && isChangesVisible) {
-			void refreshChanges();
+		if (lastActivity.current !== "idle" && activity === "idle") {
+			// 前台看着结束时立刻记已读，侧栏不会先闪一下未读再变回去；
+			// 窗口在后台时留着未读，等用户切回来再由聚焦事件清掉
+			if (activeFile !== undefined && document.hasFocus()) {
+				void client.markSessionsSeen([activeFile]).catch(() => undefined);
+			}
+			if (isChangesVisible) {
+				void refreshChanges();
+			}
 		}
 		lastActivity.current = activity;
-	}, [activity, isChangesVisible, refreshChanges]);
+	}, [activity, activeFile, isChangesVisible, refreshChanges]);
+
+	// 从后台切回来时把当前会话记为已读：离开期间跑完的那一轮，回来后不该还挂着未读
+	useEffect(() => {
+		const onFocus = (): void => {
+			if (activeFile !== undefined) {
+				void client.markSessionsSeen([activeFile]).catch(() => undefined);
+			}
+		};
+		window.addEventListener("focus", onFocus);
+		return () => window.removeEventListener("focus", onFocus);
+	}, [activeFile]);
 
 	/** 主机的模型目录与各提供方的凭证状态，供输入区的模型选择使用。 */
 	const [catalog, setCatalog] = useState<{ models: readonly ModelInfo[]; auth: Record<string, boolean> }>({
@@ -1588,6 +1663,7 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 					setSessionError(undefined);
 				}
 				void client.switchSession(path).catch(() => undefined);
+				void client.markSessionsSeen([path]).catch(() => undefined);
 				return;
 			}
 			const cwd = knownCwd ?? sessions.find((session) => session.path === path)?.cwd;
@@ -1626,6 +1702,30 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 		},
 		[focusMainTab, runSessionAction, settings.defaultThinkingLevel, withTrust],
 	);
+
+	/**
+	 * 侧栏与搜索要的回调。
+	 *
+	 * 它们依赖的会话操作用 useCallback 包了但依赖会变，直接用会让侧栏的 memo 每帧失效；
+	 * 这里经 ref 转一层，侧栏拿到的始终是同一个函数。
+	 */
+	const openSessionRef = useRef(openSession);
+	openSessionRef.current = openSession;
+	const createSessionRef = useRef(createSession);
+	createSessionRef.current = createSession;
+	const selectSession = useCallback((path: string) => void openSessionRef.current(path), []);
+	const createSessionAt = useCallback((cwd: string) => {
+		setCreateCwd(cwd);
+		void createSessionRef.current(cwd);
+	}, []);
+	const openAddProject = useCallback(() => setIsProjectDialogOpen(true), []);
+	const openSearch = useCallback(() => {
+		setIsDrawerOpen(false);
+		setIsSearchOpen(true);
+	}, []);
+	const closeDrawer = useCallback(() => setIsDrawerOpen(false), []);
+	const openSettingsView = useCallback(() => setView("settings"), []);
+	const refreshProjectsNow = useCallback(() => void refreshProjects(), [refreshProjects]);
 
 	// 连接状态：断开时输入区说明原因，恢复后自动放开
 	useEffect(() => {
@@ -2397,42 +2497,34 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 						sessions={sessions}
 						projects={projects}
 						activeFile={activeFile}
-						activities={activities}
+						statuses={statuses}
 						createCwd={createCwd}
 						theme={theme}
-						onSelect={(path) => void openSession(path)}
-						onCreate={(cwd) => {
-							setCreateCwd(cwd);
-							void createSession(cwd);
-						}}
+						onSelect={selectSession}
+						onCreate={createSessionAt}
 						canCreate={phase === "ready"}
-						onAddProject={() => setIsProjectDialogOpen(true)}
+						onAddProject={openAddProject}
 						isSearchOpen={isSearchOpen}
-						onOpenSearch={() => {
-							setIsDrawerOpen(false);
-							setIsSearchOpen(true);
-						}}
+						onOpenSearch={openSearch}
 						showHeader={isNarrow}
 						width={isNarrow ? undefined : sidebarWidth}
 						onWidthChange={isNarrow ? undefined : updateSidebarWidth}
-						onCollapse={() => setIsDrawerOpen(false)}
+						onCollapse={closeDrawer}
 						isProjectsStale={isProjectsStale}
-						onRefreshProjects={() => void refreshProjects()}
+						onRefreshProjects={refreshProjectsNow}
 						onRenameProject={renameProject}
 						onRemoveProject={removeProject}
 						onRevealProject={revealProject}
 						onRenameSession={renameSession}
 						onDeleteSession={deleteSession}
 						onToggleTheme={toggleTheme}
-						onOpenSettings={() => {
-							setView("settings");
-						}}
+						onOpenSettings={openSettingsView}
 						isSettingsOpen={view === "settings"}
 						hostStatus={
 							isReconnecting ? t("app.reconnecting") : host?.role === "viewer" ? t("app.readOnly") : undefined
 						}
 						isOpen={isDrawerOpen}
-						onNavigate={() => setIsDrawerOpen(false)}
+						onNavigate={closeDrawer}
 						hostSwitcher={
 							<HostSwitcher
 								localEndpoint={LOCAL_TARGET}
@@ -2721,9 +2813,9 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 						isOpen={isSearchOpen}
 						sessions={sessions}
 						activeFile={activeFile}
-						activities={activities}
+						statuses={statuses}
 						onClose={() => setIsSearchOpen(false)}
-						onSelect={(path) => void openSession(path)}
+						onSelect={selectSession}
 					/>
 
 					{view === "settings" ? (

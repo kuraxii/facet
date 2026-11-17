@@ -4,11 +4,12 @@
  * 居中偏上的一层，输入即按标题过滤；上下键选、回车打开、Esc 或点遮罩关闭。会话队列本身不
  * 参与过滤，浮窗关掉之后侧栏还是完整的一份列表。
  */
-import type { SessionActivity, SessionSummary } from "@facet/protocol";
+import type { SessionStatus, SessionSummary } from "@facet/protocol";
 import { Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
-import { type SidebarSession, searchSessions, shortTime } from "./sidebar-model.ts";
+import { SessionStatusMark } from "./session-status-mark.tsx";
+import { type SidebarSession, searchSessions } from "./sidebar-model.ts";
 
 /** 结果最多给这么多条，再多靠打字收窄。 */
 const RESULT_LIMIT = 40;
@@ -21,7 +22,7 @@ export interface SessionSearchProps {
 	/** 当前会话文件路径，用来标出这一条 */
 	activeFile: string | undefined;
 	/** 各会话此刻的活动状态，按会话文件路径索引 */
-	activities: ReadonlyMap<string, SessionActivity>;
+	statuses: ReadonlyMap<string, SessionStatus>;
 	/** 关闭浮窗 */
 	onClose: () => void;
 	/** 选中一条会话 */
@@ -32,7 +33,7 @@ export function SessionSearch({
 	isOpen,
 	sessions,
 	activeFile,
-	activities,
+	statuses,
 	onClose,
 	onSelect,
 }: SessionSearchProps) {
@@ -48,12 +49,13 @@ export function SessionSearch({
 		return searchSessions({
 			sessions,
 			projects: [],
-			activities,
+			statuses,
+			locale: i18n.language as "en" | "zh-CN",
 			keyword,
 			limit: RESULT_LIMIT,
 			untitled: t("sidebar.untitled"),
 		});
-	}, [isOpen, sessions, activities, keyword, t]);
+	}, [isOpen, sessions, statuses, keyword, t, i18n.language]);
 
 	// 每次打开都从空关键词、第一条结果开始
 	useEffect(() => {
@@ -152,7 +154,7 @@ export function SessionSearch({
 								onClick={() => open(session)}
 								disabled={session.isPlaceholder === true}
 							>
-								<i className={session.activity === "running" ? "dot is-run pulse" : "dot is-off"} />
+								<SessionStatusMark bucket={session.bucket} />
 								<span className="search-row-title ell">{session.title}</span>
 								<span className="search-row-proj ell">{session.project}</span>
 								<span
@@ -160,12 +162,7 @@ export function SessionSearch({
 										session.path === activeFile ? "search-row-time mono is-active" : "search-row-time mono"
 									}
 								>
-									{shortTime(
-										session.modified,
-										Date.now(),
-										undefined,
-										i18n.language === "zh-CN" ? "zh-CN" : "en",
-									)}
+									{session.timeText}
 								</span>
 							</button>
 						))

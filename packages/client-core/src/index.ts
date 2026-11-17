@@ -14,6 +14,8 @@ export type {
 export { SessionClient } from "./client.ts";
 export { historyMessageId, isHistoryMessageId } from "./message-id.ts";
 export { reduceChat, reduceSession } from "./reduce.ts";
+export type { SessionBucket } from "./session-status.ts";
+export { deriveBucket } from "./session-status.ts";
 export type {
 	ChatActivity,
 	ChatView,

@@ -14,7 +14,7 @@ function render(isOpen: boolean | undefined): string {
 			sessions: [],
 			projects: [],
 			activeFile: undefined,
-			activities: new Map(),
+			statuses: new Map(),
 			createCwd: "/work/a",
 			theme: "zinc" as ThemeName,
 			onSelect: () => {},

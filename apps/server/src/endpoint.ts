@@ -542,7 +542,7 @@ async function handleRequest(
 			return {
 				sessions: sessions.map((summary) => ({
 					summary,
-					activity: context.hub.activityOf(summary.path),
+					status: context.hub.statusOf(summary.path),
 				})),
 			};
 		}
@@ -830,6 +830,13 @@ async function handleRequest(
 		case "deleteSession": {
 			const source = asObject(params);
 			await context.hub.deleteSession(requiredString(source, "sessionFile"));
+			return {};
+		}
+		case "markSessionsSeen": {
+			const source = asObject(params);
+			for (const file of optionalStringArray(source, "sessionFiles") ?? []) {
+				context.hub.markSeen(file);
+			}
 			return {};
 		}
 		case "revealProject": {

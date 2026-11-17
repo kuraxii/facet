@@ -4,15 +4,14 @@
  * 自上而下四块：标题与全局操作、新建会话、项目过滤器、会话队列；底部是页脚。
  * 项目过滤器同时决定队列的范围与新建会话的目录，队列按时间分组，分组规则见 sidebar-model。
  */
-import type { ProjectInfo, SessionActivity, SessionSummary } from "@facet/protocol";
+import type { ProjectInfo, SessionStatus, SessionSummary } from "@facet/protocol";
 import { Plus, Search, Settings } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ScrollArea, ScrollRow } from "../common/scroll-area.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { PaneResizer } from "../panel/pane-resizer.tsx";
 import { ChevronIcon } from "../transcript/chevron.tsx";
 import { FolderIcon, MoonIcon, SunIcon } from "../transcript/icons.tsx";
-import { statusBucketOfDot } from "./session-status.ts";
 import { SessionStatusMark } from "./session-status-mark.tsx";
 import { SidebarHeader } from "./sidebar-header.tsx";
 import {
@@ -21,7 +20,6 @@ import {
 	type SidebarProject,
 	type SidebarSession,
 	samePath,
-	shortTime,
 } from "./sidebar-model.ts";
 import { SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "./sidebar-state.ts";
 
@@ -38,7 +36,7 @@ export interface SessionSidebarProps {
 	/** 当前会话的文件路径，没有打开会话时为空 */
 	activeFile: string | undefined;
 	/** 各会话此刻的活动状态，按会话文件路径索引 */
-	activities: ReadonlyMap<string, SessionActivity>;
+	statuses: ReadonlyMap<string, SessionStatus>;
 	/** 没有选中项目时新建会话落在的目录 */
 	createCwd: string;
 	/** 当前主题 */
@@ -126,11 +124,11 @@ function useDismiss(
 	}, [ref, isOpen, close, ignoreSelector]);
 }
 
-export function SessionSidebar({
+export const SessionSidebar = memo(function SessionSidebar({
 	sessions,
 	projects: storedProjects,
 	activeFile,
-	activities,
+	statuses,
 	createCwd,
 	theme,
 	onSelect,
@@ -199,6 +197,13 @@ export function SessionSidebar({
 	const triggerRef = useRef<HTMLButtonElement>(null);
 	const projectSearchRef = useRef<HTMLInputElement>(null);
 
+	// 行尾的相对时间按分钟变，自己走一个分钟时钟；流式期间不必跟着每一帧重算
+	const [now, setNow] = useState(() => Date.now());
+	useEffect(() => {
+		const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+		return () => window.clearInterval(timer);
+	}, []);
+
 	const activeCwd = sessions.find((session) => session.path === activeFile)?.cwd;
 	const scopeCwd = showsAll ? undefined : (pickedCwd ?? activeCwd);
 
@@ -207,11 +212,13 @@ export function SessionSidebar({
 			buildSidebar({
 				sessions,
 				projects: storedProjects,
-				activities,
+				statuses,
 				projectCwd: scopeCwd,
 				untitled: t("sidebar.untitled"),
+				now,
+				locale: i18n.language as "en" | "zh-CN",
 			}),
-		[sessions, storedProjects, activities, scopeCwd, t],
+		[sessions, storedProjects, statuses, scopeCwd, t, now, i18n.language],
 	);
 
 	const currentProject: SidebarProject | undefined =
@@ -638,33 +645,19 @@ export function SessionSidebar({
 											disabled={session.isPlaceholder === true}
 											title={session.title}
 										>
-											<SessionStatusMark bucket={statusBucketOfDot(session.activity)} />
+											<SessionStatusMark bucket={session.bucket} />
 											{twoLine ? (
 												<span className="sb-row-body">
 													<span className="sb-row-title ell">{session.title}</span>
 													<span className="sb-row-meta">
 														<span className="sb-row-proj ell">{session.host ?? session.project}</span>
-														<span className="sb-row-time mono">
-															{shortTime(
-																session.modified,
-																Date.now(),
-																group.key,
-																i18n.language as "en" | "zh-CN",
-															)}
-														</span>
+														<span className="sb-row-time mono">{session.timeText}</span>
 													</span>
 												</span>
 											) : (
 												<>
 													<span className="sb-row-title ell">{session.title}</span>
-													<span className="sb-row-time mono">
-														{shortTime(
-															session.modified,
-															Date.now(),
-															group.key,
-															i18n.language as "en" | "zh-CN",
-														)}
-													</span>
+													<span className="sb-row-time mono">{session.timeText}</span>
 												</>
 											)}
 										</button>
@@ -881,4 +874,4 @@ export function SessionSidebar({
 			</footer>
 		</aside>
 	);
-}
+});

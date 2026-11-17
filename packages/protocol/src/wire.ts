@@ -25,7 +25,7 @@ import type { FacetSettings } from "./settings.ts";
 import type { TerminalInfo } from "./terminal.ts";
 
 /** 线格式版本。不兼容的改动递增此值,端点据此拒绝握手。 */
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 /** 主机上报的能力标记,端点据此隐藏不可用的入口。 */
 export type Capability = "dispatch" | "tools" | "compaction" | "terminal" | "extensionUi";
@@ -285,6 +285,12 @@ export interface RequestParams {
 	renameSession: { sessionFile: string; name?: string };
 	/** 删除会话文件。不可恢复。 */
 	deleteSession: { sessionFile: string };
+	/**
+	 * 把这些会话标记为已读。
+	 *
+	 * 只记水位，不读会话文件；主机收到后广播新的状态，多端看到同一份未读结果。
+	 */
+	markSessionsSeen: { sessionFiles: string[] };
 	/** 读一整份界面偏好设置。 */
 	getSettings: Record<string, never>;
 	/** 整份替换界面偏好设置，返回主机实际存下的那份。 */
@@ -342,7 +348,7 @@ export interface RequestParams {
 /** 每条请求的应答数据。 */
 export interface RequestResults {
 	respondUi: { accepted: boolean };
-	/** 每条带上主机侧此刻的活动状态，重连后一次往返就能把本地的状态对齐 */
+	/** 每条带上主机侧此刻的状态，重连后一次往返就能把本地的状态对齐 */
 	listSessions: { sessions: SessionListItem[] };
 	listCommands: { commands: SlashCommand[] };
 	busySessions: { files: string[] };
@@ -375,6 +381,7 @@ export interface RequestResults {
 	revealProject: Record<string, never>;
 	renameSession: Record<string, never>;
 	deleteSession: Record<string, never>;
+	markSessionsSeen: Record<string, never>;
 	getSettings: { settings: FacetSettings };
 	updateSettings: { settings: FacetSettings };
 	saveCredential: { providers: ProviderInfo[] };

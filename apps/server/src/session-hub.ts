@@ -18,7 +18,9 @@ import type {
 	ActionFrame,
 	Channel,
 	SessionActivity,
+	SessionSettle,
 	SessionSnapshot,
+	SessionStatus,
 	SlashCommand,
 } from "@facet/protocol";
 import { makeChannel, parseChannel } from "@facet/protocol";
@@ -32,6 +34,7 @@ export type HubAgent = Pick<
 	| "id"
 	| "file"
 	| "isBusy"
+	| "pendingPromptCount"
 	| "currentMaintenance"
 	| "initialize"
 	| "respondUi"
@@ -183,12 +186,42 @@ interface SessionState<A extends HubAgent> {
 	closeTimer: ReturnType<typeof setTimeout> | undefined;
 	/** 上一次事件是不是压缩中，压缩结束的那一下要重算用量 */
 	wasCompacting: boolean;
-	/** 上一次广播给清单的活动状态，比对它才知道要不要再推 */
-	lastActivity: SessionActivity;
+	/** 最近一轮的收尾，新一轮开始时清空 */
+	settle: SessionSettle | undefined;
+	/** 已读水位，Unix 毫秒；零表示从未标记 */
+	seenAt: number;
+	/** 上一次广播给清单的状态，比对它才知道要不要再推 */
+	lastStatus: SessionStatus;
 	/** 最近一次被用到的时间，按内存水位回收时从最旧的开始 */
 	lastUsedAt: number;
 	readonly channels: Map<Channel, ChannelState>;
 	readonly projector: ActionProjector;
+}
+
+/** 空闲状态。没装载的会话与释放后的行都用它，不另记一份。 */
+const IDLE_STATUS: SessionStatus = { activity: "idle", settle: undefined, pendingInput: 0, seenAt: 0 };
+
+/**
+ * 两份状态是否一模一样。
+ *
+ * settle 是对象，引用比不出版本差别，得逐字段比；不比就会每次都判不等，清单跟着每帧重推。
+ */
+function sameStatus(left: SessionStatus, right: SessionStatus): boolean {
+	if (
+		left.activity !== right.activity ||
+		left.pendingInput !== right.pendingInput ||
+		left.seenAt !== right.seenAt
+	) {
+		return false;
+	}
+	if (left.settle === undefined || right.settle === undefined) {
+		return left.settle === right.settle;
+	}
+	return (
+		left.settle.at === right.settle.at &&
+		left.settle.outcome === right.settle.outcome &&
+		left.settle.message === right.settle.message
+	);
 }
 
 export interface SessionHubOptions<A extends HubAgent> {
@@ -214,7 +247,7 @@ export interface SessionHubOptions<A extends HubAgent> {
 	 *
 	 * 与 onSessionChanged 分开：状态一轮里要变好几次，每次都不该去读会话文件。
 	 */
-	readonly onActivityChanged?: (file: string, activity: SessionActivity) => void;
+	readonly onStatusChanged?: (file: string, status: SessionStatus) => void;
 }
 
 /** 文件是否存在。 */
@@ -252,14 +285,14 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		};
 		this.idleCloseMs = options.idleCloseMs ?? DEFAULT_IDLE_CLOSE_MS;
 		this.onSessionChanged = options.onSessionChanged;
-		this.onActivityChanged = options.onActivityChanged;
+		this.onStatusChanged = options.onStatusChanged;
 	}
 
 	/** 通知清单变化的回调，没有接的时候什么都不做。 */
 	private readonly onSessionChanged: ((file: string, change: "changed" | "removed") => void) | undefined;
 
 	/** 通知活动状态迁移的回调，没有接的时候什么都不做。 */
-	private readonly onActivityChanged: ((file: string, activity: SessionActivity) => void) | undefined;
+	private readonly onStatusChanged: ((file: string, status: SessionStatus) => void) | undefined;
 
 	/** 会话文件的清单有变化，通知外面。 */
 	private noteSessions(file: string | undefined, change: "changed" | "removed"): void {
@@ -311,7 +344,9 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 			opening: undefined,
 			closeTimer: undefined,
 			wasCompacting: false,
-			lastActivity: "idle",
+			settle: undefined,
+			seenAt: 0,
+			lastStatus: { activity: "idle", settle: undefined, pendingInput: 0, seenAt: 0 },
 			lastUsedAt: Date.now(),
 			channels: new Map(),
 			projector: new ActionProjector(sessionId),
@@ -410,7 +445,9 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 			opening: undefined,
 			closeTimer: undefined,
 			wasCompacting: false,
-			lastActivity: "idle",
+			settle: undefined,
+			seenAt: 0,
+			lastStatus: { activity: "idle", settle: undefined, pendingInput: 0, seenAt: 0 },
 			lastUsedAt: Date.now(),
 			channels: new Map(),
 			projector: new ActionProjector(sessionId),
@@ -596,6 +633,32 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		return row === undefined ? "idle" : this.activityOfRow(row);
 	}
 
+	/**
+	 * 会话文件此刻的完整状态，没装载的会话给一份空闲态。
+	 *
+	 * 清单与重连对齐都读它：没装载的会话没有收尾、没有人等输入，也就没有未读可言。
+	 */
+	statusOf(file: string): SessionStatus {
+		const sessionId = this.sessionIdByFile(file);
+		const row = sessionId === undefined ? undefined : this.table.get(sessionId);
+		return row === undefined ? IDLE_STATUS : this.statusOfRow(row);
+	}
+
+	/**
+	 * 记下某个会话的已读水位。
+	 *
+	 * 没装载的会话没有状态可推，直接忽略：端只会在打开会话之后上报，那时行一定在。
+	 */
+	markSeen(file: string): void {
+		const sessionId = this.sessionIdByFile(file);
+		const row = sessionId === undefined ? undefined : this.table.get(sessionId);
+		if (row === undefined) {
+			return;
+		}
+		row.seenAt = Date.now();
+		this.noteStatus(row);
+	}
+
 	/** 还在跑的会话文件。退出应用前用来判断会话会不会被连带终止。 */
 	busyFiles(): string[] {
 		const files: string[] = [];
@@ -748,9 +811,9 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 
 	private drop(row: SessionState<A>): void {
 		// 释放之后这一行就没了，别的端不会再有事件告诉它这个会话已经停下
-		if (row.lastActivity !== "idle" && row.file !== undefined) {
-			row.lastActivity = "idle";
-			this.onActivityChanged?.(row.file, "idle");
+		if (row.lastStatus.activity !== "idle" && row.file !== undefined) {
+			row.lastStatus = IDLE_STATUS;
+			this.onStatusChanged?.(row.file, IDLE_STATUS);
 		}
 		this.table.delete(row.sessionId);
 		this.clearCloseTimer(row);
@@ -839,7 +902,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		row.phase = "open";
 		row.unsubscribe = agent.subscribe((event) => this.onAgentEvent(row, event));
 		this.startInitialization(row);
-		this.noteActivity(row);
+		this.noteStatus(row);
 		this.settle(row);
 	}
 
@@ -867,6 +930,15 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		}
 		// 一轮结束与压缩结束都会改动上下文占用，重新估算一次推给所有端
 		if (event.type === "settled") {
+			// 中止的一轮不留收尾：用户自己按的停止不该变成一条未读提示
+			row.settle =
+				event.aborted === true
+					? undefined
+					: {
+							at: Date.now(),
+							outcome: event.failure === undefined ? "completed" : "failed",
+							message: event.failure,
+						};
 			this.publishUsage(row);
 		}
 		if (event.type === "phase") {
@@ -876,7 +948,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 				this.publishUsage(row);
 			}
 		}
-		this.noteActivity(row);
+		this.noteStatus(row);
 		this.settle(row);
 	}
 
@@ -897,17 +969,35 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		return agent.isBusy ? "running" : "idle";
 	}
 
-	/** 状态真的迁移了才通知外面，摘要没变就不推。 */
-	private noteActivity(row: SessionState<A>): void {
+	/**
+	 * 状态真的变了才通知外面，摘要没变就不推。
+	 *
+	 * 会话重新跑起来时先把上一次的收尾清掉：那一轮已经过去了，还留着会让侧栏一直显示
+	 * 未读的完成或失败。
+	 */
+	private noteStatus(row: SessionState<A>): void {
 		if (row.file === undefined) {
 			return;
 		}
-		const activity = this.activityOfRow(row);
-		if (activity === row.lastActivity) {
+		if (this.activityOfRow(row) !== "idle" && row.settle !== undefined) {
+			row.settle = undefined;
+		}
+		const status = this.statusOfRow(row);
+		if (sameStatus(status, row.lastStatus)) {
 			return;
 		}
-		row.lastActivity = activity;
-		this.onActivityChanged?.(row.file, activity);
+		row.lastStatus = status;
+		this.onStatusChanged?.(row.file, status);
+	}
+
+	/** 一行的完整状态，供推送与 statusOf 共用。 */
+	private statusOfRow(row: SessionState<A>): SessionStatus {
+		return {
+			activity: this.activityOfRow(row),
+			settle: row.settle,
+			pendingInput: row.agent?.pendingPromptCount ?? 0,
+			seenAt: row.seenAt,
+		};
 	}
 
 	/** 推一份当前的上下文用量。用量可能为空（刚压缩完要等下一次响应才有），空也照实推。 */

@@ -133,51 +133,21 @@
 /* 行 */
 
 .row {
-	content-visibility: auto;
-	contain-intrinsic-size: auto 80px;
+	/*
+	 * 只做布局与样式隔离，不用 content-visibility。
+	 *
+	 * 视口裁剪会在行滚出视口后丢掉已渲染的结果，拖选跨过这些区域时浏览器要逐帧把内容
+	 * 重新渲染出来才能计算选区；实测主线程占用因此从 29% 涨到 70%，拖动时选区跟不上指针。
+	 * 换成纯粹的 contain 之后流式期间的单核占用与之前持平，拖选也恢复到跟手。
+	 */
+	contain: layout style;
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
 }
 
-/*
- * 对话导航按用户行的实际位置跳转，用户行不做延迟渲染。
- *
- * 正在流式写入的行与末尾两行同理：参与视口裁剪的节点在估算高度与真实高度之间切换时，
- * 滚动总高会跟着跳，贴底跟随会把刚出来的内容顶来顶去，看起来就是底部闪烁。
- */
-.row[data-outline-key],
-.row.is-streaming,
-.row:nth-last-child(-n + 2) {
-	content-visibility: visible;
-}
-
 .row.is-user {
 	align-items: flex-end;
-}
-
-/*
- * 按行的类型给初始估算高度。
- *
- * 估算只在行从未渲染过时起作用（首次打开历史、向上翻到没到过的区域、窗口尺寸变化
- * 后记忆失效），它决定那段空白占多高，进而决定滚动条滑块的定位与大小。统一给 80px
- * 时，答复行与收尾行会差出好几屏，拖动滚动条会明显忽大忽小。
- */
-.row.is-assistant {
-	contain-intrinsic-size: auto 180px;
-}
-
-.row.is-process,
-.row.is-user {
-	contain-intrinsic-size: auto 60px;
-}
-
-.row.is-divider {
-	contain-intrinsic-size: auto 36px;
-}
-
-.row.is-fork {
-	contain-intrinsic-size: auto 28px;
 }
 
 .user-line {

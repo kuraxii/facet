@@ -2,6 +2,18 @@
 
 /* Markdown 正文 */
 
+/*
+ * 关掉 markstream 给渲染器根节点加的视口裁剪。
+ *
+ * 它按 800×600 给屏幕外的答复占位，滚进视口才换成真实高度：滚动总高跟着跳，拖选跨过时
+ * 还要重新渲染才能算选区，与 .row 上那层裁剪是同一类问题。库只有在传入 nodes 走虚拟化时
+ * 才自己关掉它，本项目传的是 content，用不到那套。
+ */
+.md .markdown-renderer {
+	content-visibility: visible;
+	contain-intrinsic-size: none;
+}
+
 /* markstream 自己的变量换成本项目的配色 */
 .md .markstream-react,
 .md .markstream-react.dark {

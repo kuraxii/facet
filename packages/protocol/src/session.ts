@@ -161,15 +161,54 @@ export interface ToolInfo {
 export type SessionActivity = "idle" | "running" | "compacting";
 
 /**
- * 清单里的一条：会话摘要加上它此刻的活动状态。
+ * 最近一轮的结束结果。
+ *
+ * 用户中止的一轮既不算完成也不算失败，主机不为它记收尾，所以这里没有对应取值。
+ */
+export type TurnOutcome = "completed" | "failed";
+
+/**
+ * 最近一轮收尾的事实。
+ *
+ * 只在活动状态回到 idle 之后才有值；新一轮开始时清掉，否则会话重新跑起来之后还会带着
+ * 上一次的收尾去提示用户。
+ */
+export interface SessionSettle {
+	/** 收尾时刻，Unix 毫秒 */
+	at: number;
+	/** 这一轮的结果 */
+	outcome: TurnOutcome;
+	/** 结果为 failed 时的原因，取自 pi 的 errorMessage */
+	message: string | undefined;
+}
+
+/**
+ * 会话此刻的状态，清单项与状态推送共用这一份。
+ *
+ * 它只陈述主机看到的事实：在不在忙、最近一轮怎么收的尾、有几个交互在等人。
+ * 「用户看过没有」不在其中，由 seenAt 与 settle.at 比出来，界面据此推分档。
+ */
+export interface SessionStatus {
+	/** 主机上此刻的活动状态 */
+	activity: SessionActivity;
+	/** 最近一轮的收尾；没跑完过、正在跑或用户中止时为空 */
+	settle: SessionSettle | undefined;
+	/** 待答的扩展交互数，大于零表示这一轮在等人 */
+	pendingInput: number;
+	/** 这一条被标记已读的时刻，Unix 毫秒；零表示从未标记 */
+	seenAt: number;
+}
+
+/**
+ * 清单里的一条：会话摘要加上它此刻的状态。
  *
  * 状态跟摘要分开，是因为两者的变化频率不同：状态一轮里要变好几次，摘要却很少动。
  */
 export interface SessionListItem {
 	/** 会话摘要，字段与会话文件一致 */
 	summary: SessionSummary;
-	/** 主机上此刻的活动状态 */
-	activity: SessionActivity;
+	/** 主机上此刻的状态 */
+	status: SessionStatus;
 }
 
 /** 接入方一次拿到的完整会话状态，用于对齐界面。消息体与历史走条目读取。 */

@@ -27,7 +27,7 @@ function summary(overrides: Partial<SessionSummary> = {}): SessionSummary {
 function source(overrides: Partial<SessionIndexSource> = {}): SessionIndexSource {
 	return {
 		summaryOf: async () => summary(),
-		activityOf: () => "idle",
+		statusOf: () => ({ activity: "idle", settle: undefined, pendingInput: 0, seenAt: 0 }),
 		...overrides,
 	};
 }
@@ -50,7 +50,14 @@ describe("SessionIndex", () => {
 		index.note("/work/a/s1.jsonl");
 		await index.flush();
 		expect(frames).toEqual([
-			{ channel: URI, action: { type: "sessions/changed", summary: summary(), activity: "idle" } },
+			{
+				channel: URI,
+				action: {
+					type: "sessions/changed",
+					summary: summary(),
+					status: { activity: "idle", settle: undefined, pendingInput: 0, seenAt: 0 },
+				},
+			},
 		]);
 	});
 
@@ -59,12 +66,17 @@ describe("SessionIndex", () => {
 		const index = new SessionIndex({
 			channel,
 			uri: URI,
-			source: source({ activityOf: () => "running" }),
+			source: source({
+				statusOf: () => ({ activity: "running", settle: undefined, pendingInput: 0, seenAt: 0 }),
+			}),
 			debounceMs: 0,
 		});
 		index.note("/work/a/s1.jsonl");
 		await index.flush();
-		expect(frames[0]?.action).toMatchObject({ type: "sessions/changed", activity: "running" });
+		expect(frames[0]?.action).toMatchObject({
+			type: "sessions/changed",
+			status: { activity: "running", settle: undefined, pendingInput: 0, seenAt: 0 },
+		});
 	});
 
 	it("文件已经不在了就推删除", async () => {

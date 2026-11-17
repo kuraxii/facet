@@ -36,8 +36,9 @@ function session(overrides: Partial<SidebarSession> & Pick<SidebarSession, "path
 	return {
 		title: "会话",
 		modified: NOW - 60_000,
+		timeText: "",
 		isRunning: false,
-		activity: "idle",
+		bucket: "done",
 		project: "facet",
 		cwd: "/work/facet",
 		host: undefined,
@@ -133,16 +134,18 @@ describe("组装侧栏", () => {
 	const base = {
 		sessions,
 		projects: [],
-		activities: new Map([["/s/a.jsonl", "running" as const]]),
+		statuses: new Map([
+			["/s/a.jsonl", { activity: "running" as const, settle: undefined, pendingInput: 0, seenAt: 0 }],
+		]),
 		now: NOW,
 	};
 
 	it("运行中的会话单独成组并带运行状态点", () => {
 		const data = buildSidebar(base);
 		expect(data.groups[0]?.sessions.map((item) => item.path)).toEqual(["/s/a.jsonl"]);
-		expect(data.groups[0]?.sessions[0]?.activity).toBe("running");
+		expect(data.groups[0]?.sessions[0]?.bucket).toBe("running");
 		expect(data.groups[0]?.sessions[0]?.isRunning).toBe(true);
-		expect(data.groups[1]?.sessions[0]?.activity).toBe("idle");
+		expect(data.groups[1]?.sessions[0]?.bucket).toBe("done");
 	});
 
 	it("项目选项合并已添加的项目与会话目录，按会话数倒序", () => {
@@ -192,16 +195,16 @@ describe("状态点", () => {
 		const data = buildSidebar({
 			sessions: [summary("/s1.jsonl"), summary("/s2.jsonl")],
 			projects: [],
-			activities: new Map([
-				["/s1.jsonl", "compacting"],
-				["/s2.jsonl", "running"],
+			statuses: new Map([
+				["/s1.jsonl", { activity: "compacting", settle: undefined, pendingInput: 0, seenAt: 0 }],
+				["/s2.jsonl", { activity: "running", settle: undefined, pendingInput: 0, seenAt: 0 }],
 			]),
 		});
 		const dots = data.groups
 			.flatMap((group) => group.sessions)
-			.map((session) => [session.path, session.activity]);
+			.map((session) => [session.path, session.bucket]);
 		expect(dots).toEqual([
-			["/s1.jsonl", "compacting"],
+			["/s1.jsonl", "running"],
 			["/s2.jsonl", "running"],
 		]);
 	});
@@ -211,6 +214,6 @@ describe("状态点", () => {
 			sessions: [summary("/s1.jsonl")],
 			projects: [],
 		});
-		expect(data.groups[0]?.sessions[0]?.activity).toBe("idle");
+		expect(data.groups[0]?.sessions[0]?.bucket).toBe("done");
 	});
 });

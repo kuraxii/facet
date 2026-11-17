@@ -3,17 +3,10 @@ import {
 	STATUS_RING_PERIOD_MS,
 	statusBucketColor,
 	statusBucketLabel,
-	statusBucketOfDot,
 	statusRingRotation,
 } from "./session-status.ts";
 
 describe("状态点分档", () => {
-	it("运行与压缩都画运行中的环，空闲是弱化点", () => {
-		expect(statusBucketOfDot("running")).toBe("running");
-		expect(statusBucketOfDot("compacting")).toBe("running");
-		expect(statusBucketOfDot("idle")).toBe("done");
-	});
-
 	it("颜色只在一处映射，done 没有强调色", () => {
 		expect(statusBucketColor("running")).toBe("var(--dot-run)");
 		expect(statusBucketColor("needs_input")).toBe("var(--dot-warn)");

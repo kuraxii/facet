@@ -63,6 +63,9 @@ const SESSION_DIR = "/mock/sessions";
 /** 会话池。摘要与条目都留在内存里，分页按游标从后往前取。 */
 const sessions = [];
 
+/** 推状态到清单通道的实现，连接建立后由 createConnection 装上。 */
+let broadcastStatus = () => {};
+
 /** 造一段带 Markdown 结构的正文，长度接近真实回复。 */
 function bodyText(index, size) {
 	const paragraphs = [
@@ -194,6 +197,10 @@ for (let index = 0; index < options.sessions; index += 1) {
 		modified: Date.now() - index * 60_000,
 		firstMessage: `第 ${index} 个会话的首条消息，用来生成侧栏标题。`,
 		entries: buildEntries(index, options.turns),
+		// 侧栏状态：收尾信息与已读水位，控制口可以改这两项来试三种未读提示
+		settle: undefined,
+		seenAt: 0,
+		pendingInput: 0,
 	});
 }
 
@@ -289,6 +296,20 @@ function createConnection(socket) {
 	const ok = (id, data) => send({ type: "response", id, ok: true, data });
 	const fail = (id, code, message) => send({ type: "response", id, ok: false, error: { code, message } });
 
+	/** 会话此刻的状态，字段与协议里的 SessionStatus 一致。 */
+	const statusOf = (session) => ({
+		activity: session.phase === "running" ? "running" : "idle",
+		settle: session.settle,
+		pendingInput: session.pendingInput,
+		seenAt: session.seenAt,
+	});
+
+	/** 推一条状态到清单通道，界面据此更新侧栏那一行。 */
+	const noteStatus = (session) => {
+		push(`sessions:/${HOST_ID}`, { type: "sessions/status", path: session.file, status: statusOf(session) });
+	};
+	broadcastStatus = (session) => noteStatus(session);
+
 	/** 假流式：按速率把一段正文切成 delta 推出去，中间插一次工具调用。 */
 	const startStreaming = (session, chatChannel, sessionChannel) => {
 		if (streaming !== undefined) {
@@ -353,15 +374,42 @@ function createConnection(socket) {
 					messageId,
 					message: assistantMessage(0, Date.now(), { text: "" }),
 				});
+				// 收尾写进状态：界面拿它和已读水位比，未读时就显示「待查看」或「失败」
+				session.settle =
+					session.nextOutcome === undefined
+						? { at: Date.now(), outcome: "completed", message: undefined }
+						: {
+								at: Date.now(),
+								outcome: session.nextOutcome,
+								message: session.nextOutcome === "failed" ? "假主机造出来的失败" : undefined,
+							};
+				session.nextOutcome = undefined;
 				push(chatChannel, { type: "chat/settled", aborted: false });
 				push(sessionChannel, { type: "session/phase", phase: "idle", maintenance: undefined });
+				noteStatus(session);
 			}
 		}, 16);
 	};
 
 	const handleRequest = (frame) => {
 		const { id, method, params } = frame;
+		if (process.env.MOCK_TRACE === "1") {
+			console.log(`[mock] 请求 ${method} ${params === undefined ? "" : JSON.stringify(params).slice(0, 90)}`);
+		}
 		switch (method) {
+			case "markSessionsSeen": {
+				const files = params?.sessionFiles ?? [];
+				for (const file of files) {
+					const session = sessions.find((item) => item.file === file);
+					if (session === undefined) {
+						continue;
+					}
+					session.seenAt = Date.now();
+					noteStatus(session);
+				}
+				ok(id, {});
+				return;
+			}
 			case "listProjects":
 				ok(id, { projects: [{ id: "mock-project", cwd: CWD, name: "mock" }] });
 				return;
@@ -378,7 +426,7 @@ function createConnection(socket) {
 							modified: session.modified,
 							firstMessage: session.firstMessage,
 						},
-						activity: session.phase === "running" ? "running" : "idle",
+						status: statusOf(session),
 					})),
 				});
 				return;
@@ -389,7 +437,11 @@ function createConnection(socket) {
 					fail(id, "unknown_session", `no such session: ${file}`);
 					return;
 				}
-				ok(id, sessionSnapshot(session));
+				const snapshot = sessionSnapshot(session);
+				if (process.env.MOCK_TRACE === "1") {
+					console.log(`[mock] openSession 返回 phase=${snapshot.phase}`);
+				}
+				ok(id, snapshot);
 				return;
 			}
 			case "subscribe": {
@@ -459,10 +511,14 @@ function createConnection(socket) {
 				ok(id, { terminals: [] });
 				return;
 			case "gitStatus":
-				ok(id, { isRepo: false });
+				// 干净仓库：右侧变更面板走最简单的分支，压测只关心主区
+				ok(id, { isRepo: true, branch: "mock", files: [] });
 				return;
 			case "gitCommits":
-				ok(id, { isRepo: false, commits: [] });
+				ok(id, { isRepo: true, commits: [] });
+				return;
+			case "gitDiff":
+				ok(id, { patch: "", truncated: false, binary: false });
 				return;
 			case "listDirectory":
 				// 右侧的文件树会逐个目录展开，给空目录即可，压测用不到文件内容
@@ -476,6 +532,16 @@ function createConnection(socket) {
 
 	const handleDispatch = (frame) => {
 		const { channel, action, clientSeq } = frame;
+		console.log(`[mock] 派发 ${channel} ${action?.type} seq=${clientSeq}`);
+		// 运行态下界面把消息走 session 通道排队，压测里同样当成一次发送
+		if (action?.type === "session/pendingMessageSet") {
+			const parsed = /^session:\/(.+)$/.exec(channel ?? "");
+			const target = parsed === null ? undefined : sessions.find((item) => item.id === parsed[1]);
+			if (target !== undefined) {
+				startStreaming(target, `chat:/${target.id}`, channel);
+			}
+			return;
+		}
 		const parsed = /^chat:\/(.+)$/.exec(channel ?? "");
 		const session = parsed === null ? undefined : sessions.find((item) => item.id === parsed[1]);
 		if (session === undefined) {
@@ -571,6 +637,27 @@ const control = createHttpServer((request, response) => {
 			const next = JSON.parse(body);
 			if (typeof next.rate === "number") stream.rate = next.rate;
 			if (typeof next.seconds === "number") stream.seconds = next.seconds;
+			// 造状态用：下一次流式按指定结果收尾，或直接给某个会话挂上待答交互
+			if (typeof next.sessionIndex === "number" && sessions[next.sessionIndex] !== undefined) {
+				const target = sessions[next.sessionIndex];
+				if (next.outcome === "completed" || next.outcome === "failed") {
+					target.nextOutcome = next.outcome;
+				}
+				if (typeof next.pendingInput === "number") {
+					target.pendingInput = next.pendingInput;
+					broadcastStatus(target);
+				}
+				if (next.unread === true) {
+					const outcome = next.outcome === "failed" ? "failed" : "completed";
+					target.settle = {
+						at: Date.now(),
+						outcome,
+						message: outcome === "failed" ? "假主机造出来的失败" : undefined,
+					};
+					target.seenAt = 0;
+					broadcastStatus(target);
+				}
+			}
 		} catch {
 			response.writeHead(400).end("bad json");
 			return;

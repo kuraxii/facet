@@ -49,7 +49,7 @@ describe("ActionProjector", () => {
 
 	it("对话级事件投影到对话通道", () => {
 		const projector = new ActionProjector("s1");
-		const projected = projector.project({ type: "settled", aborted: false });
+		const projected = projector.project({ type: "settled", aborted: false, failure: undefined });
 		expect(projected).toEqual([{ channel: "chat:/s1", action: { type: "chat/settled", aborted: false } }]);
 	});
 

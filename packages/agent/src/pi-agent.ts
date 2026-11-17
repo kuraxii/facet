@@ -28,7 +28,7 @@ import type {
 	UiResponse,
 } from "@facet/protocol";
 import { toMessage, toMessages, toModelInfo } from "./convert.ts";
-import { nextTurnState, type TurnState, toSessionEvents } from "./events.ts";
+import { nextTurnState, type TurnState, toSessionEvents, turnFailure } from "./events.ts";
 import type { ExtensionUi } from "./extension-ui.ts";
 import { type BranchSnapshot, branchSnapshot, pageOf } from "./paging.ts";
 import type { ModelMutationOptions, PromptOptions } from "./types.ts";
@@ -129,6 +129,8 @@ export class PiAgent {
 	private maintenance: Maintenance | undefined;
 	private disposed = false;
 	private readonly ui: ExtensionUi | undefined;
+	/** 最后一个 turn 的失败原因，settled 到达时取走 */
+	private lastTurnFailure: string | undefined;
 	private readonly initializeExtensions: (() => Promise<void>) | undefined;
 	private initialization: SessionInitialization;
 	private initializationPromise: Promise<void> | undefined;
@@ -196,6 +198,11 @@ export class PiAgent {
 
 	get isCompacting(): boolean {
 		return this.session.isCompacting;
+	}
+
+	/** 待答的扩展交互数。主机据此判「需要输入」，与「在不在忙」分开看。 */
+	get pendingPromptCount(): number {
+		return this.ui?.snapshot().prompts.length ?? 0;
 	}
 
 	/** 会话仍在推进:本轮未回到 idle,或有维护动作在跑。 */
@@ -669,10 +676,35 @@ export class PiAgent {
 
 	/** 一个 pi 事件可能转成多条对外事件，也可能只用于触发状态刷新。 */
 	private handleSessionEvent(event: AgentSessionEvent): void {
+		const failure = this.trackFailure(event);
 		for (const mapped of toSessionEvents(event)) {
-			this.emit(mapped);
+			this.emit(mapped.type === "settled" ? { ...mapped, failure } : mapped);
 		}
 		this.refreshTurnState(event);
+	}
+
+	/**
+	 * 记下最后一轮的结果，供 settled 事件使用。
+	 *
+	 * 失败信号只在 turn_end 的助手消息上，settled 本身不带，所以先攒着等终局一起给出。
+	 * 新一轮开始时清空，免得这一轮没产生 turn_end 却继承了上一轮的失败。
+	 */
+	private trackFailure(event: AgentSessionEvent): string | undefined {
+		if (event.type === "agent_start") {
+			this.lastTurnFailure = undefined;
+			return undefined;
+		}
+		if (event.type === "turn_end") {
+			this.lastTurnFailure = turnFailure(toMessage(event.message));
+			return undefined;
+		}
+		if (event.type === "agent_settled") {
+			// 中止的一轮不记成失败：用户自己按的停止不该冒出失败提示
+			const failure = event.aborted === true ? undefined : this.lastTurnFailure;
+			this.lastTurnFailure = undefined;
+			return failure;
+		}
+		return undefined;
 	}
 
 	/** 逐个通知订阅方。单个订阅方抛错只上报，不影响其余订阅方收到事件。 */

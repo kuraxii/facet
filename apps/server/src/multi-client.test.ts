@@ -44,6 +44,8 @@ class FakeAgent implements HubAgent {
 	}
 	cancelUi(): void {}
 
+	readonly pendingPromptCount = 0;
+
 	get isBusy(): boolean {
 		return this.busy;
 	}
@@ -388,7 +390,7 @@ describe("两个端接同一台主机", () => {
 			await client.subscribe(CHAT);
 		}
 		agent.emit({ type: "queue", steering: ["补充"], followUp: [] } as never);
-		agent.emit({ type: "settled", aborted: false } as never);
+		agent.emit({ type: "settled", aborted: false, failure: undefined } as never);
 		await settle();
 		expect(first.frames.length).toBeGreaterThan(0);
 		expect(first.frames.map((frame) => [frame.channel, frame.action, frame.seq])).toEqual(

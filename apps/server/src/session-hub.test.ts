@@ -68,6 +68,8 @@ class FakeAgent implements HubAgent {
 	}
 	cancelUi(): void {}
 
+	readonly pendingPromptCount = 0;
+
 	get isBusy(): boolean {
 		return this.busy;
 	}
@@ -299,7 +301,7 @@ describe("会话清单通知", () => {
 		const { hub: local, notes } = hubWithNotes();
 		const snapshot = await local.openSession("/tmp/s1.jsonl");
 		notes.length = 0;
-		local.agent(snapshot.id).emit({ type: "settled", aborted: false } as never);
+		local.agent(snapshot.id).emit({ type: "settled", aborted: false, failure: undefined } as never);
 		expect(notes).toContainEqual(["/tmp/s1.jsonl", "changed"]);
 		local.dispose();
 	});
@@ -476,7 +478,7 @@ describe("空闲回收", () => {
 		await vi.advanceTimersByTimeAsync(IDLE_MS * 3);
 		expect(hub.has(snapshot.id)).toBe(true);
 		agent.busy = false;
-		agent.emit({ type: "settled", aborted: false });
+		agent.emit({ type: "settled", aborted: false, failure: undefined });
 		await vi.advanceTimersByTimeAsync(IDLE_MS + 1);
 		expect(hub.has(snapshot.id)).toBe(false);
 	});
@@ -614,7 +616,7 @@ describe("多端", () => {
 		}
 		const agent = hub.agent(snapshot.id);
 		agent.emit({ type: "queue", steering: ["排队一句"], followUp: [] } as never);
-		agent.emit({ type: "settled", aborted: false } as never);
+		agent.emit({ type: "settled", aborted: false, failure: undefined } as never);
 		expect(first.frames.length).toBeGreaterThan(0);
 		expect(first.frames).toEqual(second.frames);
 	});

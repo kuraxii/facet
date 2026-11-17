@@ -1309,10 +1309,10 @@ describe("SessionClient", () => {
 				modified: 2,
 				firstMessage: "你好",
 			},
-			activity: "running",
+			status: { activity: "running", settle: undefined, pendingInput: 0, seenAt: 0 },
 		});
 		expect(client.store.sessionList().map((entry) => entry.summary.path)).toEqual(["/work/a/s1.jsonl"]);
-		expect(client.store.sessionActivity("/work/a/s1.jsonl")).toBe("running");
+		expect(client.store.sessionStatus("/work/a/s1.jsonl").activity).toBe("running");
 	});
 
 	it("重复 attach 不叠加动作监听", async () => {

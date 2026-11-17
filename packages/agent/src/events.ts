@@ -5,7 +5,7 @@
  * 事件按会话顺序到达，订阅方不需要再排序。
  */
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
-import type { EntryKind, Maintenance, SessionEvent, TurnPhase } from "@facet/protocol";
+import type { EntryKind, Maintenance, Message, SessionEvent, TurnPhase } from "@facet/protocol";
 import { toMessage, toMessages, toToolOutput } from "./convert.ts";
 
 /** 本轮的生命周期与维护动作。 */
@@ -72,6 +72,19 @@ export function nextTurnState(event: AgentSessionEvent, current: TurnState): Tur
 	}
 }
 
+/**
+ * 一轮是否以错误收尾。
+ *
+ * 只看助手消息的 stopReason：工具调用失败但模型接着跑下去属于对话内细节，不该升成会话级的
+ * 结果，所以不从 tool_end 的 isError 推。
+ */
+export function turnFailure(message: Message): string | undefined {
+	if (message.role !== "assistant" || message.stopReason !== "error") {
+		return undefined;
+	}
+	return message.errorMessage ?? "模型请求失败";
+}
+
 /** 取出流式增量。pi 的 message_update 还包含 start、end 等非增量变体，那些不对外输出。 */
 function deltaFor(
 	event: AgentSessionEvent,
@@ -109,7 +122,8 @@ export function toSessionEvents(event: AgentSessionEvent): SessionEvent[] {
 		case "agent_end":
 			return [{ type: "run_end", willRetry: event.willRetry }];
 		case "agent_settled":
-			return [{ type: "settled", aborted: event.aborted }];
+			// 失败原因不在这里取：turn_end 的助手消息才有 stopReason，由 PiAgent 攒着后补上
+			return [{ type: "settled", aborted: event.aborted, failure: undefined }];
 		case "turn_start":
 			return [{ type: "turn_start" }];
 		case "turn_end":

@@ -10,9 +10,9 @@ import type {
 	Channel,
 	Entry,
 	Message,
-	SessionActivity,
 	SessionListItem,
 	SessionSnapshot,
+	SessionStatus,
 } from "@facet/protocol";
 import { makeChannel, parseChannel } from "@facet/protocol";
 import { historyMessageId, isHistoryMessageId } from "./message-id.ts";
@@ -26,6 +26,33 @@ import {
 	type NoticeView,
 	type SessionView,
 } from "./state.ts";
+
+/** 清单里没有的会话按这份空闲态算，省得每处都写一遍字面量。 */
+const IDLE_SESSION_STATUS: SessionStatus = {
+	activity: "idle",
+	settle: undefined,
+	pendingInput: 0,
+	seenAt: 0,
+};
+
+/** 两份状态是否一样。settle 是对象，得逐字段比，否则每次都判不等、每次都通知一遍。 */
+function sameStatus(left: SessionStatus, right: SessionStatus): boolean {
+	if (
+		left.activity !== right.activity ||
+		left.pendingInput !== right.pendingInput ||
+		left.seenAt !== right.seenAt
+	) {
+		return false;
+	}
+	if (left.settle === undefined || right.settle === undefined) {
+		return left.settle === right.settle;
+	}
+	return (
+		left.settle.at === right.settle.at &&
+		left.settle.outcome === right.settle.outcome &&
+		left.settle.message === right.settle.message
+	);
+}
 
 /** 通道上出现序号缺口。 */
 export interface ChannelGap {
@@ -154,9 +181,9 @@ export class SessionStore {
 		this.markChanged();
 	}
 
-	/** 清单里某个会话此刻的活动状态，清单里没有时按空闲算。 */
-	sessionActivity(path: string): SessionActivity {
-		return this.sessionIndex.get(path)?.activity ?? "idle";
+	/** 清单里某个会话此刻的状态，清单里没有时按空闲算。 */
+	sessionStatus(path: string): SessionStatus {
+		return this.sessionIndex.get(path)?.status ?? IDLE_SESSION_STATUS;
 	}
 
 	sessionView(channel: Channel): SessionView | undefined {
@@ -236,17 +263,17 @@ export class SessionStore {
 	/** 归约一条清单动作。认不出的动作原样跳过，清单仍然可用。 */
 	private applySessionList(action: Action): void {
 		if (action.type === "sessions/changed") {
-			this.sessionIndex.set(action.summary.path, { summary: action.summary, activity: action.activity });
+			this.sessionIndex.set(action.summary.path, { summary: action.summary, status: action.status });
 			this.markChanged();
 			return;
 		}
 		if (action.type === "sessions/status") {
 			// 清单里还没有这条摘要时先忽略：摘要到了会连同当时的状态一起带上
 			const current = this.sessionIndex.get(action.path);
-			if (current === undefined || current.activity === action.activity) {
+			if (current === undefined || sameStatus(current.status, action.status)) {
 				return;
 			}
-			this.sessionIndex.set(action.path, { ...current, activity: action.activity });
+			this.sessionIndex.set(action.path, { ...current, status: action.status });
 			this.markChanged();
 			return;
 		}

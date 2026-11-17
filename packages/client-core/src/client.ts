@@ -624,6 +624,20 @@ export class SessionClient {
 	}
 
 	/**
+	 * 把这些会话标记为已读。
+	 *
+	 * 水位记在主机上，多端看到同一份未读结果；批量发是因为切换会话时可能一次带上好几条。
+	 */
+	async markSessionsSeen(sessionFiles: readonly string[]): Promise<void> {
+		if (sessionFiles.length === 0) {
+			return;
+		}
+		await this.exclusive(
+			async () => await this.transport.request("markSessionsSeen", { sessionFiles: [...sessionFiles] }),
+		);
+	}
+
+	/**
 	 * 删除会话。
 	 *
 	 * 删的是当前打开的会话时，连接上的订阅与本地投影一并清掉，界面回到没有会话的状态。

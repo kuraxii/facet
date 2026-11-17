@@ -26,8 +26,8 @@ export type SessionEvent =
 	| { type: "run_start" }
 	/** 一次底层运行结束，willRetry 为真时后续还有重试 */
 	| { type: "run_end"; willRetry: boolean }
-	/** 会话不会再自动继续，唯一的终局信号 */
-	| { type: "settled"; aborted: boolean }
+	/** 会话不会再自动继续，唯一的终局信号；failure 非空表示这一轮以错误收尾 */
+	| { type: "settled"; aborted: boolean; failure: string | undefined }
 	| { type: "turn_start" }
 	/** 一轮结束，带该轮的工具结果 */
 	| { type: "turn_end"; message: Message; toolResults: Message[] }

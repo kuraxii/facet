@@ -4,8 +4,10 @@
  * 侧栏由项目过滤器与按时间分组的会话队列组成。过滤器决定队列的范围与新建会话的目录，
  * 队列按「进行中 / 今天 / 昨天 / 更早」分组。这里只做纯函数变换，组件负责渲染。
  */
+
+import { deriveBucket, type SessionBucket } from "@facet/client-core";
 import type { SupportedLanguage } from "@facet/i18n";
-import type { ProjectInfo, SessionActivity, SessionSummary } from "@facet/protocol";
+import type { ProjectInfo, SessionStatus, SessionSummary } from "@facet/protocol";
 
 /** 队列分组的键，数组顺序即展示顺序。 */
 export type GroupKey = "running" | "today" | "yesterday" | "earlier";
@@ -18,10 +20,12 @@ export interface SidebarSession {
 	title: string;
 	/** 最后活动时间，Unix 毫秒 */
 	modified: number;
-	/** 是否正在运行 */
+	/** 行尾的相对时间文案，分组定下来之后由 buildSidebar 填好 */
+	timeText: string;
+	/** 是否正在运行，用于「进行中」分组 */
 	isRunning: boolean;
-	/** 行首状态点，直接取主机推来的活动状态 */
-	activity: SessionActivity;
+	/** 行首状态点，由主机状态与已读水位推出来 */
+	bucket: SessionBucket;
 	/** 所属项目名，队列过滤到单个项目时不重复显示 */
 	project: string;
 	/** 所属项目目录 */
@@ -63,8 +67,8 @@ export interface SidebarInput {
 	sessions: readonly SessionSummary[];
 	/** 用户添加的项目 */
 	projects: readonly ProjectInfo[];
-	/** 各会话此刻的活动状态，按会话文件路径索引，缺省都按空闲算 */
-	activities?: ReadonlyMap<string, SessionActivity> | undefined;
+	/** 各会话此刻的状态，按会话文件路径索引，缺省都按空闲算 */
+	statuses?: ReadonlyMap<string, SessionStatus> | undefined;
 	/** 队列的范围：给出时只列该目录的会话，缺省列出全部 */
 	projectCwd?: string | undefined;
 	/** 会话标题关键词，空串表示不过滤 */
@@ -73,6 +77,8 @@ export interface SidebarInput {
 	now?: number;
 	/** 没有标题时的占位名 */
 	untitled?: string;
+	/** 相对时间用哪种语言，缺省英文 */
+	locale?: SupportedLanguage;
 }
 
 /**
@@ -156,6 +162,25 @@ function clockTime(date: Date): string {
  *
  * 今天用相对时长，昨天用 HH:mm，更早用星期或日期；默认不带分组，保持旧行为。
  */
+/**
+ * 按 locale 与选项缓存 formatter。
+ *
+ * 侧栏每行每帧都要算一次时间，`new Intl.DateTimeFormat` 是整个调用里最贵的一步；
+ * 同一台机器上 locale 与选项就那么几种，缓存之后它退化成一次查表。
+ */
+const dateFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function dateFormatter(locale: SupportedLanguage, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+	const key = `${locale}:${JSON.stringify(options)}`;
+	const cached = dateFormatters.get(key);
+	if (cached !== undefined) {
+		return cached;
+	}
+	const created = new Intl.DateTimeFormat(locale, options);
+	dateFormatters.set(key, created);
+	return created;
+}
+
 export function shortTime(
 	value: number,
 	now: number = Date.now(),
@@ -184,9 +209,9 @@ export function shortTime(
 		return isChinese ? "昨天" : "Yesterday";
 	}
 	if (diff < 6 * 86_400_000) {
-		return new Intl.DateTimeFormat(locale, { weekday: "short" }).format(date);
+		return dateFormatter(locale, { weekday: "short" }).format(date);
 	}
-	return new Intl.DateTimeFormat(locale, { month: "short", day: "numeric" }).format(date);
+	return dateFormatter(locale, { month: "short", day: "numeric" }).format(date);
 }
 
 /** 本地时区当天零点的时间戳，分组边界按本地日期划分。 */
@@ -203,25 +228,30 @@ function shiftDay(dayStart: number, days: number): number {
 	return date.getTime();
 }
 
+/** 清单里没有的会话按空闲算，与主机给的默认一致。 */
+const IDLE_STATUS: SessionStatus = { activity: "idle", settle: undefined, pendingInput: 0, seenAt: 0 };
+
 /**
  * 一条会话的展示数据。
  *
- * 运行状态只看主机推来的那一份：同一台主机上的会话可能有别的端在跑，本地只知道当前
- * 打开的那一个，按本地算会让切走之后的状态失真。
+ * 状态只看主机推来的那一份：同一台主机上的会话可能有别的端在跑，本地只知道当前打开的
+ * 那一个，按本地算会让切走之后的状态失真。
  */
 function toSession(
 	summary: SessionSummary,
-	activities: ReadonlyMap<string, SessionActivity> | undefined,
+	statuses: ReadonlyMap<string, SessionStatus> | undefined,
 	untitled: string | undefined,
 ): SidebarSession {
-	const activity = activities?.get(summary.path) ?? "idle";
-	const isRunning = activity !== "idle";
+	const status = statuses?.get(summary.path) ?? IDLE_STATUS;
+	const bucket = deriveBucket(status);
 	return {
 		path: summary.path,
 		title: sessionTitle(summary.name, summary.firstMessage, untitled),
 		modified: summary.modified,
-		isRunning,
-		activity,
+		timeText: "",
+		// 等输入也算在跑：那一轮还没结束，只是卡在人身上
+		isRunning: bucket === "running" || bucket === "needs_input",
+		bucket,
 		project: baseName(summary.cwd),
 		cwd: summary.cwd,
 		host: undefined,
@@ -321,7 +351,7 @@ export function buildSidebar(input: SidebarInput): SidebarData {
 	const now = input.now ?? Date.now();
 	const keyword = (input.keyword ?? "").trim().toLowerCase();
 	const all = input.sessions
-		.map((summary) => toSession(summary, input.activities, input.untitled))
+		.map((summary) => toSession(summary, input.statuses, input.untitled))
 		.sort((left, right) => right.modified - left.modified);
 
 	const inScope =
@@ -333,8 +363,17 @@ export function buildSidebar(input: SidebarInput): SidebarData {
 			? inScope
 			: inScope.filter((session) => session.title.toLowerCase().includes(keyword));
 
+	const groups = groupSessions(matched, now).map((group) => ({
+		...group,
+		// 时间文案只取决于分组与分钟，放在这里算一次，行渲染不再各自调一遍
+		sessions: group.sessions.map((session) => ({
+			...session,
+			timeText: shortTime(session.modified, now, group.key, input.locale ?? "en"),
+		})),
+	}));
+
 	return {
-		groups: groupSessions(matched, now),
+		groups,
 		projects: listProjects(input.projects, input.sessions),
 		total: all.length,
 	};

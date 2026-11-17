@@ -221,10 +221,15 @@
 	scrollbar-gutter: stable;
 }
 
+/*
+ * 不用 content-visibility 做视口裁剪。
+ *
+ * 一个文件段的高度在几十行到几千行之间，估算值给不准：屏幕外的段被裁掉之后，滚动总高
+ * 在估算值与真实值之间来回跳，快速拖动滚动条时内容会明显跳动。裁剪本身还会让拖选跨过
+ * 视口外的段时逐帧重新渲染，主线程被占住，选区跟不上指针。
+ */
 .section {
 	border-bottom: 1px solid var(--line);
-	content-visibility: auto;
-	contain-intrinsic-size: auto 120px;
 }
 
 .fileHeader {
@@ -410,8 +415,6 @@
 
 .commitRow {
 	display: flex;
-	content-visibility: auto;
-	contain-intrinsic-size: auto var(--commit-row-height);
 	align-items: center;
 	gap: var(--changes-icon-gap);
 	width: 100%;

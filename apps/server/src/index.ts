@@ -79,7 +79,7 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 		replayLimit: config.replayLimit,
 		idleCloseMs: config.sessionIdleMs,
 		onSessionChanged: (file, change) => sessionIndex?.note(file, change),
-		onActivityChanged: (file, activity) => sessionIndex?.noteActivity(file, activity),
+		onStatusChanged: (file, status) => sessionIndex?.noteStatus(file, status),
 	});
 	// 索引要读会话目录与运行状态，两样都在 hub 建好之后才齐
 	sessionIndex = new SessionIndex({
@@ -87,7 +87,7 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 		uri: sessionsChannelFor(hostId),
 		source: {
 			summaryOf: (file) => factory.sessionSummary(file),
-			activityOf: (file) => hub.activityOf(file),
+			statusOf: (file) => hub.statusOf(file),
 		},
 		onCwd: (cwd) => void ensureProject(cwd),
 	});

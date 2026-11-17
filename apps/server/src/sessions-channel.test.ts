@@ -27,7 +27,11 @@ describe("SessionsChannel", () => {
 		const second: unknown[] = [];
 		channel.subscribe(URI, undefined, { id: "c1", send: (frame) => first.push(frame.action) });
 		channel.subscribe(URI, undefined, { id: "c2", send: (frame) => second.push(frame.action) });
-		channel.publish(URI, { type: "sessions/changed", summary: summary("/a/s1.jsonl"), activity: "idle" });
+		channel.publish(URI, {
+			type: "sessions/changed",
+			summary: summary("/a/s1.jsonl"),
+			status: { activity: "idle", settle: undefined, pendingInput: 0, seenAt: 0 },
+		});
 		expect(first).toEqual(second);
 		expect(first).toHaveLength(1);
 	});

@@ -4,14 +4,14 @@
  * 一档对应一种画法：运行中是环，等待输入是告警图标，需要关注是实心点，失败是带描边的点，
  * 已完成是弱化的点。颜色只在这里映射一次，行、角标、分组头都从这里取。
  */
+import type { SessionBucket } from "@facet/client-core";
 import { createI18n, type Translate, translate } from "@facet/i18n";
-import type { SessionActivity } from "@facet/protocol";
 
 const fallbackI18n = createI18n("zh-CN");
 const fallbackT = translate(fallbackI18n);
 
-/** 侧栏行首的状态分档。 */
-export type SessionStatusBucket = "running" | "needs_input" | "attention" | "failed" | "done";
+/** 侧栏行首的状态分档，与客户端推导出的那一套是同一份。 */
+export type SessionStatusBucket = SessionBucket;
 
 /** 环转一圈的周期，毫秒。 */
 export const STATUS_RING_PERIOD_MS = 900;
@@ -61,10 +61,4 @@ export function statusBucketLabel(bucket: SessionStatusBucket, t: Translate = fa
 		case "done":
 			return t("sessionStatus.done");
 	}
-}
-
-/** 会话列表里已有的状态点取值，换算成画法分档。 */
-export function statusBucketOfDot(activity: SessionActivity): SessionStatusBucket {
-	// 压缩上下文也是这台会话在忙，画同一个环
-	return activity === "idle" ? "done" : "running";
 }

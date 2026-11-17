@@ -420,17 +420,25 @@ describe("会话清单", () => {
 			channel: listChannel,
 			serverSeq: 1,
 			origin: undefined,
-			action: { type: "sessions/changed", summary: summary("/a/s1.jsonl", 2), activity: "idle" },
+			action: {
+				type: "sessions/changed",
+				summary: summary("/a/s1.jsonl", 2),
+				status: { activity: "idle", settle: undefined, pendingInput: 0, seenAt: 0 },
+			},
 		});
 		store.apply({
 			type: "action",
 			channel: listChannel,
 			serverSeq: 2,
 			origin: undefined,
-			action: { type: "sessions/changed", summary: summary("/a/s2.jsonl", 5), activity: "running" },
+			action: {
+				type: "sessions/changed",
+				summary: summary("/a/s2.jsonl", 5),
+				status: { activity: "running", settle: undefined, pendingInput: 0, seenAt: 0 },
+			},
 		});
 		expect(store.sessionList().map((entry) => entry.summary.path)).toEqual(["/a/s2.jsonl", "/a/s1.jsonl"]);
-		expect(store.sessionActivity("/a/s2.jsonl")).toBe("running");
+		expect(store.sessionStatus("/a/s2.jsonl").activity).toBe("running");
 	});
 
 	it("同路径的新摘要覆盖旧的", () => {
@@ -440,7 +448,11 @@ describe("会话清单", () => {
 			channel: listChannel,
 			serverSeq: 1,
 			origin: undefined,
-			action: { type: "sessions/changed", summary: summary("/a/s1.jsonl", 1), activity: "idle" },
+			action: {
+				type: "sessions/changed",
+				summary: summary("/a/s1.jsonl", 1),
+				status: { activity: "idle", settle: undefined, pendingInput: 0, seenAt: 0 },
+			},
 		});
 		store.apply({
 			type: "action",
@@ -450,7 +462,7 @@ describe("会话清单", () => {
 			action: {
 				type: "sessions/changed",
 				summary: { ...summary("/a/s1.jsonl", 9), name: "改过" },
-				activity: "idle",
+				status: { activity: "idle", settle: undefined, pendingInput: 0, seenAt: 0 },
 			},
 		});
 		expect(store.sessionList()).toHaveLength(1);
@@ -464,7 +476,11 @@ describe("会话清单", () => {
 			channel: listChannel,
 			serverSeq: 1,
 			origin: undefined,
-			action: { type: "sessions/changed", summary: summary("/a/s1.jsonl", 1), activity: "idle" },
+			action: {
+				type: "sessions/changed",
+				summary: summary("/a/s1.jsonl", 1),
+				status: { activity: "idle", settle: undefined, pendingInput: 0, seenAt: 0 },
+			},
 		});
 		store.apply({
 			type: "action",
@@ -491,7 +507,12 @@ describe("会话清单", () => {
 
 	it("完整清单替换掉本地这份", () => {
 		const store = new SessionStore();
-		store.replaceSessionList([{ summary: summary("/a/s1.jsonl", 1), activity: "idle" }]);
+		store.replaceSessionList([
+			{
+				summary: summary("/a/s1.jsonl", 1),
+				status: { activity: "idle", settle: undefined, pendingInput: 0, seenAt: 0 },
+			},
+		]);
 		expect(store.sessionList()).toHaveLength(1);
 		store.replaceSessionList([]);
 		expect(store.sessionList()).toEqual([]);

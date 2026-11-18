@@ -6,6 +6,7 @@
 
 - Node.js 26（当前 LTS，版本写在 `.node-version`），npm（仓库用 npm workspaces）；server 产物打包的是同一个版本
 - Electron 由 `postinstall` 脚本准备；Linux 上如果 `node-pty` 需要现编，系统要装有编译工具链（`gcc`、`make`、`python3`）
+- 发行包支持 Linux 与 Windows x64：Windows 上用 `node-pty` 自带的预编译产物，不需要编译工具链
 
 ## 安装
 
@@ -22,7 +23,7 @@ npm install
 ## 打包
 
 ```bash
-npm run dist            # 先打独立主机产物，再打 rpm 与 deb
+npm run dist            # 先打独立主机产物，再按宿主平台出安装包（Linux rpm/deb/tar.gz，Windows NSIS）
 npm run build:server    # 只打独立 server 产物
 ```
 
@@ -30,7 +31,7 @@ server 是一个自带运行时的独立产物（用户看到的「主机」是�
 
 ```
 apps/desktop/dist-server/
-  bin/node            官方 Node（scripts/build-server.mjs 里固定版本，缓存在 ~/.cache/facet-node）
+  bin/node            官方 Node（scripts/build-server.mjs 里固定版本，缓存在 ~/.cache/facet-node）；Windows 上是 bin/node.exe
   lib/server.mjs      server 入口，esbuild 打成单个 ES 模块
   lib/pty-server.mjs  终端子进程入口
   lib/node_modules/node-pty/   唯一的原生模块
@@ -48,8 +49,9 @@ apps/desktop/dist-server/
 
 ## 运行
 
-本机的主机只开一个 unix socket（`$XDG_RUNTIME_DIR/facet-dev.sock`，没有运行目录时是
-`~/.local/share/facet-dev/facet.sock`），桌面按同一套规则拼出路径直接连，两边都不用填端口：
+本机的主机只开一个本地 socket：Linux 上是 `$XDG_RUNTIME_DIR/facet-dev.sock`，没有运行目录时是
+`~/.local/share/facet-dev/facet.sock`；Windows 上没有 unix socket，改用命名管道
+`\\.\pipe\facet-<数据目录摘要>`。桌面按同一套规则拼出地址直接连，两边都不用填端口：
 
 ```bash
 npm run dev            # 打产物 → 起 server → 起桌面；桌面退出时 server 一起收掉
@@ -232,19 +234,23 @@ scripts/build-fonts.sh <字体目录>
 
 开发实例的三处目录都带 `-dev` 后缀：数据目录是 `~/.local/share/facet-dev`，配置目录是 `~/.config/facet-dev`，pi 数据目录是 `~/.pi/agent-dev`。`npm run dev`（即 `dev:split`）、`dev:host`、`dev:desktop` 都用这一套，因此开发时跑的东西与装好的包互不影响，`projects.json`、主机身份与 pi 会话各有一份。
 
+Windows 上没有 XDG 变量，按家目录推导：数据目录是 `%USERPROFILE%\.local\share\facet`（开发态 `facet-dev`），pi 数据目录是 `%USERPROFILE%\.pi\agent`，桌面本地记录落在 Electron 的 `%APPDATA%\facet\desktop.json`。
+
 发布版与 pi 命令行共用 `~/.pi/agent` 的凭证与模型配置；开发态用 `agent-dev`，避免开发期的会话混进真实目录。
 
 主机标识在首次启动时生成并写入 `host.json`：取 `/etc/machine-id` 拼上数据目录做 SHA-256，取前 20 位；读不到 machine-id 时改用时间戳加随机串。同一台机器跑多份（不同数据目录）各有各的标识，删掉 `host.json` 即可换一个。
 
 ## 打包
 
-只出 Linux 的包：三种格式、两种架构，一共六个。
+Linux 出 rpm、deb 与 tar.gz（x86_64 与 arm64 各一套，共六个），Windows 出 x64 的 NSIS 安装包；
+macOS 与 AppImage 不做。
 
 ```bash
-npm run dist -w @facet/desktop # 本机架构，rpm + deb + tar.gz 各一个
+npm run dist                   # 先打独立主机产物，再按宿主平台出安装包
+npm run dist -w @facet/desktop # 只出安装包，要求主机产物已经打好
 ```
 
-产物在 `apps/desktop/dist/`，归档名里的架构串随格式变（由 electron-builder 决定，不手写）：
+Linux 产物在 `apps/desktop/dist/`，归档名里的架构串随格式变（由 electron-builder 决定，不手写）：
 
 | 格式 | x86_64 | arm64 | 说明 |
 |---|---|---|---|
@@ -252,7 +258,17 @@ npm run dist -w @facet/desktop # 本机架构，rpm + deb + tar.gz 各一个
 | deb | `facet-<版本>-amd64.deb` | `facet-<版本>-arm64.deb` | Debian、Ubuntu 系 |
 | tar.gz | `facet-<版本>-x64.tar.gz` | `facet-<版本>-arm64.tar.gz` | 免安装，解压即用 |
 
-arm64 的包得在 arm64 机器上打：`node-pty` 是原生模块（N-API），`npm ci` 按当前架构编。
+Windows 产物同样在 `apps/desktop/dist/`：
+
+| 产物 | 文件名 | 说明 |
+|---|---|---|
+| NSIS 安装包 | `facet-<版本>-x64-setup.exe` | 双击安装，可改安装目录，装在当前用户下，不要求管理员 |
+
+两个平台都按宿主平台打，不能交叉编：`node-pty` 是原生模块（N-API，`npm ci` 按当前架构取），
+`scripts/build-server.mjs` 也按宿主平台下载自带的 Node 运行时（Linux 上是 `bin/node`，
+Windows 上是 `bin/node.exe`）。
+
+Linux：
 
 - 安装到 `/opt/Facet`，可执行文件是 `facet`，桌面项 `facet.desktop` 与 `StartupWMClass` 都是 `facet`，图标 512×512
 - 依赖走 electron-builder 的缺省清单（deb：`libgtk-3-0`、`libnss3`、`libxss1`、`libxtst6` 等；rpm：`gtk3`、`nss`、`libXScrnSaver` 等），不手写
@@ -260,7 +276,18 @@ arm64 的包得在 arm64 机器上打：`node-pty` 是原生模块（N-API），
 - 构建 deb/rpm 用的 `fpm` 由 electron-builder 自己下载到 `~/.cache/electron-builder`，不需要系统装 fpm
 - 渲染产物约 54 MB，主要是随包打的字体（Inter、Noto Sans SC、Maple Mono CN）；Electron 本身约 100 MB
 
-开发时桌面用 `process.execPath` 加 `ELECTRON_RUN_AS_NODE=1` 拉起 `out/main/server.js`，server 再起同目录的 `pty-server.js`；打包后桌面改为拉起独立产物 `resources/server/bin/node resources/server/lib/server.mjs`。
+Windows：
+
+- 图标是 `apps/desktop/build/icon.ico`（16–256 多尺寸，从同目录 `icon.png` 生成），NSIS 段配置在 `apps/desktop/electron-builder.yml`
+- 本机主机走命名管道，没有 unix socket；管道名取数据目录摘要，开发实例与发布实例各自一份
+- 升级与卸载前会跑 `apps/desktop/build/stop-stale-server.ps1`（由 `build/installer.nsh` 挂到 `customUnInstall`）
+  停掉旧版本留下的 server：它是独立进程，占着管道，不停会一直连到旧代码
+- 不重编原生模块（`npmRebuild: false`）：真正加载 `node-pty` 的是 `resources/server` 里按 Node 构建的那份，
+  为 Electron 的 ABI 再编一遍没有必要，Windows 上还会要求装了 Spectre 缓解库的 MSVC
+- 安装包未签名：别的机器上首次运行会触发 SmartScreen 提示，正式分发要配代码签名证书
+- 数据与配置目录仍按家目录推导：`%USERPROFILE%\.local\share\facet`（开发态 `facet-dev`）、`%USERPROFILE%\.pi\agent`
+
+开发时桌面用 `process.execPath` 加 `ELECTRON_RUN_AS_NODE=1` 拉起 `out/main/server.js`，server 再起同目录的 `pty-server.js`；打包后桌面改为拉起独立产物 `resources/server/bin/node resources/server/lib/server.mjs`（Windows 上是 `bin\node.exe`）。
 
 ### CI
 
@@ -268,16 +295,18 @@ arm64 的包得在 arm64 机器上打：`node-pty` 是原生模块（N-API），
 
 1. `ubuntu-24.04` 上先跑五条门禁（`mock:check`、`typecheck`、`lint`、`test`、`build`），不过就不往下走；
 2. `ubuntu-24.04` 与 `ubuntu-24.04-arm` 两台原生 runner 各打一套 rpm / deb / tar.gz；
-3. 六个包按架构作为 workflow artifact 上传，保留 90 天，不自动建 Release；
-4. 版本号取自标签：`v0.1.0` → `0.1.0`，手动 dispatch 时用 `apps/desktop/package.json` 里的版本。
+3. `windows-latest` 上先核对 server 产物里是 `bin/node.exe`，再出 x64 的 NSIS 安装包（`--publish never`，只留本机）；
+4. 产物按平台作为 workflow artifact 上传：Linux 六个包、Windows 一份 `facet-<版本>-x64-setup.exe`，保留 90 天，不自动建 Release；
+5. Windows job 缓存 Electron、自带 Node 运行时与 NSIS 工具链，缓存键跟着 `package-lock.json` 与 `.node-version` 走；
+6. 版本号取自标签：`v0.1.0` → `0.1.0`，手动 dispatch 时用 `apps/desktop/package.json` 里的版本。
 
-Windows 与 macOS 不在流水线里：`scripts/build-server.mjs` 只认 `node-v…-linux-x64`，`electron-builder.yml` 也只配了 linux 段。
+macOS 不在流水线里，也没有适配。
 
 ## 环境变量
 
 | 变量 | 含义 |
 |---|---|
-| `FACET_HOST`、`FACET_PORT` | 给出任意一个就改成监听 TCP；缺省只开 unix socket |
+| `FACET_HOST`、`FACET_PORT` | 给出任意一个就改成监听 TCP；缺省只开本地 socket（unix socket 或 Windows 命名管道） |
 | `FACET_HOST_NAME` | 主机展示名 |
 | `FACET_AGENT_DIR` | pi 数据目录 |
 | `FACET_SESSION_DIR` | 会话文件目录，缺省按工作目录分组 |
@@ -286,7 +315,7 @@ Windows 与 macOS 不在流水线里：`scripts/build-server.mjs` 只认 `node-v
 | `FACET_SESSION_IDLE_MS` | 没人订阅且空闲后多久回收会话 |
 | `FACET_DEBUG` | 打开主机侧调试日志 |
 | `FACET_ENDPOINT` | 桌面连这个主机（`host:port` 或 `ssh://user@host`），不再用本机发现文件 |
-| `FACET_SOCKET` | 指定 unix socket 的路径，缺省 `$XDG_RUNTIME_DIR/facet.sock`（无运行目录时 `<数据目录>/facet.sock`） |
+| `FACET_SOCKET` | 指定本地 socket 的地址：Linux 上缺省 `$XDG_RUNTIME_DIR/facet.sock`（无运行目录时 `<数据目录>/facet.sock`），Windows 上缺省命名管道 `\\.\pipe\facet-<数据目录摘要>` |
 | `FACET_REMOTE_PERMISSION` | 远程连接申请档位的上限：`view`（只读，缺省）或 `operate`（可申请操作档） |
 | `FACET_WEB_PORT` | Web 端接入端口，缺省关闭；同一个端口发页面也接 WebSocket |
 | `FACET_PTY_SERVER` | pty 子进程入口，缺省与 server 入口同目录（`pty-server.mjs`、`pty-server.js` 或 `pty-server-child.ts`） |

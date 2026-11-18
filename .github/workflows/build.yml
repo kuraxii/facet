@@ -1,10 +1,9 @@
-# 推 `v*` 标签时出 Linux 的六个发行包：rpm / deb / tar.gz × x86_64 / arm64。
+# 推 `v*` 标签时出两个平台的发行包：Linux 的 rpm / deb / tar.gz × x86_64 / arm64，
+# Windows 的 x64 NSIS 安装包。
 #
-# 两种架构各用一台原生 runner：node-pty 是原生模块，x64 上交叉编 arm64 需要交叉工具链，
-# 直接用 arm runner 走同一条 `npm ci` → `@electron/rebuild` 的路径更省事。
-#
-# Windows 暂不在这条流水线里：`scripts/build-server.mjs` 目前只认 `node-v…-linux-x64`，
-# electron-builder 也只配了 linux 段与 png 图标，改完构建脚本与 win 段之后再补 windows job。
+# 两个平台各用原生 runner 打自己那份：node-pty 是原生模块，x64 上交叉编 arm64 需要交叉工具链，
+# 直接用 arm runner 走同一条 `npm ci` → `@electron/rebuild` 的路径更省事；Windows 也一样，
+# 自带的 Node 运行时与 Electron 二进制都按 runner 的平台下载。
 #
 # 产物只作为 workflow artifact 留着（默认 90 天），不自动建 Release。
 
@@ -115,5 +114,86 @@ jobs:
             apps/desktop/dist/*.deb
             apps/desktop/dist/*.tar.gz
           # 六个包一次传完，任缺其一就当失败
+          if-no-files-found: error
+          retention-days: 90
+
+  # Windows 只出 x64 的 NSIS 安装包：arm64 要另一套 Electron 二进制与 win32-arm64 的 Node
+  # 运行时，等有需求再补一台 arm64 runner
+  windows:
+    name: windows x64
+    needs: gates
+    runs-on: windows-latest
+    # 自带 Node 运行时、Electron 与 NSIS 工具链都要下，压缩安装包本身也要几分钟
+    timeout-minutes: 60
+    env:
+      # 不签名：runner 上没有证书，别让 electron-builder 去翻系统证书存储
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      # 三处下载都不小：Electron 约 100 MB、自带 Node 运行时约 30 MB、NSIS/7zip 工具链约 50 MB。
+      # 键跟着锁文件与 .node-version 走，版本一换自然失效
+      - name: 缓存 Electron、Node 运行时与打包工具链
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\AppData\Local\electron\Cache
+            ~\.cache\facet-node
+            ~\AppData\Local\electron-builder\Cache
+          key: windows-downloads-${{ hashFiles('package-lock.json', '.node-version') }}
+          restore-keys: |
+            windows-downloads-
+
+      - run: npm ci
+
+      # 版本号取自标签：v0.1.0 → 0.1.0。手跑时保持 package.json 里的版本。
+      # 用 pwsh 而不是 bash：Windows runner 上的 bash 是 Git Bash，能跑但要依赖它的 PATH
+      - name: 写入版本号
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          npm pkg set "version=$version" --workspace @facet/desktop
+
+      # 顺序与 linux job 一致：先打 server 产物
+      - name: 打独立的 server 产物
+        run: npm run build:server
+      - name: 构建桌面
+        run: npm run build -w @facet/desktop
+
+      - name: 核对 server 自带的 Node 运行时
+        shell: pwsh
+        # Windows 的运行时是 node.exe：产物按别的平台打出来时这里先失败，不必等安装包
+        run: |
+          $node = "apps/desktop/dist-server/bin/node.exe"
+          if (-not (Test-Path $node)) {
+            throw "缺少 $node：server 产物不是按 Windows 打的"
+          }
+          & $node --version
+
+      - name: 出 NSIS 安装包
+        working-directory: apps/desktop
+        # --publish never：产物只留在本机，由下一步上传
+        run: npx electron-builder --win --x64 --publish never
+
+      - name: 核对产物
+        working-directory: apps/desktop
+        shell: pwsh
+        # 安装包只有一个；体积异常小说明有文件没打进去
+        run: |
+          $setups = @(Get-ChildItem dist/*-setup.exe)
+          if ($setups.Count -ne 1) {
+            throw "dist 下应只有一个 *-setup.exe，实际 $($setups.Count) 个"
+          }
+          Get-ChildItem dist/* | ForEach-Object { "$($_.Name) $([math]::Round($_.Length / 1MB, 1)) MB" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: facet-windows-x64
+          path: apps/desktop/dist/*-setup.exe
           if-no-files-found: error
           retention-days: 90

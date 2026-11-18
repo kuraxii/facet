@@ -4,7 +4,7 @@
  * 全部来自环境变量，缺省值面向本机嵌入运行：只监听回环地址，端口由系统分配，
  * 数据写在 facet 自己的目录，与命令行工具的数据目录分开。
  */
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { homedir } from "node:os";
 import { basename, isAbsolute, join } from "node:path";
 import { DEFAULT_AGENT_DIR } from "@facet/agent";
@@ -78,20 +78,45 @@ function readFlag(value: string | undefined): boolean {
 }
 
 /**
- * 本机 unix socket 的固定路径。
+ * 本机 socket 的固定位置。
  *
- * 契约：优先 `$XDG_RUNTIME_DIR/<数据目录名>.sock`（运行目录随登录会话创建、退出即清理），
- * 没有运行目录时退回 `<数据目录>/facet.sock`。名字里的 `facet` / `facet-dev` 取自数据目录，
- * 开发实例与发布实例因此不会抢同一个 socket。
+ * 契约：Linux 与 macOS 上优先 `$XDG_RUNTIME_DIR/<数据目录名>.sock`（运行目录随登录会话
+ * 创建、退出即清理），没有运行目录时退回 `<数据目录>/facet.sock`；名字里的 `facet` /
+ * `facet-dev` 取自数据目录，开发实例与发布实例因此不会抢同一个 socket。
+ *
+ * Windows 没有 unix socket，改用具名管道：管道名在整台机器上共用一个命名空间，所以取数据
+ * 目录的摘要做名字，既让开发实例与发布实例分开，也不让不同用户的主机撞在一起。桌面端按同一
+ * 规则推导，两端算出来必须是同一个名字。
  *
  * `FACET_DATA_DIR` / `FACET_SOCKET` 可以覆盖，覆盖之后两端得自己对齐。
  */
-export function defaultSocketPath(env: Record<string, string | undefined>, dataDir: string): string {
+export function defaultSocketPath(
+	env: Record<string, string | undefined>,
+	dataDir: string,
+	platform: NodeJS.Platform = process.platform,
+): string {
+	if (platform === "win32") {
+		return namedPipePath(dataDir);
+	}
 	const runtime = env.XDG_RUNTIME_DIR?.trim();
 	if (runtime !== undefined && runtime.length > 0 && isAbsolute(runtime)) {
 		return join(runtime, `${basename(dataDir)}.sock`);
 	}
 	return join(dataDir, SOCKET_FILE);
+}
+
+/**
+ * 数据目录对应的命名管道名。
+ *
+ * 摘要只取路径的前 12 位十六进制：够用来区分同一台机器上的几个数据目录，又不把用户路径
+ * 直接写进进程命令行。
+ */
+export function namedPipePath(dataDir: string): string {
+	// 只统一分隔符、去掉尾部的斜杠：管子两端可能在不同工作目录、也可能是不同的盘符写法，
+	// 摘要里不能混进任何与进程环境有关的东西，否则两边算出的名字会不一样。
+	const normalized = dataDir.replaceAll("\\", "/").replace(/\/+$/, "");
+	const digest = createHash("sha256").update(normalized).digest("hex").slice(0, 12);
+	return `\\\\.\\pipe\\facet-${digest}`;
 }
 
 /** 按 XDG 规范取应用数据目录，非绝对路径的 XDG_DATA_HOME 按未设置处理。 */
@@ -109,11 +134,14 @@ function readInt(value: string | undefined, fallback: number): number {
 	return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
-/** 从环境变量读取配置。 */
-export function loadServerConfig(env: Record<string, string | undefined> = process.env): ServerConfig {
+/** 从环境变量读取配置。platform 只用来决定本机 socket 的形态，测试里可以指定。 */
+export function loadServerConfig(
+	env: Record<string, string | undefined> = process.env,
+	platform: NodeJS.Platform = process.platform,
+): ServerConfig {
 	const hostName = env.FACET_HOST_NAME?.trim();
 	const dataDir = env.FACET_DATA_DIR?.trim() || defaultDataDir(env);
-	// 显式给了监听地址或端口就按 TCP 走；其余情况本机只开 unix socket，不占任何端口
+	// 显式给了监听地址或端口就按 TCP 走；其余情况本机只开本地 socket，不占任何端口
 	const wantsTcp = (env.FACET_HOST?.trim() ?? "") !== "" || (env.FACET_PORT?.trim() ?? "") !== "";
 	return {
 		host: env.FACET_HOST?.trim() || DEFAULT_HOST,
@@ -121,7 +149,8 @@ export function loadServerConfig(env: Record<string, string | undefined> = proce
 		agentDir: env.FACET_AGENT_DIR?.trim() || DEFAULT_AGENT_DIR,
 		sessionDir: env.FACET_SESSION_DIR?.trim() || undefined,
 		dataDir,
-		socketPath: env.FACET_SOCKET?.trim() || (wantsTcp ? undefined : defaultSocketPath(env, dataDir)),
+		socketPath:
+			env.FACET_SOCKET?.trim() || (wantsTcp ? undefined : defaultSocketPath(env, dataDir, platform)),
 		remotePermission: env.FACET_REMOTE_PERMISSION?.trim() === "operate" ? "operate" : "view",
 		webPort: env.FACET_WEB_PORT === undefined ? undefined : readInt(env.FACET_WEB_PORT, 0) || undefined,
 		webRoot: env.FACET_WEB_ROOT?.trim() || undefined,

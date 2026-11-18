@@ -22,27 +22,34 @@ import {
 
 const roots: string[] = [];
 
+/**
+ * 在临时仓库里跑一条 git 命令。
+ *
+ * 全局与系统配置一律屏蔽、提交身份钉死：跑测试的机器上常常没有配置 `user.name`（CI 上就是
+ * 空的），也可能配了 `commit.gpgsign` 或各种默认钩子，用例不能受这些影响。
+ */
+function git(root: string, ...args: string[]): void {
+	execFileSync("git", ["-C", root, ...args], {
+		env: {
+			...process.env,
+			GIT_AUTHOR_NAME: "facet",
+			GIT_AUTHOR_EMAIL: "facet@example.com",
+			GIT_COMMITTER_NAME: "facet",
+			GIT_COMMITTER_EMAIL: "facet@example.com",
+			GIT_CONFIG_GLOBAL: "/dev/null",
+			GIT_CONFIG_SYSTEM: "/dev/null",
+		},
+	});
+}
+
 /** 建一个临时仓库并提交一次，返回它的根目录。 */
 async function createRepo(): Promise<string> {
 	const root = await mkdtemp(join(tmpdir(), "facet-git-"));
 	roots.push(root);
-	const git = (...args: string[]): void => {
-		execFileSync("git", ["-C", root, ...args], {
-			env: {
-				...process.env,
-				GIT_AUTHOR_NAME: "facet",
-				GIT_AUTHOR_EMAIL: "facet@example.com",
-				GIT_COMMITTER_NAME: "facet",
-				GIT_COMMITTER_EMAIL: "facet@example.com",
-				GIT_CONFIG_GLOBAL: "/dev/null",
-				GIT_CONFIG_SYSTEM: "/dev/null",
-			},
-		});
-	};
-	git("init", "-b", "main");
+	git(root, "init", "-b", "main");
 	await writeFile(join(root, "tracked.txt"), "第一行\n第二行\n", "utf8");
-	git("add", ".");
-	git("commit", "-m", "初始提交");
+	git(root, "add", ".");
+	git(root, "commit", "-m", "初始提交");
 	return root;
 }
 
@@ -113,8 +120,8 @@ describe("gitStatus", () => {
 		await writeFile(join(root, "untracked.txt"), "新文件一行\n", "utf8");
 		await mkdir(join(root, "src"));
 		await writeFile(join(root, "src", "gone.ts"), "一行\n", "utf8");
-		execFileSync("git", ["-C", root, "add", "src/gone.ts"]);
-		execFileSync("git", ["-C", root, "commit", "-m", "加一个文件"]);
+		git(root, "add", "src/gone.ts");
+		git(root, "commit", "-m", "加一个文件");
 		await rm(join(root, "src", "gone.ts"));
 
 		const status = await gitStatus(root);
@@ -126,7 +133,7 @@ describe("gitStatus", () => {
 
 	it("重命名的旧路径一起给出", async () => {
 		const root = await createRepo();
-		execFileSync("git", ["-C", root, "mv", "tracked.txt", "renamed.txt"]);
+		git(root, "mv", "tracked.txt", "renamed.txt");
 		const status = await gitStatus(root);
 		expect(status.files).toEqual([
 			expect.objectContaining({ path: "renamed.txt", status: "renamed", oldPath: "tracked.txt" }),
@@ -198,8 +205,8 @@ describe("gitCommits", () => {
 	it("从新到旧列出提交", async () => {
 		const root = await createRepo();
 		await writeFile(join(root, "tracked.txt"), "第三行\n", "utf8");
-		execFileSync("git", ["-C", root, "add", "tracked.txt"]);
-		execFileSync("git", ["-C", root, "commit", "-m", "第二个提交"]);
+		git(root, "add", "tracked.txt");
+		git(root, "commit", "-m", "第二个提交");
 		const result = await gitCommits(root);
 		expect(result.isRepo).toBe(true);
 		expect(result.commits.map((commit) => commit.subject)).toEqual(["第二个提交", "初始提交"]);
@@ -242,8 +249,8 @@ describe("gitCommit", () => {
 		const root = await createRepo();
 		await writeFile(join(root, "tracked.txt"), "第一行\n改过的第二行\n", "utf8");
 		await writeFile(join(root, "fresh.txt"), "新文件\n", "utf8");
-		execFileSync("git", ["-C", root, "add", "-A"]);
-		execFileSync("git", ["-C", root, "commit", "-m", "第二次提交"]);
+		git(root, "add", "-A");
+		git(root, "commit", "-m", "第二次提交");
 		const [commit] = (await gitCommits(root)).commits;
 		const detail = await gitCommit(root, commit?.sha ?? "");
 		const byPath = new Map(detail.files.map((file) => [file.path, file]));
@@ -256,8 +263,8 @@ describe("gitCommit", () => {
 
 	it("重命名文件同时带旧路径才能取到完整补丁", async () => {
 		const root = await createRepo();
-		execFileSync("git", ["-C", root, "mv", "tracked.txt", "renamed.txt"]);
-		execFileSync("git", ["-C", root, "commit", "-m", "重命名"]);
+		git(root, "mv", "tracked.txt", "renamed.txt");
+		git(root, "commit", "-m", "重命名");
 		const [commit] = (await gitCommits(root)).commits;
 		const detail = await gitCommit(root, commit?.sha ?? "");
 		const renamed = detail.files.find((file) => file.path === "renamed.txt");

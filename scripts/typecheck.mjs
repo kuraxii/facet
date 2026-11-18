@@ -62,11 +62,28 @@ function runProject(project) {
 
 function runWorkspace(workspace) {
 	return new Promise((resolve) => {
-		const command = process.platform === "win32" ? "npm.cmd" : "npm";
-		const child = spawn(command, ["run", "--silent", "typecheck", "--workspace", workspace.name], {
-			cwd: root,
-			stdio: ["ignore", "pipe", "pipe"],
-		});
+		// Windows 上 .cmd 不能直接 spawn：Node 20.12 起拒绝这种调用并报 EINVAL。经由同一个 Node
+		// 跑 npm 的入口脚本即可绕开，`npm run typecheck` 一定给了 npm_execpath；直接执行本脚本时
+		// 退回命令行脚本，此时才需要一层 shell
+		const npmCli = process.env.npm_execpath;
+		const command =
+			npmCli === undefined ? (process.platform === "win32" ? "npm.cmd" : "npm") : process.execPath;
+		const child = spawn(
+			command,
+			[
+				...(npmCli === undefined ? [] : [npmCli]),
+				"run",
+				"--silent",
+				"typecheck",
+				"--workspace",
+				workspace.name,
+			],
+			{
+				cwd: root,
+				stdio: ["ignore", "pipe", "pipe"],
+				shell: npmCli === undefined && process.platform === "win32",
+			},
+		);
 		let output = "";
 		child.stdout.on("data", (chunk) => {
 			output += chunk;

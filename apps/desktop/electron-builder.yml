@@ -1,5 +1,5 @@
-# 发行包配置。只出 Linux 的 rpm、deb 与 tar.gz 三种（x86_64 与 arm64 各一套），
-# macOS、Windows、AppImage 不做。
+# 发行包配置。Linux 出 rpm、deb 与 tar.gz 三种（x86_64 与 arm64 各一套），Windows 出 x64
+# 的 NSIS 安装包；macOS 与 AppImage 不做。
 #
 # 桌面本体进 asar；server 与其 pty 子进程在独立产物里（见 extraResources），不占 asar。
 appId: app.facet.desktop
@@ -11,13 +11,21 @@ directories:
   output: dist
 
 # 只带构建产物与运行时要解析的依赖。工作区的 @facet/* 已经被打进 out/main，不必再带源码。
+# 写成「全部包含 + 逐项排除」：electron-builder 的包含式白名单不生效，会把源码、构建中间产物、
+# 独立 server 产物与上一次的 dist 一起塞进 asar。
 files:
-  - out/**
-  - package.json
-  - "!**/*.map"
-  # node-pty 只留 linux 的构建产物与运行时脚本，源码和其它平台的预编译都不要
+  - "**/*"
+  - "!out/**/*.map"
+  - "!src{,/**/*}"
+  - "!build{,/**/*}"
+  - "!dist{,/**/*}"
+  - "!dist-server{,/**/*}"
+  - "!release{,/**/*}"
+  - "!electron.vite.config.ts"
+  - "!tsconfig*.json"
+  - "!*.tsbuildinfo"
+  # node-pty 只留运行时脚本与头文件以外的部分，源码与其它平台的预编译在各平台的段里再收窄
   - "!node_modules/node-pty/{src,deps,third_party,scripts,typings}/**"
-  - "!node_modules/node-pty/prebuilds/{win32-x64,win32-arm64,darwin-x64,darwin-arm64}/**"
 
 # 独立 server 产物：自带的官方 Node 运行时 + 打好的 server 入口，放在 resources/server 下
 extraResources:
@@ -25,6 +33,11 @@ extraResources:
     to: server
 
 asar: true
+
+# 不重编原生模块：node-pty 是 N-API 模块，一份构建在 Node 与 Electron 自带的 Node 里都能用，
+# 而真正加载它的那份在独立 server 产物里（按 Node 构建）。为 Electron 的 ABI 再编一遍既不
+# 必要，Windows 上还会要求装了 Spectre 缓解库的 MSVC 才能编过 node-pty 的 conpty 目标。
+npmRebuild: false
 
 # node-pty 是原生模块，.node 与 spawn-helper 必须在 asar 外面才能被加载
 asarUnpack:
@@ -47,6 +60,29 @@ linux:
       Name: Facet
       Comment: Pi 编码助手的桌面端
       Categories: Development;Utility;
+
+# Windows 只出 x64 的安装包：arm64 要另一套 Electron 二进制与 win32-arm64 的 Node 运行时，
+# 便携版与 zip 也不出，NSIS 安装包是唯一分发形态。
+win:
+  executableName: facet
+  icon: build/icon.ico
+  target:
+    - nsis
+
+nsis:
+  artifactName: facet-${version}-${arch}-setup.${ext}
+  # 允许改安装目录，装到当前用户下，不要求管理员
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Facet
+  # 升级与卸载前停掉旧版本留下的 server：它是独立进程，占着固定名字的命名管道
+  include: build/installer.nsh
+  # 会话、凭证与设置都在用户数据目录里，卸载不删
+  deleteAppDataOnUninstall: false
 
 deb:
   maintainer: Facet <facet@localhost>

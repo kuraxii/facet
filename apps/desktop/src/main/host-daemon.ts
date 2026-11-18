@@ -2,18 +2,20 @@
  * 本机主机的拉起与接管。
  *
  * 主机是能独立于桌面运行的进程：桌面拉起它时让它自己成一组进程，日志写进数据目录的
- * server.log。连接位置是固定契约——数据目录下的 `facet.sock`——桌面上来就连，连得上说明主机
- * 在跑，连不上就自己拉起一个。数据目录里的 `endpoint.json` 只留作排障用，不参与连接。
+ * server.log。连接位置是固定契约：Linux 上是 unix socket 的固定路径，Windows 上是按同一
+ * 规则算出的命名管道。桌面上来就连，连得上说明主机在跑，连不上就自己拉起一个。数据目录里
+ * 的 `endpoint.json` 只留作排障用，不参与连接。
  *
  * 桌面运行期间仍然看着它：进程退出后按退避间隔重新拉起；主动结束时不再拉起。
  */
 
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { closeSync, openSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { connect as connectSocket } from "node:net";
 import { homedir } from "node:os";
-import { basename, isAbsolute, join } from "node:path";
+import { basename, isAbsolute, join, resolve } from "node:path";
 import { type DiscoveryRecord, parseDiscovery } from "@facet/protocol";
 import { StreamTransport } from "@facet/transport";
 
@@ -38,24 +40,44 @@ const RESTART_DELAYS_MS = [200, 500, 1000, 2000, 5000, 10_000];
  * 只有 socket 路径：没有端口也没有令牌，身份由 socket 的 `0600` 与目录的 `0700` 保证。
  */
 export interface LocalHost {
-	/** unix socket 路径 */
+	/** unix socket 路径，Windows 上是命名管道名 */
 	readonly path: string;
 }
 
 /**
- * 本机主机 socket 的固定路径，与主机侧按同一规则推导。
+ * 本机主机连接位置的固定契约，与主机侧按同一规则推导。
  *
- * 优先运行目录（`$XDG_RUNTIME_DIR/<数据目录名>.sock`），没有时退回数据目录。
+ * Linux 与 macOS 上是 unix socket：优先运行目录（`$XDG_RUNTIME_DIR/<数据目录名>.sock`），
+ * 没有时退回数据目录。Windows 上改用具名管道，名字取数据目录的摘要——管道名在整台机器上
+ * 共用一个命名空间，主机侧按同一算法推导，两边算出同一个名字才连得上。
  */
 export function hostSocketPath(
 	dataDir: string,
 	env: Record<string, string | undefined> = process.env,
+	platform: NodeJS.Platform = process.platform,
 ): string {
+	if (platform === "win32") {
+		return namedPipePath(dataDir);
+	}
 	const runtime = env.XDG_RUNTIME_DIR?.trim();
 	if (runtime !== undefined && runtime.length > 0 && isAbsolute(runtime)) {
 		return join(runtime, `${basename(dataDir)}.sock`);
 	}
 	return join(dataDir, SOCKET_FILE);
+}
+
+/**
+ * 数据目录对应的命名管道名。
+ *
+ * 与主机侧 `apps/server/src/config.ts` 的算法逐字一致：摘要只取数据目录路径的前 12 位十六
+ * 进制，够区分同一台机器上的几个数据目录，也不把用户路径写进进程命令行。
+ */
+export function namedPipePath(dataDir: string): string {
+	// 只统一分隔符、去掉尾部的斜杠：管子两端可能在不同工作目录、也可能是不同的盘符写法，
+	// 摘要里不能混进任何与进程环境有关的东西，否则两边算出的名字会不一样。
+	const normalized = dataDir.replaceAll("\\", "/").replace(/\/+$/, "");
+	const digest = createHash("sha256").update(normalized).digest("hex").slice(0, 12);
+	return `\\\\.\\pipe\\facet-${digest}`;
 }
 
 /**
@@ -82,7 +104,7 @@ export function readDiscoveryFile(text: string): DiscoveryRecord | undefined {
 	return parseDiscovery(text);
 }
 
-/** 连到本机主机：unix socket，不带令牌，身份由内核按文件权限判定。 */
+/** 连到本机主机：本地 socket，不带令牌，身份由内核按文件权限或管道 ACL 判定。 */
 export function connectLocalHost(host: LocalHost, timeoutMs = PROBE_TIMEOUT_MS) {
 	return new StreamTransport({
 		handshakeTimeoutMs: timeoutMs,
@@ -90,7 +112,7 @@ export function connectLocalHost(host: LocalHost, timeoutMs = PROBE_TIMEOUT_MS) 
 	});
 }
 
-/** 按 unix socket 或 TCP 建一条字节流。 */
+/** 按本地 socket（unix socket 或命名管道）或 TCP 建一条字节流。 */
 export async function openStream(target: { path: string } | { host: string; port: number }) {
 	const socket =
 		"path" in target

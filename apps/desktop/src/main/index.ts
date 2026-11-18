@@ -495,7 +495,8 @@ function resolveHostLaunch(): { command: string; args: string[]; env: NodeJS.Pro
 	const bundled = app.isPackaged
 		? join(process.resourcesPath, "server")
 		: join(app.getAppPath(), "dist-server");
-	const node = join(bundled, "bin", "node");
+	// Windows 的运行时可执行文件带 .exe，与 scripts/build-server.mjs 的产物布局一致
+	const node = join(bundled, "bin", process.platform === "win32" ? "node.exe" : "node");
 	if (!existsSync(node)) {
 		console.error(`Cannot find the server build: ${bundled}. Run npm run build:server first.`);
 		return undefined;

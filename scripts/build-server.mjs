@@ -4,7 +4,7 @@
  * 产物是一个自带官方 Node 运行时的目录：
  *
  *   dist-server/
- *     bin/node            官方 Node（当前 LTS，随发行包分发）
+ *     bin/node            官方 Node（当前 LTS，随发行包分发）；Windows 上是 bin/node.exe
  *     lib/server.mjs      server 入口，esbuild 打成单个 ES 模块（源码里有顶层 await）
  *     lib/pty-server.mjs  终端子进程入口
  *     lib/worker.js       codemode 脚本的沙箱 worker（pi 的沙箱在自己的线程里跑脚本）
@@ -19,7 +19,7 @@
 
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { chmod, copyFile, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, copyFile, cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39,25 +39,40 @@ const DEFAULT_NODE_VERSION = "26.13.1";
 const nodeVersion = readNodeVersion() ?? DEFAULT_NODE_VERSION;
 
 /**
+ * 目标平台。
+ *
+ * 按宿主平台打一份：自带的 Node 运行时与 node-pty 的原生产物都按平台取，交叉打包要另一套
+ * 工具链，这里不猜也不声明。官方 Node 的发行包命名把 `win32` 写作 `win`，其余与
+ * `process.platform` 一致。
+ */
+const isWindows = process.platform === "win32";
+const nodePlatform = isWindows ? "win" : process.platform;
+
+/** 运行时目录里可执行文件的名字，Windows 带 `.exe`。 */
+const NODE_EXECUTABLE = isWindows ? "node.exe" : "node";
+
+/**
  * 取官方 Node 运行时。
  *
- * 只在缓存目录里下载与解包：缓存随时可以删，删了下次打包会重新下。
+ * 只在缓存目录里下载与解包：缓存随时可以删，删了下次打包会重新下。Linux 与 macOS 的发行包
+ * 是 tar.xz，Windows 是 zip，两种都用 bsdtar 解；`bin/node` 与 `node.exe` 的位置也不同。
  */
 async function ensureNodeBinary() {
-	const tag = `node-v${nodeVersion}-linux-x64`;
-	const tar = join(cacheDir, `${tag}.tar.xz`);
+	const tag = `node-v${nodeVersion}-${nodePlatform}-${process.arch}`;
+	const extension = isWindows ? ".zip" : ".tar.xz";
+	const archive = join(cacheDir, `${tag}${extension}`);
 	const extracted = join(cacheDir, tag);
-	const binary = join(extracted, "bin", "node");
+	const binary = isWindows ? join(extracted, NODE_EXECUTABLE) : join(extracted, "bin", NODE_EXECUTABLE);
 	if (existsSync(binary)) {
 		return binary;
 	}
 	await mkdir(cacheDir, { recursive: true });
-	if (!existsSync(tar)) {
-		const url = `https://nodejs.org/dist/v${nodeVersion}/${tag}.tar.xz`;
+	if (!existsSync(archive)) {
+		const url = `https://nodejs.org/dist/v${nodeVersion}/${tag}${extension}`;
 		console.log(`[server] 下载 ${url}`);
-		await download(url, tar);
+		await download(url, archive);
 	}
-	execFileSync("tar", ["xJf", tar, "-C", cacheDir], { stdio: "inherit" });
+	execFileSync("tar", ["-xf", archive, "-C", cacheDir], { stdio: "inherit" });
 	if (!existsSync(binary)) {
 		throw new Error(`解包后没有找到 ${binary}`);
 	}
@@ -124,15 +139,38 @@ async function copyExtensionTransform(target) {
 	await copyFile(source, join(target, "babel.cjs"));
 }
 
-/** 只拷 node-pty 跑起来需要的那部分。 */
+/**
+ * 只拷 node-pty 跑起来需要的那部分。
+ *
+ * 编译产物与预编译产物按平台取：Windows 安装脚本在没有编译工具链时不会生成
+ * `build/Release/*.node`，运行时走 `prebuilds/win32-<arch>`；Linux 与 macOS 由 `npm ci`
+ * 就地编译，别的平台的目录带过去也用不上。
+ */
 async function copyNodePty(target) {
 	const source = join(root, "node_modules", "node-pty");
 	await mkdir(target, { recursive: true });
-	for (const item of ["lib", "build", "package.json", "LICENSE"]) {
+	for (const item of ["lib", "package.json", "LICENSE"]) {
 		await cp(join(source, item), join(target, item), { recursive: true });
 	}
-	// 预编译产物留给别的平台，本产物只要 linux-x64 的 build 结果
+	// build 目录不一定有：没有编译过的机器上只有 postinstall 拷过来的 conpty 运行时
+	if (existsSync(join(source, "build"))) {
+		await cp(join(source, "build"), join(target, "build"), { recursive: true });
+	}
+	const prebuild = join(source, "prebuilds", `${process.platform}-${process.arch}`);
+	if (existsSync(prebuild)) {
+		await cp(prebuild, join(target, "prebuilds", `${process.platform}-${process.arch}`), { recursive: true });
+	}
 	await rm(join(target, "build", "Release", "obj.target"), { recursive: true, force: true });
+}
+
+/** 递归统计产物体积，`du` 只有 unix 有。 */
+async function directorySize(dir) {
+	let total = 0;
+	for (const entry of await readdir(dir, { withFileTypes: true })) {
+		const path = join(dir, entry.name);
+		total += entry.isDirectory() ? await directorySize(path) : (await stat(path)).size;
+	}
+	return total;
 }
 
 /** 拷 wasm 虚拟机、它的 JS 封装与 package.json；类型声明与扩展模块的 .so 用不上。 */
@@ -166,8 +204,11 @@ async function main() {
 	await mkdir(join(outDir, "lib"), { recursive: true });
 
 	const node = await ensureNodeBinary();
-	await copyFile(node, join(outDir, "bin", "node"));
-	await chmod(join(outDir, "bin", "node"), 0o755);
+	await copyFile(node, join(outDir, "bin", NODE_EXECUTABLE));
+	// Windows 的可执行位由扩展名决定，没有权限位要设
+	if (!isWindows) {
+		await chmod(join(outDir, "bin", NODE_EXECUTABLE), 0o755);
+	}
 	console.log(`[server] 自带 Node ${nodeVersion}`);
 
 	await bundle(join(root, "apps/server/src/main.ts"), join(outDir, "lib/server.mjs"));
@@ -189,8 +230,8 @@ async function main() {
 		`${JSON.stringify({ name: "facet-server", version, private: true, main: "lib/server.mjs" }, null, 2)}\n`,
 	);
 
-	const listing = execFileSync("du", ["-sh", outDir], { encoding: "utf8" }).trim();
-	console.log(`[server] 完成：${listing}`);
+	const megabytes = Math.round((await directorySize(outDir)) / (1024 * 1024));
+	console.log(`[server] 完成：${megabytes}M`);
 }
 
 function readNodeVersion() {

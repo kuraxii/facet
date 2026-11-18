@@ -1,5 +1,5 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -75,20 +75,28 @@ describe("resolveDataDir", () => {
 	});
 
 	it("开发实例的数据目录带 -dev 后缀，与发布实例分开", () => {
-		expect(resolveDataDir({ XDG_DATA_HOME: "/xdg" }, { isDev: true })).toBe("/xdg/facet-dev");
-		expect(resolveDataDir({ XDG_DATA_HOME: "/xdg" })).toBe("/xdg/facet");
+		expect(resolveDataDir({ XDG_DATA_HOME: "/xdg" }, { isDev: true })).toBe(join("/xdg", "facet-dev"));
+		expect(resolveDataDir({ XDG_DATA_HOME: "/xdg" })).toBe(join("/xdg", "facet"));
 	});
 
 	it("socket 优先落在运行目录，没有时落在数据目录", () => {
-		expect(hostSocketPath("/data/facet-dev", { XDG_RUNTIME_DIR: "/run/user/1000" })).toBe(
-			"/run/user/1000/facet-dev.sock",
+		expect(hostSocketPath("/data/facet-dev", { XDG_RUNTIME_DIR: "/run/user/1000" }, "linux")).toBe(
+			join("/run/user/1000", "facet-dev.sock"),
 		);
-		expect(hostSocketPath("/data/facet-dev", {})).toBe("/data/facet-dev/facet.sock");
+		expect(hostSocketPath("/data/facet-dev", {}, "linux")).toBe(join("/data/facet-dev", "facet.sock"));
+	});
+
+	it("Windows 上改用具名管道，与主机侧算出同一个名字", () => {
+		// 摘要与 apps/server/src/config.ts 的 defaultSocketPath 一致：两边算出同一个管道名才连得上
+		expect(hostSocketPath("/data/facet", {}, "win32")).toBe("\\\\.\\pipe\\facet-252272ec9bcb");
+		expect(hostSocketPath("/data/facet-dev", { XDG_RUNTIME_DIR: "/run/user/1000" }, "win32")).toBe(
+			"\\\\.\\pipe\\facet-80d4e7bdd3a2",
+		);
 	});
 
 	it("按 XDG_DATA_HOME 取，没有或不是绝对路径时用家目录", () => {
-		expect(resolveDataDir({ XDG_DATA_HOME: "/xdg" })).toBe("/xdg/facet");
-		expect(resolveDataDir({ XDG_DATA_HOME: "relative" }).endsWith("/.local/share/facet")).toBe(true);
+		expect(resolveDataDir({ XDG_DATA_HOME: "/xdg" })).toBe(join("/xdg", "facet"));
+		expect(resolveDataDir({ XDG_DATA_HOME: "relative" })).toBe(join(homedir(), ".local", "share", "facet"));
 	});
 });
 

@@ -64,11 +64,21 @@ export function isLoopbackAddress(address: string | undefined): boolean {
 	return normalized === "::1" || normalized === "localhost" || normalized.startsWith("127.");
 }
 
+/**
+ * 这个监听位置是不是 Windows 命名管道。
+ *
+ * 命名管道不是文件系统里的东西：没有目录、没有权限位，监听之前也不需要清理上次的残留，
+ * 这些文件系统操作在管道上一律跳过，失败信息只会盖住真正的原因。
+ */
+export function isNamedPipePath(path: string): boolean {
+	return path.startsWith("\\\\");
+}
+
 export interface EndpointHandle {
-	/** 实际监听的端口,配置为 0 时由系统分配；unix socket 模式下为 0 */
+	/** 实际监听的端口,配置为 0 时由系统分配；本地 socket 模式下为 0 */
 	readonly port: number;
 	readonly host: string;
-	/** unix socket 路径，TCP 模式下没有 */
+	/** 本地 socket 路径或管道名，TCP 模式下没有 */
 	readonly socketPath?: string;
 	/** Web 接入的端口，未开启时没有 */
 	readonly webPort?: number;
@@ -110,7 +120,8 @@ async function handleFrame(context: RpcContext, connection: Connection, text: st
 	}
 	const frame = parsed as RawFrame;
 	if (!connection.authenticated) {
-		// 首帧必须是认证帧；TCP 与 Web 入口还要带上正确令牌，unix socket 已由内核确认身份
+		// 首帧必须是认证帧；TCP 与 Web 入口还要带上正确令牌，本地 socket 已由内核或管道 ACL
+		// 确认身份
 		if (frame.type !== "auth") {
 			connection.close(1008, "Authentication required");
 			return;
@@ -234,8 +245,9 @@ export async function startEndpoint(options: {
 		return connection;
 	};
 
-	// 只有 unix 监听器能由内核证明对端身份，先在这里定好，accept 时带进每条连接
-	const useUnixSocket = options.config.socketPath !== undefined && options.config.socketPath.length > 0;
+	// 本地 socket（unix socket 或 Windows 命名管道）只允许本机同一用户连上，身份由内核或
+	// 管道 ACL 保证，先在这里定好，accept 时带进每条连接
+	const useLocalSocket = options.config.socketPath !== undefined && options.config.socketPath.length > 0;
 
 	const accept = (socket: Socket): void => {
 		const connection = makeConnection(
@@ -250,7 +262,7 @@ export async function startEndpoint(options: {
 				socket.destroy();
 			},
 			undefined,
-			useUnixSocket,
+			useLocalSocket,
 		);
 		const decoder = new FrameDecoder();
 		socket.setEncoding("utf8");
@@ -272,11 +284,14 @@ export async function startEndpoint(options: {
 
 	const socketServer = createSocketServer((socket) => accept(socket));
 
-	if (useUnixSocket) {
+	if (useLocalSocket) {
 		const path = options.config.socketPath as string;
-		// 上一次异常退出可能留下同名的 socket 文件，先清掉再监听
-		await rm(path, { force: true }).catch(() => undefined);
-		await mkdir(dirname(path), { recursive: true, mode: 0o700 }).catch(() => undefined);
+		// 命名管道没有文件系统残留：上一次进程异常退出后管道随进程一起消失，直接监听
+		if (!isNamedPipePath(path)) {
+			// 上一次异常退出可能留下同名的 socket 文件，先清掉再监听
+			await rm(path, { force: true }).catch(() => undefined);
+			await mkdir(dirname(path), { recursive: true, mode: 0o700 }).catch(() => undefined);
+		}
 		await new Promise<void>((resolve, reject) => {
 			socketServer.once("error", reject);
 			socketServer.listen(path, () => {
@@ -284,8 +299,10 @@ export async function startEndpoint(options: {
 				resolve();
 			});
 		});
-		// socket 本身也收成仅本人可读写，同机的其他用户连不上
-		await chmod(path, 0o600).catch(() => undefined);
+		// socket 本身也收成仅本人可读写，同机的其他用户连不上；管道由创建者的 ACL 把住
+		if (!isNamedPipePath(path)) {
+			await chmod(path, 0o600).catch(() => undefined);
+		}
 	} else {
 		await new Promise<void>((resolve, reject) => {
 			socketServer.once("error", reject);
@@ -348,7 +365,7 @@ export async function startEndpoint(options: {
 	return {
 		port,
 		host: options.config.host,
-		...(useUnixSocket ? { socketPath: options.config.socketPath as string } : {}),
+		...(useLocalSocket ? { socketPath: options.config.socketPath as string } : {}),
 		...(webPort === undefined ? {} : { webPort }),
 		close: async () => {
 			webSockets?.close();

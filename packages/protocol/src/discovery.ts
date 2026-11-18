@@ -1,7 +1,7 @@
 /**
  * 主机发现文件的格式。
  *
- * 数据目录里的 `endpoint.json` 记录主机怎么连：unix socket 路径或 TCP 端点、连接令牌、
+ * 数据目录里的 `endpoint.json` 记录主机怎么连：本地 socket 位置或 TCP 端点、连接令牌、
  * 主机标识与进程。写盘与权限收窄在主机侧，读与解析在端点侧，两边共用这里的类型与解析，
  * 免得字段各写一份。这里只有纯数据，不碰文件系统。
  */
@@ -9,7 +9,12 @@
 /** 发现文件的格式版本。字段不兼容的改动递增它。 */
 export const DISCOVERY_SCHEMA_VERSION = 2;
 
-/** 一条主机的连接方式。 */
+/**
+ * 一条主机的连接方式。
+ *
+ * `unix` 这类本地字节流在 Linux 与 macOS 上是 unix socket，Windows 上是命名管道；
+ * 两者都只是本机连、不占端口的地址，格式因此共用一条，`path` 里存具体位置。
+ */
 export type DiscoveryEndpoint =
 	| { readonly transport: "unix"; readonly path: string }
 	| { readonly transport: "tcp"; readonly url: string };

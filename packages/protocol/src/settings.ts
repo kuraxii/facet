@@ -10,14 +10,14 @@ import type { ThinkingLevel } from "./model.ts";
 /**
  * 具体的界面配色方案。
  *
- * light 为唯一浅色，zinc 为缺省的深色，其余是同一套语义色板的深色变体。
+ * light 为唯一浅色，dark 为缺省的深色，其余是同一套语义色板的深色变体。
  */
-export const UI_THEMES = ["light", "zinc", "midnight", "claude", "ghostty", "pureBlack"] as const;
+export const UI_THEMES = ["light", "dark", "midnight", "claude", "ghostty", "pureBlack"] as const;
 
 /** 一个配色方案。 */
 export type UiTheme = (typeof UI_THEMES)[number];
 
-/** 主题。system 表示跟随系统深浅色，深色一侧用缺省的 zinc。 */
+/** 主题。system 表示跟随系统深浅色，深色一侧用缺省的 dark。 */
 export type ThemeMode = UiTheme | "system";
 
 /** 代码高亮配色，浅深两版跟随界面主题的深浅。 */
@@ -98,7 +98,7 @@ export interface FacetSettings {
 export const DEFAULT_SETTINGS: FacetSettings = {
 	version: 1,
 	appearance: {
-		theme: "zinc",
+		theme: "dark",
 		codeTheme: "github",
 		codeFont: "",
 		editorFont: "",

@@ -71,7 +71,31 @@ jobs:
         with:
           node-version-file: .node-version
           cache: npm
-      - run: npm ci
+
+      # 原生模块（node-pty、ssh2 的 crypto 绑定）由构建机现场编译，符号版本跟着构建机的
+      # glibc 走；runner 本身是 2.39，产物装到 Ubuntu 20.04（2.31）上会直接起不来。所以
+      # `npm ci` 放进 rockylinux:8（glibc 2.28）里跑，其余步骤留在 runner 上。
+      # 打包也留在 runner：旧环境里 electron-builder 自带的 fpm 会用便携 Ruby 顶掉系统
+      # OpenSSL，让 rpmbuild 起不来。
+      - name: 原生模块在 glibc 2.28 的环境里编译
+        run: |
+          # setup-node 装的那份 Node 直接挂进容器，版本与架构自动一致
+          NODE_ROOT="$(dirname "$(dirname "$(command -v node)")")"
+          docker run --rm \
+            -v "$PWD:/work" \
+            -v "$NODE_ROOT:/opt/hostnode:ro" \
+            -v "$HOME/.npm:/root/.npm" \
+            -w /work \
+            rockylinux/rockylinux:8 bash -euc '
+              dnf install -y --setopt=install_weak_deps=False \
+                gcc-toolset-11-gcc gcc-toolset-11-gcc-c++ make python3.11 openssl-devel libatomic git findutils xz tar
+              source /opt/rh/gcc-toolset-11/enable
+              export PATH=/opt/hostnode/bin:$PATH PYTHON=/usr/bin/python3.11
+              node -v
+              npm ci
+            '
+          # 容器里以 root 写的 node_modules 交回 runner 用户，后续步骤才写得动
+          sudo chown -R "$(id -u):$(id -g)" node_modules
 
       # 版本号取自标签：v0.1.0 → 0.1.0。手跑时保持 package.json 里的版本
       - name: 写入版本号
@@ -105,6 +129,11 @@ jobs:
             fi
           done
           echo "三个格式各出一份"
+
+      # 上一步只证明包出得来了；这一步证明它能在目标机上跑：所有 ELF 的符号版本都不超过
+      # Ubuntu 20.04 的 2.31
+      - name: 核对 glibc 底线
+        run: node scripts/check-glibc.mjs --max 2.31
 
       - uses: actions/upload-artifact@v4
         with:

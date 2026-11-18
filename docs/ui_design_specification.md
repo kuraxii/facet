@@ -7,38 +7,38 @@
 ## 1. 设计系统基础 (Design Tokens)
 
 ### 1.1 颜色系统 (Color System)
-配色是同一套语义色板的六种取值：一套浅色加五套深色，全部以 CSS 变量定义在 `packages/ui/src/styles/theme.css`，组件只读变量。缺省为深色的 `zinc`，`跟随系统` 在系统偏浅时用 `light`，否则用 `zinc`。
+配色是同一套语义色板的六种取值：一套浅色加五套深色，全部以 CSS 变量定义在 `packages/ui/src/styles/theme.css`，组件只读变量。缺省为深色的 `dark`，`跟随系统` 在系统偏浅时用 `light`，否则用 `dark`。
 
 | 配色 | 取向 | 代表色 |
 |---|---|---|
 | `light` | 浅色 | `#ffffff` |
-| `zinc` | 深色（缺省），中性灰 | `#808080` |
+| `dark` | 深色（缺省），中性灰配钴蓝强调色 | `#60a5fa` |
 | `midnight` | 深色，蓝调 | `#4a6ba8` |
 | `claude` | 深色，暖棕 | `#d97757` |
 | `ghostty` | 深色，石板蓝 | `#8caaee` |
 | `pureBlack` | 深色，纯黑底 | `#000000` |
 
-每套配色都填满同一组变量，取值含义如下。表里的参考值是 `zinc` 与 `light` 两套。
+每套配色都填满同一组变量，取值含义如下。表里的参考值是 `dark` 与 `light` 两套。
 
 *   **表面背景色 (Surfaces)**：用于构建层级关系。
-    *   `--bg`：最底层背景（主视口区）。zinc `#18181b` / light `#ffffff`
-    *   `--sb`：侧边栏。zinc `#131316` / light `#f4f4f5`
-    *   `--card` / `--card2`：一级面板与其中的卡片。zinc `#1f1f22` / `#27272a`，light `#fafafa` / `#f4f4f5`
+    *   `--bg`：最底层背景（主视口区）。dark `#18181b` / light `#ffffff`
+    *   `--sb`：侧边栏。dark `#131316` / light `#f4f4f5`
+    *   `--card` / `--card2`：一级面板与其中的卡片。dark `#1f1f22` / `#27272a`，light `#fafafa` / `#f4f4f5`
     *   `--surface2` / `--surface3` / `--surface4`：悬浮、选中与按下三档。选中的会话行用 `--surface4`
 *   **文本颜色 (Text)**：
-    *   `--t1`：主文本（标题、正文）。zinc `#fafafa` / light `#1a1a1e`
-    *   `--t2`：次文本（描述、次要信息）。zinc `#a1a1aa` / light `#71717a`
-    *   `--t3`：弱文本（占位符、辅助时间/数据）。zinc `#71717a` / light `#a1a1aa`
+    *   `--t1`：主文本（标题、正文）。dark `#fafafa` / light `#1a1a1e`
+    *   `--t2`：次文本（描述、次要信息）。dark `#a1a1aa` / light `#71717a`
+    *   `--t3`：弱文本（占位符、辅助时间/数据）。dark `#71717a` / light `#a1a1aa`
 *   **边框与分割线 (Lines)**：
-    *   `--line`：常规分割线、边框。zinc `#27272a` / light `#e4e4e7`
-    *   `--line2`：强调边框（输入框默认边框）。zinc `#303036` / light `#ececf1`
+    *   `--line`：常规分割线、边框。dark `#27272a` / light `#e4e4e7`
+    *   `--line2`：强调边框（输入框默认边框）。dark `#303036` / light `#ececf1`
 *   **语义色 (Semantic)**：
-    *   `--acc`：强调色的文字版（链接、聚焦描边、指示条）。zinc `#fafafa` / light `#2563eb`（钴蓝，白底上 5.2:1）
-    *   `--acc-fill`：强调色的填充版（主按钮底色），配 `--on-acc` 的文字。zinc `#e4e4e7` / light `#1d4ed8`（比文字版深一档，白字压上去 6.6:1）
+    *   `--acc`：强调色的文字版（链接、聚焦描边、指示条）。dark `#60a5fa`（钴蓝亮版，压深底 7.5:1）/ light `#2563eb`（钴蓝，白底上 5.2:1）
+    *   `--acc-fill`：强调色的填充版（主按钮底色），配 `--on-acc` 的文字。dark `#60a5fa`（配深色文字 7.5:1）/ light `#1d4ed8`（比文字版深一档，白字压上去 6.6:1）
     *   `--ok` / `--warn` / `--err`：成功、警告、失败。状态文字与图标用它，底纹用同色的 `--okbg` / `--warnbg` / `--errbg`
     *   `--dot-ok` / `--dot-warn` / `--dot-err` / `--dot-run`：列表行上的状态点。点只有 6pt，彩度比状态色更高一档
 *   **Diff 差异色 (Code Diff)**：
-    *   `--add` / `--del`：差异文本色。zinc `#4ade80` / `#ef4444`，light `#15803d` / `#b91c1c`
+    *   `--add` / `--del`：差异文本色。dark `#4ade80` / `#ef4444`，light `#15803d` / `#b91c1c`
     *   `--addbg` / `--delbg`：差异行的底色，取同色 16% 透明度
 *   **代码配色 (Code Highlight)**：代码块与差异视图的语法高亮另有一套配色，可选 GitHub、Catppuccin、Dracula、Tokyo Night、One、Nord、Gruvbox、Solarized，浅深跟随界面主题。
 

@@ -433,7 +433,7 @@ for (let index = 0; index < options.sessions; index += 1) {
 const settings = {
 	version: 1,
 	appearance: {
-		theme: "zinc",
+		theme: "dark",
 		codeTheme: "github",
 		codeFont: "",
 		editorFont: "",

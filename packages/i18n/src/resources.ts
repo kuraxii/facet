@@ -174,7 +174,7 @@ export const en = {
 	},
 	theme: {
 		light: "Light",
-		zinc: "Zinc",
+		dark: "Dark",
 		midnight: "Midnight",
 		claude: "Claude",
 		ghostty: "Ghostty",
@@ -683,11 +683,11 @@ export const zhCN = {
 	},
 	theme: {
 		light: "浅色",
-		zinc: "Zinc",
+		dark: "暗色",
 		midnight: "Midnight",
 		claude: "Claude",
 		ghostty: "Ghostty",
-		pureBlack: "纯黑",
+		pureBlack: "Pure black",
 		system: "跟随系统",
 	},
 	editor: {

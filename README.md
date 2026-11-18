@@ -222,7 +222,7 @@ scripts/build-fonts.sh <字体目录>
 
 界面字体固定为 Inter 与 Noto Sans SC Variable，正文字号固定为 15px；代码块字号固定为 12.5px。整体大小由界面缩放控制，编辑器字号与终端字号各自可调。
 
-配色是一套浅色加五套深色（`zinc` 为缺省），代码高亮另有八套可选，浅深跟随界面主题。全部取值在 `packages/ui/src/styles/theme.css`。
+配色是一套浅色加五套深色（`dark` 为缺省，强调色钴蓝 `#60a5fa`），代码高亮另有八套可选，浅深跟随界面主题。全部取值在 `packages/ui/src/styles/theme.css`。
 
 ## 数据放在哪
 
@@ -268,9 +268,14 @@ Windows 产物同样在 `apps/desktop/dist/`：
 `scripts/build-server.mjs` 也按宿主平台下载自带的 Node 运行时（Linux 上是 `bin/node`，
 Windows 上是 `bin/node.exe`）。
 
+Linux 包的 glibc 底线取决于**编译原生模块那台机器**：`pty.node` 与 `sshcrypto.node` 是现场
+编译的，符号版本跟着编译机的 glibc 走（Ubuntu 24.04 上编出来要 2.39）。目标是 Ubuntu 20.04
+（glibc 2.31），所以 CI 把 `npm ci` 放进 `rockylinux:8`（glibc 2.28）容器里跑，其余步骤留在
+runner 上；`node scripts/check-glibc.mjs --max 2.31` 会把这条底线钉住，超了就构建失败。
+
 Linux：
 
-- 安装到 `/opt/Facet`，可执行文件是 `facet`，桌面项 `facet.desktop` 与 `StartupWMClass` 都是 `facet`，图标 512×512
+- 安装到 `/opt/Facet`，可执行文件是 `facet`，桌面项 `facet.desktop` 与 `StartupWMClass` 都是 `facet`，图标 512×512（`apps/desktop/build/icon.png`，由同目录 `icon.svg` 渲染）
 - 依赖走 electron-builder 的缺省清单（deb：`libgtk-3-0`、`libnss3`、`libxss1`、`libxtst6` 等；rpm：`gtk3`、`nss`、`libXScrnSaver` 等），不手写
 - `node-pty` 的原生模块与 `spawn-helper` 解包在 `resources/app.asar.unpacked`，打包时只留 linux 的构建产物，源码与其它平台的预编译都剔掉
 - 构建 deb/rpm 用的 `fpm` 由 electron-builder 自己下载到 `~/.cache/electron-builder`，不需要系统装 fpm
@@ -278,7 +283,7 @@ Linux：
 
 Windows：
 
-- 图标是 `apps/desktop/build/icon.ico`（16–256 多尺寸，从同目录 `icon.png` 生成），NSIS 段配置在 `apps/desktop/electron-builder.yml`
+- 图标是 `apps/desktop/build/icon.ico`（16–256 多尺寸，从同目录 `icon.svg` 渲染，`icon.png` 是 512×512 的源图），NSIS 段配置在 `apps/desktop/electron-builder.yml`
 - 本机主机走命名管道，没有 unix socket；管道名取数据目录摘要，开发实例与发布实例各自一份
 - 升级与卸载前会跑 `apps/desktop/build/stop-stale-server.ps1`（由 `build/installer.nsh` 挂到 `customUnInstall`）
   停掉旧版本留下的 server：它是独立进程，占着管道，不停会一直连到旧代码
@@ -294,7 +299,9 @@ Windows：
 `.github/workflows/build.yml`：推 `v*` 标签（或手动 dispatch）时触发——
 
 1. `ubuntu-24.04` 上先跑五条门禁（`mock:check`、`typecheck`、`lint`、`test`、`build`），不过就不往下走；
-2. `ubuntu-24.04` 与 `ubuntu-24.04-arm` 两台原生 runner 各打一套 rpm / deb / tar.gz；
+2. `ubuntu-24.04` 与 `ubuntu-24.04-arm` 两台原生 runner 各打一套 rpm / deb / tar.gz：`npm ci`
+   在 `rockylinux:8` 容器里跑（原生模块按 glibc 2.28 编），打包仍在 runner 上做，最后核对
+   产物的 glibc 底线不超过 2.31；
 3. `windows-latest` 上先核对 server 产物里是 `bin/node.exe`，再出 x64 的 NSIS 安装包（`--publish never`，只留本机）；
 4. 产物按平台作为 workflow artifact 上传：Linux 六个包、Windows 一份 `facet-<版本>-x64-setup.exe`，保留 90 天，不自动建 Release；
 5. Windows job 缓存 Electron、自带 Node 运行时与 NSIS 工具链，缓存键跟着 `package-lock.json` 与 `.node-version` 走；

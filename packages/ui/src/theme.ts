@@ -21,7 +21,7 @@ export interface UiThemeOption {
 /** 设置页上的配色清单，浅色在前，其余按深浅排列。 */
 export const UI_THEME_OPTIONS: readonly UiThemeOption[] = [
 	{ id: "light", label: "Light", swatch: "#ffffff", dark: false },
-	{ id: "zinc", label: "Zinc", swatch: "#808080", dark: true },
+	{ id: "dark", label: "Dark", swatch: "#60a5fa", dark: true },
 	{ id: "midnight", label: "Midnight", swatch: "#4a6ba8", dark: true },
 	{ id: "claude", label: "Claude", swatch: "#d97757", dark: true },
 	{ id: "ghostty", label: "Ghostty", swatch: "#8caaee", dark: true },
@@ -32,7 +32,7 @@ export const UI_THEME_OPTIONS: readonly UiThemeOption[] = [
 export const THEME_MODES: readonly ThemeMode[] = [...UI_THEMES, "system"];
 
 /** 缺省的深色配色，切到浅色再切回来时用它。 */
-export const DEFAULT_DARK_THEME: UiTheme = "zinc";
+export const DEFAULT_DARK_THEME: UiTheme = "dark";
 
 /** 这套配色是不是深色。 */
 export function isDarkTheme(theme: UiTheme): boolean {

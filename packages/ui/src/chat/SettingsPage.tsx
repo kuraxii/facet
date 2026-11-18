@@ -562,8 +562,8 @@ function AppearanceSection({
 		switch (id) {
 			case "light":
 				return t("theme.light");
-			case "zinc":
-				return t("theme.zinc");
+			case "dark":
+				return t("theme.dark");
 			case "midnight":
 				return t("theme.midnight");
 			case "claude":

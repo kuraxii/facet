@@ -15,7 +15,7 @@ import { closeSync, openSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { connect as connectSocket } from "node:net";
 import { homedir } from "node:os";
-import { basename, isAbsolute, join, resolve } from "node:path";
+import { basename, isAbsolute, join } from "node:path";
 import { type DiscoveryRecord, parseDiscovery } from "@facet/protocol";
 import { StreamTransport } from "@facet/transport";
 

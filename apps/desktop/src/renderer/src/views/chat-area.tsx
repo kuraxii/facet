@@ -165,25 +165,6 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 							composer.runFacetCommand(command.name, args);
 						}}
 					/>
-
-					{transcript.notices.length > 0 ? (
-						<div className="notices">
-							{transcript.notices.map((notice) => (
-								<span
-									key={`${notice.level}:${notice.message}`}
-									className={
-										notice.level === "error"
-											? "chip is-error"
-											: notice.level === "warning"
-												? "chip is-warn"
-												: "chip"
-									}
-								>
-									{notice.message}
-								</span>
-							))}
-						</div>
-					) : null}
 				</div>
 			</div>
 		</>

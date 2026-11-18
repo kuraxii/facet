@@ -323,18 +323,6 @@
 	min-width: 100%;
 }
 
-.main-error {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	flex: none;
-	margin: 0;
-	padding: 6px var(--chat-gutter-x);
-	background: var(--errbg);
-	color: var(--err);
-	font-size: 12px;
-}
-
 /* 增删行数的颜色，对话里的文件改动与变更页共用 */
 .add {
 	color: var(--add);

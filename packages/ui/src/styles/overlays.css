@@ -474,3 +474,133 @@ dialog.dialog.is-picker .dialog-actions {
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 }
+
+/* 轻提示 */
+
+/*
+ * 右下角一列，新的在下。挂到 body 上，主区与右栏的 overflow 都裁不到它。
+ * 层级低于悬浮提示：提示压在轻提示上也不会被挡住。
+ */
+.toast-host {
+	position: fixed;
+	right: var(--toast-edge);
+	bottom: var(--toast-edge);
+	/* 提示是浮层里最低的一档：右键菜单 70、弹窗 60、悬浮提示 90 */
+	z-index: 50;
+	display: flex;
+	flex-direction: column;
+	gap: var(--toast-gap);
+	width: var(--toast-width);
+	pointer-events: none;
+}
+
+.toast {
+	display: flex;
+	align-items: flex-start;
+	gap: var(--toast-icon-gap);
+	padding: var(--toast-padding-y) var(--toast-padding-x);
+	border: 1px solid var(--line2);
+	border-left: 3px solid var(--line2);
+	border-radius: var(--toast-radius);
+	background: var(--card);
+	box-shadow: 0 12px 32px rgba(0, 0, 0, 0.32);
+	color: var(--t2);
+	font-size: 12.5px;
+	line-height: 1.45;
+	pointer-events: auto;
+	/* 进出都走 CSS：进入靠 @starting-style，离开时元素已经从 DOM 里拿掉，只留进入动画 */
+	opacity: 1;
+	translate: 0 0;
+	transition:
+		opacity 160ms ease-out,
+		translate 160ms ease-out;
+}
+
+@starting-style {
+	.toast {
+		opacity: 0;
+		translate: 0 6px;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.toast {
+		transition: opacity 120ms linear;
+	}
+
+	@starting-style {
+		.toast {
+			translate: 0 0;
+		}
+	}
+}
+
+.toast.is-success {
+	border-left-color: var(--dot-ok);
+}
+
+.toast.is-warning {
+	border-left-color: var(--warn);
+}
+
+.toast.is-error {
+	border-left-color: var(--err);
+}
+
+.toast-icon {
+	flex: none;
+	margin-top: 1px;
+	color: var(--t3);
+}
+
+.toast.is-success .toast-icon {
+	color: var(--dot-ok);
+}
+
+.toast.is-warning .toast-icon {
+	color: var(--warn);
+}
+
+.toast.is-error .toast-icon {
+	color: var(--err);
+}
+
+/* 事实内容可能很长：折行但不撑破宽度 */
+.toast-text {
+	flex: 1;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.toast-count {
+	flex: none;
+	color: var(--t3);
+	font-size: 11px;
+}
+
+.toast-close {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--t3);
+	cursor: pointer;
+}
+
+.toast-close {
+	width: 20px;
+	height: 20px;
+}
+
+.toast-close:hover {
+	background: color-mix(in srgb, var(--t1) 8%, transparent);
+	color: var(--t1);
+}
+
+.toast-close:focus-visible {
+	outline: 2px solid var(--acc);
+	outline-offset: 1px;
+}

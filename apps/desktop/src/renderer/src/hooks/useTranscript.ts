@@ -4,7 +4,7 @@
  * 屏幕上的对话由主区域的投影得到；这一层管它周围的东西：提示条、滚动位置、向上补历史
  * 与已读标记。只读会话客户端，不推动任何动作以外的东西。
  */
-import type { NoticeView, SessionClient, SessionView } from "@facet/client-core";
+import type { SessionClient } from "@facet/client-core";
 import { createTranscriptCache, toTranscript } from "@facet/client-core";
 import type { ScrollRestore } from "@facet/ui";
 import { useStickToBottom } from "@facet/ui";
@@ -15,8 +15,6 @@ export interface TranscriptOptions {
 	client: SessionClient;
 	/** 当前对话视图 */
 	chat: ReturnType<SessionClient["chatView"]>;
-	/** 当前会话视图 */
-	session: SessionView | undefined;
 	/** 当前会话文件，滚动位置按它保存 */
 	activeFile: string | undefined;
 	/** 当前会话标识，换会话时重置补历史的闸门 */
@@ -28,8 +26,6 @@ export interface TranscriptOptions {
 export interface Transcript {
 	/** 投影后的对话条目 */
 	items: ReturnType<typeof toTranscript>;
-	/** 要显示的提示：对话通道与扩展给出的合并，同一句只留一条 */
-	notices: readonly NoticeView[];
 	/** 滚动容器的引用与元素 */
 	scrollRef: (element: HTMLDivElement | null) => void;
 	scrollElement: HTMLDivElement | null;
@@ -42,21 +38,9 @@ export interface Transcript {
 }
 
 export function useTranscript(options: TranscriptOptions): Transcript {
-	const { client, chat, session, activeFile, openedSessionId, hostEpoch } = options;
+	const { client, chat, activeFile, openedSessionId, hostEpoch } = options;
 	/** 每个会话文件上次的滚动位置，切回标签时恢复 */
 	const scrollPositions = useRef(new Map<string, ScrollRestore>());
-
-	const notices = useMemo(
-		() => [
-			...new Map(
-				[...(chat?.notices ?? []), ...(session?.state.extensionUi.notices ?? [])].map((notice) => [
-					`${notice.level}:${notice.message}`,
-					notice,
-				]),
-			).values(),
-		],
-		[chat?.notices, session?.state.extensionUi.notices],
-	);
 
 	// 投影缓存按条目对象记忆：流式期间每帧只有末尾那条消息换新，其余条目直接沿用
 	const transcriptCache = useRef(createTranscriptCache());
@@ -136,7 +120,7 @@ export function useTranscript(options: TranscriptOptions): Transcript {
 		scrollPositions.current.clear();
 	}, [hostEpoch]);
 
-	return { items, notices, scrollRef, scrollElement, isPinned, scrollToBottom, forgetScroll };
+	return { items, scrollRef, scrollElement, isPinned, scrollToBottom, forgetScroll };
 }
 
 export interface ReadMarkerOptions {

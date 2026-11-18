@@ -1,4 +1,5 @@
-# 发行包配置。只出 Linux 的 rpm 与 deb 两种，macOS、Windows、AppImage 不做。
+# 发行包配置。只出 Linux 的 rpm、deb 与 tar.gz 三种（x86_64 与 arm64 各一套），
+# macOS、Windows、AppImage 不做。
 #
 # 桌面本体进 asar；server 与其 pty 子进程在独立产物里（见 extraResources），不占 asar。
 appId: app.facet.desktop
@@ -34,6 +35,7 @@ linux:
   target:
     - rpm
     - deb
+    - tar.gz
   category: Development
   executableName: facet
   # .desktop 名与 Electron 的 app_id 一致，桌面环境才能把窗口归到图标上

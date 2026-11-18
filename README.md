@@ -238,18 +238,21 @@ scripts/build-fonts.sh <字体目录>
 
 ## 打包
 
-只出 Linux 的两种安装包：
+只出 Linux 的包：三种格式、两种架构，一共六个。
 
 ```bash
-npm run dist -w @facet/desktop
+npm run dist -w @facet/desktop # 本机架构，rpm + deb + tar.gz 各一个
 ```
 
-产物在 `apps/desktop/dist/`：
+产物在 `apps/desktop/dist/`，归档名里的架构串随格式变（由 electron-builder 决定，不手写）：
 
-| 文件 | 说明 |
-|---|---|
-| `facet-<版本>-x86_64.rpm` | Fedora、RHEL 系 |
-| `facet-<版本>-amd64.deb` | Debian、Ubuntu 系 |
+| 格式 | x86_64 | arm64 | 说明 |
+|---|---|---|---|
+| rpm | `facet-<版本>-x86_64.rpm` | `facet-<版本>-aarch64.rpm` | Fedora、RHEL 系 |
+| deb | `facet-<版本>-amd64.deb` | `facet-<版本>-arm64.deb` | Debian、Ubuntu 系 |
+| tar.gz | `facet-<版本>-x64.tar.gz` | `facet-<版本>-arm64.tar.gz` | 免安装，解压即用 |
+
+arm64 的包得在 arm64 机器上打：`node-pty` 是原生模块（N-API），`npm ci` 按当前架构编。
 
 - 安装到 `/opt/Facet`，可执行文件是 `facet`，桌面项 `facet.desktop` 与 `StartupWMClass` 都是 `facet`，图标 512×512
 - 依赖走 electron-builder 的缺省清单（deb：`libgtk-3-0`、`libnss3`、`libxss1`、`libxtst6` 等；rpm：`gtk3`、`nss`、`libXScrnSaver` 等），不手写
@@ -258,6 +261,17 @@ npm run dist -w @facet/desktop
 - 渲染产物约 54 MB，主要是随包打的字体（Inter、Noto Sans SC、Maple Mono CN）；Electron 本身约 100 MB
 
 开发时桌面用 `process.execPath` 加 `ELECTRON_RUN_AS_NODE=1` 拉起 `out/main/server.js`，server 再起同目录的 `pty-server.js`；打包后桌面改为拉起独立产物 `resources/server/bin/node resources/server/lib/server.mjs`。
+
+### CI
+
+`.github/workflows/build.yml`：推 `v*` 标签（或手动 dispatch）时触发——
+
+1. `ubuntu-24.04` 上先跑五条门禁（`mock:check`、`typecheck`、`lint`、`test`、`build`），不过就不往下走；
+2. `ubuntu-24.04` 与 `ubuntu-24.04-arm` 两台原生 runner 各打一套 rpm / deb / tar.gz；
+3. 六个包按架构作为 workflow artifact 上传，保留 90 天，不自动建 Release；
+4. 版本号取自标签：`v0.1.0` → `0.1.0`，手动 dispatch 时用 `apps/desktop/package.json` 里的版本。
+
+Windows 与 macOS 不在流水线里：`scripts/build-server.mjs` 只认 `node-v…-linux-x64`，`electron-builder.yml` 也只配了 linux 段。
 
 ## 环境变量
 
@@ -285,7 +299,6 @@ npm run dist -w @facet/desktop
 
 ## 文档
 
-- `docs/requirements.md`：需求与取舍
 - `docs/ui_design_specification.md`：界面设计说明
 - `docs/i18n.md`：界面语言与文案规则
 - `docs/backlog.md`：还没做完的能力、验收项、设计取舍与建议顺序

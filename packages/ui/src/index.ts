@@ -73,6 +73,7 @@ export {
 	SIDEBAR_DEFAULT_WIDTH,
 	SIDEBAR_MAX_WIDTH,
 	SIDEBAR_MIN_WIDTH,
+	SIDEBAR_WIDTH_BOUNDS,
 	type SidebarStorage,
 	writeSidebarWidth,
 } from "./chat/sidebar-state.ts";
@@ -117,7 +118,9 @@ export {
 export type { MainTabItem, MainTabsProps } from "./panel/main-tabs.tsx";
 export { MainTabs } from "./panel/main-tabs.tsx";
 export type { PaneResizerProps } from "./panel/pane-resizer.tsx";
-export { clampWidth, PaneResizer } from "./panel/pane-resizer.tsx";
+export { PaneResizer } from "./panel/pane-resizer.tsx";
+export type { PaneWidthBounds } from "./panel/pane-width.ts";
+export { clampPaneWidth } from "./panel/pane-width.ts";
 export type { PanelStorage, RightPanelState, RightPanelTab } from "./panel/panel-state.ts";
 export {
 	clampPanelWidth,
@@ -125,6 +128,7 @@ export {
 	PANEL_DEFAULT_WIDTH,
 	PANEL_MAX_WIDTH,
 	PANEL_MIN_WIDTH,
+	PANEL_WIDTH_BOUNDS,
 	readPanelState,
 	writePanelState,
 } from "./panel/panel-state.ts";
@@ -144,6 +148,17 @@ export {
 	uiThemeLabel,
 } from "./theme.ts";
 export { useHoverTip } from "./tip.tsx";
+export type { Toast, ToastInput, ToastLevel } from "./toast.ts";
+export {
+	dismissToast,
+	expireToasts,
+	pushToast,
+	shiftToastExpiry,
+	TOAST_LIMIT,
+	toastDuration,
+} from "./toast.ts";
+export type { ToastHostProps } from "./toast-host.tsx";
+export { ToastHost } from "./toast-host.tsx";
 export type { DisplayRow, ForkPoint, RowKind } from "./transcript/group.ts";
 export { formatDuration, groupLabel, groupRows, turnDurationText } from "./transcript/group.ts";
 export { ArrowDownIcon } from "./transcript/icons.tsx";

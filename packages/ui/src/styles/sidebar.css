@@ -18,6 +18,20 @@
 	transition: background-color var(--dur-fast) var(--ease);
 }
 
+/*
+ * 宽屏：把剪辑区放宽到分隔条命中区的宽度。
+ *
+ * 分隔条的热区有一大半落在接缝外侧的主区上，而 `.sb` 的 `overflow: hidden` 会把伸出去的那半
+ * 裁掉、连点击一起裁掉。窄屏不这样做：那里 `.sb` 是贴左缘的抽屉，放宽剪辑会从屏幕左缘漏出
+ * 一条内容。
+ */
+@media (min-width: 881px) {
+	.sb {
+		overflow: clip;
+		overflow-clip-margin: var(--divider-hit-width);
+	}
+}
+
 /* 宽屏收起左栏 */
 .shell.is-sb-hidden .sb {
 	display: none;
@@ -28,10 +42,12 @@
 	position: absolute;
 	top: 0;
 	bottom: 0;
-	right: 0;
 	z-index: 3;
-	/* 命中区让开滚动条：拇指在沟槽里居中，最外面 2px 才是空的 */
-	width: var(--sidebar-divider-hit);
+	/* 命中区 6px：只有 `--sidebar-hit-inset`（1px）压进列表内容，其余 5px 落在接缝外侧的主区上，
+	   贴右缘那条滚动条（沟槽 8px、拇指居中 4px）因此照旧可点。负的 right 就是把盒子往外推
+	   的那一步；伸出去的部分靠上面 `.sb` 放宽的剪辑区才活得下来 */
+	width: var(--divider-hit-width);
+	right: calc(var(--sidebar-hit-inset) - var(--divider-hit-width));
 	margin: 0;
 	border: 0;
 	cursor: col-resize;

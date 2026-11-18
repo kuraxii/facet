@@ -333,21 +333,6 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 							onCreateTerminal={() => void openTerminal()}
 							canCreateTerminal={canUseTerminal}
 						/>
-						{terminal.terminalError === undefined ? null : (
-							<p className="main-error">
-								{terminal.terminalError}
-								<button
-									type="button"
-									className="chg-retry"
-									onClick={() => {
-										terminal.clearError();
-										void openTerminal();
-									}}
-								>
-									{t("common.retry")}
-								</button>
-							</p>
-						)}
 						<div className="main-tab-content" id="main-tab-content">
 							<DocumentPane
 								host={host}
@@ -363,7 +348,10 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 					</main>
 
 					{shell.panel.open ? (
-						<RightPanel width={shell.panel.width} onWidthChange={(width) => shell.updatePanel({ width })}>
+						<RightPanel
+							width={shell.isNarrow ? undefined : shell.panel.width}
+							onWidthChange={shell.isNarrow ? undefined : (width) => shell.updatePanel({ width })}
+						>
 							{shell.panel.tab === "changes" ? (
 								<ChangesPane
 									status={tabs.changes.status}

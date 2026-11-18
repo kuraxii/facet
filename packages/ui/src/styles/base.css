@@ -37,6 +37,14 @@
 	--tool-tip-gap: 6px;
 	--tool-tip-width: 560px;
 	--tool-tip-height: 320px;
+	/* 轻提示：离窗口右下角的距离、宽度、行间距、内边距与圆角 */
+	--toast-edge: 16px;
+	--toast-width: 320px;
+	--toast-gap: 8px;
+	--toast-padding-x: 10px;
+	--toast-padding-y: 8px;
+	--toast-radius: 10px;
+	--toast-icon-gap: 8px;
 	--context-divider-gap: 12px;
 	--context-divider-padding: 4px;
 	--context-divider-line-height: 1px;
@@ -159,10 +167,10 @@
 	--scrollbar-thumb-color: color-mix(in srgb, var(--t3) 40%, transparent);
 	--scrollbar-thumb-color-hover: var(--t2);
 	--scrollbar-track-color: transparent;
-	/* 两个面板分隔条的命中区宽度，以及悬停时那条高亮的颜色 */
+	/* 分隔条的鼠标命中区总宽度，左右两条共用；悬停时那条高亮线的颜色取下一项 */
 	--divider-hit-width: 6px;
-	/* 侧栏分隔条的命中区：右缘还要放滚动条（沟槽 8px、拇指居中 4px），只剩最外的 2px */
-	--sidebar-divider-hit: 2px;
+	/* 左栏分隔条压进列表内容的宽度：只压 1px，其余命中区落在接缝外侧，贴右缘的滚动条照旧可点 */
+	--sidebar-hit-inset: 1px;
 	--divider-highlight: color-mix(in srgb, var(--acc) 55%, transparent);
 	/* 对话导航的缩放倍数，由设置里的百分比写入；下面每个尺寸都是它的倍数 */
 	--outline-scale: 1;
@@ -470,6 +478,15 @@ button {
 :focus-visible {
 	outline: 2px solid var(--acc);
 	outline-offset: 2px;
+}
+
+/*
+ * 拖动分隔条期间：整页光标统一成列宽光标，文字不可选中。
+ * 标记挂在根节点上，由分隔条在按下时写入、松开或卸载时删除。
+ */
+:root[data-resizing="col"] * {
+	cursor: col-resize !important;
+	user-select: none !important;
 }
 
 svg {

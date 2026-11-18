@@ -5,11 +5,13 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { useComposer } from "./hooks/useComposer.ts";
 import { useHostConnection } from "./hooks/useHostConnection.ts";
 import { useMainTabs } from "./hooks/useMainTabs.ts";
+import { useNoticeBridge } from "./hooks/useNoticeBridge.ts";
 import { useSessionLifecycle } from "./hooks/useSessionLifecycle.ts";
 import { useTerminalPanel } from "./hooks/useTerminalPanel.ts";
 import { useReadMarker, useTranscript } from "./hooks/useTranscript.ts";
 import { useWorkspaceShell } from "./hooks/useWorkspaceShell.ts";
 import { bridge, client, terminalClient } from "./runtime.ts";
+import { ToastProvider, useToast } from "./toast-provider.tsx";
 import { BootScreen } from "./views/boot-screen.tsx";
 import { Workbench } from "./views/workbench.tsx";
 
@@ -36,12 +38,15 @@ export function App(): React.JSX.Element {
 	}, []);
 	return (
 		<I18nProvider language={language}>
-			<AppView languageSetting={languageSetting} onLanguageChange={changeLanguage} />
+			<ToastProvider>
+				<AppView languageSetting={languageSetting} onLanguageChange={changeLanguage} />
+			</ToastProvider>
 		</I18nProvider>
 	);
 }
 
 function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
+	const toast = useToast();
 	const version = useSyncExternalStore(
 		(onChange) => client.store.subscribe(onChange),
 		() => client.store.getVersion(),
@@ -93,6 +98,7 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 		canUseTerminal,
 		cwd: terminalCwd,
 		connectEpoch: host.connectEpoch,
+		showToast: toast.show,
 	});
 
 	const tabs = useMainTabs({
@@ -106,10 +112,12 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 		onOpenSession: session.openSession,
 	});
 
+	// 主机侧通知与插件的 ctx.ui.notify 都走轻提示：后台会话的提示也能被看见
+	useNoticeBridge({ chat, session: sessionView, sessionId: openedSessionId, show: toast.show });
+
 	const transcript = useTranscript({
 		client,
 		chat,
-		session: sessionView,
 		activeFile: session.activeFile,
 		openedSessionId,
 		hostEpoch: host.hostEpoch,
@@ -183,10 +191,17 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 		[tabs, terminal],
 	);
 
-	/** 标签菜单里的复制动作。 */
-	const copyText = useCallback((text: string): void => {
-		void navigator.clipboard.writeText(text).catch(() => undefined);
-	}, []);
+	/** 标签菜单里的复制动作；成功用复制到的内容回执，失败给出剪贴板自己的说法。 */
+	const copyText = useCallback(
+		(text: string): void => {
+			void navigator.clipboard.writeText(text).then(
+				() => toast.show({ level: "success", message: text }),
+				(error: unknown) =>
+					toast.show({ level: "error", message: error instanceof Error ? error.message : String(error) }),
+			);
+		},
+		[toast],
+	);
 
 	// 快捷键 Ctrl + ` 回到终端标签；没有终端时在当前目录新建一个
 	const tabList = tabs.tabs;

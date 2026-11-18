@@ -361,14 +361,6 @@
 	background: var(--card2);
 }
 
-.notices {
-	display: flex;
-	flex-wrap: wrap;
-	justify-content: center;
-	gap: 8px;
-	padding-top: 2px;
-}
-
 .chip-wrap {
 	position: relative;
 	display: inline-flex;

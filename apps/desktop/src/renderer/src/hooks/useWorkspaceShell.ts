@@ -254,14 +254,24 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 		}
 	}, [isNarrow]);
 
-	/** 改右栏状态并写回本地存储。 */
-	const updatePanel = useCallback((patch: Partial<RightPanelState>) => {
-		setPanel((current) => {
-			const next = { ...current, ...patch };
-			writePanelState(localStorage, next);
-			return next;
-		});
-	}, []);
+	/**
+	 * 改右栏状态并写回本地存储。
+	 *
+	 * 窄屏下右栏是浮层、宽度由样式表定，改宽度既看不出效果，又会把桌面端的偏好写坏。
+	 */
+	const updatePanel = useCallback(
+		(patch: Partial<RightPanelState>) => {
+			if (isNarrow && patch.width !== undefined) {
+				return;
+			}
+			setPanel((current) => {
+				const next = { ...current, ...patch };
+				writePanelState(localStorage, next);
+				return next;
+			});
+		},
+		[isNarrow],
+	);
 
 	const setSearchOpen = useCallback((open: boolean) => setIsSearchOpen(open), []);
 	const closeDrawer = useCallback(() => setIsDrawerOpen(false), []);

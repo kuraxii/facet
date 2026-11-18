@@ -1,0 +1,119 @@
+# 推 `v*` 标签时出 Linux 的六个发行包：rpm / deb / tar.gz × x86_64 / arm64。
+#
+# 两种架构各用一台原生 runner：node-pty 是原生模块，x64 上交叉编 arm64 需要交叉工具链，
+# 直接用 arm runner 走同一条 `npm ci` → `@electron/rebuild` 的路径更省事。
+#
+# Windows 暂不在这条流水线里：`scripts/build-server.mjs` 目前只认 `node-v…-linux-x64`，
+# electron-builder 也只配了 linux 段与 png 图标，改完构建脚本与 win 段之后再补 windows job。
+#
+# 产物只作为 workflow artifact 留着（默认 90 天），不自动建 Release。
+
+name: build
+
+on:
+  push:
+    tags:
+      - "v*"
+  # 手动跑一次也能出包，用来验证流水线本身
+  workflow_dispatch:
+
+# 只读仓库：这条流水线不写 releases，也不回写分支
+permissions:
+  contents: read
+
+# 同一版本重复推送时，先把上一轮停掉
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # 关掉各组件的颜色与控制字符，日志在 Actions 里更好读
+  NO_COLOR: "1"
+  CI: "1"
+
+jobs:
+  # 门禁：AGENTS.md 要求五条全绿才能往下走，放在这里一次性把关
+  gates:
+    name: gates
+    runs-on: ubuntu-24.04
+    # 五条门禁在本机约三分钟；给宽一点，卡住时能自己结束
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - run: npm run mock:check
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test
+      - run: npm run build
+
+  linux:
+    name: linux ${{ matrix.arch }}
+    needs: gates
+    strategy:
+      # 一个架构挂了不要把另一个也取消掉，两个都要看到结果
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    # 打三个包 + 下载 Electron 与 Node 运行时，留足时间
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+
+      # 版本号取自标签：v0.1.0 → 0.1.0。手跑时保持 package.json 里的版本
+      - name: 写入版本号
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: npm pkg set version="${GITHUB_REF_NAME#v}" --workspace @facet/desktop
+
+      # 先打 server 再让 electron-builder 动 node_modules：node-pty 是 N-API 模块，同一份
+      # .node 在 Node 与 Electron 下都能加载，但顺序固定下来，将来换成 ABI 相关的原生模块
+      # 时不会拷错那一份
+      - name: 打独立的 server 产物
+        run: npm run build:server
+      - name: 构建桌面
+        run: npm run build -w @facet/desktop
+
+      - name: 出 rpm、deb 与 tar.gz
+        working-directory: apps/desktop
+        # --publish never：产物只留在本机，由下一步上传
+        run: npx electron-builder --linux rpm deb tar.gz --${{ matrix.arch }} --publish never
+
+      - name: 核对产物
+        working-directory: apps/desktop
+        # 归档名里的架构串随格式变（rpm 用 x86_64/aarch64、deb 用 amd64/arm64），
+        # 所以按格式数个数，不拼文件名
+        run: |
+          ls -lh dist/*.rpm dist/*.deb dist/*.tar.gz
+          for ext in rpm deb tar.gz; do
+            count=$(ls -1 dist/*."$ext" 2>/dev/null | wc -l)
+            if [ "$count" != "1" ]; then
+              echo "dist 下应只有一个 .$ext，实际 $count 个"
+              exit 1
+            fi
+          done
+          echo "三个格式各出一份"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: facet-linux-${{ matrix.arch }}
+          path: |
+            apps/desktop/dist/*.rpm
+            apps/desktop/dist/*.deb
+            apps/desktop/dist/*.tar.gz
+          # 六个包一次传完，任缺其一就当失败
+          if-no-files-found: error
+          retention-days: 90

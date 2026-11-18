@@ -10,6 +10,7 @@ import { ChevronRight } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { shortTime } from "../chat/sidebar-model.ts";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { useHoverTip } from "../tip.tsx";
 import styles from "./changes.module.css";
 
 export interface CommitHistoryProps {
@@ -26,6 +27,8 @@ export interface CommitHistoryProps {
 /** 最近提交列表。 */
 export function CommitHistory({ commits, isLoading, error, onCommitPress }: CommitHistoryProps): ReactNode {
 	const { t, language } = useI18n();
+	// 行里给的是短 sha，完整值由提示补上
+	const tip = useHoverTip();
 	const [isOpen, setIsOpen] = useState(false);
 
 	if (commits !== undefined && !commits.isRepo) {
@@ -70,7 +73,7 @@ export function CommitHistory({ commits, isLoading, error, onCommitPress }: Comm
 								type="button"
 								className={styles.commitRow}
 								key={commit.sha}
-								title={commit.sha}
+								{...tip.handlers(commit.sha)}
 								onClick={() => onCommitPress?.(commit)}
 							>
 								<span
@@ -90,6 +93,7 @@ export function CommitHistory({ commits, isLoading, error, onCommitPress }: Comm
 					)}
 				</div>
 			) : null}
+			{tip.render()}
 		</section>
 	);
 }

@@ -79,6 +79,13 @@ export interface SidebarInput {
 	untitled?: string;
 	/** 相对时间用哪种语言，缺省英文 */
 	locale?: SupportedLanguage;
+	/**
+	 * 上一帧「进行中」组的会话路径，按当时显示的顺序。
+	 *
+	 * 运行中的会话每轮结束都会刷新摘要时间，照着时间排会让几条同时在跑的会话互相挤；
+	 * 给出这份记忆后，运行期间只按进入先后排：新开跑的排在组首，已经在跑的位置不动。
+	 */
+	runningOrder?: readonly string[] | undefined;
 }
 
 /**
@@ -342,6 +349,46 @@ function listProjects(added: readonly ProjectInfo[], sessions: readonly SessionS
 }
 
 /**
+ * 把运行中的会话按记忆顺序提到前面。
+ *
+ * 会话在组里的位置只由「谁先开始跑」决定：记不住的新面孔排在组首，记得住的按上一帧的
+ * 顺序跟着，于是摘要时间再怎么刷，已经在跑的几行都不会互相挤。非运行中的会话保持原顺序，
+ * 落到日期组里仍然是时间倒序。
+ */
+function orderRunning(
+	sessions: readonly SidebarSession[],
+	runningOrder: readonly string[] | undefined,
+): SidebarSession[] {
+	if (runningOrder === undefined || runningOrder.length === 0) {
+		return [...sessions];
+	}
+	const rank = new Map(runningOrder.map((path, index) => [path, index]));
+	const running: SidebarSession[] = [];
+	const rest: SidebarSession[] = [];
+	for (const session of sessions) {
+		if (session.isRunning) {
+			running.push(session);
+		} else {
+			rest.push(session);
+		}
+	}
+	if (running.length < 2) {
+		return [...sessions];
+	}
+	const fresh: SidebarSession[] = [];
+	const known: SidebarSession[] = [];
+	for (const session of running) {
+		if (rank.has(session.path)) {
+			known.push(session);
+		} else {
+			fresh.push(session);
+		}
+	}
+	known.sort((left, right) => (rank.get(left.path) ?? 0) - (rank.get(right.path) ?? 0));
+	return [...fresh, ...known, ...rest];
+}
+
+/**
  * 组装侧栏数据。
  *
  * 先按项目范围与关键词筛出一份会话，再分组；项目选项与主机条始终按全部会话统计，
@@ -363,7 +410,7 @@ export function buildSidebar(input: SidebarInput): SidebarData {
 			? inScope
 			: inScope.filter((session) => session.title.toLowerCase().includes(keyword));
 
-	const groups = groupSessions(matched, now).map((group) => ({
+	const groups = groupSessions(orderRunning(matched, input.runningOrder), now).map((group) => ({
 		...group,
 		// 时间文案只取决于分组与分钟，放在这里算一次，行渲染不再各自调一遍
 		sessions: group.sessions.map((session) => ({

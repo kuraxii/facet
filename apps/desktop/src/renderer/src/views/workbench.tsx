@@ -174,7 +174,6 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 	const emptyCreateCwd = session.createCwd.length > 0 ? session.createCwd : session.projects[0]?.cwd;
 	const activeTab = tabs.tabs.find((item) => item.id === tabs.activeTabId);
 	const fileTab = activeTab?.kind === "file" ? activeTab : undefined;
-	const terminalDisabledReason = canUseTerminal ? undefined : t("app.terminalUnavailable");
 	const errorBar =
 		session.sessionError === undefined ? null : (
 			<div className="session-error">
@@ -292,6 +291,7 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 						onRenameProject={session.renameProject}
 						onRemoveProject={session.removeProject}
 						onRevealProject={session.revealProject}
+						onRevealSessionFolder={session.revealSessionFolder}
 						onRenameSession={session.renameSession}
 						onDeleteSession={session.deleteSession}
 						onOpenSettings={shell.openSettings}
@@ -332,7 +332,6 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 							onReorder={tabs.reorderTabs}
 							onCreateTerminal={() => void openTerminal()}
 							canCreateTerminal={canUseTerminal}
-							terminalDisabledReason={terminalDisabledReason}
 						/>
 						{terminal.terminalError === undefined ? null : (
 							<p className="main-error">

@@ -6,8 +6,10 @@
  */
 
 import { X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { isComposingKey } from "../keys.ts";
+import { Modal } from "../modal.tsx";
 
 /** 密码框参数。 */
 export interface SshPasswordDialogProps {
@@ -26,21 +28,6 @@ export function SshPasswordDialog({ host, isRetry, onSubmit, onCancel }: SshPass
 	const [password, setPassword] = useState("");
 	const inputRef = useRef<HTMLInputElement>(null);
 
-	// 打开就把光标放进输入框，Esc 放弃
-	useEffect(() => {
-		const frame = requestAnimationFrame(() => inputRef.current?.focus());
-		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key === "Escape") {
-				onCancel();
-			}
-		};
-		document.addEventListener("keydown", onKeyDown);
-		return () => {
-			cancelAnimationFrame(frame);
-			document.removeEventListener("keydown", onKeyDown);
-		};
-	}, [onCancel]);
-
 	const submit = (): void => {
 		if (password.length === 0) {
 			return;
@@ -49,41 +36,39 @@ export function SshPasswordDialog({ host, isRetry, onSubmit, onCancel }: SshPass
 	};
 
 	return (
-		<div className="dialog-backdrop">
-			<div className="dialog is-narrow" role="dialog" aria-modal="true" aria-label={t("ssh.title")}>
-				<div className="dialog-head">
-					<h2 className="dialog-title">{t("ssh.heading", { host })}</h2>
-					<button type="button" className="dialog-close" aria-label={t("common.close")} onClick={onCancel}>
-						<X size={18} strokeWidth={1.5} />
-					</button>
-				</div>
-
-				<p className="dialog-label">{t("ssh.password")}</p>
-				<input
-					ref={inputRef}
-					className="set-input ssh-password-input"
-					type="password"
-					aria-label={t("ssh.label")}
-					autoComplete="current-password"
-					value={password}
-					onChange={(event) => setPassword(event.target.value)}
-					onKeyDown={(event) => {
-						if (event.key === "Enter") {
-							submit();
-						}
-					}}
-				/>
-				{isRetry ? <p className="ssh-password-error">{t("ssh.wrong")}</p> : null}
-
-				<div className="dialog-actions">
-					<button type="button" className="dialog-cancel" onClick={onCancel}>
-						{t("common.cancel")}
-					</button>
-					<button type="button" className="dialog-primary" onClick={submit} disabled={password.length === 0}>
-						{t("ssh.connect")}
-					</button>
-				</div>
+		<Modal open onClose={onCancel} label={t("ssh.title")} className="is-narrow">
+			<div className="dialog-head">
+				<h2 className="dialog-title">{t("ssh.heading", { host })}</h2>
+				<button type="button" className="dialog-close" aria-label={t("common.close")} onClick={onCancel}>
+					<X size={18} strokeWidth={1.5} />
+				</button>
 			</div>
-		</div>
+
+			<p className="dialog-label">{t("ssh.password")}</p>
+			<input
+				ref={inputRef}
+				className="set-input ssh-password-input"
+				type="password"
+				aria-label={t("ssh.label")}
+				autoComplete="current-password"
+				value={password}
+				onChange={(event) => setPassword(event.target.value)}
+				onKeyDown={(event) => {
+					if (event.key === "Enter" && !isComposingKey(event)) {
+						submit();
+					}
+				}}
+			/>
+			{isRetry ? <p className="ssh-password-error">{t("ssh.wrong")}</p> : null}
+
+			<div className="dialog-actions">
+				<button type="button" className="dialog-cancel" onClick={onCancel}>
+					{t("common.cancel")}
+				</button>
+				<button type="button" className="dialog-primary" onClick={submit} disabled={password.length === 0}>
+					{t("ssh.connect")}
+				</button>
+			</div>
+		</Modal>
 	);
 }

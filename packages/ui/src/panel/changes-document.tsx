@@ -321,7 +321,7 @@ export function ChangesDocument({
 
 	const header = (
 		<div className={styles.docToolbar}>
-			<span className={styles.branch} title={title ?? status?.branch ?? ""}>
+			<span className={styles.branch}>
 				{title ?? status?.branch ?? "…"}
 				{status?.upstream === undefined ? null : (
 					<span className={styles.upstream}>
@@ -341,7 +341,6 @@ export function ChangesDocument({
 						type="button"
 						className={styles.iconButton}
 						aria-label={allCollapsed ? t("panel.expandAllFiles") : t("panel.collapseAllFiles")}
-						title={allCollapsed ? t("panel.expandAllFiles") : t("panel.collapseAllFiles")}
 						onClick={toggleAll}
 					>
 						{allCollapsed ? (
@@ -355,7 +354,6 @@ export function ChangesDocument({
 						className={styles.iconButton}
 						data-on={wrapLines}
 						aria-label={wrapLines ? t("panel.scrollLongLines") : t("panel.wrapLongLines")}
-						title={wrapLines ? t("panel.scrollLongLines") : t("panel.wrapLongLines")}
 						onClick={() => setWrapLines((current) => !current)}
 					>
 						<TextWrap size={14} strokeWidth={1.5} />
@@ -366,7 +364,6 @@ export function ChangesDocument({
 				type="button"
 				className={styles.iconButton}
 				aria-label={t("panel.refreshChanges")}
-				title={t("panel.refreshChanges")}
 				onClick={refresh}
 				disabled={isLoading}
 			>

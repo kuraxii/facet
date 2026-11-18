@@ -1,29 +1,25 @@
 /* 浮层：会话搜索、对话框、提供商挑选、信任与 SSH 密码。 */
 
-/* 会话搜索：居中偏上的一层，遮住正文但让出窗口顶带 */
-
-/* 固定在视口上，顶带一起变暗；窗口按钮单独提到遮罩之上，遮罩期间仍然可点 */
-.search-overlay {
-	position: fixed;
-	inset: 0;
-	z-index: 60;
-	display: flex;
-	justify-content: center;
-	align-items: flex-start;
-	padding-top: 12vh;
-	background: rgb(0 0 0 / 45%);
-}
-
-.search-panel {
+/* 会话搜索：居中偏上的一层。模态弹层由浏览器定位，这里只把它往下推一段 */
+dialog.search-panel[open] {
 	display: flex;
 	flex-direction: column;
 	width: min(560px, calc(100vw - 32px));
 	max-height: min(60vh, 460px);
+	margin-top: 12vh;
+	margin-bottom: auto;
+	padding: 0;
 	border: 1px solid var(--line2);
 	border-radius: 12px;
 	background: var(--card);
 	box-shadow: 0 24px 64px rgb(0 0 0 / 45%);
 	overflow: hidden;
+}
+
+dialog.search-panel::backdrop {
+	background: rgb(0 0 0 / 45%);
+	overflow: hidden;
+	overscroll-behavior: contain;
 }
 
 .search-field {
@@ -111,24 +107,30 @@
 }
 
 /* 对话框 */
-.dialog-backdrop {
-	position: fixed;
-	inset: 0;
-	z-index: 100;
-	display: grid;
-	place-items: center;
-	padding: 24px;
-	background: rgba(0, 0, 0, 0.55);
-}
-
-.dialog {
+/*
+ * 原生模态弹层。
+ *
+ * 居中、顶部层、背后页面 inert 都由 `showModal()` 给，这里只定尺寸与观感；遮罩用
+ * `::backdrop`，并把弹层里的滚动与背后的滚动隔开（`overscroll-behavior`）。
+ */
+dialog.dialog {
 	width: 480px;
-	max-width: 100%;
+	max-width: calc(100vw - 48px);
+	max-height: calc(100vh - 48px);
+	margin: auto;
 	padding: 22px 24px 20px;
 	border: 1px solid var(--line2);
 	border-radius: 20px;
 	background: var(--card);
 	box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+	overflow: auto;
+	overscroll-behavior: contain;
+}
+
+dialog.dialog::backdrop {
+	background: rgba(0, 0, 0, 0.55);
+	overflow: hidden;
+	overscroll-behavior: contain;
 }
 
 .dialog-head {
@@ -261,7 +263,7 @@
 	font-size: 12px;
 }
 
-.dialog.is-picker {
+dialog.dialog.is-picker[open] {
 	display: flex;
 	flex-direction: column;
 	width: 520px;
@@ -360,7 +362,7 @@
 	margin-top: 22px;
 }
 
-.dialog.is-picker .dialog-actions {
+dialog.dialog.is-picker .dialog-actions {
 	justify-content: space-between;
 	gap: 8px;
 	margin-top: 14px;
@@ -440,4 +442,35 @@
 .dialog-primary:disabled {
 	cursor: default;
 	opacity: 0.4;
+}
+
+/* 悬浮提示 */
+
+/*
+ * 落点由 `useHoverTip` 给：`position: fixed` 让祖先的 `overflow` 与 `contain` 都裁不到它，
+ * 与触发元素的间隙也由它算进 `top` 里，这里只留观感。
+ */
+.pop-tip {
+	position: fixed;
+	/* 提示要比它所在的浮层高：右键菜单是 70，弹窗是 60，提示落在最上面一层 */
+	z-index: 90;
+	max-width: var(--tool-tip-width);
+	max-height: var(--tool-tip-height);
+	overflow: auto;
+	padding: 8px 10px;
+	border: 1px solid var(--line2);
+	border-radius: 10px;
+	background: var(--card);
+	box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+	overscroll-behavior: contain;
+}
+
+.pop-tip pre {
+	margin: 0;
+	color: var(--t2);
+	font-family: var(--font-mono);
+	font-size: 11.5px;
+	line-height: 1.55;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
 }

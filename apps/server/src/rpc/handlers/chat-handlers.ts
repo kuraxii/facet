@@ -78,12 +78,12 @@ export const chatHandlers: DispatchHandlerMap = {
 			if (agent.isStreaming && action.streamingBehavior === undefined) {
 				throw new RequestError("rejected", "session is running, streamingBehavior is required");
 			}
-			// prompt 在运行开始后返回，这里不会挂到整轮结束
-			handled =
-				(await agent.prompt(action.text, {
-					images: action.images as never,
-					streamingBehavior: action.streamingBehavior,
-				})) === "handled";
+			// prompt 在运行开始后返回，这里不会挂到整轮结束；启动、排队、被扩展消费都算受理
+			await agent.prompt(action.text, {
+				images: action.images as never,
+				streamingBehavior: action.streamingBehavior,
+			});
+			handled = true;
 		});
 		return handled ? "handled" : undefined;
 	},
@@ -105,10 +105,13 @@ export const chatHandlers: DispatchHandlerMap = {
 	"session/pendingMessageSet": async (action, { context, sessionId }) => {
 		let handled = false;
 		await context.hub.withSession(sessionId, async (agent) => {
-			handled =
-				action.kind === "steering"
-					? (await agent.steer(action.text)) === "handled"
-					: (await agent.followUp(action.text)) === "handled";
+			// 进队列与当场被消费都算受理，端点据此收起输入框里的原文
+			if (action.kind === "steering") {
+				await agent.steer(action.text);
+			} else {
+				await agent.followUp(action.text);
+			}
+			handled = true;
 		});
 		return handled ? "handled" : undefined;
 	},

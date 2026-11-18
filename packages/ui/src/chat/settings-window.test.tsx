@@ -41,12 +41,12 @@ const markup = renderToStaticMarkup(
 );
 
 describe("设置窗", () => {
-	it("渲染成带遮罩的对话框，窗口本身可聚焦", () => {
-		expect(markup).toContain('class="dialog-backdrop"');
-		expect(markup).toContain('role="dialog"');
-		expect(markup).toContain('aria-modal="true"');
+	it("渲染成原生 dialog，遮罩与焦点交给浏览器", () => {
+		expect(markup).toContain("<dialog");
 		expect(markup).toContain('aria-label="设置"');
-		expect(markup).toContain('tabindex="-1"');
+		// 原生模态弹层自带这些语义，自己再写一遍会互相打架
+		expect(markup).not.toContain('role="dialog"');
+		expect(markup).not.toContain("aria-modal");
 	});
 
 	it("标题栏带关闭按钮", () => {

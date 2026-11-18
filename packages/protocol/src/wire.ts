@@ -252,6 +252,8 @@ export interface RequestResults {
 	projectTrust: { hasProjectResources: boolean; trusted: boolean | undefined };
 	setProjectTrust: Record<string, never>;
 	revealProject: Record<string, never>;
+	/** 在主机侧文件管理器打开一个目录，没有返回值 */
+	revealPath: Record<string, never>;
 	renameSession: Record<string, never>;
 	deleteSession: Record<string, never>;
 	markSessionsSeen: Record<string, never>;

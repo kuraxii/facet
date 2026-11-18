@@ -7,6 +7,8 @@
 import { FolderPlus, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { isComposingKey } from "../keys.ts";
+import { Modal } from "../modal.tsx";
 import { ChevronIcon } from "../transcript/chevron.tsx";
 import { FolderIcon } from "../transcript/icons.tsx";
 import { RequestEpoch } from "./request-epoch.ts";
@@ -32,7 +34,6 @@ export function CreateProjectDialog({ isOpen, onPickFolder, onCreate, onClose }:
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [error, setError] = useState<string | undefined>(undefined);
 	const nameRef = useRef<HTMLInputElement>(null);
-	const cardRef = useRef<HTMLDivElement>(null);
 	/** 本次打开的轮次，关闭或重开都会推进它 */
 	const epoch = useRef(new RequestEpoch());
 
@@ -55,35 +56,6 @@ export function CreateProjectDialog({ isOpen, onPickFolder, onCreate, onClose }:
 		epoch.current.advance();
 		onClose();
 	}, [onClose]);
-
-	// 点对话框外面关闭
-	useEffect(() => {
-		if (!isOpen) {
-			return;
-		}
-		const onPointerDown = (event: PointerEvent) => {
-			const card = cardRef.current;
-			if (card !== null && event.target instanceof Node && card.contains(event.target)) {
-				return;
-			}
-			close();
-		};
-		document.addEventListener("pointerdown", onPointerDown);
-		return () => document.removeEventListener("pointerdown", onPointerDown);
-	}, [isOpen, close]);
-
-	useEffect(() => {
-		if (!isOpen) {
-			return;
-		}
-		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key === "Escape") {
-				close();
-			}
-		};
-		document.addEventListener("keydown", onKeyDown);
-		return () => document.removeEventListener("keydown", onKeyDown);
-	}, [isOpen, close]);
 
 	if (!isOpen) {
 		return null;
@@ -140,75 +112,66 @@ export function CreateProjectDialog({ isOpen, onPickFolder, onCreate, onClose }:
 	};
 
 	return (
-		<div className="dialog-backdrop">
-			<div
-				ref={cardRef}
-				className="dialog"
-				role="dialog"
-				aria-modal="true"
-				aria-label={t("projectDialog.title")}
-			>
-				<div className="dialog-head">
-					<h2 className="dialog-title">{t("projectDialog.title")}</h2>
-					<button type="button" className="dialog-close" aria-label={t("common.close")} onClick={close}>
-						<X size={18} strokeWidth={1.5} />
-					</button>
-				</div>
-
-				<label className={isNameFocused ? "project-field is-focused" : "project-field"}>
-					<FolderIcon size={18} />
-					<span className="name-divider" />
-					<input
-						ref={nameRef}
-						className="project-name"
-						value={name}
-						onChange={(event) => setName(event.target.value)}
-						onFocus={() => setIsNameFocused(true)}
-						onBlur={() => setIsNameFocused(false)}
-						onKeyDown={(event) => {
-							if (event.key === "Enter") {
-								void submit();
-							}
-						}}
-						placeholder={t("projectDialog.name")}
-						aria-label={t("projectDialog.name")}
-					/>
-				</label>
-
-				<p className="dialog-label">{t("projectDialog.sourceFolder")}</p>
-				<div className="source-box">
-					{cwd === undefined ? (
-						<span className="source-hint">
-							{t("projectDialog.sourceHint")}
-							<ChevronIcon isOpen={false} />
-						</span>
-					) : (
-						<span className="source-path mono" title={cwd}>
-							{cwd}
-						</span>
-					)}
-					<button type="button" className="source-add" onClick={() => void pickFolder()} disabled={isPicking}>
-						<FolderPlus size={14} strokeWidth={1.5} />
-						{isPicking ? t("projectDialog.picking") : t("projectDialog.add")}
-					</button>
-				</div>
-
-				{error === undefined ? null : <p className="dialog-error">{error}</p>}
-
-				<div className="dialog-actions">
-					<button type="button" className="dialog-cancel" onClick={close}>
-						{t("common.cancel")}
-					</button>
-					<button
-						type="button"
-						className="dialog-primary"
-						onClick={() => void submit()}
-						disabled={cwd === undefined || isSubmitting}
-					>
-						{isSubmitting ? t("projectDialog.creating") : t("projectDialog.create")}
-					</button>
-				</div>
+		<Modal open onClose={close} label={t("projectDialog.title")}>
+			<div className="dialog-head">
+				<h2 className="dialog-title">{t("projectDialog.title")}</h2>
+				<button type="button" className="dialog-close" aria-label={t("common.close")} onClick={close}>
+					<X size={18} strokeWidth={1.5} />
+				</button>
 			</div>
-		</div>
+
+			<label className={isNameFocused ? "project-field is-focused" : "project-field"}>
+				<FolderIcon size={18} />
+				<span className="name-divider" />
+				<input
+					ref={nameRef}
+					data-autofocus
+					className="project-name"
+					value={name}
+					onChange={(event) => setName(event.target.value)}
+					onFocus={() => setIsNameFocused(true)}
+					onBlur={() => setIsNameFocused(false)}
+					onKeyDown={(event) => {
+						if (event.key === "Enter" && !isComposingKey(event)) {
+							void submit();
+						}
+					}}
+					placeholder={t("projectDialog.name")}
+					aria-label={t("projectDialog.name")}
+				/>
+			</label>
+
+			<p className="dialog-label">{t("projectDialog.sourceFolder")}</p>
+			<div className="source-box">
+				{cwd === undefined ? (
+					<span className="source-hint">
+						{t("projectDialog.sourceHint")}
+						<ChevronIcon isOpen={false} />
+					</span>
+				) : (
+					<span className="source-path mono">{cwd}</span>
+				)}
+				<button type="button" className="source-add" onClick={() => void pickFolder()} disabled={isPicking}>
+					<FolderPlus size={14} strokeWidth={1.5} />
+					{isPicking ? t("projectDialog.picking") : t("projectDialog.add")}
+				</button>
+			</div>
+
+			{error === undefined ? null : <p className="dialog-error">{error}</p>}
+
+			<div className="dialog-actions">
+				<button type="button" className="dialog-cancel" onClick={close}>
+					{t("common.cancel")}
+				</button>
+				<button
+					type="button"
+					className="dialog-primary"
+					onClick={() => void submit()}
+					disabled={cwd === undefined || isSubmitting}
+				>
+					{isSubmitting ? t("projectDialog.creating") : t("projectDialog.create")}
+				</button>
+			</div>
+		</Modal>
 	);
 }

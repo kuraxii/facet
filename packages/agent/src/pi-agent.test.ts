@@ -257,6 +257,29 @@ describe("阶段与维护动作", () => {
 		]);
 	});
 
+	it("settled 到达时这一轮已经收回 idle", async () => {
+		const { agent, events, emitToAgent } = createAgent({
+			run: async (run) => {
+				run.preflightResult?.("started");
+			},
+		});
+		await agent.prompt("你好");
+		emitToAgent({ type: "agent_start" });
+		// 收尾那一刻的 isBusy 决定主机怎么判这一轮：仍为 true 的话，刚记下的收尾会被清掉
+		const busyAtSettled: boolean[] = [];
+		agent.subscribe((event) => {
+			if (event.type === "settled") {
+				busyAtSettled.push(agent.isBusy);
+			}
+		});
+		emitToAgent({ type: "agent_settled", aborted: false });
+		expect(busyAtSettled).toEqual([false]);
+		// 阶段先转 idle，再发 settled
+		const tail = events.slice(-2);
+		expect(tail[0]).toMatchObject({ type: "phase", phase: "idle" });
+		expect(tail[1]).toMatchObject({ type: "settled" });
+	});
+
 	it("被扩展消费的输入不留下 starting", async () => {
 		const { agent } = createAgent({
 			run: async (run) => {

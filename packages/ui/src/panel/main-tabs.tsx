@@ -17,11 +17,13 @@ import {
 	useState,
 } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { useHoverTip } from "../tip.tsx";
 import {
 	type MainTab,
 	type MainTabDropTarget,
 	normalizeMainTabDropTarget,
 	reorderMainTabIds,
+	wheelStep,
 } from "./main-tab.ts";
 
 /** 标签栏上的一条标签；文字与图标由调用方给出。 */
@@ -117,6 +119,17 @@ function resolveDropTarget(event: ReactDragEvent<HTMLDivElement>): MainTabDropTa
 	return { id, after: event.clientX >= rect.left + rect.width / 2 };
 }
 
+/**
+ * 把标签滚进可见范围时的选项：只动标签栏自己。
+ *
+ * `container` 是较新的取值，旧引擎会忽略它——界面本来也不会滚页面，忽略不掉东西。
+ */
+const SCROLL_INTO_VIEW = {
+	block: "nearest",
+	inline: "nearest",
+	container: "nearest",
+} as unknown as ScrollIntoViewOptions;
+
 /** 主区域标签栏。加号菜单目前只提供终端。 */
 export function MainTabs({
 	tabs,
@@ -128,9 +141,10 @@ export function MainTabs({
 	onReorder,
 	onCreateTerminal,
 	canCreateTerminal,
-	terminalDisabledReason,
 }: MainTabsProps): ReactNode {
 	const { t } = useI18n();
+	// 标签与加号按钮共用一份悬浮提示：标签的完整路径、按钮的说明都走它
+	const tip = useHoverTip();
 	const [isMenuOpen, setIsMenuOpen] = useState(false);
 	/** 正在拖动的标签标识 */
 	const [draggedId, setDraggedId] = useState<string | undefined>(undefined);
@@ -145,14 +159,47 @@ export function MainTabs({
 	const menuRef = useRef<HTMLDivElement | null>(null);
 	const contextMenuRef = useRef<HTMLDivElement | null>(null);
 	const activeRef = useRef<HTMLDivElement | null>(null);
+	const barRef = useRef<HTMLDivElement | null>(null);
+	const stripRef = useRef<HTMLDivElement | null>(null);
 
 	// 标签多到需要横向滚动时，切过去的标签保持在可见范围内
 	useEffect(() => {
 		if (activeId === undefined) {
 			return;
 		}
-		activeRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+		activeRef.current?.scrollIntoView(SCROLL_INTO_VIEW);
 	}, [activeId]);
+
+	/**
+	 * 垂直滚轮换成横向位移。
+	 *
+	 * 标签栏只有横向可滚，Chromium 不会把垂直滚轮折到横轴上，不接管的话标签多了就翻不到
+	 * 后面的标签。横向手势（`deltaX`）、缩放组合键、菜单里滚轮都不接管。
+	 */
+	useEffect(() => {
+		const bar = barRef.current;
+		const strip = stripRef.current;
+		if (bar === null || strip === null) {
+			return;
+		}
+		const onWheel = (event: WheelEvent): void => {
+			if (event.deltaY === 0 || event.ctrlKey) {
+				return;
+			}
+			if (strip.scrollWidth <= strip.clientWidth) {
+				return;
+			}
+			if (event.target instanceof Element && event.target.closest('[role="menu"]') !== null) {
+				return;
+			}
+			strip.scrollLeft += event.deltaY * wheelStep(event.deltaMode, strip.clientWidth);
+			// 不拦住的话滚轮会继续往外冒，落到窗口层面的滚动上
+			event.preventDefault();
+		};
+		// 必须在 passive 之外注册，否则 preventDefault 无效
+		bar.addEventListener("wheel", onWheel, { passive: false });
+		return () => bar.removeEventListener("wheel", onWheel);
+	}, []);
 
 	const closeMenu = useCallback(() => setIsMenuOpen(false), []);
 	const closeContextMenu = useCallback(() => setContextMenu(undefined), []);
@@ -286,8 +333,8 @@ export function MainTabs({
 
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: 整条标签栏都是拖动落点，包含标签之间的间隙与末尾空白
-		<div className="main-tabs" onDragOver={dragOver} onDrop={drop}>
-			<div className="main-tab-strip" role="tablist" aria-label={t("mainTabs.label")}>
+		<div className="main-tabs" ref={barRef} onDragOver={dragOver} onDrop={drop}>
+			<div className="main-tab-strip" ref={stripRef} role="tablist" aria-label={t("mainTabs.label")}>
 				{tabs.map((item) => {
 					const Icon = ICONS[item.kind];
 					const isActive = item.id === activeId;
@@ -315,7 +362,7 @@ export function MainTabs({
 								className="main-tab-main"
 								aria-selected={isActive}
 								aria-controls="main-tab-content"
-								title={item.title ?? item.label}
+								{...tip.handlers(item.title ?? item.label)}
 								draggable={dragArmedId === item.id}
 								onDragStart={(event) => startDrag(event, item.id)}
 								onDragEnd={endDrag}
@@ -335,7 +382,6 @@ export function MainTabs({
 									type="button"
 									className="main-tab-close"
 									aria-label={t("mainTabs.closeTab", { name: item.label })}
-									title={t("mainTabs.closeTab", { name: item.label })}
 									onClick={() => onClose(item.id)}
 									onContextMenu={(event) => openContextMenu(event, item.id)}
 								>
@@ -351,7 +397,7 @@ export function MainTabs({
 					type="button"
 					className="main-tab-add"
 					aria-label={t("mainTabs.add")}
-					title={t("mainTabs.add")}
+					{...tip.handlers(t("mainTabs.add"))}
 					aria-expanded={isMenuOpen}
 					aria-haspopup="menu"
 					onClick={() => setIsMenuOpen((open) => !open)}
@@ -365,7 +411,6 @@ export function MainTabs({
 							role="menuitem"
 							className="main-tab-menu-item"
 							disabled={!canCreateTerminal}
-							title={terminalDisabledReason ?? t("terminal.newTerminal")}
 							onClick={() => {
 								closeMenu();
 								onCreateTerminal();
@@ -377,6 +422,7 @@ export function MainTabs({
 					</div>
 				) : null}
 			</div>
+			{tip.render()}
 			{contextItem === undefined ? null : (
 				<div
 					ref={contextMenuRef}

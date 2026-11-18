@@ -376,6 +376,18 @@ describe("SessionClient", () => {
 		expect(client.sessionView()?.state.queued.steering).toEqual(["补充一句"]);
 	});
 
+	it("运行中发出去的消息被主机排进队列时，按文字认出来并收起", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		const sent: string[] = [];
+		client.onSent((text) => sent.push(text));
+		// 界面上发出去的就是一条普通发送，主机在运行中把它排进了队列
+		client.send("运行中补充", { streamingBehavior: "steer" });
+		expect(sent).toEqual([]);
+		transport.emit(SESSION, { type: "session/queueChanged", steering: ["运行中补充"], followUp: [] });
+		expect(sent).toEqual(["运行中补充"]);
+	});
+
 	it("连续发两条时按 clientSeq 逐条核销，不互相覆盖", async () => {
 		const { transport, client } = createClient(2);
 		await client.openSession("/tmp/s1.jsonl");

@@ -670,13 +670,19 @@ export class PiAgent {
 		this.emit({ type: "phase", phase: next.phase, maintenance: next.maintenance });
 	}
 
-	/** 一个 pi 事件可能转成多条对外事件，也可能只用于触发状态刷新。 */
+	/**
+	 * 一个 pi 事件可能转成多条对外事件，也可能只用于触发状态刷新。
+	 *
+	 * 先把轮次状态推进到位，再对外发事件：`settled` 到达时 `isBusy` 已经是 false，主机据此
+	 * 认出「这一轮跑完了」；反过来先发事件的话，主机读到的仍是 running，会把它刚记下的收尾
+	 * 当成上一轮的残留清掉，侧栏就再也不显示未读的完成与失败。
+	 */
 	private handleSessionEvent(event: AgentSessionEvent): void {
 		const failure = this.trackFailure(event);
+		this.dispatchTurn({ kind: "event", event });
 		for (const mapped of toSessionEvents(event)) {
 			this.emit(mapped.type === "settled" ? { ...mapped, failure } : mapped);
 		}
-		this.dispatchTurn({ kind: "event", event });
 	}
 
 	/**

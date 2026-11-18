@@ -7,6 +7,7 @@
 import type { CustomProviderInfo, ProviderInfo } from "@facet/protocol";
 import { useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { isComposingKey } from "../keys.ts";
 import { ProviderForm } from "./ProviderForm.tsx";
 import { ProviderPicker } from "./ProviderPicker.tsx";
 import { providerRows } from "./provider-rows.ts";
@@ -281,7 +282,7 @@ export function ProvidersSection({
 										value={key}
 										onChange={(event) => setKey(event.target.value)}
 										onKeyDown={(event) => {
-											if (event.key === "Enter" && key.trim().length > 0) {
+											if (event.key === "Enter" && !isComposingKey(event) && key.trim().length > 0) {
 												void saveCredential(provider.id);
 											}
 										}}
@@ -306,7 +307,7 @@ export function ProvidersSection({
 										value={address}
 										onChange={(event) => setAddress(event.target.value)}
 										onKeyDown={(event) => {
-											if (event.key === "Enter") {
+											if (event.key === "Enter" && !isComposingKey(event)) {
 												void saveAddress(provider.id);
 											}
 										}}

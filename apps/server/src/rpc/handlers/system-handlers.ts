@@ -34,6 +34,7 @@ type SystemMethod =
 	| "projectTrust"
 	| "setProjectTrust"
 	| "revealProject"
+	| "revealPath"
 	| "getSettings"
 	| "updateSettings"
 	| "saveCredential"
@@ -138,6 +139,11 @@ export const systemHandlers: Pick<RequestHandlerMap, SystemMethod> = {
 			throw new ProjectNotFoundError(params.id);
 		}
 		await revealInFileManager(project.cwd);
+		return {};
+	},
+	// 目录由端点指定（会话所在的工作目录），不查项目登记：没添加成项目的目录也要能打开
+	revealPath: async (params): Promise<RequestResults["revealPath"]> => {
+		await revealInFileManager(params.path);
 		return {};
 	},
 

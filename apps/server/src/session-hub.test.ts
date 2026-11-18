@@ -8,6 +8,7 @@ import type {
 	SessionEvent,
 	SessionEventListener,
 	SessionSnapshot,
+	SessionStatus,
 	SlashCommand,
 } from "@facet/protocol";
 import { makeChannel } from "@facet/protocol";
@@ -304,6 +305,32 @@ describe("会话清单通知", () => {
 		local.agent(snapshot.id).emit({ type: "settled", aborted: false, failure: undefined } as never);
 		expect(notes).toContainEqual(["/tmp/s1.jsonl", "changed"]);
 		local.dispose();
+	});
+});
+
+describe("会话状态的推送", () => {
+	it("一轮跑完后推出去的状态里带着收尾，侧栏才认得出未读", async () => {
+		const pushes: [string, SessionStatus][] = [];
+		const hub = new SessionHub<FakeAgent>({
+			factory,
+			replayLimit: 8,
+			idleCloseMs: IDLE_MS,
+			onStatusChanged: (file, status) => pushes.push([file, status]),
+		});
+		const snapshot = await hub.openSession("/tmp/unread.jsonl");
+		const agent = hub.agent(snapshot.id) as unknown as FakeAgent;
+		agent.busy = true;
+		agent.emit({ type: "phase", phase: "running", maintenance: undefined } as never);
+		// agent 侧的顺序：先把轮次收回 idle，再发 settled
+		agent.busy = false;
+		agent.emit({ type: "phase", phase: "idle", maintenance: undefined } as never);
+		agent.emit({ type: "settled", aborted: false, failure: undefined } as never);
+
+		const last = pushes[pushes.length - 1]?.[1];
+		expect(last?.activity).toBe("idle");
+		expect(last?.settle?.outcome).toBe("completed");
+		expect(hub.statusOf("/tmp/unread.jsonl").settle).toBeDefined();
+		hub.dispose();
 	});
 });
 

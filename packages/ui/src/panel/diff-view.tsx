@@ -2,6 +2,7 @@ import type { GitDiff } from "@facet/protocol";
 import { RefreshCw, X } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { useHoverTip } from "../tip.tsx";
 import { lineClass, patchLines } from "../transcript/diff-lines.ts";
 
 export interface DiffViewProps {
@@ -21,6 +22,8 @@ type DiffState = { kind: "loading" } | { kind: "ready"; diff: GitDiff } | { kind
 /** 主区域里的只读补丁视图。 */
 export function DiffView({ path, untracked, loadDiff, onClose }: DiffViewProps): ReactNode {
 	const { t } = useI18n();
+	// 文件头的完整路径走这份提示
+	const tip = useHoverTip();
 	const [state, setState] = useState<DiffState>({ kind: "loading" });
 	const loadRef = useRef(loadDiff);
 	loadRef.current = loadDiff;
@@ -45,27 +48,16 @@ export function DiffView({ path, untracked, loadDiff, onClose }: DiffViewProps):
 
 	const header = (
 		<div className="file-head">
-			<span className="file-path" title={path}>
+			<span className="file-path" {...tip.handlers(path)}>
 				{path}
 			</span>
-			<button
-				type="button"
-				className="ib"
-				aria-label={t("panel.refreshChanges")}
-				title={t("panel.refreshChanges")}
-				onClick={reload}
-			>
+			<button type="button" className="ib" aria-label={t("panel.refreshChanges")} onClick={reload}>
 				<RefreshCw size={13} strokeWidth={1.5} />
 			</button>
-			<button
-				type="button"
-				className="ib"
-				aria-label={t("common.close")}
-				title={t("common.close")}
-				onClick={onClose}
-			>
+			<button type="button" className="ib" aria-label={t("common.close")} onClick={onClose}>
 				<X size={13} strokeWidth={1.5} />
 			</button>
+			{tip.render()}
 		</div>
 	);
 

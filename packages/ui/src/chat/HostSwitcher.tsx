@@ -8,6 +8,8 @@
 import { Check, Pencil, Plus, Server, Settings2, X } from "lucide-react";
 import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { isComposingKey } from "../keys.ts";
+import { useHoverTip } from "../tip.tsx";
 import { endpointLabel, type SavedHost } from "./host-list.ts";
 
 /** 点浮层外面时关掉。 */
@@ -66,6 +68,8 @@ export function HostSwitcher({
 	onRenameHost,
 }: HostSwitcherProps): ReactNode {
 	const { t } = useI18n();
+	// 主机清单里的按钮共用一个提示
+	const tip = useHoverTip();
 	const [isOpen, setIsOpen] = useState(false);
 	const [isAdding, setIsAdding] = useState(false);
 	/** 正在改名的主机与草稿 */
@@ -118,7 +122,6 @@ export function HostSwitcher({
 				type="button"
 				className="sb-foot-btn is-icon"
 				aria-label={t("host.menu")}
-				title={t("host.menu")}
 				aria-expanded={isOpen}
 				onClick={() => {
 					setIsOpen((open) => !open);
@@ -128,7 +131,8 @@ export function HostSwitcher({
 				<Server size={14} strokeWidth={1.5} />
 			</button>
 			{isOpen ? (
-				<div className="host-pop" role="dialog" aria-label={t("host.list")}>
+				// biome-ignore lint/a11y/useSemanticElements: 浮层里是一份主机清单，用不到 fieldset 的表单语义
+				<div className="host-pop" role="group" aria-label={t("host.list")}>
 					<ul className="host-list">
 						<li className={activeEndpoint === localEndpoint ? "host-row is-on" : "host-row"}>
 							<button type="button" className="host-main" onClick={() => onConnect(localEndpoint)}>
@@ -151,7 +155,7 @@ export function HostSwitcher({
 										ref={renameRef}
 										onChange={(event) => setRenaming({ id: host.id, draft: event.target.value })}
 										onKeyDown={(event) => {
-											if (event.key === "Enter") {
+											if (event.key === "Enter" && !isComposingKey(event)) {
 												onRenameHost(host.id, renaming.draft);
 												setRenaming(undefined);
 											} else if (event.key === "Escape") {
@@ -163,7 +167,7 @@ export function HostSwitcher({
 										type="button"
 										className="host-remove"
 										aria-label={t("host.saveName")}
-										title={t("common.save")}
+										{...tip.handlers(t("common.save"))}
 										onClick={() => {
 											onRenameHost(host.id, renaming.draft);
 											setRenaming(undefined);
@@ -175,7 +179,7 @@ export function HostSwitcher({
 										type="button"
 										className="host-remove"
 										aria-label={t("host.cancelRename")}
-										title={t("common.cancel")}
+										{...tip.handlers(t("common.cancel"))}
 										onClick={() => setRenaming(undefined)}
 									>
 										<X size={12} strokeWidth={1.5} />
@@ -199,7 +203,7 @@ export function HostSwitcher({
 										type="button"
 										className="host-remove"
 										aria-label={t("host.renameLabel", { name: host.name })}
-										title={t("host.rename")}
+										{...tip.handlers(t("host.rename"))}
 										onClick={() => setRenaming({ id: host.id, draft: host.name })}
 									>
 										<Pencil size={12} strokeWidth={1.5} />
@@ -208,7 +212,7 @@ export function HostSwitcher({
 										type="button"
 										className="host-remove"
 										aria-label={t("host.removeLabel", { name: host.name })}
-										title={t("host.remove")}
+										{...tip.handlers(t("host.remove"))}
 										onClick={() => onRemoveHost(host.id)}
 									>
 										<Settings2 size={12} strokeWidth={1.5} />
@@ -266,6 +270,7 @@ export function HostSwitcher({
 					)}
 				</div>
 			) : null}
+			{tip.render()}
 		</div>
 	);
 }

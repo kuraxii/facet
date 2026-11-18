@@ -6,8 +6,10 @@
  */
 import type { SessionStatus, SessionSummary } from "@facet/protocol";
 import { Search } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { isComposingKey } from "../keys.ts";
+import { Modal } from "../modal.tsx";
 import { SessionStatusMark } from "./session-status-mark.tsx";
 import { type SidebarSession, searchSessions } from "./sidebar-model.ts";
 
@@ -40,7 +42,6 @@ export function SessionSearch({
 	const { t, i18n } = useI18n();
 	const [keyword, setKeyword] = useState("");
 	const [selected, setSelected] = useState(0);
-	const inputRef = useRef<HTMLInputElement>(null);
 
 	const results = useMemo(() => {
 		if (!isOpen) {
@@ -64,8 +65,6 @@ export function SessionSearch({
 		}
 		setKeyword("");
 		setSelected(0);
-		const frame = requestAnimationFrame(() => inputRef.current?.focus());
-		return () => cancelAnimationFrame(frame);
 	}, [isOpen]);
 
 	// 结果变了之后选中项可能越界，收回最后一条
@@ -89,86 +88,74 @@ export function SessionSearch({
 	}
 
 	return (
-		<div
-			className="search-overlay"
-			role="dialog"
-			aria-modal="true"
-			aria-label={t("search.title")}
-			onPointerDown={(event) => {
-				if (event.target === event.currentTarget) {
-					onClose();
-				}
-			}}
-		>
-			<div className="search-panel">
-				<label className="search-field">
-					<Search size={16} strokeWidth={1.5} />
-					<input
-						ref={inputRef}
-						value={keyword}
-						onChange={(event) => setKeyword(event.target.value)}
-						onKeyDown={(event) => {
-							if (event.key === "Escape") {
+		<Modal open onClose={onClose} label={t("search.title")} className="search-panel">
+			<label className="search-field">
+				<Search size={16} strokeWidth={1.5} />
+				<input
+					data-autofocus
+					value={keyword}
+					onChange={(event) => setKeyword(event.target.value)}
+					onKeyDown={(event) => {
+						if (event.key === "Escape") {
+							event.preventDefault();
+							onClose();
+							return;
+						}
+						if (event.key === "ArrowDown") {
+							event.preventDefault();
+							setSelected((current) => (results.length === 0 ? 0 : (current + 1) % results.length));
+							return;
+						}
+						if (event.key === "ArrowUp") {
+							event.preventDefault();
+							setSelected((current) =>
+								results.length === 0 ? 0 : (current - 1 + results.length) % results.length,
+							);
+							return;
+						}
+						if (event.key === "Enter" && !isComposingKey(event)) {
+							const target = results[selected];
+							if (target !== undefined) {
 								event.preventDefault();
-								onClose();
-								return;
+								open(target);
 							}
-							if (event.key === "ArrowDown") {
-								event.preventDefault();
-								setSelected((current) => (results.length === 0 ? 0 : (current + 1) % results.length));
-								return;
-							}
-							if (event.key === "ArrowUp") {
-								event.preventDefault();
-								setSelected((current) =>
-									results.length === 0 ? 0 : (current - 1 + results.length) % results.length,
-								);
-								return;
-							}
-							if (event.key === "Enter") {
-								const target = results[selected];
-								if (target !== undefined) {
-									event.preventDefault();
-									open(target);
+						}
+					}}
+					placeholder={t("search.placeholder")}
+					aria-label={t("search.placeholder")}
+				/>
+			</label>
+			<div className="search-results" role="listbox" aria-label={t("search.results")}>
+				{results.length === 0 ? (
+					<p className="search-empty">
+						{keyword.trim().length === 0 ? t("search.emptyAll") : t("search.empty")}
+					</p>
+				) : (
+					results.map((session, index) => (
+						<button
+							key={session.path}
+							type="button"
+							role="option"
+							aria-selected={index === selected}
+							className={index === selected ? "search-row is-selected" : "search-row"}
+							onPointerMove={() => setSelected(index)}
+							onClick={() => open(session)}
+							disabled={session.isPlaceholder === true}
+						>
+							<SessionStatusMark bucket={session.bucket} />
+							<span className="search-row-title ell">{session.title}</span>
+							<span className="search-row-proj ell">{session.project}</span>
+							<span
+								className={
+									session.path === activeFile ? "search-row-time mono is-active" : "search-row-time mono"
 								}
-							}
-						}}
-						placeholder={t("search.placeholder")}
-						aria-label={t("search.placeholder")}
-					/>
-				</label>
-				<div className="search-results" role="listbox" aria-label={t("search.results")}>
-					{results.length === 0 ? (
-						<p className="search-empty">
-							{keyword.trim().length === 0 ? t("search.emptyAll") : t("search.empty")}
-						</p>
-					) : (
-						results.map((session, index) => (
-							<button
-								key={session.path}
-								type="button"
-								role="option"
-								aria-selected={index === selected}
-								className={index === selected ? "search-row is-selected" : "search-row"}
-								onPointerMove={() => setSelected(index)}
-								onClick={() => open(session)}
-								disabled={session.isPlaceholder === true}
 							>
-								<SessionStatusMark bucket={session.bucket} />
-								<span className="search-row-title ell">{session.title}</span>
-								<span className="search-row-proj ell">{session.project}</span>
-								<span
-									className={
-										session.path === activeFile ? "search-row-time mono is-active" : "search-row-time mono"
-									}
-								>
-									{session.timeText}
-								</span>
-							</button>
-						))
-					)}
-				</div>
+								{session.timeText}
+							</span>
+						</button>
+					))
+				)}
 			</div>
-		</div>
+		</Modal>
 	);
 }

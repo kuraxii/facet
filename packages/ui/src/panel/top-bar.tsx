@@ -17,7 +17,6 @@ export function SidebarToggle({ isOpen, onToggle }: { isOpen: boolean; onToggle:
 			type="button"
 			className="chrome-toggle is-sidebar"
 			aria-label={label}
-			title={label}
 			aria-expanded={isOpen}
 			onClick={onToggle}
 		>
@@ -35,7 +34,6 @@ export function PanelToggle({ isOpen, onToggle }: { isOpen: boolean; onToggle: (
 			type="button"
 			className="chrome-toggle is-panel"
 			aria-label={label}
-			title={label}
 			aria-expanded={isOpen}
 			onClick={onToggle}
 		>

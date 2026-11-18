@@ -4,12 +4,14 @@
  * 一个组件对应一个终端：挂载时取回滚写进去，之后主机推来的输出直接写；键盘输入按字符流
  * 送回主机；容器尺寸变化时重新 fit 并把新尺寸同步过去。切到别的终端时整个组件卸载，
  * 回来重新挂载并重取回滚，避免为每个标签各留一个 xterm 实例。
+ *
+ * 挂载后把焦点交给终端：打开面板或切标签都是重新挂载，键盘输入因此不用再点一次。
  */
 
 import type { TerminalClient } from "@facet/client-core";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
-import { useEffect, useRef } from "react";
+import { useEffect, useImperativeHandle, useRef } from "react";
 import "@xterm/xterm/css/xterm.css";
 
 /** 终端外观。跟着界面配色与设置走。 */
@@ -30,6 +32,12 @@ export interface TerminalAppearance {
 	cursor: string;
 	/** 选区底色 */
 	selection: string;
+	/** 滚动条占的宽度，像素 */
+	scrollbarWidth: number;
+	/** 滚动条滑块的颜色 */
+	scrollbarThumb: string;
+	/** 指针落在滚动条或拖动时的颜色 */
+	scrollbarThumbHover: string;
 }
 
 export interface TerminalViewProps {
@@ -43,6 +51,14 @@ export interface TerminalViewProps {
 	onExit?: (code: number) => void;
 	/** 终端被别的端关掉 */
 	onClosed?: () => void;
+	/** 上层拿这个 ref 把焦点要回去：点已经选中的标签时用 */
+	ref?: React.Ref<TerminalViewHandle>;
+}
+
+/** 上层能对终端做的事。 */
+export interface TerminalViewHandle {
+	/** 把焦点交给终端，让键盘输入直接落到 shell 上 */
+	focus(): void;
 }
 
 export function TerminalView({
@@ -51,12 +67,23 @@ export function TerminalView({
 	appearance,
 	onExit,
 	onClosed,
+	ref,
 }: TerminalViewProps): React.JSX.Element {
 	const containerRef = useRef<HTMLDivElement | null>(null);
 	const termRef = useRef<Terminal | null>(null);
 	const fitRef = useRef<FitAddon | null>(null);
 	const callbacksRef = useRef({ onExit, onClosed });
 	callbacksRef.current = { onExit, onClosed };
+
+	useImperativeHandle(
+		ref,
+		() => ({
+			focus: () => {
+				termRef.current?.focus();
+			},
+		}),
+		[],
+	);
 
 	// 实例只在换终端时重建：字体与配色改了就地更新，不动已有内容
 	// biome-ignore lint/correctness/useExhaustiveDependencies: 外观走单独的 effect，重建实例会丢掉回滚
@@ -73,11 +100,21 @@ export function TerminalView({
 			scrollback: appearance.scrollback,
 			// 终端不铺自己的底色，透出界面背景；xterm 只有打开透明选项才接受透明主题
 			allowTransparency: true,
+			/*
+			 * xterm 自己画滚动条（`.xterm-scrollable-element` 里的 `.slider`），宽度取自
+			 * `overviewRuler.width`，缺省 14px——比界面那套 8px 宽，所以这里按界面的宽度给，
+			 * 颜色也换成界面用的两个变量，两处观感才一致。原生 `::-webkit-scrollbar` 对它无效。
+			 */
+			overviewRuler: { width: appearance.scrollbarWidth },
 			theme: {
 				background: "rgba(0,0,0,0)",
 				foreground: appearance.foreground,
 				cursor: appearance.cursor,
 				selectionBackground: appearance.selection,
+				// xterm 把它写进自己注入的样式表，因此这里只接受解析得出的具体颜色
+				scrollbarSliderBackground: appearance.scrollbarThumb,
+				scrollbarSliderHoverBackground: appearance.scrollbarThumbHover,
+				scrollbarSliderActiveBackground: appearance.scrollbarThumbHover,
 			},
 			allowProposedApi: true,
 			convertEol: false,
@@ -88,6 +125,8 @@ export function TerminalView({
 		termRef.current = terminal;
 		fitRef.current = fit;
 		fit.fit();
+		// 挂载即聚焦：打开面板与切标签都会走到这里
+		terminal.focus();
 
 		let disposed = false;
 		const input = terminal.onData((data) => {
@@ -160,11 +199,15 @@ export function TerminalView({
 		terminal.options.fontSize = appearance.fontSize;
 		terminal.options.lineHeight = appearance.lineHeight;
 		terminal.options.cursorBlink = appearance.cursorBlink;
+		terminal.options.overviewRuler = { width: appearance.scrollbarWidth };
 		terminal.options.theme = {
 			background: "rgba(0,0,0,0)",
 			foreground: appearance.foreground,
 			cursor: appearance.cursor,
 			selectionBackground: appearance.selection,
+			scrollbarSliderBackground: appearance.scrollbarThumb,
+			scrollbarSliderHoverBackground: appearance.scrollbarThumbHover,
+			scrollbarSliderActiveBackground: appearance.scrollbarThumbHover,
 		};
 		try {
 			fitRef.current?.fit();

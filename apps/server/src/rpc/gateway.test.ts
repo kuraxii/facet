@@ -312,6 +312,38 @@ describe("派发去重", () => {
 		expect(connection.frames.filter((frame) => frame.action.type === "chat/inputHandled")).toHaveLength(0);
 	});
 
+	it("运行中发出的消息被排进队列，也回一条受理回执", async () => {
+		// 主机把这条排进了 pi 的队列，这一轮并没有新起：端点仍要收起草稿
+		const context = makeContext({
+			hub: {
+				busyFiles: () => [],
+				lastSeq: () => 0,
+				hold: () => ({ release: () => {} }),
+				agent: () => ({ abort: async () => {} }),
+				withSession: async (_id: string, work: (agent: never) => Promise<void>) => {
+					await work({
+						isStreaming: true,
+						// pi 在运行中收到带 streamingBehavior 的输入时返回 queued
+						prompt: async () => "queued",
+					} as never);
+				},
+			},
+		});
+		const connection = makeConnection();
+		await handleDispatch(context, connection, {
+			channel: "chat:/s1",
+			action: { type: "chat/turnStarted", text: "运行中补充", streamingBehavior: "steer" },
+			clientSeq: 7,
+		});
+		await vi.waitFor(() =>
+			expect(
+				connection.frames.filter(
+					(frame) => frame.action.type === "chat/inputHandled" && frame.origin?.clientSeq === 7,
+				),
+			).toHaveLength(1),
+		);
+	});
+
 	it("没有 clientSeq 的帧不做去重", async () => {
 		const { context, abort } = makeAbortContext();
 		const connection = makeConnection();
@@ -324,7 +356,7 @@ describe("派发去重", () => {
 
 describe("契约表", () => {
 	it("每个方法的权限档只在生成物里声明一次", () => {
-		expect(Object.keys(REQUEST_CONTRACTS)).toHaveLength(50);
+		expect(Object.keys(REQUEST_CONTRACTS)).toHaveLength(51);
 		expect(REQUEST_CONTRACTS.respondUi?.auth).toBe("write");
 		expect(REQUEST_CONTRACTS.saveCredential?.auth).toBe("admin");
 		expect(REQUEST_CONTRACTS.listSessions?.auth).toBe("public");

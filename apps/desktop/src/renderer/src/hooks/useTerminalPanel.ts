@@ -18,6 +18,21 @@ import { type RefObject, useCallback, useEffect, useRef, useState } from "react"
 function readTerminalAppearance(): TerminalAppearance {
 	const styles = getComputedStyle(document.documentElement);
 	const read = (name: string, fallback: string): string => styles.getPropertyValue(name).trim() || fallback;
+	/**
+	 * 把变量解析成具体颜色。
+	 *
+	 * 滚动条的颜色变量本身是 `color-mix(...)` 或 `var(...)`，xterm 只接受能解析的颜色，
+	 * 所以借一个隐藏元素让浏览器先算一遍，再读计算值。
+	 */
+	const resolve = (value: string): string => {
+		const probe = document.createElement("span");
+		probe.style.color = value;
+		probe.style.display = "none";
+		document.body.appendChild(probe);
+		const resolved = getComputedStyle(probe).color;
+		probe.remove();
+		return resolved;
+	};
 	return {
 		fontFamily: read("--font-terminal", "ui-monospace, monospace"),
 		fontSize: Number.parseFloat(read("--terminal-size", "12.5")),
@@ -27,6 +42,10 @@ function readTerminalAppearance(): TerminalAppearance {
 		foreground: read("--t1", "#1a1a1e"),
 		cursor: read("--acc", "#239956"),
 		selection: read("--surface3", "#e4e4e7"),
+		// 与界面其它滚动容器同一份宽度与配色
+		scrollbarWidth: Number.parseFloat(read("--scrollbar-width", "8")),
+		scrollbarThumb: resolve(read("--scrollbar-thumb-color", "rgba(161,161,170,0.4)")),
+		scrollbarThumbHover: resolve(read("--scrollbar-thumb-color-hover", "#71717a")),
 	};
 }
 

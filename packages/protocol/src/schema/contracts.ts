@@ -240,6 +240,11 @@ export const REQUEST_SCHEMAS = {
 		params: Type.Object({ id: Id }),
 		nonEmpty: ["id"],
 	},
+	revealPath: {
+		auth: "admin",
+		params: Type.Object({ path: Path }),
+		nonEmpty: ["path"],
+	},
 	renameSession: {
 		auth: "write",
 		params: Type.Object({ sessionFile: SessionFile, name: Type.Optional(Type.String()) }),

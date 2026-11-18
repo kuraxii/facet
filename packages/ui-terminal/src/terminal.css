@@ -173,6 +173,19 @@
 	background-color: transparent;
 }
 
+/*
+ * 藏掉 xterm 自己画的那条滚动条。
+ *
+ * 可见的那条是视口的原生滚动条（`.xterm-viewport` 是 `overflow-y: scroll`），已经按界面
+ * 统一了宽度与配色。xterm 另外还会在同位置放一条自己的（`.xterm-scrollable-element >
+ * .scrollbar`，缺省 14px，滚动时淡入），两条叠在一起看就像多出一条线，所以这条不显示。
+ * 它的宽度仍由 `overviewRuler.width` 参与 xterm 的列宽计算（见 `terminal-view.tsx`），
+ * 与原生那条对齐，正文因此不会压在滚动条下面。
+ */
+.term-surface .xterm .xterm-scrollable-element > .scrollbar {
+	display: none;
+}
+
 /* 开终端失败时贴在面板上方的提示 */
 .term-dock-error {
 	display: flex;

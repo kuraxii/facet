@@ -82,6 +82,7 @@ export const en = {
 	queue: {
 		label_one: "{{count}} queued message",
 		label_other: "{{count}} queued messages",
+		mergeHint: "withdrawing merges them into one",
 		withdraw: "Withdraw queued messages",
 	},
 	sidebar: {
@@ -105,6 +106,7 @@ export const en = {
 		removeProjectHint: "Session files remain. The project can be added again.",
 		deleteSessionHint: "Deleted session files cannot be recovered.",
 		revealProject: "Open in file manager",
+		revealSessionFolder: "Open Containing Folder",
 		untitled: "Untitled session",
 		group: {
 			running: "Running",
@@ -587,6 +589,7 @@ export const zhCN = {
 	},
 	queue: {
 		label_other: "排队 {{count}} 条",
+		mergeHint: "收回后合并为一条",
 		withdraw: "收回排队内容",
 	},
 	sidebar: {
@@ -610,6 +613,7 @@ export const zhCN = {
 		removeProjectHint: "移除后会话文件保留,项目可以重新添加",
 		deleteSessionHint: "删除后会话文件不可恢复",
 		revealProject: "在文件管理器中打开",
+		revealSessionFolder: "打开所在文件夹",
 		untitled: "未命名会话",
 		group: {
 			running: "进行中",

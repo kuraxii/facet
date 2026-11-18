@@ -143,6 +143,7 @@ export {
 	UI_THEME_OPTIONS,
 	uiThemeLabel,
 } from "./theme.ts";
+export { useHoverTip } from "./tip.tsx";
 export type { DisplayRow, ForkPoint, RowKind } from "./transcript/group.ts";
 export { formatDuration, groupLabel, groupRows, turnDurationText } from "./transcript/group.ts";
 export { ArrowDownIcon } from "./transcript/icons.tsx";

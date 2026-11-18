@@ -618,6 +618,11 @@ export class SessionClient {
 		await this.transport.request("revealProject", { id });
 	}
 
+	/** 在主机侧文件管理器打开一个目录，会话菜单用它打开会话所在的工作目录。 */
+	async revealPath(path: string): Promise<void> {
+		await this.transport.request("revealPath", { path });
+	}
+
 	/**
 	 * 会话改名。
 	 *
@@ -1031,7 +1036,7 @@ export class SessionClient {
 					? this.oldestPending(runtime, "turn")
 					: undefined
 				: frame.channel === opened.sessionChannel && frame.action.type === "session/queueChanged"
-					? this.oldestPending(runtime, "steering", [...frame.action.steering, ...frame.action.followUp])
+					? this.oldestPending(runtime, undefined, [...frame.action.steering, ...frame.action.followUp])
 					: undefined;
 		if (fallbackSeq === undefined) {
 			return;
@@ -1043,14 +1048,19 @@ export class SessionClient {
 		}
 	}
 
-	/** 同类待确认记录里最早的一条；给了 texts 时还要求文本在其中。 */
+	/**
+	 * 待确认记录里最早的一条。
+	 *
+	 * `kind` 给了就只要那一类；不给时两类都算——运行中发出的消息走的是 `send`，客户端按
+	 * 「起一轮」记账，主机却把它排进了队列，只按类别认会认不出来。
+	 */
 	private oldestPending(
 		runtime: SessionRuntime,
-		kind: PendingSend["kind"],
+		kind: PendingSend["kind"] | undefined,
 		texts?: readonly string[],
 	): number | undefined {
 		for (const pending of runtime.pendingSend.values()) {
-			if (pending.kind !== kind) {
+			if (kind !== undefined && pending.kind !== kind) {
 				continue;
 			}
 			if (texts !== undefined && !texts.includes(pending.text)) {

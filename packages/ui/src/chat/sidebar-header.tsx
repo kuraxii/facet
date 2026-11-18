@@ -51,7 +51,6 @@ export function SidebarHeader({
 						type="button"
 						className="chrome-toggle"
 						aria-label={t("sidebar.collapse")}
-						title={t("sidebar.collapse")}
 						aria-expanded={true}
 						onClick={onCollapse}
 					>

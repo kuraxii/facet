@@ -16,6 +16,7 @@ import type {
 import { X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { Modal } from "../modal.tsx";
 import { CODE_THEME_OPTIONS, UI_THEME_OPTIONS } from "../theme.ts";
 import { ProvidersSection } from "./ProvidersSection.tsx";
 import { providerRows } from "./provider-rows.ts";
@@ -122,41 +123,6 @@ export function SettingsPage({
 	const [providers, setProviders] = useState<readonly ProviderInfo[] | undefined>(undefined);
 	const [providersError, setProvidersError] = useState<string | undefined>(undefined);
 
-	/** 关闭回调每次渲染都是新的，事件监听只挂一次，用 ref 转一手 */
-	const onCloseRef = useRef(onClose);
-	onCloseRef.current = onClose;
-
-	/** 设置窗口本身，打开时把焦点交给它 */
-	const windowRef = useRef<HTMLDivElement>(null);
-
-	useEffect(() => {
-		const previous = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
-		windowRef.current?.focus();
-		const onKeyDown = (event: KeyboardEvent): void => {
-			if (event.key === "Escape") {
-				onCloseRef.current();
-			}
-		};
-		document.addEventListener("keydown", onKeyDown);
-		return () => {
-			document.removeEventListener("keydown", onKeyDown);
-			// 关闭后焦点回到打开设置的那个按钮。放到下一轮事件循环里给：这一轮里窗口还在
-			// 移除中，而且点遮罩的 click 随后还会把焦点带回 body
-			if (previous !== undefined) {
-				setTimeout(() => previous.focus(), 0);
-			}
-		};
-	}, []);
-
-	/** 点窗口外面关闭。 */
-	const handleBackdropPointerDown = (event: React.PointerEvent<HTMLDivElement>): void => {
-		const window = windowRef.current;
-		if (window !== null && event.target instanceof Node && window.contains(event.target)) {
-			return;
-		}
-		onClose();
-	};
-
 	const loadSettings = useCallback(async () => {
 		setIsLoading(true);
 		setLoadError(undefined);
@@ -257,122 +223,113 @@ export function SettingsPage({
 	);
 
 	return (
-		<div className="dialog-backdrop" role="presentation" onPointerDown={handleBackdropPointerDown}>
-			<div
-				ref={windowRef}
-				className="set-page"
-				role="dialog"
-				aria-modal="true"
-				aria-label={t("settings.title")}
-				tabIndex={-1}
-			>
-				<header className="set-head">
-					<h1 className="set-title">{t("settings.title")}</h1>
-					<button type="button" className="set-close" aria-label={t("settings.close")} onClick={onClose}>
-						<X size={16} strokeWidth={1.5} />
-					</button>
-				</header>
+		<Modal open onClose={onClose} label={t("settings.title")} className="set-page">
+			<header className="set-head">
+				<h1 className="set-title">{t("settings.title")}</h1>
+				<button type="button" className="set-close" aria-label={t("settings.close")} onClick={onClose}>
+					<X size={16} strokeWidth={1.5} />
+				</button>
+			</header>
 
-				<div className="set-body">
-					<nav className="set-nav" aria-label={t("settings.categories")}>
-						{SECTIONS.map((item) => (
-							<button
-								type="button"
-								key={item.key}
-								className={item.key === section ? "set-nav-item is-on" : "set-nav-item"}
-								aria-current={item.key === section}
-								onClick={() => onSectionChange(item.key)}
-							>
-								{t(item.labelKey)}
-							</button>
-						))}
-					</nav>
+			<div className="set-body">
+				<nav className="set-nav" aria-label={t("settings.categories")}>
+					{SECTIONS.map((item) => (
+						<button
+							type="button"
+							key={item.key}
+							className={item.key === section ? "set-nav-item is-on" : "set-nav-item"}
+							aria-current={item.key === section}
+							onClick={() => onSectionChange(item.key)}
+						>
+							{t(item.labelKey)}
+						</button>
+					))}
+				</nav>
 
-					<div className="set-content">
-						{section === "appearance" &&
-						((uiScale !== undefined && onUiScaleChange !== undefined) ||
-							(languageSetting !== undefined && onLanguageChange !== undefined)) ? (
+				<div className="set-content">
+					{section === "appearance" &&
+					((uiScale !== undefined && onUiScaleChange !== undefined) ||
+						(languageSetting !== undefined && onLanguageChange !== undefined)) ? (
+						<section className="set-section">
+							<SettingsGroup label={t("settings.local")}>
+								{languageSetting === undefined || onLanguageChange === undefined ? null : (
+									<SettingsRow title={t("settings.language")}>
+										<select
+											className="set-input"
+											value={languageSetting}
+											onChange={(event) => onLanguageChange(event.target.value as LanguageSetting)}
+											aria-label={t("settings.language")}
+										>
+											<option value="auto">{t("language.system")}</option>
+											<option value="en">{t("language.en")}</option>
+											<option value="zh-CN">{t("language.zh-CN")}</option>
+										</select>
+									</SettingsRow>
+								)}
+								{uiScale === undefined || onUiScaleChange === undefined ? null : (
+									<SettingsRow title={t("settings.uiScale")}>
+										<select
+											className="set-input"
+											value={uiScale}
+											onChange={(event) => onUiScaleChange(Number(event.target.value))}
+											aria-label={t("settings.uiScale")}
+										>
+											{UI_SCALE_STEPS.map((step) => (
+												<option key={step} value={step}>
+													{step}%
+												</option>
+											))}
+										</select>
+									</SettingsRow>
+								)}
+							</SettingsGroup>
+						</section>
+					) : null}
+
+					{section === "about" ? <AboutSection about={about} data={data} /> : null}
+
+					{section === "models" || section === "appearance" || section === "input" ? (
+						<fieldset className="set-lock" disabled={!canEdit}>
 							<section className="set-section">
-								<SettingsGroup label={t("settings.local")}>
-									{languageSetting === undefined || onLanguageChange === undefined ? null : (
-										<SettingsRow title={t("settings.language")}>
-											<select
-												className="set-input"
-												value={languageSetting}
-												onChange={(event) => onLanguageChange(event.target.value as LanguageSetting)}
-												aria-label={t("settings.language")}
-											>
-												<option value="auto">{t("language.system")}</option>
-												<option value="en">{t("language.en")}</option>
-												<option value="zh-CN">{t("language.zh-CN")}</option>
-											</select>
-										</SettingsRow>
-									)}
-									{uiScale === undefined || onUiScaleChange === undefined ? null : (
-										<SettingsRow title={t("settings.uiScale")}>
-											<select
-												className="set-input"
-												value={uiScale}
-												onChange={(event) => onUiScaleChange(Number(event.target.value))}
-												aria-label={t("settings.uiScale")}
-											>
-												{UI_SCALE_STEPS.map((step) => (
-													<option key={step} value={step}>
-														{step}%
-													</option>
-												))}
-											</select>
-										</SettingsRow>
-									)}
-								</SettingsGroup>
+								{loadError === undefined ? null : (
+									<StatusNote
+										message={t("settings.readFailed", { error: loadError })}
+										onRetry={loadSettings}
+										tone="error"
+									/>
+								)}
+								{isLoading ? <p className="set-hint">{t("settings.loading")}</p> : null}
+								{draft === undefined ? null : (
+									<>
+										{section === "models" ? (
+											<ModelsSection
+												draft={draft}
+												patch={patch}
+												data={data}
+												providers={providers}
+												providersError={providersError}
+												onReloadProviders={() => void loadProviders()}
+											/>
+										) : null}
+										{section === "appearance" ? (
+											<AppearanceSection draft={draft} patch={patch} onPreview={onAppearancePreview} />
+										) : null}
+										{section === "input" ? <InputSection draft={draft} patch={patch} /> : null}
+										{saveError === undefined ? null : (
+											<StatusNote
+												message={t("settings.saveFailed", { error: saveError })}
+												onRetry={() => void save(draft)}
+												tone="error"
+											/>
+										)}
+									</>
+								)}
 							</section>
-						) : null}
-
-						{section === "about" ? <AboutSection about={about} data={data} /> : null}
-
-						{section === "models" || section === "appearance" || section === "input" ? (
-							<fieldset className="set-lock" disabled={!canEdit}>
-								<section className="set-section">
-									{loadError === undefined ? null : (
-										<StatusNote
-											message={t("settings.readFailed", { error: loadError })}
-											onRetry={loadSettings}
-											tone="error"
-										/>
-									)}
-									{isLoading ? <p className="set-hint">{t("settings.loading")}</p> : null}
-									{draft === undefined ? null : (
-										<>
-											{section === "models" ? (
-												<ModelsSection
-													draft={draft}
-													patch={patch}
-													data={data}
-													providers={providers}
-													providersError={providersError}
-													onReloadProviders={() => void loadProviders()}
-												/>
-											) : null}
-											{section === "appearance" ? (
-												<AppearanceSection draft={draft} patch={patch} onPreview={onAppearancePreview} />
-											) : null}
-											{section === "input" ? <InputSection draft={draft} patch={patch} /> : null}
-											{saveError === undefined ? null : (
-												<StatusNote
-													message={t("settings.saveFailed", { error: saveError })}
-													onRetry={() => void save(draft)}
-													tone="error"
-												/>
-											)}
-										</>
-									)}
-								</section>
-							</fieldset>
-						) : null}
-					</div>
+						</fieldset>
+					) : null}
 				</div>
 			</div>
-		</div>
+		</Modal>
 	);
 }
 
@@ -655,7 +612,6 @@ function AppearanceSection({
 								key={option.id}
 								type="button"
 								className={appearance.theme === option.id ? "set-swatch is-active" : "set-swatch"}
-								title={themeLabel(option.id)}
 								aria-label={themeLabel(option.id)}
 								aria-pressed={appearance.theme === option.id}
 								onClick={() => patchAppearance({ theme: option.id })}
@@ -667,7 +623,6 @@ function AppearanceSection({
 						<button
 							type="button"
 							className={appearance.theme === "system" ? "set-swatch is-active" : "set-swatch"}
-							title={t("theme.system")}
 							aria-label={t("theme.system")}
 							aria-pressed={appearance.theme === "system"}
 							onClick={() => patchAppearance({ theme: "system" })}

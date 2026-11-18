@@ -90,7 +90,6 @@ function CopyButton({ code }: { code: string }) {
 			type="button"
 			className="code-copy"
 			aria-label={copied ? t("markdown.copied") : t("markdown.copyCode")}
-			title={copied ? t("markdown.copied") : t("markdown.copyCode")}
 			onClick={() => {
 				void navigator.clipboard?.writeText(code).then(
 					() => setCopied(true),

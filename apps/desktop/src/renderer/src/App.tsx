@@ -23,6 +23,10 @@ interface AppViewProps {
 export function App(): React.JSX.Element {
 	const [languageSetting, setLanguageSetting] = useState(bridge.languageSetting);
 	const [language, setLanguage] = useState(bridge.language);
+	// 界面语言换了就同步到根节点：读屏按它选发音，浏览器按它断行
+	useEffect(() => {
+		document.documentElement.lang = language;
+	}, [language]);
 	const changeLanguage = useCallback((setting: LanguageSetting) => {
 		setLanguageSetting(setting);
 		void bridge

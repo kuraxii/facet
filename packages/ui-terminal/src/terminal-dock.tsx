@@ -7,10 +7,11 @@
 import type { TerminalClient } from "@facet/client-core";
 import type { TerminalInfo } from "@facet/protocol";
 import { useI18n } from "@facet/ui/i18n";
+import { useHoverTip } from "@facet/ui/tip";
 import { Plus, SquareTerminal, X } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";
 import { clampDockHeight } from "./dock-state.ts";
-import { type TerminalAppearance, TerminalView } from "./terminal-view.tsx";
+import { type TerminalAppearance, TerminalView, type TerminalViewHandle } from "./terminal-view.tsx";
 
 export interface TerminalDockProps {
 	/** 是否展开 */
@@ -63,6 +64,10 @@ export function TerminalDock({
 	onClose,
 }: TerminalDockProps): React.JSX.Element | null {
 	const { t } = useI18n();
+	// 标签的 shell 与目录、新建按钮的目标目录都走这份提示
+	const tip = useHoverTip();
+	/** 当前标签的终端视图，点标签时用它把焦点要回去 */
+	const viewRef = useRef<TerminalViewHandle | null>(null);
 	const tabs = openTerminals(terminals);
 	const active = tabs.find((terminal) => terminal.id === activeId) ?? tabs[0];
 
@@ -120,8 +125,12 @@ export function TerminalDock({
 								role="tab"
 								aria-selected={terminal.id === active?.id}
 								className="term-tab-main"
-								title={`${terminal.shell} · ${terminal.cwd}`}
-								onClick={() => onSelect(terminal.id)}
+								{...tip.handlers(`${terminal.shell} · ${terminal.cwd}`)}
+								onClick={() => {
+									onSelect(terminal.id);
+									// 点已经选中的标签不会重新挂载，焦点得单独要一次
+									viewRef.current?.focus();
+								}}
 							>
 								<SquareTerminal size={13} strokeWidth={1.5} />
 								<span className="term-tab-name">{tabLabel(terminal)}</span>
@@ -145,9 +154,13 @@ export function TerminalDock({
 						type="button"
 						className="term-tool"
 						aria-label={t("terminal.newTerminal")}
-						title={
-							disabledReason ?? (cwd === undefined ? t("terminal.newInHome") : t("terminal.newIn", { cwd }))
-						}
+						{...tip.handlers(
+							disabledReason === undefined
+								? cwd === undefined
+									? t("terminal.newInHome")
+									: t("terminal.newIn", { cwd })
+								: undefined,
+						)}
 						disabled={disabledReason !== undefined}
 						onClick={onCreate}
 					>
@@ -162,9 +175,16 @@ export function TerminalDock({
 				{active === undefined ? (
 					<p className="term-empty">{disabledReason ?? t("terminal.empty")}</p>
 				) : (
-					<TerminalView key={active.id} terminalId={active.id} client={client} appearance={appearance} />
+					<TerminalView
+						key={active.id}
+						ref={viewRef}
+						terminalId={active.id}
+						client={client}
+						appearance={appearance}
+					/>
 				)}
 			</div>
+			{tip.render()}
 		</section>
 	);
 }

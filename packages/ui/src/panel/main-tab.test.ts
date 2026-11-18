@@ -8,6 +8,7 @@ import {
 	reorderMainTabIds,
 	sessionTabId,
 	terminalTabId,
+	wheelStep,
 } from "./main-tab.ts";
 
 describe("main tab identity", () => {
@@ -69,5 +70,17 @@ describe("main tab identity", () => {
 		const beforeB = normalizeMainTabDropTarget(tabs, { id: "b", after: false });
 		expect(reorderMainTabIds(tabs, "c", beforeB.id, beforeB.after)).toEqual(["a", "c", "b"]);
 		expect(reorderMainTabIds(tabs, "c", "a", true)).toEqual(["a", "c", "b"]);
+	});
+});
+
+describe("滚轮换算", () => {
+	it("像素模式原样，行模式按行高，页模式按一屏宽", () => {
+		expect(wheelStep(0, 800)).toBe(1);
+		expect(wheelStep(1, 800)).toBe(16);
+		expect(wheelStep(2, 800)).toBe(800);
+	});
+
+	it("宽度为零时页模式也给出正数步长", () => {
+		expect(wheelStep(2, 0)).toBe(1);
 	});
 });

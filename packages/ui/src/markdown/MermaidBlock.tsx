@@ -139,7 +139,6 @@ function CopyButton({ code }: { code: string }) {
 			type="button"
 			className="code-copy"
 			aria-label={copied ? t("markdown.copied") : t("markdown.copyDefinition")}
-			title={copied ? t("markdown.copied") : t("markdown.copyDefinition")}
 			onClick={() => {
 				void navigator.clipboard?.writeText(code).then(
 					() => setCopied(true),
@@ -324,7 +323,6 @@ export function MermaidBlock({ node }: MermaidBlockProps) {
 							type="button"
 							className="code-copy"
 							aria-label={t("markdown.zoomOut")}
-							title={t("markdown.zoomOut")}
 							disabled={view.scale <= MIN_SCALE}
 							onClick={() => zoomBy(1 / ZOOM_STEP)}
 						>
@@ -334,7 +332,6 @@ export function MermaidBlock({ node }: MermaidBlockProps) {
 							type="button"
 							className="code-copy"
 							aria-label={t("markdown.zoomIn")}
-							title={t("markdown.zoomIn")}
 							disabled={view.scale >= MAX_SCALE}
 							onClick={() => zoomBy(ZOOM_STEP)}
 						>
@@ -344,7 +341,6 @@ export function MermaidBlock({ node }: MermaidBlockProps) {
 							type="button"
 							className="code-copy"
 							aria-label={t("markdown.fitWidth")}
-							title={t("markdown.fitWidth")}
 							onClick={() => setView({ scale: 1, x: 0, y: 0 })}
 						>
 							<Maximize2 size={13} strokeWidth={1.5} />
@@ -356,7 +352,6 @@ export function MermaidBlock({ node }: MermaidBlockProps) {
 						type="button"
 						className="code-copy"
 						aria-label={showSource ? t("markdown.showDiagram") : t("markdown.showSource")}
-						title={showSource ? t("markdown.showDiagram") : t("markdown.showSource")}
 						onClick={() => setShowSource((shown) => !shown)}
 					>
 						{showSource ? <Workflow size={13} strokeWidth={1.5} /> : <Code2 size={13} strokeWidth={1.5} />}

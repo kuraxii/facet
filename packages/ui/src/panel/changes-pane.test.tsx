@@ -57,12 +57,14 @@ describe("变更页", () => {
 		expect(html).toContain("重试");
 	});
 
-	it("文件行把完整路径放在悬停标题里", () => {
+	it("文件行只显示文件名，不再挂原生 title", () => {
 		const html = render({
 			isRepo: true,
 			branch: "dev",
 			files: [{ path: "src/app.ts", status: "modified", added: 1, removed: 0, binary: false }],
 		});
-		expect(html).toContain('title="src/app.ts"');
+		expect(html).toContain("app.ts");
+		// 原生 title 会画出系统那套气泡；完整路径改由 `useHoverTip` 在悬停时给
+		expect(html).not.toContain("title=");
 	});
 });

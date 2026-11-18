@@ -137,13 +137,28 @@
 	--commit-graph-width: 8px;
 	--commit-sha-width: 64px;
 	--commit-section-max-height: 60%;
-	--main-terminal-padding: 6px 8px;
+	/*
+	 * 终端视图的内边距：右侧留 0，滚动条才贴着面板右缘，正文的右边距由 xterm 自己的列宽给
+	 * ——与其它滚动容器的约定一致（横向留白交给内容，不留给容器）。
+	 */
+	--main-terminal-padding-y: 6px;
+	--main-terminal-padding-x: 8px;
 	/* 三栏宽度：顶带的格子与下面的正文共用，由界面按当前状态写入 */
 	--sidebar-width: 272px;
 	--panel-width: 0px;
 	/* 滚动条占的宽度，以及其中拇指的宽度；轨道其余部分是透明的 */
 	--scrollbar-width: 8px;
 	--scrollbar-thumb: 4px;
+	/*
+	 * 拇指与轨道的颜色。
+	 *
+	 * 拇指按观感取 `--t3` 的 40%：它与底色的对比只有 1.4:1 到 2:1，低于 WCAG 1.4.11 给非文本
+	 * 内容要求的 3:1，是这里刻意选淡的结果——指针落上去才提到 `--t2`，靠悬停区分。系统要求
+	 * 更高对比度时由下方 `prefers-contrast: more` 那段补齐。
+	 */
+	--scrollbar-thumb-color: color-mix(in srgb, var(--t3) 40%, transparent);
+	--scrollbar-thumb-color-hover: var(--t2);
+	--scrollbar-track-color: transparent;
 	/* 两个面板分隔条的命中区宽度，以及悬停时那条高亮的颜色 */
 	--divider-hit-width: 6px;
 	/* 侧栏分隔条的命中区：右缘还要放滚动条（沟槽 8px、拇指居中 4px），只剩最外的 2px */
@@ -177,8 +192,16 @@
 
 /*
  * 滚动条统一成细的悬浮条：没有外框、轨道与两端的箭头，只剩一条半透明的拇指，指针落上去
- * 才提亮。Chromium 一旦给了 `scrollbar-width` 或 `scrollbar-color` 就按标准画，会带箭头，
- * 所以这里只走 webkit 伪元素；下面再用 `@supports` 给没有伪元素的引擎一份等效的细条。
+ * 才提亮。
+ *
+ * 两套写法不能同时生效：只要给了非 `auto` 的 `scrollbar-width` 或 `scrollbar-color`，
+ * 浏览器就会关掉 `::-webkit-scrollbar` 伪元素。所以这里以伪元素为主（宽度可控、拇指能画成
+ * 圆角并带悬停态，`--scrollbar-width` 也因此等于实际宽度，行的右内边距才算得准），
+ * 标准属性只作为没有伪元素的引擎的回退。
+ *
+ * 规则只挂在真正会滚的容器上，不用 `*`：通配选择器会让每个元素都参与一次样式重算。
+ * 第三方组件自己的滚动容器（CodeMirror 的 `.cm-scroller`、xterm 的 `.xterm-viewport`）
+ * 按各自的类名列在里面，它们的 DOM 不在我们手里，加不了 `scroll-y`。
  */
 
 /**
@@ -210,39 +233,205 @@
 	padding-right: calc(var(--scroll-inset, 0px) - var(--scrollbar-width));
 }
 
-*::-webkit-scrollbar {
+/* 会滚动的容器：文字区、弹层与浮层、代码块与编辑器、终端标签栏 */
+:where(
+	.scroll-y,
+	.scroll,
+	.sb-opts,
+	.panel-body,
+	.set-content,
+	.set-list-scroll,
+	.search-results,
+	.picker-list,
+	.cmd-pop,
+	.chip-pop,
+	.pop-tip,
+	.tr-out pre,
+	.tr-think,
+	.code-card-body,
+	.mermaid-source,
+	.math-block,
+	.diff-scroll,
+	.diff-body,
+	dialog.dialog,
+	.cm-scroller,
+	.xterm-viewport
+)::-webkit-scrollbar {
 	width: var(--scrollbar-width);
 	height: var(--scrollbar-width);
 	background: transparent;
 }
 
-*::-webkit-scrollbar-button {
+:where(
+	.scroll-y,
+	.scroll,
+	.sb-opts,
+	.panel-body,
+	.set-content,
+	.set-list-scroll,
+	.search-results,
+	.picker-list,
+	.cmd-pop,
+	.chip-pop,
+	.pop-tip,
+	.tr-out pre,
+	.tr-think,
+	.code-card-body,
+	.mermaid-source,
+	.math-block,
+	.diff-scroll,
+	.diff-body,
+	dialog.dialog,
+	.cm-scroller,
+	.xterm-viewport
+)::-webkit-scrollbar-button {
 	display: none;
 	width: 0;
 	height: 0;
 }
 
-*::-webkit-scrollbar-track,
-*::-webkit-scrollbar-corner {
-	background: transparent;
+:where(
+	.scroll-y,
+	.scroll,
+	.sb-opts,
+	.panel-body,
+	.set-content,
+	.set-list-scroll,
+	.search-results,
+	.picker-list,
+	.cmd-pop,
+	.chip-pop,
+	.pop-tip,
+	.tr-out pre,
+	.tr-think,
+	.code-card-body,
+	.mermaid-source,
+	.math-block,
+	.diff-scroll,
+	.diff-body,
+	dialog.dialog,
+	.cm-scroller,
+	.xterm-viewport
+)::-webkit-scrollbar-track,
+:where(
+	.scroll-y,
+	.scroll,
+	.sb-opts,
+	.panel-body,
+	.set-content,
+	.set-list-scroll,
+	.search-results,
+	.picker-list,
+	.cmd-pop,
+	.chip-pop,
+	.pop-tip,
+	.tr-out pre,
+	.tr-think,
+	.code-card-body,
+	.mermaid-source,
+	.math-block,
+	.diff-scroll,
+	.diff-body,
+	dialog.dialog,
+	.cm-scroller,
+	.xterm-viewport
+)::-webkit-scrollbar-corner {
+	background: var(--scrollbar-track-color);
 }
 
-*::-webkit-scrollbar-thumb {
+:where(
+	.scroll-y,
+	.scroll,
+	.sb-opts,
+	.panel-body,
+	.set-content,
+	.set-list-scroll,
+	.search-results,
+	.picker-list,
+	.cmd-pop,
+	.chip-pop,
+	.pop-tip,
+	.tr-out pre,
+	.tr-think,
+	.code-card-body,
+	.mermaid-source,
+	.math-block,
+	.diff-scroll,
+	.diff-body,
+	dialog.dialog,
+	.cm-scroller,
+	.xterm-viewport
+)::-webkit-scrollbar-thumb {
 	border: calc((var(--scrollbar-width) - var(--scrollbar-thumb)) / 2) solid transparent;
 	border-radius: 999px;
-	background: color-mix(in srgb, var(--t3) 40%, transparent);
+	background: var(--scrollbar-thumb-color);
 	background-clip: content-box;
 }
 
-*::-webkit-scrollbar-thumb:hover {
-	background: var(--t2);
+:where(
+	.scroll-y,
+	.scroll,
+	.sb-opts,
+	.panel-body,
+	.set-content,
+	.set-list-scroll,
+	.search-results,
+	.picker-list,
+	.cmd-pop,
+	.chip-pop,
+	.pop-tip,
+	.tr-out pre,
+	.tr-think,
+	.code-card-body,
+	.mermaid-source,
+	.math-block,
+	.diff-scroll,
+	.diff-body,
+	dialog.dialog,
+	.cm-scroller,
+	.xterm-viewport
+)::-webkit-scrollbar-thumb:hover {
+	background: var(--scrollbar-thumb-color-hover);
 	background-clip: content-box;
 }
 
-@supports (-moz-appearance: none) {
-	* {
-		scrollbar-width: thin;
-		scrollbar-color: color-mix(in srgb, var(--t3) 40%, transparent) transparent;
+/* 没有伪元素的引擎：标准属性的宽度只有三档，画不出圆角拇指，观感上退一步 */
+@supports not (scrollbar-color: auto) {
+	:where(
+		.scroll-y,
+		.scroll,
+		.sb-opts,
+		.panel-body,
+		.set-content,
+		.set-list-scroll,
+		.search-results,
+		.picker-list,
+		.cmd-pop,
+		.chip-pop,
+		.pop-tip,
+		.tr-out pre,
+		.tr-think,
+		.code-card-body,
+		.mermaid-source,
+		.math-block,
+		.diff-scroll,
+		.diff-body,
+		dialog.dialog,
+		.cm-scroller,
+		.xterm-viewport
+	) {
+		/* 复位成 auto：非 auto 的宽度会反过来关掉 `::-webkit-scrollbar` */
+		scrollbar-width: auto;
+		scrollbar-color: var(--scrollbar-thumb-color) var(--scrollbar-track-color);
+	}
+}
+
+/* 系统要求更高对比度时，拇指换成正文色、轨道给出不透明底色 */
+@media (prefers-contrast: more) {
+	:root {
+		--scrollbar-thumb-color: var(--t1);
+		--scrollbar-thumb-color-hover: var(--t1);
+		--scrollbar-track-color: var(--surface2);
 	}
 }
 
@@ -320,7 +509,7 @@ svg.fl {
 .md,
 .bub,
 .tr-out pre,
-.tr-tip pre,
+.pop-tip pre,
 .tr-think,
 .code-card-body,
 .mermaid-source,

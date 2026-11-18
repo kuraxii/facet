@@ -11,6 +11,8 @@ import type { ContextUsage, ModelInfo, SlashCommand, ThinkingLevel } from "@face
 import { Brain, FileUp, ImagePlus, Plus, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { isComposingKey } from "../keys.ts";
+import { useHoverTip } from "../tip.tsx";
 import { ChevronIcon } from "../transcript/chevron.tsx";
 import { SendIcon, StopIcon } from "../transcript/icons.tsx";
 import { ContextRing, usageDetailText, usageLabel, usagePercentText } from "./ContextRing.tsx";
@@ -164,6 +166,8 @@ export function Composer({
 	onRunCommand,
 }: ComposerProps) {
 	const { t } = useI18n();
+	// 一排按钮共用一份悬浮提示：谁被悬停就贴谁
+	const tip = useHoverTip();
 
 	// 运行中发送走排队，插入当前轮次；压缩、停止中与连接断开时不接受新输入。
 	// 只有图片没有文字也算一条要发的内容。
@@ -281,7 +285,6 @@ export function Composer({
 									type="button"
 									className="att-x"
 									aria-label={t("composer.removeImage", { name: item.name })}
-									title={t("composer.removeImage", { name: item.name })}
 									onClick={() => onRemoveAttachment(item.id)}
 								>
 									<X size={12} strokeWidth={1.5} />
@@ -308,6 +311,10 @@ export function Composer({
 					setCommandIndex(0);
 				}}
 				onKeyDown={(event) => {
+					// 组词期间的回车与 Tab 是选词，不是发送与补全
+					if (isComposingKey(event)) {
+						return;
+					}
 					if (isPaletteOpen) {
 						if (event.key === "ArrowDown" || event.key === "ArrowUp") {
 							event.preventDefault();
@@ -352,7 +359,7 @@ export function Composer({
 							role="option"
 							aria-selected={index === Math.min(commandIndex, matches.length - 1)}
 							className={index === Math.min(commandIndex, matches.length - 1) ? "cmd-row is-on" : "cmd-row"}
-							title={command.origin}
+							{...tip.handlers(command.origin)}
 							onMouseEnter={() => setCommandIndex(index)}
 							onClick={() => pickCommand(command)}
 						>
@@ -372,20 +379,19 @@ export function Composer({
 						type="button"
 						className="ib"
 						aria-label={t("composer.add")}
-						title={t("composer.addImageOrFile")}
+						{...tip.handlers(t("composer.addImageOrFile"))}
 						aria-expanded={openMenu === "attach"}
 						onClick={() => setOpenMenu(openMenu === "attach" ? undefined : "attach")}
 					>
 						<Plus size={16} strokeWidth={1.5} />
 					</button>
 					{openMenu === "attach" ? (
-						<div className="chip-pop is-attach" role="menu" aria-label={t("composer.addContent")}>
+						// biome-ignore lint/a11y/useSemanticElements: 浮层里是一组按钮，用不到 fieldset 的表单语义
+						<div className="chip-pop is-attach" role="group" aria-label={t("composer.addContent")}>
 							<button
 								type="button"
 								className="chip-pop-item is-row"
-								role="menuitem"
 								disabled={onPickImages === undefined || !canAddImages}
-								title={onPickImages === undefined ? t("composer.notAvailable") : t("composer.addImage")}
 								onClick={() => {
 									if (onPickImages === undefined || !canAddImages) {
 										return;
@@ -397,13 +403,7 @@ export function Composer({
 								<ImagePlus size={14} strokeWidth={1.5} />
 								<span className="ell">{t("composer.addImage")}</span>
 							</button>
-							<button
-								type="button"
-								className="chip-pop-item is-row"
-								role="menuitem"
-								disabled
-								title={t("composer.notAvailable")}
-							>
+							<button type="button" className="chip-pop-item is-row" role="menuitem" disabled>
 								<FileUp size={14} strokeWidth={1.5} />
 								<span className="ell">{t("composer.uploadFile")}</span>
 							</button>
@@ -418,13 +418,14 @@ export function Composer({
 						onClick={() => setOpenMenu(openMenu === "model" ? undefined : "model")}
 						disabled={!canPickModel}
 						aria-expanded={openMenu === "model"}
-						title={canPickModel ? t("composer.switchModel") : t("composer.currentModel")}
+						{...tip.handlers(canPickModel ? t("composer.switchModel") : t("composer.currentModel"))}
 					>
 						{modelLabel(model, t("composer.noModel"))}
 						{canPickModel ? <ChevronIcon isOpen={openMenu === "model"} /> : null}
 					</button>
 					{openMenu === "model" ? (
-						<div className="chip-pop" role="dialog" aria-label={t("composer.chooseModel")}>
+						// biome-ignore lint/a11y/useSemanticElements: 浮层里是一组按钮，用不到 fieldset 的表单语义
+						<div className="chip-pop" role="group" aria-label={t("composer.chooseModel")}>
 							{grouped.map(([provider, items]) => (
 								<div key={provider} className="chip-pop-group">
 									<p className="chip-pop-head">
@@ -443,7 +444,6 @@ export function Composer({
 												key={modelKey(item)}
 												className={isCurrent ? "chip-pop-item is-on" : "chip-pop-item"}
 												disabled={!usable}
-												title={usable ? item.id : t("composer.providerNoCredentials")}
 												onClick={() => {
 													onModelChange?.(item);
 													setOpenMenu(undefined);
@@ -470,7 +470,7 @@ export function Composer({
 						onClick={() => setOpenMenu(openMenu === "level" ? undefined : "level")}
 						disabled={!canPickLevel}
 						aria-expanded={openMenu === "level"}
-						title={canPickLevel ? t("composer.switchThinking") : t("composer.currentThinking")}
+						{...tip.handlers(canPickLevel ? t("composer.switchThinking") : t("composer.currentThinking"))}
 						aria-label={t("composer.thinkingLevel", {
 							level: thinkingLevel === undefined ? t("composer.defaultLevel") : LEVEL_LABELS[thinkingLevel],
 						})}
@@ -480,7 +480,8 @@ export function Composer({
 						{canPickLevel ? <ChevronIcon isOpen={openMenu === "level"} /> : null}
 					</button>
 					{openMenu === "level" ? (
-						<div className="chip-pop" role="dialog" aria-label={t("composer.chooseThinking")}>
+						// biome-ignore lint/a11y/useSemanticElements: 浮层里是一组按钮，用不到 fieldset 的表单语义
+						<div className="chip-pop" role="group" aria-label={t("composer.chooseThinking")}>
 							{levels.map((level) => (
 								<button
 									type="button"
@@ -506,12 +507,13 @@ export function Composer({
 							onClick={() => setOpenMenu(openMenu === "context" ? undefined : "context")}
 							aria-expanded={openMenu === "context"}
 							aria-label={usageLabel(contextUsage, t)}
-							title={usageLabel(contextUsage, t)}
+							{...tip.handlers(usageLabel(contextUsage, t))}
 						>
 							<ContextRing usage={contextUsage} />
 						</button>
 						{openMenu === "context" ? (
-							<div className="chip-pop is-context" role="dialog" aria-label={t("composer.contextUsage")}>
+							// biome-ignore lint/a11y/useSemanticElements: 浮层是说明加一个按钮，用不到 fieldset 的表单语义
+							<div className="chip-pop is-context" role="group" aria-label={t("composer.contextUsage")}>
 								<p className="ctx-pop-title">{t("composer.contextWindow")}</p>
 								<p className="ctx-pop-value">
 									{isCompacting
@@ -530,13 +532,6 @@ export function Composer({
 											setOpenMenu(undefined);
 										}}
 										disabled={!canCompact || isCompacting}
-										title={
-											isCompacting
-												? t("composer.compacting")
-												: canCompact
-													? t("composer.compactHint")
-													: t("composer.waitForCompact")
-										}
 									>
 										{t("composer.compact")}
 									</button>
@@ -555,7 +550,7 @@ export function Composer({
 							onClick={onStop}
 							disabled={!canStop || activity === "stopping"}
 							aria-label={activity === "stopping" ? t("composer.stopping") : t("composer.stop")}
-							title={activity === "stopping" ? t("composer.stopping") : t("composer.stopTurn")}
+							{...tip.handlers(activity === "stopping" ? t("composer.stopping") : t("composer.stopTurn"))}
 						>
 							<StopIcon size={15} />
 						</button>
@@ -564,7 +559,7 @@ export function Composer({
 							type="button"
 							className="send"
 							aria-label={isQueuing ? t("composer.queue") : t("composer.send")}
-							title={isQueuing ? t("composer.insertTurn") : undefined}
+							{...tip.handlers(isQueuing ? t("composer.insertTurn") : undefined)}
 							onClick={onSend}
 							disabled={!canSend}
 						>
@@ -573,6 +568,7 @@ export function Composer({
 					)}
 				</span>
 			</div>
+			{tip.render()}
 		</div>
 	);
 }

@@ -307,7 +307,7 @@
 }
 
 .main-view.is-terminal {
-	padding: var(--main-terminal-padding);
+	padding: var(--main-terminal-padding-y) 0 var(--main-terminal-padding-y) var(--main-terminal-padding-x);
 }
 
 .diff-scroll {

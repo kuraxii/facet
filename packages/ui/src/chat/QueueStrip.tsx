@@ -6,6 +6,7 @@
 import type { QueuedInput } from "@facet/protocol";
 import { X } from "lucide-react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { useHoverTip } from "../tip.tsx";
 
 /** 排队条参数。 */
 export interface QueueStripProps {
@@ -25,6 +26,8 @@ function entriesOf(queued: QueuedInput): { key: string; text: string }[] {
 
 export function QueueStrip({ queued, onClear }: QueueStripProps) {
 	const { t } = useI18n();
+	const tip = useHoverTip();
+
 	const entries = entriesOf(queued);
 	if (entries.length === 0) {
 		return null;
@@ -32,16 +35,20 @@ export function QueueStrip({ queued, onClear }: QueueStripProps) {
 
 	return (
 		<div className="queue-strip">
-			<span className="queue-label">{t("queue.label", { count: entries.length })}</span>
+			<span className="queue-label">
+				{t("queue.label", { count: entries.length })}
+				{entries.length > 1 ? <span className="queue-merge-hint">· {t("queue.mergeHint")}</span> : null}
+			</span>
 			{entries.map((entry) => (
-				<span key={entry.key} className="queue-item" title={entry.text}>
+				<span key={entry.key} className="queue-item" {...tip.handlers(entry.text)}>
 					{entry.text}
 				</span>
 			))}
-			<button type="button" className="queue-clear" onClick={onClear} title={t("queue.withdraw")}>
+			<button type="button" className="queue-clear" onClick={onClear}>
 				<X size={11} strokeWidth={1.5} />
 				{t("queue.withdraw")}
 			</button>
+			{tip.render()}
 		</div>
 	);
 }

@@ -5,7 +5,7 @@
  * 透明的 `.app-drag` 与侧栏头部承担。双击拖动区切换最大化由 Chromium 处理。浏览器里跑同一份
  * 界面时桥上没有这些方法，这组按钮不渲染。
  */
-import { useI18n } from "@facet/ui";
+import { useHoverTip, useI18n } from "@facet/ui";
 import { Copy, Minus, Square, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -38,6 +38,8 @@ export function readWindowControls(bridge: {
 
 export function WindowControls({ controls }: { controls: WindowControls }) {
 	const { t } = useI18n();
+	// 三个按钮共用一份悬浮提示：贴到窗口右上角，portal 出去不会被顶带裁掉
+	const tip = useHoverTip();
 	const [isMaximized, setIsMaximized] = useState(false);
 
 	useEffect(() => controls.onWindowState(setIsMaximized), [controls]);
@@ -49,7 +51,7 @@ export function WindowControls({ controls }: { controls: WindowControls }) {
 					type="button"
 					className="window-btn"
 					aria-label={t("window.minimize")}
-					title={t("window.minimize")}
+					{...tip.handlers(t("window.minimize"))}
 					onClick={() => controls.minimize()}
 				>
 					<Minus size={14} strokeWidth={1.6} />
@@ -58,7 +60,7 @@ export function WindowControls({ controls }: { controls: WindowControls }) {
 					type="button"
 					className="window-btn"
 					aria-label={isMaximized ? t("window.restore") : t("window.maximize")}
-					title={isMaximized ? t("window.restore") : t("window.maximize")}
+					{...tip.handlers(isMaximized ? t("window.restore") : t("window.maximize"))}
 					onClick={() => controls.toggleMaximize()}
 				>
 					{isMaximized ? <Copy size={13} strokeWidth={1.6} /> : <Square size={12} strokeWidth={1.6} />}
@@ -67,12 +69,13 @@ export function WindowControls({ controls }: { controls: WindowControls }) {
 					type="button"
 					className="window-btn is-close"
 					aria-label={t("window.close")}
-					title={t("window.close")}
+					{...tip.handlers(t("window.close"))}
 					onClick={() => controls.close()}
 				>
 					<X size={15} strokeWidth={1.6} />
 				</button>
 			</div>
+			{tip.render()}
 		</header>
 	);
 }

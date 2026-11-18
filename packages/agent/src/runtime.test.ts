@@ -6,14 +6,25 @@ import { PiAgentFactory, thinkingLevelForModel } from "./runtime.ts";
 
 let root: string;
 let factory: PiAgentFactory;
+/** 用例开始前的 pi 全局配置目录，结束后放回去 */
+let previousAgentDir: string | undefined;
 
 beforeEach(async () => {
 	root = await mkdtemp(join(tmpdir(), "facet-agent-trust-"));
+	// 内置的 MCP 扩展按 pi 的全局配置目录找 mcp.json，配了服务器就会打开 codemode。
+	// 跑测试时把这个目录指到临时目录，机器上已有的 mcp.json 才不会改变内置扩展的激活状态。
+	previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+	process.env.PI_CODING_AGENT_DIR = join(root, "agent");
 	factory = await PiAgentFactory.create({ agentDir: join(root, "agent") });
 });
 
 afterEach(async () => {
 	factory.dispose();
+	if (previousAgentDir === undefined) {
+		delete process.env.PI_CODING_AGENT_DIR;
+	} else {
+		process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+	}
 	await rm(root, { recursive: true, force: true });
 });
 

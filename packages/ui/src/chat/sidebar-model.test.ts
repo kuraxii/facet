@@ -173,6 +173,54 @@ describe("组装侧栏", () => {
 		expect(data.projects.map((project) => project.sessionCount)).toEqual([2, 2]);
 	});
 
+	it("运行中的会话按进入先后排，摘要时间刷新不改变位置", () => {
+		const running = () =>
+			new Map([
+				["/s/a.jsonl", { activity: "running" as const, settle: undefined, pendingInput: 0, seenAt: 0 }],
+				["/s/b.jsonl", { activity: "running" as const, settle: undefined, pendingInput: 0, seenAt: 0 }],
+			]);
+		const two = [
+			summary({ id: "a", path: "/s/a.jsonl", cwd: "/work/facet", modified: NOW - 60_000 }),
+			summary({ id: "b", path: "/s/b.jsonl", cwd: "/work/facet", modified: NOW - 3_600_000 }),
+		];
+		// 第一帧按时间倒序排：a 在前
+		const first = buildSidebar({ sessions: two, projects: [], statuses: running(), now: NOW });
+		const firstOrder = first.groups[0]?.sessions.map((item) => item.path);
+		expect(firstOrder).toEqual(["/s/a.jsonl", "/s/b.jsonl"]);
+
+		// 一轮结束后 b 的摘要时间刷到最新，运行中的位置仍然不动
+		const churned = [
+			summary({ id: "a", path: "/s/a.jsonl", cwd: "/work/facet", modified: NOW - 60_000 }),
+			summary({ id: "b", path: "/s/b.jsonl", cwd: "/work/facet", modified: NOW }),
+		];
+		const second = buildSidebar({
+			sessions: churned,
+			projects: [],
+			statuses: running(),
+			now: NOW,
+			runningOrder: firstOrder,
+		});
+		expect(second.groups[0]?.sessions.map((item) => item.path)).toEqual(["/s/a.jsonl", "/s/b.jsonl"]);
+		expect(second.groups[0]?.sessions.map((item) => item.isRunning)).toEqual([true, true]);
+	});
+
+	it("新进运行组的会话排在组首，已经在跑的位置不动", () => {
+		const data = buildSidebar({
+			sessions: [
+				summary({ id: "a", path: "/s/a.jsonl", cwd: "/work/facet", modified: NOW - 60_000 }),
+				summary({ id: "b", path: "/s/b.jsonl", cwd: "/work/facet", modified: NOW }),
+			],
+			projects: [],
+			statuses: new Map([
+				["/s/a.jsonl", { activity: "running" as const, settle: undefined, pendingInput: 0, seenAt: 0 }],
+				["/s/b.jsonl", { activity: "running" as const, settle: undefined, pendingInput: 0, seenAt: 0 }],
+			]),
+			now: NOW,
+			runningOrder: ["/s/a.jsonl"],
+		});
+		expect(data.groups[0]?.sessions.map((item) => item.path)).toEqual(["/s/b.jsonl", "/s/a.jsonl"]);
+	});
+
 	it("关键词过滤会话标题", () => {
 		const data = buildSidebar({ ...base, keyword: "重连" });
 		expect(data.groups.flatMap((group) => group.sessions).map((item) => item.path)).toEqual(["/s/b.jsonl"]);

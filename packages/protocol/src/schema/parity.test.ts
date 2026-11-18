@@ -116,6 +116,8 @@ interface FrozenRequestParams {
 	setProjectTrust: { cwd: string; trusted: boolean };
 	/** 在主机的文件管理器里打开某个已添加项目的目录。 */
 	revealProject: { id: string };
+	/** 在主机的文件管理器里打开任意目录，路径由调用方给出。 */
+	revealPath: { path: string };
 	/**
 	 * 会话改名。
 	 *
@@ -222,6 +224,7 @@ describe("参数类型与重构前一致", () => {
 				true,
 			),
 			revealProject: assertEqual<RequestParams["revealProject"], FrozenRequestParams["revealProject"]>(true),
+			revealPath: assertEqual<RequestParams["revealPath"], FrozenRequestParams["revealPath"]>(true),
 			renameSession: assertEqual<RequestParams["renameSession"], FrozenRequestParams["renameSession"]>(true),
 			deleteSession: assertEqual<RequestParams["deleteSession"], FrozenRequestParams["deleteSession"]>(true),
 			markSessionsSeen: assertEqual<
@@ -273,6 +276,6 @@ describe("参数类型与重构前一致", () => {
 			>(true),
 		};
 		expect(Object.values(proofs).every((value) => value === true)).toBe(true);
-		expect(Object.keys(proofs)).toHaveLength(50);
+		expect(Object.keys(proofs)).toHaveLength(51);
 	});
 });

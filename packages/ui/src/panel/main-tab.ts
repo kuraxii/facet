@@ -146,3 +146,22 @@ export function normalizeMainTabDropTarget(
 	const previous = tabs[index - 1];
 	return previous === undefined ? target : { id: previous.id, after: true };
 }
+
+/** 滚轮按行计数时一行的像素高度；小步滚轮（部分鼠标驱动）报的是行数。 */
+const WHEEL_LINE_PIXELS = 16;
+
+/**
+ * 滚轮一格折成多少像素。
+ *
+ * `deltaMode` 有三种：像素（0）原样用，行（1）按行高换算，页（2）按一屏宽换算。
+ * 标签栏只能横向滚，垂直滚轮的位移直接拿来做横向位移，所以要先统一成像素。
+ */
+export function wheelStep(deltaMode: number, viewportWidth: number): number {
+	if (deltaMode === 1) {
+		return WHEEL_LINE_PIXELS;
+	}
+	if (deltaMode === 2) {
+		return Math.max(1, viewportWidth);
+	}
+	return 1;
+}

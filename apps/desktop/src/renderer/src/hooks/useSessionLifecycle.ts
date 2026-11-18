@@ -174,6 +174,8 @@ export interface SessionLifecycle {
 	removeProject: (id: string) => Promise<void>;
 	/** 在系统里打开项目目录 */
 	revealProject: (id: string) => Promise<void>;
+	/** 在系统里打开会话所在的工作目录 */
+	revealSessionFolder: (cwd: string) => Promise<void>;
 	/** 记下信任决定并继续被挡住的那次打开 */
 	decideTrust: (trusted: boolean) => void;
 	/** 取消信任询问 */
@@ -555,6 +557,13 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 		[client],
 	);
 
+	const revealSessionFolder = useCallback(
+		async (cwd: string) => {
+			await client.revealPath(cwd);
+		},
+		[client],
+	);
+
 	/** 丢掉当前会话：续订回不来时连订阅一起放掉，界面回到没有会话的状态。 */
 	const resetActive = useCallback(() => {
 		void client.release().catch(() => undefined);
@@ -586,6 +595,7 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 		renameProject,
 		removeProject,
 		revealProject,
+		revealSessionFolder,
 		decideTrust,
 		cancelTrust,
 		closeProjectDialog,

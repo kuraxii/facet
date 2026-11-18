@@ -5,8 +5,10 @@
  * 已配置列表里，也从这里消失。自定义提供方一律算已配置，不在这里出现。
  */
 import { Search, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { isComposingKey } from "../keys.ts";
+import { Modal } from "../modal.tsx";
 import type { ProviderRow } from "./provider-rows.ts";
 
 /** 挑选弹窗参数。 */
@@ -35,11 +37,6 @@ export function ProviderPicker({ rows, onSaveCredential, onCreateCustom, onClose
 	const [failure, setFailure] = useState<{ providerId: string; message: string } | undefined>(undefined);
 	const searchRef = useRef<HTMLInputElement>(null);
 
-	// 打开即把光标放进搜索框，列表从头开始看
-	useEffect(() => {
-		searchRef.current?.focus({ preventScroll: true });
-	}, []);
-
 	// 已经在用的不列：有凭证的、自定义的都不在这里
 	const pending = useMemo(() => rows.filter((row) => !isAdded(row)), [rows]);
 	const keyword = query.trim().toLowerCase();
@@ -67,96 +64,95 @@ export function ProviderPicker({ rows, onSaveCredential, onCreateCustom, onClose
 	};
 
 	return (
-		<div className="dialog-backdrop">
-			<div className="dialog is-picker" role="dialog" aria-modal="true" aria-label={t("picker.title")}>
-				<div className="dialog-head">
-					<h2 className="dialog-title">{t("picker.title")}</h2>
-					<button type="button" className="dialog-close" aria-label={t("common.close")} onClick={onClose}>
-						<X size={18} strokeWidth={1.5} />
-					</button>
-				</div>
+		<Modal open onClose={onClose} label={t("picker.title")} className="is-picker">
+			<div className="dialog-head">
+				<h2 className="dialog-title">{t("picker.title")}</h2>
+				<button type="button" className="dialog-close" aria-label={t("common.close")} onClick={onClose}>
+					<X size={18} strokeWidth={1.5} />
+				</button>
+			</div>
 
-				<label className="picker-search">
-					<Search size={14} strokeWidth={1.6} />
-					<input
-						ref={searchRef}
-						className="picker-search-input"
-						value={query}
-						onChange={(event) => setQuery(event.target.value)}
-						placeholder={t("picker.search")}
-						aria-label={t("picker.search")}
-					/>
-				</label>
+			<label className="picker-search">
+				<Search size={14} strokeWidth={1.6} />
+				<input
+					ref={searchRef}
+					data-autofocus
+					className="picker-search-input"
+					value={query}
+					onChange={(event) => setQuery(event.target.value)}
+					placeholder={t("picker.search")}
+					aria-label={t("picker.search")}
+				/>
+			</label>
 
-				<ul className="picker-list">
-					{visible.map((row) => {
-						const provider = row.provider;
-						const isBusy = busyId === provider.id;
-						return (
-							<li key={provider.id} className="picker-row">
-								<div className="picker-row-head">
-									<span className="picker-name ell">{provider.name}</span>
+			<ul className="picker-list">
+				{visible.map((row) => {
+					const provider = row.provider;
+					const isBusy = busyId === provider.id;
+					return (
+						<li key={provider.id} className="picker-row">
+							<div className="picker-row-head">
+								<span className="picker-name ell">{provider.name}</span>
+								<button
+									type="button"
+									className="set-row-action"
+									onClick={() => {
+										setFailure(undefined);
+										setKey("");
+										setEditingId(editingId === provider.id ? undefined : provider.id);
+									}}
+								>
+									{t("picker.add")}
+								</button>
+							</div>
+
+							{editingId === provider.id ? (
+								<div className="picker-key">
+									<input
+										className="set-input mono picker-key-input"
+										type="password"
+										value={key}
+										onChange={(event) => setKey(event.target.value)}
+										onKeyDown={(event) => {
+											if (event.key === "Enter" && !isComposingKey(event) && key.trim().length > 0) {
+												void save(provider.id);
+											}
+										}}
+										placeholder={t("picker.apiKeyPlaceholder")}
+										aria-label={t("picker.apiKeyLabel", { name: provider.name })}
+									/>
 									<button
 										type="button"
-										className="set-row-action"
-										onClick={() => {
-											setFailure(undefined);
-											setKey("");
-											setEditingId(editingId === provider.id ? undefined : provider.id);
-										}}
+										className="set-save"
+										disabled={isBusy || key.trim().length === 0}
+										onClick={() => void save(provider.id)}
 									>
-										{t("picker.add")}
+										{isBusy ? t("picker.saving") : t("common.save")}
 									</button>
 								</div>
+							) : null}
 
-								{editingId === provider.id ? (
-									<div className="picker-key">
-										<input
-											className="set-input mono picker-key-input"
-											type="password"
-											value={key}
-											onChange={(event) => setKey(event.target.value)}
-											onKeyDown={(event) => {
-												if (event.key === "Enter" && key.trim().length > 0) {
-													void save(provider.id);
-												}
-											}}
-											placeholder={t("picker.apiKeyPlaceholder")}
-											aria-label={t("picker.apiKeyLabel", { name: provider.name })}
-										/>
-										<button
-											type="button"
-											className="set-save"
-											disabled={isBusy || key.trim().length === 0}
-											onClick={() => void save(provider.id)}
-										>
-											{isBusy ? t("picker.saving") : t("common.save")}
-										</button>
-									</div>
-								) : null}
-
-								{failure?.providerId === provider.id ? (
-									<p className="set-row-error">{failure.message}</p>
-								) : null}
-							</li>
-						);
-					})}
-					{visible.length === 0 ? (
-						<li className="picker-empty">
-							{pending.length === 0 ? t("picker.emptyConfigured") : t("picker.emptyMatch")}
+							{failure?.providerId === provider.id ? (
+								<p className="set-row-error">{failure.message}</p>
+							) : null}
 						</li>
-					) : null}
-				</ul>
+					);
+				})}
+				{visible.length === 0 ? (
+					<li className="picker-empty">
+						{pending.length === 0 ? t("picker.emptyConfigured") : t("picker.emptyMatch")}
+					</li>
+				) : null}
+			</ul>
 
-				<div className="dialog-actions">
-					<button type="button" className="set-reset" onClick={onCreateCustom}>
-						{t("picker.addCustom")}
-					</button>
-					<button type="button" className="set-save" onClick={onClose}>
-						{t("picker.done")}
-					</button>
-				</div>
+			<div className="dialog-actions">
+				<button type="button" className="set-reset" onClick={onCreateCustom}>
+					{t("picker.addCustom")}
+				</button>
+				<button type="button" className="set-save" onClick={onClose}>
+					{t("picker.done")}
+				</button>
 			</div>
-		</div>
+		</Modal>
 	);
 }

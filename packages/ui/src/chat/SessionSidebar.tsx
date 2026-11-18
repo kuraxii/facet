@@ -9,7 +9,9 @@ import { Plus, Search, Settings } from "lucide-react";
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ScrollArea, ScrollRow } from "../common/scroll-area.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { isComposingKey } from "../keys.ts";
 import { PaneResizer } from "../panel/pane-resizer.tsx";
+import { useHoverTip } from "../tip.tsx";
 import { ChevronIcon } from "../transcript/chevron.tsx";
 import { FolderIcon } from "../transcript/icons.tsx";
 import { SessionStatusMark } from "./session-status-mark.tsx";
@@ -66,6 +68,8 @@ export interface SessionSidebarProps {
 	onRemoveProject?: (id: string) => Promise<void>;
 	/** 在主机的文件管理器里打开项目目录，失败时抛错 */
 	onRevealProject?: (id: string) => Promise<void>;
+	/** 在系统里打开会话所在的工作目录 */
+	onRevealSessionFolder?: (cwd: string) => Promise<void>;
 	/** 会话改名，失败时抛错 */
 	onRenameSession?: (path: string, name: string | undefined) => Promise<void>;
 	/** 删除会话，失败时抛错 */
@@ -138,6 +142,7 @@ export const SessionSidebar = memo(function SessionSidebar({
 	onRenameProject,
 	onRemoveProject,
 	onRevealProject,
+	onRevealSessionFolder,
 	onRenameSession,
 	onDeleteSession,
 	onOpenSettings,
@@ -148,6 +153,8 @@ export const SessionSidebar = memo(function SessionSidebar({
 	onNavigate,
 }: SessionSidebarProps) {
 	const { t, i18n } = useI18n();
+	// 侧栏里能悬停出说明的地方共用一份提示
+	const tip = useHoverTip();
 	const [projectKeyword, setProjectKeyword] = useState("");
 	const [isFilterOpen, setIsFilterOpen] = useState(false);
 	const [isFilterUp, setIsFilterUp] = useState(false);
@@ -198,19 +205,25 @@ export const SessionSidebar = memo(function SessionSidebar({
 	const activeCwd = sessions.find((session) => session.path === activeFile)?.cwd;
 	const scopeCwd = showsAll ? undefined : (pickedCwd ?? activeCwd);
 
-	const data = useMemo(
-		() =>
-			buildSidebar({
-				sessions,
-				projects: storedProjects,
-				statuses,
-				projectCwd: scopeCwd,
-				untitled: t("sidebar.untitled"),
-				now,
-				locale: i18n.language as "en" | "zh-CN",
-			}),
-		[sessions, storedProjects, statuses, scopeCwd, t, now, i18n.language],
-	);
+	/** 上一帧「进行中」组的顺序，几条会话同时在跑时不互相挤 */
+	const runningOrder = useRef<readonly string[]>([]);
+
+	const data = useMemo(() => {
+		const built = buildSidebar({
+			sessions,
+			projects: storedProjects,
+			statuses,
+			projectCwd: scopeCwd,
+			untitled: t("sidebar.untitled"),
+			now,
+			locale: i18n.language as "en" | "zh-CN",
+			runningOrder: runningOrder.current,
+		});
+		// 记下这一帧的顺序给下一帧：同样的输入再算一遍结果相同，重复渲染不会错位
+		runningOrder.current =
+			built.groups.find((group) => group.key === "running")?.sessions.map((session) => session.path) ?? [];
+		return built;
+	}, [sessions, storedProjects, statuses, scopeCwd, t, now, i18n.language]);
 
 	const currentProject: SidebarProject | undefined =
 		scopeCwd === undefined ? undefined : data.projects.find((item) => samePath(item.cwd, scopeCwd));
@@ -486,11 +499,7 @@ export const SessionSidebar = memo(function SessionSidebar({
 					onNavigate?.();
 				}}
 				disabled={!canCreate || newSessionCwd.length === 0}
-				title={
-					newSessionCwd.length === 0
-						? t("sidebar.addFirstProject")
-						: t("sidebar.newIn", { cwd: newSessionCwd })
-				}
+				{...tip.handlers(newSessionCwd.length === 0 ? undefined : t("sidebar.newIn", { cwd: newSessionCwd }))}
 			>
 				<Plus size={14} strokeWidth={1.5} />
 				{t("common.newSession")}
@@ -514,10 +523,11 @@ export const SessionSidebar = memo(function SessionSidebar({
 				</button>
 
 				{isFilterOpen ? (
+					// biome-ignore lint/a11y/useSemanticElements: 这是挂在过滤器按钮下的浮层，用不到 fieldset 的表单语义
 					<div
 						ref={panelRef}
 						className={isFilterUp ? "sb-pop is-up" : "sb-pop"}
-						role="dialog"
+						role="group"
 						aria-label={t("sidebar.chooseProject")}
 						onKeyDown={trapFocus}
 					>
@@ -548,7 +558,7 @@ export const SessionSidebar = memo(function SessionSidebar({
 											type="button"
 											className={isOn ? "sb-opt is-on" : "sb-opt"}
 											aria-pressed={isOn}
-											title={project.cwd}
+											{...tip.handlers(project.cwd)}
 											onClick={() => selectProject(project.cwd)}
 											onContextMenu={(event) => {
 												if (project.id === undefined) return;
@@ -634,7 +644,7 @@ export const SessionSidebar = memo(function SessionSidebar({
 												});
 											}}
 											disabled={session.isPlaceholder === true}
-											title={session.title}
+											{...tip.handlers(session.title)}
 										>
 											<SessionStatusMark bucket={session.bucket} />
 											{twoLine ? (
@@ -675,7 +685,7 @@ export const SessionSidebar = memo(function SessionSidebar({
 								value={renaming.value}
 								onChange={(event) => setRenaming({ id: renaming.id, value: event.target.value })}
 								onKeyDown={(event) => {
-									if (event.key === "Enter") {
+									if (event.key === "Enter" && !isComposingKey(event)) {
 										void submitRename(menuProject.cwd);
 									}
 									if (event.key === "Escape") {
@@ -773,7 +783,7 @@ export const SessionSidebar = memo(function SessionSidebar({
 									setSessionRename({ path: sessionRename.path, value: event.target.value })
 								}
 								onKeyDown={(event) => {
-									if (event.key === "Enter") {
+									if (event.key === "Enter" && !isComposingKey(event)) {
 										void submitSessionRename();
 									}
 									if (event.key === "Escape") {
@@ -828,6 +838,16 @@ export const SessionSidebar = memo(function SessionSidebar({
 							</button>
 							<button
 								type="button"
+								className="sb-menu-item"
+								disabled={isSessionBusy}
+								onClick={() =>
+									void runSessionMenuAction(async () => onRevealSessionFolder?.(menuSession.cwd))
+								}
+							>
+								{t("sidebar.revealSessionFolder")}
+							</button>
+							<button
+								type="button"
 								className="sb-menu-item is-danger"
 								onClick={() => setSessionDeletePath(menuSession.path)}
 							>
@@ -847,13 +867,13 @@ export const SessionSidebar = memo(function SessionSidebar({
 					type="button"
 					className={isSettingsOpen ? "sb-foot-btn is-icon is-on" : "sb-foot-btn is-icon"}
 					aria-label={t("sidebar.settings")}
-					title={t("sidebar.settings")}
 					aria-pressed={isSettingsOpen}
 					onClick={() => onOpenSettings?.()}
 				>
 					<Settings size={14} strokeWidth={1.5} />
 				</button>
 			</footer>
+			{tip.render()}
 		</aside>
 	);
 });

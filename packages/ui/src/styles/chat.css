@@ -192,6 +192,12 @@
 	flex: none;
 }
 
+/* 多条排队时补一句说明：收回会把它们拼成一条草稿 */
+.queue-merge-hint {
+	color: inherit;
+	opacity: 0.75;
+}
+
 .queue-item {
 	max-width: 220px;
 	padding: 2px 8px;
@@ -760,30 +766,6 @@
 }
 
 /* 参数摘要的完整内容：停留才出现，铺在窗口上，不参与行内排版；指针可以移进来滚动查看 */
-.tr-tip {
-	position: fixed;
-	z-index: 45;
-	max-width: var(--tool-tip-width);
-	margin-top: var(--tool-tip-gap);
-	max-height: var(--tool-tip-height);
-	overflow: auto;
-	padding: 8px 10px;
-	border: 1px solid var(--line2);
-	border-radius: 10px;
-	background: var(--card);
-	box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
-	overscroll-behavior: contain;
-}
-
-.tr-tip pre {
-	margin: 0;
-	color: var(--t2);
-	font-family: var(--font-mono);
-	font-size: 11.5px;
-	line-height: 1.55;
-	white-space: pre-wrap;
-	overflow-wrap: anywhere;
-}
 
 .tr-out pre {
 	max-height: 260px;

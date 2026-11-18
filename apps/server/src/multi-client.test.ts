@@ -412,8 +412,17 @@ describe("两个端接同一台主机", () => {
 		first.dispatch(CHAT, { type: "chat/turnStarted", text: "你好" });
 		await settle();
 		expect(agent.prompts).toEqual(["你好"]);
-		// 两个端都从主机收到了这一轮开始的动作
-		expect(second.frames.length).toBe(first.frames.length);
+		// 受理回执只回给发起方：它是「这条输入已被收下」的应答，不是通道上的动作
+		const receipts = (frames: { action: { type: string } }[]) =>
+			frames.filter((frame) => frame.action.type === "chat/inputHandled").length;
+		expect(receipts(first.frames)).toBe(1);
+		expect(receipts(second.frames)).toBe(0);
+		// 通道上的动作两端一致
+		const broadcast = (frames: { channel: string; action: unknown; seq: number }[]) =>
+			frames
+				.filter((frame) => (frame.action as { type: string }).type !== "chat/inputHandled")
+				.map((frame) => [frame.channel, frame.action, frame.seq]);
+		expect(broadcast(second.frames)).toEqual(broadcast(first.frames));
 	});
 
 	it("并发写同一轮时只有一条执行，另一条被明确拒绝", async () => {

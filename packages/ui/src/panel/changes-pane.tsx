@@ -9,6 +9,7 @@ import type { GitCommit, GitCommits, GitFileChange, GitStatus } from "@facet/pro
 import { ChevronRight, FileText, RefreshCw } from "lucide-react";
 import { type CSSProperties, type ReactNode, useCallback, useMemo, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { useHoverTip } from "../tip.tsx";
 import styles from "./changes.module.css";
 import { ChangeMark, changeStatusLabelKey } from "./changes-mark.tsx";
 import { buildChangesTree, type ChangesTreeRow, flattenChangesTree } from "./changes-tree.ts";
@@ -78,6 +79,8 @@ function FileRow({
 	onOpenDiff: ((file: GitFileChange) => void) | undefined;
 }): ReactNode {
 	const { t } = useI18n();
+	// 行里显示的是文件名，完整路径由提示补上
+	const tip = useHoverTip();
 	const file = row.file;
 	const name = file.path.split("/").pop() ?? file.path;
 	const statusLabel = t(changeStatusLabelKey(file.status));
@@ -92,7 +95,7 @@ function FileRow({
 				className={styles.row}
 				style={rowStyle(row.depth)}
 				data-selected={isSelected}
-				title={file.path}
+				{...tip.handlers(file.path)}
 				onClick={open}
 			>
 				<FileText className={styles.fileIcon} size={14} strokeWidth={1.5} />
@@ -109,6 +112,7 @@ function FileRow({
 					<ChangeMark status={file.status} />
 				</span>
 			</button>
+			{tip.render()}
 		</li>
 	);
 }
@@ -149,7 +153,7 @@ export function ChangesPane({
 
 	const header = (
 		<div className={styles.head}>
-			<span className={styles.branch} title={status?.branch ?? ""}>
+			<span className={styles.branch}>
 				{status?.branch ?? "…"}
 				{status?.upstream === undefined ? null : (
 					<span className={styles.upstream}>
@@ -167,7 +171,6 @@ export function ChangesPane({
 				type="button"
 				className={styles.iconButton}
 				aria-label={t("panel.refreshChanges")}
-				title={t("panel.refreshChanges")}
 				onClick={onRefresh}
 				disabled={isLoading}
 			>

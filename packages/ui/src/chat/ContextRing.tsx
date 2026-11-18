@@ -95,7 +95,7 @@ export function ContextRing({ usage, size = 16, strokeWidth = 2 }: ContextRingPr
 	const label = usageLabel(usage, t);
 
 	return (
-		<span className="ctx-ring" role="img" aria-label={label} title={label}>
+		<span className="ctx-ring" role="img" aria-label={label}>
 			<svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true" focusable="false">
 				<circle
 					cx={center}

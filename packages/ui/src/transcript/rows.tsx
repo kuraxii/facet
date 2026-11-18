@@ -21,9 +21,9 @@ import {
 	Wrench,
 } from "lucide-react";
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { Markdown } from "../markdown/Markdown.tsx";
+import { useHoverTip } from "../tip.tsx";
 import { ChevronIcon, TreeChevron } from "./chevron.tsx";
 import {
 	type DisplayRow,
@@ -128,7 +128,6 @@ function CopyButton({ text, onCopy }: { text: string; onCopy: (text: string) => 
 			type="button"
 			className={isDone ? "copy-btn is-done" : "copy-btn"}
 			aria-label={isDone ? t("transcript.copied") : t("transcript.copy")}
-			title={isDone ? t("transcript.copied") : t("transcript.copy")}
 			onClick={() => {
 				onCopy(text);
 				setIsDone(true);
@@ -206,30 +205,12 @@ function ToolImageThumb({ image, label }: { image: ToolImage; label: string }) {
 	);
 }
 
-/** 参数弹窗的延时：指针在摘要上停留这么久才弹，扫过去不打扰 */
-const TIP_DELAY_MS = 500;
-/** 弹窗要能滚起来，指针从摘要挪到弹窗上这段时间先不收；挪出去超过它才关 */
-const TIP_HIDE_DELAY_MS = 300;
-
 function ToolRow({ part }: { part: ToolCallPart }) {
 	const { t } = useI18n();
 	const [isOpen, setOpen] = useState(false);
 	const [isExpanded, setExpanded] = useState(false);
-	/** 参数完整内容弹窗的落点，未悬停时为空 */
-	const [tip, setTip] = useState<{ left: number; top: number } | undefined>(undefined);
-	const tipTimer = useRef<number | undefined>(undefined);
-	const showTipSoon = useCallback((rect: DOMRect) => {
-		window.clearTimeout(tipTimer.current);
-		tipTimer.current = window.setTimeout(() => setTip({ left: rect.left, top: rect.bottom }), TIP_DELAY_MS);
-	}, []);
-	// 弹窗里可以滚动查看长参数，所以离开摘要后不立刻关，留给指针挪过去的时间
-	const hideTipSoon = useCallback(() => {
-		window.clearTimeout(tipTimer.current);
-		tipTimer.current = window.setTimeout(() => setTip(undefined), TIP_HIDE_DELAY_MS);
-	}, []);
-	const keepTip = useCallback(() => window.clearTimeout(tipTimer.current), []);
-	// 行被收起或整行消失时，未到点的定时器不能再弹
-	useEffect(() => () => window.clearTimeout(tipTimer.current), []);
+	// 参数完整内容的悬停浮层，与别处的提示共用一份实现
+	const tip = useHoverTip();
 	const output = part.output ?? "";
 	// 展开给的就是工具结果原文：模型看到的那份，界面上不再删改任何一行
 	const body = output;
@@ -257,10 +238,7 @@ function ToolRow({ part }: { part: ToolCallPart }) {
 				{target.length === 0 ? null : (
 					<span
 						className={`tr-arg${isRunning ? " is-live" : ""}`}
-						onPointerEnter={
-							hasDetail ? (event) => showTipSoon(event.currentTarget.getBoundingClientRect()) : undefined
-						}
-						onPointerLeave={hasDetail ? hideTipSoon : undefined}
+						{...tip.handlers(hasDetail ? <pre>{detail}</pre> : undefined)}
 					>
 						{target}
 					</span>
@@ -288,19 +266,7 @@ function ToolRow({ part }: { part: ToolCallPart }) {
 					) : null}
 				</div>
 			) : null}
-			{tip === undefined
-				? null
-				: createPortal(
-						<div
-							className="tr-tip"
-							style={{ left: tip.left, top: tip.top }}
-							onPointerEnter={keepTip}
-							onPointerLeave={hideTipSoon}
-						>
-							<pre>{detail}</pre>
-						</div>,
-						document.body,
-					)}
+			{tip.render()}
 		</div>
 	);
 }
@@ -485,7 +451,6 @@ const RowView = memo(function RowView({
 							type="button"
 							className="fork-btn"
 							aria-label={t("transcript.fork")}
-							title={t("transcript.fork")}
 							disabled={fork.needsSettle && !canFork}
 							onClick={() => onFork(fork.beforeEntryId)}
 						>
@@ -582,7 +547,6 @@ const RowView = memo(function RowView({
 								type="button"
 								className="revert-btn"
 								aria-label={t("transcript.revert")}
-								title={t("transcript.revert")}
 								onClick={() => onRevert(entryId, text)}
 							>
 								<Undo2 size={12} strokeWidth={1.5} />

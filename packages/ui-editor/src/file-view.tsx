@@ -7,6 +7,7 @@
  */
 import type { FileContent } from "@facet/protocol";
 import { useI18n } from "@facet/ui/i18n";
+import { useHoverTip } from "@facet/ui/tip";
 import { Check, Pencil, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { CodeSurface } from "./code-surface.tsx";
@@ -39,6 +40,8 @@ function isConflict(error: unknown): boolean {
 
 export function FileView({ path, content, onSave, onReload }: FileViewProps) {
 	const { t } = useI18n();
+	// 路径被省略号截断时由提示补全
+	const tip = useHoverTip();
 	/** 编辑器里的当前内容 */
 	const [draft, setDraft] = useState(content.kind === "text" ? content.content : "");
 	/** 磁盘上那份内容，用来判断有没有改动 */
@@ -138,16 +141,17 @@ export function FileView({ path, content, onSave, onReload }: FileViewProps) {
 	return (
 		<div className="file-view">
 			<div className="file-head">
-				<span className="file-path" title={path}>
+				<span className="file-path" {...tip.handlers(path)}>
 					{path}
 				</span>
-				{isDirty ? <span className="file-dirty" role="status" title={t("editor.unsavedChanges")} /> : null}
+				{isDirty ? (
+					<span className="file-dirty" role="status" aria-label={t("editor.unsavedChanges")} />
+				) : null}
 				{isText && !isEditing ? (
 					<button
 						type="button"
 						className="ib"
 						aria-label={t("editor.edit")}
-						title={t("editor.edit")}
 						onClick={() => {
 							setIsEditing(true);
 						}}
@@ -161,7 +165,6 @@ export function FileView({ path, content, onSave, onReload }: FileViewProps) {
 							type="button"
 							className="ib"
 							aria-label={t("editor.save")}
-							title={t("editor.saveShortcut")}
 							disabled={!isDirty || isSaving}
 							onClick={() => void save()}
 						>
@@ -175,7 +178,6 @@ export function FileView({ path, content, onSave, onReload }: FileViewProps) {
 							type="button"
 							className="ib"
 							aria-label={t("editor.exitEdit")}
-							title={t("editor.exitEdit")}
 							onClick={() => {
 								setDraft(baseline);
 								setIsEditing(false);
@@ -213,6 +215,7 @@ export function FileView({ path, content, onSave, onReload }: FileViewProps) {
 					{content.kind === "binary" ? t("editor.binaryNoPreview") : t("editor.tooLargeNoPreview")}
 				</p>
 			)}
+			{tip.render()}
 		</div>
 	);
 }

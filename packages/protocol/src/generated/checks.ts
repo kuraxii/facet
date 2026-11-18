@@ -519,6 +519,25 @@ function buildRequestRevealProject(): (value: unknown) => boolean {
 const checkRequestRevealProject = buildRequestRevealProject();
 
 /**
+ * revealPath 的参数判断。
+ *
+ * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
+ */
+function buildRequestRevealPath(): (value: unknown) => boolean {
+	// @ts-ignore
+	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && ("path" in value && typeof value.path === "string")));
+	return (value: unknown): boolean => {
+		if (!check_0(value)) return false;
+		const source = value as Record<string, unknown>;
+		return (
+			typeof source.path === "string" && source.path.length > 0
+		);
+	};
+}
+
+const checkRequestRevealPath = buildRequestRevealPath();
+
+/**
  * renameSession 的参数判断。
  *
  * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
@@ -989,6 +1008,7 @@ export const REQUEST_CONTRACTS: Readonly<Record<string, RequestContract | undefi
 	"projectTrust": { auth: "public", check: checkRequestProjectTrust },
 	"setProjectTrust": { auth: "admin", check: checkRequestSetProjectTrust },
 	"revealProject": { auth: "admin", check: checkRequestRevealProject },
+	"revealPath": { auth: "admin", check: checkRequestRevealPath },
 	"renameSession": { auth: "write", check: checkRequestRenameSession },
 	"deleteSession": { auth: "write", check: checkRequestDeleteSession },
 	"markSessionsSeen": { auth: "public", check: checkRequestMarkSessionsSeen },

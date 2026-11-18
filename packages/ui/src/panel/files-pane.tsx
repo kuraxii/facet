@@ -19,6 +19,7 @@ import {
 	useState,
 } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { useHoverTip } from "../tip.tsx";
 import { TreeChevron } from "../transcript/chevron.tsx";
 
 export interface FilesPaneProps {
@@ -48,6 +49,8 @@ interface Row {
 }
 
 export function FilesPane({ loadDirectory, onOpenFile, selectedPath }: FilesPaneProps) {
+	// 文件行的完整路径与读取失败的原文都走这份提示
+	const tip = useHoverTip();
 	const { t } = useI18n();
 	const [directories, setDirectories] = useState<Readonly<Record<string, DirectoryState>>>({});
 	const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set([""]));
@@ -133,7 +136,6 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath }: FilesPane
 				type="button"
 				className="ib"
 				aria-label={t("panel.refreshFiles")}
-				title={t("panel.refreshFiles")}
 				disabled={root?.isLoading === true}
 				onClick={refresh}
 			>
@@ -264,7 +266,7 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath }: FilesPane
 								}}
 								className={isSelected ? "tree-row is-on" : "tree-row"}
 								style={{ "--files-depth": depth } as CSSProperties}
-								title={entry.path}
+								{...tip.handlers(entry.path)}
 								role="treeitem"
 								aria-level={depth + 1}
 								aria-expanded={isDirectory ? isOpen : undefined}
@@ -289,7 +291,7 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath }: FilesPane
 								<span className="tree-name">{entry.name}</span>
 								{state?.isLoading === true ? <span className="tree-note">…</span> : null}
 								{state?.error === undefined ? null : (
-									<span className="tree-note is-error" title={state.error}>
+									<span className="tree-note is-error" {...tip.handlers(state.error)}>
 										{t("panel.readFailed")}
 									</span>
 								)}
@@ -298,6 +300,7 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath }: FilesPane
 					);
 				})}
 			</div>
+			{tip.render()}
 		</>
 	);
 }

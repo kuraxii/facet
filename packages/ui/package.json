@@ -9,7 +9,8 @@
 		".": "./src/index.ts",
 		"./styles": "./src/styles/index.css",
 		"./i18n": "./src/i18n/I18nProvider.tsx",
-		"./tip": "./src/tip.tsx"
+		"./tip": "./src/tip.tsx",
+		"./markdown": "./src/markdown/Markdown.tsx"
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit",

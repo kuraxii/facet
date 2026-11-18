@@ -28,6 +28,7 @@ import {
 import { tags } from "@lezer/highlight";
 import { useEffect, useRef } from "react";
 import { editorTheme, readEditorPalette } from "./editor-theme.ts";
+import { isMarkdownPath } from "./markdown-file.ts";
 
 /** 语法着色：只挑几类常用的 token，颜色取自界面的语义色。 */
 const HIGHLIGHT_STYLE = HighlightStyle.define([
@@ -43,7 +44,33 @@ const HIGHLIGHT_STYLE = HighlightStyle.define([
 	{ tag: [tags.heading, tags.strong], color: "var(--t1)", fontWeight: "600" },
 	{ tag: tags.link, color: "var(--acc)", textDecoration: "underline" },
 	{ tag: tags.invalid, color: "var(--err)" },
+	// Markdown：让标记符退成底噪，结构本身（行内代码、斜体、引用、链接地址）各自成形。
+	// 标记符一并淡掉是 Markdown 看着像纯文本的主因：`#`、`**`、`>` 与正文同色时整段是灰墙。
+	{ tag: tags.processingInstruction, color: "var(--t3)" },
+	{ tag: tags.monospace, color: "var(--markdown-code-text)" },
+	{ tag: tags.emphasis, fontStyle: "italic" },
+	{ tag: tags.strikethrough, color: "var(--t3)", textDecoration: "line-through" },
+	{ tag: tags.quote, color: "var(--t3)" },
+	{ tag: tags.url, color: "var(--t3)" },
+	{ tag: tags.labelName, color: "var(--t3)" },
+	{ tag: tags.contentSeparator, color: "var(--t3)" },
 ]);
+
+/**
+ * Markdown 的语言支持。
+ *
+ * `language-data` 里登记的那条是无参 `markdown()`，只认严格 CommonMark：表格、任务列表
+ * 这类 GFM 结构不出结构高亮，围栏代码块里的内容也不会按语言着色。这里自己登记一条，
+ * 把 GFM 与「按 info 串找语言」都打开；扩展名与 `isMarkdownPath` 认的保持一致。
+ */
+const MARKDOWN = LanguageDescription.of({
+	name: "Markdown",
+	extensions: ["md", "markdown", "mkd"],
+	load: () =>
+		import("@codemirror/lang-markdown").then((module) =>
+			module.markdown({ base: module.markdownLanguage, codeLanguages: languages }),
+		),
+});
 
 export interface CodeSurfaceProps {
 	/** 文件内容 */
@@ -62,6 +89,9 @@ export interface CodeSurfaceProps {
 
 /** 按文件名找语言，找不到时按纯文本。 */
 function languageFor(path: string): LanguageDescription | null {
+	if (isMarkdownPath(path)) {
+		return MARKDOWN;
+	}
 	return LanguageDescription.matchFilename(languages, path);
 }
 

@@ -122,6 +122,9 @@
 	--editor-gutter-x: 4px;
 	--editor-head-height: 18px;
 	--editor-head-gap: 4px;
+	/* Markdown 预览：正文的最大行宽，与窄窗口下两侧必须留出的内边距 */
+	--file-preview-width: 720px;
+	--file-preview-gutter-x: 16px;
 	/* 文件树：紧凑行高、缩进、图标与右侧留白 */
 	--files-row-height: 22px;
 	--files-row-padding-x: 8px;

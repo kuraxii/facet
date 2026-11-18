@@ -7,10 +7,12 @@
  */
 import type { FileContent } from "@facet/protocol";
 import { useI18n } from "@facet/ui/i18n";
+import { Markdown } from "@facet/ui/markdown";
 import { useHoverTip } from "@facet/ui/tip";
-import { Check, Pencil, X } from "lucide-react";
+import { Check, Code, Eye, Pencil, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { CodeSurface } from "./code-surface.tsx";
+import { isMarkdownPath } from "./markdown-file.ts";
 
 /** 写回的结果。 */
 export interface FileSaveResult {
@@ -38,6 +40,9 @@ function isConflict(error: unknown): boolean {
 	);
 }
 
+/** Markdown 文件的两种呈现：渲染后的预览，与可编辑的源码。 */
+type MarkdownView = "preview" | "source";
+
 export function FileView({ path, content, onSave, onReload }: FileViewProps) {
 	const { t } = useI18n();
 	// 路径被省略号截断时由提示补全
@@ -58,6 +63,11 @@ export function FileView({ path, content, onSave, onReload }: FileViewProps) {
 	const [hasConflict, setHasConflict] = useState(false);
 	/** 刚保存成功，短暂把按钮换成对勾 */
 	const [isSaved, setIsSaved] = useState(false);
+	/**
+	 * Markdown 当前是预览还是源码；非 Markdown 文件不看它。初值取一次就够：
+	 * 文件标签与文件一一对应，换文件是重挂组件，不靠重置。
+	 */
+	const [markdownView, setMarkdownView] = useState<MarkdownView>("preview");
 
 	// 换文件或重新读到内容时重置整个视图
 	useEffect(() => {
@@ -137,6 +147,10 @@ export function FileView({ path, content, onSave, onReload }: FileViewProps) {
 	}, [draft, onReload, onSave]);
 
 	const isText = content.kind === "text";
+	/** 能渲染预览的文件：有文本内容，且扩展名是 Markdown */
+	const isMarkdown = isText && isMarkdownPath(path);
+	/** 正在看渲染结果，没在看看源码 */
+	const isPreviewing = isMarkdown && markdownView === "preview";
 
 	return (
 		<div className="file-view">
@@ -147,12 +161,27 @@ export function FileView({ path, content, onSave, onReload }: FileViewProps) {
 				{isDirty ? (
 					<span className="file-dirty" role="status" aria-label={t("editor.unsavedChanges")} />
 				) : null}
+				{isMarkdown ? (
+					<button
+						type="button"
+						className="ib"
+						aria-label={isPreviewing ? t("editor.viewSource") : t("editor.viewPreview")}
+						{...tip.handlers(isPreviewing ? t("editor.viewSource") : t("editor.viewPreview"))}
+						onClick={() => {
+							setMarkdownView(isPreviewing ? "source" : "preview");
+						}}
+					>
+						{isPreviewing ? <Code size={14} strokeWidth={1.5} /> : <Eye size={14} strokeWidth={1.5} />}
+					</button>
+				) : null}
 				{isText && !isEditing ? (
 					<button
 						type="button"
 						className="ib"
 						aria-label={t("editor.edit")}
 						onClick={() => {
+							// 预览里点铅笔直接落到源码的编辑态，不用先切一次模式
+							setMarkdownView("source");
 							setIsEditing(true);
 						}}
 					>
@@ -202,7 +231,11 @@ export function FileView({ path, content, onSave, onReload }: FileViewProps) {
 				</p>
 			) : null}
 			{saveError === undefined ? null : <p className="chg-note is-error">{saveError}</p>}
-			{isText ? (
+			{isText && isPreviewing ? (
+				<div className="file-preview">
+					<Markdown text={draft} isStreaming={false} indexKey={path} />
+				</div>
+			) : isText ? (
 				<CodeSurface
 					text={draft}
 					path={path}

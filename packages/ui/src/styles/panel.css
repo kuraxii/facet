@@ -634,6 +634,19 @@
 	font-size: 11.5px;
 }
 
+/* Markdown 的渲染预览：正文按可读宽度居中，长文档自己滚动 */
+.file-preview {
+	flex: 1;
+	min-height: 0;
+	padding: 0 var(--file-preview-gutter-x);
+	overflow: auto;
+}
+
+.file-preview .md {
+	max-width: var(--file-preview-width);
+	margin: 0 auto;
+}
+
 .code-surface {
 	flex: 1;
 	height: auto;

@@ -29,7 +29,7 @@ import {
 	useI18n,
 } from "@facet/ui";
 import { X } from "lucide-react";
-import { type ReactNode, useMemo } from "react";
+import { type ReactNode, type RefObject, useMemo } from "react";
 import { AppFrame } from "../app-frame.tsx";
 import { bridge } from "../bridge.ts";
 import type { Composer } from "../hooks/useComposer.ts";
@@ -73,6 +73,8 @@ export interface WorkbenchProps {
 	closeTabs: (ids: readonly string[]) => void;
 	/** 复制一段文本 */
 	copyText: (text: string) => void;
+	/** 输入框本身：引用之后要把光标放回它末尾 */
+	composerInput: RefObject<HTMLTextAreaElement | null>;
 	/** 开一个终端并摆好标签 */
 	openTerminal: () => Promise<void>;
 }
@@ -94,6 +96,7 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 		closeTabs,
 		copyText,
 		openTerminal,
+		composerInput,
 	} = props;
 	const { t } = useI18n();
 	const client = useHostClient();
@@ -219,6 +222,7 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 				queued={queued}
 				errorBar={errorBar}
 				copyText={copyText}
+				composerInput={composerInput}
 			/>
 		);
 	return (

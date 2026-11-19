@@ -9,7 +9,7 @@
 import type { ChatActivity } from "@facet/client-core";
 import type { ContextUsage, ModelInfo, SlashCommand, ThinkingLevel } from "@facet/protocol";
 import { Brain, FileUp, ImagePlus, Plus, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type Ref, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { isComposingKey } from "../keys.ts";
 import { useHoverTip } from "../tip.tsx";
@@ -89,6 +89,10 @@ export interface ComposerProps {
 	commands?: readonly SlashCommand[];
 	/** 选中一条界面自己处理的命令 */
 	onRunCommand?: (command: SlashCommand, args: string) => void;
+	/**
+	 * 输入框本身。引用之类的动作要从外面把光标放回末尾，所以把它交给调用方。
+	 */
+	ref?: Ref<HTMLTextAreaElement>;
 }
 
 /** 模型芯片的显示文本。 */
@@ -164,6 +168,7 @@ export function Composer({
 	onCompact,
 	commands,
 	onRunCommand,
+	ref,
 }: ComposerProps) {
 	const { t } = useI18n();
 	// 一排按钮共用一份悬浮提示：谁被悬停就贴谁
@@ -298,6 +303,7 @@ export function Composer({
 			<textarea
 				// 高度由 CSS 的 field-sizing 跟内容长，两行只是没有该属性时的退路
 				rows={2}
+				ref={ref}
 				value={value}
 				placeholder={
 					isQueuing

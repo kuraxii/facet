@@ -1,8 +1,8 @@
 /**
  * 提交历史。
  *
- * 变更视图底部的一段可折叠列表：从新到旧显示当前分支最近的提交，行内是图形上的点、短
- * 哈希、说明与相对时间。
+ * 变更视图底部的一段可折叠列表：从新到旧显示当前分支的提交，行内是图形上的点、短哈希、
+ * 说明与相对时间；指针停在行上时给出这条提交的悬浮卡，见 `CommitTip`。
  */
 
 import type { GitCommit, GitCommits } from "@facet/protocol";
@@ -12,6 +12,7 @@ import { shortTime } from "../chat/sidebar-model.ts";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { useHoverTip } from "../tip.tsx";
 import styles from "./changes.module.css";
+import { CommitTip } from "./commit-tip.tsx";
 
 export interface CommitHistoryProps {
 	/** 提交清单；还没取到时为空 */
@@ -27,7 +28,7 @@ export interface CommitHistoryProps {
 /** 最近提交列表。 */
 export function CommitHistory({ commits, isLoading, error, onCommitPress }: CommitHistoryProps): ReactNode {
 	const { t, language } = useI18n();
-	// 行里给的是短 sha，完整值由提示补上
+	// 行里只放得下短哈希与说明第一行，其余信息由悬浮卡补上
 	const tip = useHoverTip();
 	const [isOpen, setIsOpen] = useState(false);
 
@@ -73,7 +74,7 @@ export function CommitHistory({ commits, isLoading, error, onCommitPress }: Comm
 								type="button"
 								className={styles.commitRow}
 								key={commit.sha}
-								{...tip.handlers(commit.sha)}
+								{...tip.handlers(<CommitTip commit={commit} webUrl={commits.webUrl} />)}
 								onClick={() => onCommitPress?.(commit)}
 							>
 								<span

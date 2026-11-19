@@ -165,6 +165,21 @@
 	--commit-sha-width: 64px;
 	--commit-section-max-height: 60%;
 	/*
+	 * 提交悬浮卡：卡片宽度，三个区段的左右留白与上下留白，段内行距与并列项之间的距离，
+	 * 以及说明第一行与正文各自最多显示的行数。超出的部分收成省略号——卡片高度要留在
+	 * `--tool-tip-height` 以内，否则整张卡片跟着滚动，底部的链接会滚出视野。
+	 */
+	--commit-tip-width: 520px;
+	--commit-tip-padding-x: 14px;
+	--commit-tip-padding-y: 12px;
+	--commit-tip-band-padding-y: 8px;
+	--commit-tip-lead-gap: 10px;
+	--commit-tip-row-gap: 6px;
+	--commit-tip-text-size: 13px;
+	--commit-tip-line-height: 1.5;
+	--commit-tip-subject-lines: 2;
+	--commit-tip-body-lines: 6;
+	/*
 	 * 终端视图的内边距：右侧留 0，滚动条才贴着面板右缘，正文的右边距由 xterm 自己的列宽给
 	 * ——与其它滚动容器的约定一致（横向留白交给内容，不留给容器）。
 	 */

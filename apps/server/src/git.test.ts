@@ -18,6 +18,7 @@ import {
 	parseCommitNameStatus,
 	parseNumstat,
 	parseStatusRecords,
+	remoteWebUrl,
 } from "./git.ts";
 
 const roots: string[] = [];
@@ -180,44 +181,90 @@ describe("gitDiff", () => {
 });
 
 describe("gitCommits", () => {
-	it("解析短哈希、说明与作者时间", () => {
+	it("解析短哈希、说明、正文、作者与改动规模", () => {
 		const output = [
-			"aaa\u0000aaa1111\u0000第二个提交\u00002026-01-02T03:04:05+08:00",
-			"bbb\u0000bbb2222\u0000初始提交\u00002026-01-01T00:00:00+08:00",
-			"",
-		].join("\n");
+			"\u001eaaa\u0000aaa1111\u0000张三\u0000a@example.com\u00002026-01-02T03:04:05+08:00\u0000第二个提交\u0000正文第一段\n\n正文第二段\n\u001f\n\n 2 files changed, 46 insertions(+), 3 deletions(-)\n",
+			"\u001ebbb\u0000bbb2222\u0000李四\u0000b@example.com\u00002026-01-01T00:00:00+08:00\u0000初始提交\u0000\u001f\n\n 1 file changed, 2 insertions(+)\n",
+			"\u001eccc\u0000ccc3333\u0000王五\u0000c@example.com\u00002026-01-01T00:00:00+08:00\u0000合并分支\u0000\u001f\n",
+		].join("");
 		expect(parseCommitLog(output)).toEqual([
 			{
 				sha: "aaa",
 				shortSha: "aaa1111",
 				subject: "第二个提交",
+				body: "正文第一段\n\n正文第二段",
+				authorName: "张三",
+				authorEmail: "a@example.com",
 				authorDate: "2026-01-02T03:04:05+08:00",
+				stats: { filesChanged: 2, insertions: 46, deletions: 3 },
 			},
 			{
 				sha: "bbb",
 				shortSha: "bbb2222",
 				subject: "初始提交",
+				body: "",
+				authorName: "李四",
+				authorEmail: "b@example.com",
+				authorDate: "2026-01-01T00:00:00+08:00",
+				stats: { filesChanged: 1, insertions: 2, deletions: 0 },
+			},
+			{
+				sha: "ccc",
+				shortSha: "ccc3333",
+				subject: "合并分支",
+				body: "",
+				authorName: "王五",
+				authorEmail: "c@example.com",
 				authorDate: "2026-01-01T00:00:00+08:00",
 			},
 		]);
 	});
 
-	it("从新到旧列出提交", async () => {
+	it("从新到旧列出提交，带上作者、正文与改动规模", async () => {
 		const root = await createRepo();
 		await writeFile(join(root, "tracked.txt"), "第三行\n", "utf8");
 		git(root, "add", "tracked.txt");
-		git(root, "commit", "-m", "第二个提交");
+		git(root, "commit", "-m", "第二个提交", "-m", "正文一段");
 		const result = await gitCommits(root);
 		expect(result.isRepo).toBe(true);
 		expect(result.commits.map((commit) => commit.subject)).toEqual(["第二个提交", "初始提交"]);
+		expect(result.commits[0]).toMatchObject({
+			authorName: "facet",
+			authorEmail: "facet@example.com",
+			body: "正文一段",
+			stats: { filesChanged: 1, insertions: 1, deletions: 2 },
+		});
 		expect(result.commits[0]?.shortSha.length).toBeGreaterThan(0);
 		expect(Number.isNaN(Date.parse(result.commits[0]?.authorDate ?? ""))).toBe(false);
+	});
+
+	it("有远端时给出仓库网页地址", async () => {
+		const root = await createRepo();
+		git(root, "remote", "add", "origin", "git@github.com:ocean/facet.git");
+		expect((await gitCommits(root)).webUrl).toBe("https://github.com/ocean/facet");
 	});
 
 	it("不是仓库时给 isRepo false", async () => {
 		const root = await mkdtemp(join(tmpdir(), "facet-norepo-"));
 		roots.push(root);
 		expect(await gitCommits(root)).toEqual({ isRepo: false, commits: [] });
+	});
+});
+
+describe("remoteWebUrl", () => {
+	it("把 https、ssh 与 scp 三种写法折成网页地址", () => {
+		expect(remoteWebUrl("https://github.com/ocean/facet.git")).toBe("https://github.com/ocean/facet");
+		expect(remoteWebUrl("https://gitlab.example.com:8443/g/sub/repo")).toBe(
+			"https://gitlab.example.com:8443/g/sub/repo",
+		);
+		expect(remoteWebUrl("ssh://git@github.com:2222/ocean/facet.git")).toBe("https://github.com/ocean/facet");
+		expect(remoteWebUrl("git@github.com:ocean/facet.git")).toBe("https://github.com/ocean/facet");
+	});
+
+	it("本地路径与空值不给地址", () => {
+		expect(remoteWebUrl("")).toBeUndefined();
+		expect(remoteWebUrl("/srv/git/facet.git")).toBeUndefined();
+		expect(remoteWebUrl("../facet")).toBeUndefined();
 	});
 });
 

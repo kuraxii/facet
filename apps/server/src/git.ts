@@ -10,6 +10,7 @@ import { join } from "node:path";
 import type {
 	GitCommit,
 	GitCommitDetail,
+	GitCommitStats,
 	GitCommits,
 	GitDiff,
 	GitFileChange,
@@ -26,8 +27,8 @@ const MAX_BUFFER_BYTES = 8 * 1024 * 1024;
 /** 全部提交历史的输出上限，比单次 diff 放宽。 */
 const MAX_LOG_BYTES = 64 * 1024 * 1024;
 
-/** 取提交历史时可以多等一会。 */
-const GIT_LOG_TIMEOUT_MS = 10_000;
+/** 取提交历史时可以多等一会：带上改动规模之后每条提交都要算一次 diff。 */
+const GIT_LOG_TIMEOUT_MS = 20_000;
 
 /** 补丁内容的返回上限，超出截断。 */
 const MAX_PATCH_BYTES = 400 * 1024;
@@ -310,22 +311,68 @@ export async function gitStatus(cwd: string): Promise<GitStatus> {
 }
 
 /**
- * 解析 `git log` 的 NUL 分隔记录。
+ * 取提交历史的格式。
  *
- * 每条一行，字段依次是完整哈希、短哈希、说明第一行、作者时间。说明里不会出现 NUL；空行
- * 直接跳过。
+ * 记录之间用 `0x1e` 分隔，字段用 NUL 分隔；末尾的 `0x1f` 把正文与 git 随后追加的
+ * `--shortstat` 统计块分开——统计块由 git 自己输出，排版不固定，只能靠这个标记切开。
+ */
+const COMMIT_FORMAT = "%x1e%H%x00%h%x00%an%x00%ae%x00%aI%x00%s%x00%b%x1f";
+
+/** `--shortstat` 那一行里的文件数与增删行数；只改一行时后面的小句缺省。 */
+const SHORT_STAT = /(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/;
+
+/** 解析 `--shortstat` 输出的统计块；合并提交没有自己的差异，给不出数字。 */
+function parseShortStat(text: string): GitCommitStats | undefined {
+	const match = SHORT_STAT.exec(text);
+	if (match === null) {
+		return undefined;
+	}
+	return {
+		filesChanged: Number.parseInt(match[1] ?? "0", 10) || 0,
+		insertions: Number.parseInt(match[2] ?? "0", 10) || 0,
+		deletions: Number.parseInt(match[3] ?? "0", 10) || 0,
+	};
+}
+
+/**
+ * 解析 `git log` 按 `COMMIT_FORMAT` 输出的记录。
+ *
+ * 每条记录依次是完整哈希、短哈希、作者名、作者邮箱、作者时间、说明第一行、正文与统计块；
+ * 说明里不会出现 NUL 与这两个分隔符，空记录直接跳过。
  */
 export function parseCommitLog(output: string): GitCommit[] {
 	const commits: GitCommit[] = [];
-	for (const line of output.split("\n")) {
-		if (line.length === 0) {
+	for (const record of output.split("\u001e")) {
+		if (record.length === 0) {
 			continue;
 		}
-		const [sha, shortSha, subject, authorDate] = line.split("\u0000");
-		if (sha === undefined || shortSha === undefined || subject === undefined || authorDate === undefined) {
+		const fields = record.split("\u0000");
+		const [sha, shortSha, authorName, authorEmail, authorDate, subject, rest] = fields;
+		if (
+			sha === undefined ||
+			shortSha === undefined ||
+			authorName === undefined ||
+			authorEmail === undefined ||
+			authorDate === undefined ||
+			subject === undefined ||
+			rest === undefined
+		) {
 			continue;
 		}
-		commits.push({ sha, shortSha, subject, authorDate });
+		// 正文与统计块之间是 `0x1f`，正文尾部 git 会留一个换行，显示前去掉
+		const cut = rest.indexOf("\u001f");
+		const body = (cut < 0 ? rest : rest.slice(0, cut)).replace(/\n+$/, "");
+		const stats = cut < 0 ? undefined : parseShortStat(rest.slice(cut + 1));
+		commits.push({
+			sha,
+			shortSha,
+			subject,
+			body,
+			authorName,
+			authorEmail,
+			authorDate,
+			...(stats === undefined ? {} : { stats }),
+		});
 	}
 	return commits;
 }
@@ -387,20 +434,68 @@ export function parseCommitNameStatus(output: string): Map<string, CommitStatusE
 	return entries;
 }
 
+/**
+ * 远端仓库在浏览器里的地址。
+ *
+ * 只看 `remote.origin.url` 这一项：`https://host/owner/repo.git`、`git@host:owner/repo.git`
+ * 与 `ssh://git@host/owner/repo.git` 都折成 `https://host/owner/repo`，去掉用户名与末尾的
+ * `.git`；ssh 与 git 协议里的端口是那个协议的，浏览器打不开，一并去掉。本地路径与认不出来
+ * 的形状不给地址。
+ */
+export function remoteWebUrl(remote: string): string | undefined {
+	const text = remote.trim();
+	if (text.length === 0) {
+		return undefined;
+	}
+	let host: string | undefined;
+	let path: string | undefined;
+	if (/^(?:https?|ssh|git|git\+ssh):\/\//i.test(text)) {
+		try {
+			const url = new URL(text);
+			// 只有网页协议保留端口，其余协议的端口换成 https 之后没有意义
+			host = url.protocol === "http:" || url.protocol === "https:" ? url.host : url.hostname;
+			path = url.pathname;
+		} catch {
+			return undefined;
+		}
+	} else {
+		// scp 形状：`[user@]host:path`
+		const match = /^(?:[^@/\s]+@)?([^:/\s]+):(.+)$/.exec(text);
+		if (match === null) {
+			return undefined;
+		}
+		host = match[1];
+		path = match[2];
+	}
+	const trimmed = (path ?? "").replace(/^\/+/, "").replace(/\.git$/, "");
+	if (host === undefined || trimmed.length === 0) {
+		return undefined;
+	}
+	return `https://${host.toLowerCase()}/${trimmed}`;
+}
+
 /** 当前分支的全部提交，从新到旧；不是仓库时 isRepo 为假。 */
 export async function gitCommits(cwd: string): Promise<GitCommits> {
 	if (!(await isGitRepository(cwd))) {
 		return { isRepo: false, commits: [] };
 	}
-	const result = await runGit(["log", "--format=%H%x00%h%x00%s%x00%aI"], {
-		cwd,
-		timeoutMs: GIT_LOG_TIMEOUT_MS,
-		maxBuffer: MAX_LOG_BYTES,
-	});
-	if (result.code !== 0) {
+	const [logResult, remoteResult] = await Promise.all([
+		runGit(["log", `--format=${COMMIT_FORMAT}`, "--shortstat"], {
+			cwd,
+			timeoutMs: GIT_LOG_TIMEOUT_MS,
+			maxBuffer: MAX_LOG_BYTES,
+		}),
+		runGit(["config", "--get", "remote.origin.url"], { cwd }),
+	]);
+	if (logResult.code !== 0) {
 		return { isRepo: true, commits: [] };
 	}
-	return { isRepo: true, commits: parseCommitLog(result.stdout) };
+	const webUrl = remoteResult.code === 0 ? remoteWebUrl(remoteResult.stdout) : undefined;
+	return {
+		isRepo: true,
+		commits: parseCommitLog(logResult.stdout),
+		...(webUrl === undefined ? {} : { webUrl }),
+	};
 }
 
 /** 校验客户端给来的提交哈希，避免把它当成另一个 git 选项。 */
@@ -418,7 +513,7 @@ export async function gitCommit(cwd: string, sha: string): Promise<GitCommitDeta
 		throw new Error("not a git repository");
 	}
 	const [metaResult, statusResult, numstatResult] = await Promise.all([
-		runGit(["show", "-s", "--format=%H%x00%h%x00%s%x00%aI", safeSha], { cwd }),
+		runGit(["show", "-s", "--shortstat", `--format=${COMMIT_FORMAT}`, safeSha], { cwd }),
 		runGit(
 			["diff-tree", "--no-commit-id", "--name-status", "-r", "--root", "--first-parent", "-M", "-z", safeSha],
 			{ cwd },

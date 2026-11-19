@@ -486,6 +486,15 @@ dialog.dialog.is-picker .dialog-actions {
 	overscroll-behavior: contain;
 }
 
+/*
+ * 卡片式提示：内边距由内容自己给，分隔线才能通到浮层边缘。
+ * 尺寸、圆角与阴影沿用 `.pop-tip`。
+ */
+.pop-tip-card {
+	padding: 0;
+	border-radius: 8px;
+}
+
 .pop-tip pre {
 	margin: 0;
 	color: var(--t2);

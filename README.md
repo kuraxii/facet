@@ -275,7 +275,7 @@ runner 上；`node scripts/check-glibc.mjs --max 2.31` 会把这条底线钉住�
 
 Linux：
 
-- 安装到 `/opt/Facet`，可执行文件是 `facet`，桌面项 `facet.desktop` 与 `StartupWMClass` 都是 `facet`，图标 512×512（`apps/desktop/build/icon.png`，由同目录 `icon.svg` 渲染）
+- 安装到 `/opt/Facet`，可执行文件是 `facet`，桌面项 `facet.desktop` 与 `StartupWMClass` 都是 `facet`；图标按 16/24/32/48/64/128/256/512/1024 九档装进 `/usr/share/icons/hicolor/<size>/apps/`，全部由 `apps/desktop/build/icon.svg` 渲染，16/24/32 那三档用 `icon-small.svg` 的简化版（去掉发光与虚线、线条加粗）
 - 依赖走 electron-builder 的缺省清单（deb：`libgtk-3-0`、`libnss3`、`libxss1`、`libxtst6` 等；rpm：`gtk3`、`nss`、`libXScrnSaver` 等），不手写
 - `node-pty` 的原生模块与 `spawn-helper` 解包在 `resources/app.asar.unpacked`，打包时只留 linux 的构建产物，源码与其它平台的预编译都剔掉
 - 构建 deb/rpm 用的 `fpm` 由 electron-builder 自己下载到 `~/.cache/electron-builder`，不需要系统装 fpm
@@ -283,7 +283,7 @@ Linux：
 
 Windows：
 
-- 图标是 `apps/desktop/build/icon.ico`（16–256 多尺寸，从同目录 `icon.svg` 渲染，`icon.png` 是 512×512 的源图），NSIS 段配置在 `apps/desktop/electron-builder.yml`
+- 图标是 `apps/desktop/build/icon.ico`（16–256 六档，从同目录 `icon.svg` 渲染），NSIS 段配置在 `apps/desktop/electron-builder.yml`
 - 本机主机走命名管道，没有 unix socket；管道名取数据目录摘要，开发实例与发布实例各自一份
 - 升级与卸载前会跑 `apps/desktop/build/stop-stale-server.ps1`（由 `build/installer.nsh` 挂到 `customUnInstall`）
   停掉旧版本留下的 server：它是独立进程，占着管道，不停会一直连到旧代码
@@ -335,10 +335,11 @@ macOS 不在流水线里，也没有适配。
 
 ## 文档
 
+- `docs/architecture.md`：分层拓扑、依赖禁令、各层不变量与扩展步骤
 - `docs/ui_design_specification.md`：界面设计说明
 - `docs/i18n.md`：界面语言与文案规则
 - `docs/backlog.md`：还没做完的能力、验收项、设计取舍与建议顺序
-- `AGENTS.md`：分支、提交与注释规范
+- `AGENTS.md`：规则与红线（依赖禁令、质量门禁、分支、提交与注释规范）
 
 ## 插件与 skill
 

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- 小尺寸专用：去掉外发光与虚线，线条加粗。16/24px 下细节会糊成一团，这一版只保形状。 -->
+  <defs>
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1A1D26" />
+      <stop offset="100%" stop-color="#0F1117" />
+    </linearGradient>
+  </defs>
+
+  <rect x="8" y="8" width="240" height="240" rx="60" fill="url(#bg-grad)" />
+
+  <g fill="none" stroke="#60A5FA" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 106 194 L 106 100 Q 106 64 142 64 L 166 64" />
+    <path d="M 70 128 L 138 128 Q 154 128 166 108" />
+  </g>
+
+  <g fill="#0F1117" stroke="#60A5FA" stroke-width="11">
+    <circle cx="166" cy="64" r="15" />
+    <circle cx="106" cy="194" r="15" />
+  </g>
+</svg>

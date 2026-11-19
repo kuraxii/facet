@@ -53,7 +53,10 @@ linux:
   executableName: facet
   # .desktop 名与 Electron 的 app_id 一致，桌面环境才能把窗口归到图标上
   syncDesktopName: true
-  icon: build/icon.png
+  # 给一整个目录而不是单张 512：面板与菜单要的是 16–64 这些尺寸，逐档给原生像素比让
+  # KDE/GTK 从 512 缩放更清楚。16/24/32 由 icon-small.svg 渲染（去掉发光与虚线、线条加粗），
+  # 再小就糊成一团了。
+  icon: build/icons
   description: Facet 是 pi 编码助手的桌面端，主机与界面分进程，可以连本机也可以连远程。
   desktop:
     entry:

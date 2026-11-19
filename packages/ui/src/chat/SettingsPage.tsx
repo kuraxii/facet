@@ -607,6 +607,17 @@ function AppearanceSection({
 			<SettingsGroup label={t("settings.appearancePage.general")}>
 				<SettingsRow title={t("settings.appearancePage.theme")} isStacked>
 					<div className="set-swatches">
+						{/* 跟随系统排最前：它是缺省行为，也是唯一不直接挑色板的选项 */}
+						<button
+							type="button"
+							className={appearance.theme === "system" ? "set-swatch is-active" : "set-swatch"}
+							aria-label={t("theme.system")}
+							aria-pressed={appearance.theme === "system"}
+							onClick={() => patchAppearance({ theme: "system" })}
+						>
+							<i className="set-swatch-chip is-system" />
+							<span className="set-swatch-name">{t("theme.system")}</span>
+						</button>
 						{UI_THEME_OPTIONS.map((option) => (
 							<button
 								key={option.id}
@@ -620,16 +631,6 @@ function AppearanceSection({
 								<span className="set-swatch-name">{themeLabel(option.id)}</span>
 							</button>
 						))}
-						<button
-							type="button"
-							className={appearance.theme === "system" ? "set-swatch is-active" : "set-swatch"}
-							aria-label={t("theme.system")}
-							aria-pressed={appearance.theme === "system"}
-							onClick={() => patchAppearance({ theme: "system" })}
-						>
-							<i className="set-swatch-chip is-system" />
-							<span className="set-swatch-name">{t("theme.system")}</span>
-						</button>
 					</div>
 				</SettingsRow>
 				<SettingsRow title={t("settings.appearancePage.liveMotion")}>

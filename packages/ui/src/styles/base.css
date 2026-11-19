@@ -29,6 +29,12 @@
 	--attach-thumb-gap: 8px;
 	--attach-thumb-radius: 10px;
 	--attach-remove-size: 18px;
+	/*
+	 * 输入框的行数：静止时两行，随输入向上长到十四行为止，再多就在框内滚动。
+	 * 两档都按行数给，乘输入框自己的行高（1lh）取高度，与内边距无关。
+	 */
+	--composer-rows-min: 2;
+	--composer-rows-max: 14;
 	/* 工具结果里的图片：收起时的最大高度，与多张之间的间距 */
 	--tool-image-height: 320px;
 	--tool-image-gap: 8px;
@@ -294,6 +300,7 @@
 	.cmd-pop,
 	.chip-pop,
 	.pop-tip,
+	.composer textarea,
 	.tr-out pre,
 	.tr-think,
 	.code-card-body,
@@ -322,6 +329,7 @@
 	.cmd-pop,
 	.chip-pop,
 	.pop-tip,
+	.composer textarea,
 	.tr-out pre,
 	.tr-think,
 	.code-card-body,
@@ -350,6 +358,7 @@
 	.cmd-pop,
 	.chip-pop,
 	.pop-tip,
+	.composer textarea,
 	.tr-out pre,
 	.tr-think,
 	.code-card-body,
@@ -373,6 +382,7 @@
 	.cmd-pop,
 	.chip-pop,
 	.pop-tip,
+	.composer textarea,
 	.tr-out pre,
 	.tr-think,
 	.code-card-body,
@@ -399,6 +409,7 @@
 	.cmd-pop,
 	.chip-pop,
 	.pop-tip,
+	.composer textarea,
 	.tr-out pre,
 	.tr-think,
 	.code-card-body,
@@ -428,6 +439,7 @@
 	.cmd-pop,
 	.chip-pop,
 	.pop-tip,
+	.composer textarea,
 	.tr-out pre,
 	.tr-think,
 	.code-card-body,
@@ -457,6 +469,7 @@
 		.cmd-pop,
 		.chip-pop,
 		.pop-tip,
+		.composer textarea,
 		.tr-out pre,
 		.tr-think,
 		.code-card-body,

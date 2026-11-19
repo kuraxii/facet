@@ -47,6 +47,14 @@
 
 .composer textarea {
 	width: 100%;
+	/* 高度由内容定：两行起步，向上长到十四行为止，再多就在框内滚动 */
+	min-height: calc(var(--composer-rows-min) * 1lh);
+	max-height: calc(var(--composer-rows-max) * 1lh);
+	/*
+	 * 留白全交给 `.composer` 的外内边距：输入框自带内边距的话，上下会各扣掉一截，
+	 * 十四行的高度就算不准。
+	 */
+	padding: 0;
 	border: 0;
 	outline: 0;
 	resize: none;
@@ -55,6 +63,11 @@
 	font: inherit;
 	font-size: 14px;
 	line-height: 1.6;
+	/*
+	 * 跟着内容长高，到上限之后自己出滚动条。引擎不支持时退回 `rows` 给的固定两行，
+	 * 多出的内容同样在框内滚动，不依赖脚本补高度。
+	 */
+	field-sizing: content;
 	/* 内容超过一屏时滚动条出现也不让文字跟着跳 */
 	scrollbar-gutter: stable;
 }

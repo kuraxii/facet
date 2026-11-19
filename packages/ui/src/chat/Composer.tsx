@@ -296,6 +296,7 @@ export function Composer({
 			)}
 			{attachmentNotice === undefined ? null : <p className="composer-note">{attachmentNotice}</p>}
 			<textarea
+				// 高度由 CSS 的 field-sizing 跟内容长，两行只是没有该属性时的退路
 				rows={2}
 				value={value}
 				placeholder={

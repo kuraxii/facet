@@ -3,7 +3,12 @@
 :root {
 	/* 界面字体与代码字体，两者都随构建产物一起打进应用 */
 	--font-sans: Inter, "Noto Sans SC Variable", "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
-	--font-mono: "Maple Mono CN", ui-monospace, SFMono-Regular, Menlo, monospace;
+	/*
+	 * 代码字体只带 Latin、符号、框线与 Nerd Font 图标，没有汉字：等宽语境里的汉字落到第二
+	 * 位的界面中文字体上。系统 monospace 都没有中文，排到它后面就等于交给各机器自己的回退。
+	 */
+	--font-mono:
+		"Maple Mono CN", "Noto Sans SC Variable", "Noto Sans SC", ui-monospace, SFMono-Regular, Menlo, monospace;
 	/* 编辑器与终端的字体默认跟代码字体，各自可以在设置里单列 */
 	--font-editor: var(--font-mono);
 	--font-terminal: var(--font-mono);

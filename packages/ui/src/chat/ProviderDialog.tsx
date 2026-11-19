@@ -18,6 +18,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { Modal } from "../modal.tsx";
 import { API_OPTIONS, apiOptionLabel } from "./provider-api.ts";
+import { providerDraftIssue } from "./provider-draft.ts";
 import type { ProviderRow } from "./provider-rows.ts";
 import type { SettingsDataSource } from "./settings-data-source.ts";
 
@@ -178,19 +179,13 @@ export function ProviderDialog({
 		if (!isCustom) {
 			return undefined;
 		}
-		if (!/^[a-z0-9][a-z0-9._-]*$/.test(shownId.trim())) {
-			return t("providerForm.invalidId");
-		}
-		if (name.trim().length === 0) {
-			return t("providerForm.invalidName");
-		}
-		if (baseUrl.trim().length === 0) {
-			return t("providerForm.invalidBaseUrl");
-		}
-		if (rows.length === 0 || rows.some((item) => item.model.id.trim().length === 0)) {
-			return t("providerForm.invalidModelId");
-		}
-		return undefined;
+		const issue = providerDraftIssue({
+			id: shownId,
+			name,
+			baseUrl,
+			models: rows.map((item) => item.model),
+		});
+		return issue === undefined ? undefined : t(issue);
 	};
 
 	const save = async (): Promise<void> => {

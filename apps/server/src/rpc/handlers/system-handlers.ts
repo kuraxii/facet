@@ -12,6 +12,7 @@ import { ProjectNotFoundError } from "../../project-store.ts";
 import { revealInFileManager } from "../../reveal.ts";
 import type { RequestHandlerMap } from "../gateway.ts";
 import { asFileError, resolveProjectDirectory } from "../helpers.ts";
+import { normalizeProviderInput } from "../provider-input.ts";
 
 /** 系统域负责的方法。 */
 type SystemMethod =
@@ -243,7 +244,7 @@ export const systemHandlers: Pick<RequestHandlerMap, SystemMethod> = {
 	},
 
 	saveCustomProvider: async (params, context): Promise<RequestResults["saveCustomProvider"]> => {
-		await context.factory.saveCustomProvider(params.provider);
+		await context.factory.saveCustomProvider(normalizeProviderInput(params.provider));
 		return { providers: customProviderList(await context.factory.customProviders()) };
 	},
 

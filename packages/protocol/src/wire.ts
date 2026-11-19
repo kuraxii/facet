@@ -12,7 +12,7 @@ import type { Channel } from "./channel.ts";
 import type { SlashCommand } from "./command.ts";
 import type { FileContent, FileEntry, FileWriteResult } from "./file.ts";
 import type { GitCommitDetail, GitCommits, GitDiff, GitStatus } from "./git.ts";
-import type { CustomProviderInfo, ModelInfo, ProviderInfo } from "./model.ts";
+import type { AgentDefaults, CustomProviderInfo, ModelInfo, ProviderInfo } from "./model.ts";
 import type { ProjectInfo } from "./project.ts";
 import type { REQUEST_SCHEMAS } from "./schema/contracts.ts";
 import type { Entry, SessionListItem, SessionSnapshot } from "./session.ts";
@@ -259,6 +259,9 @@ export interface RequestResults {
 	markSessionsSeen: Record<string, never>;
 	getSettings: { settings: FacetSettings };
 	updateSettings: { settings: FacetSettings };
+	/** pi 自己的默认设置：新建会话时由它开局 */
+	getAgentDefaults: AgentDefaults;
+	setAgentDefaults: AgentDefaults;
 	saveCredential: { providers: ProviderInfo[] };
 	deleteCredential: { providers: ProviderInfo[] };
 	diagnostics: { text: string };

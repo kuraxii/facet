@@ -138,12 +138,22 @@ describe("设置读取", () => {
 
 	it("写出的文件带版本号", async () => {
 		const store = await SettingsStore.open({ file: join(root, "nested", "settings.json") });
-		await store.save({ ...store.get(), defaultThinkingLevel: "high" });
+		await store.save({ ...store.get(), appearance: { ...store.get().appearance, theme: "light" } });
 		const written = JSON.parse(await readFile(join(root, "nested", "settings.json"), "utf8")) as {
 			version: number;
-			defaultThinkingLevel?: string;
 		};
 		expect(written.version).toBe(1);
-		expect(written.defaultThinkingLevel).toBe("high");
+	});
+
+	it("默认思考档位归 pi，旧文件里留着也丢掉", async () => {
+		const store = await SettingsStore.open({ file: join(root, "legacy", "settings.json") });
+		await store.save(store.get());
+		const written = JSON.parse(await readFile(join(root, "legacy", "settings.json"), "utf8")) as {
+			defaultThinkingLevel?: string;
+		};
+		expect(written.defaultThinkingLevel).toBeUndefined();
+		expect(parseSettings({ version: 1, defaultThinkingLevel: "high" })).not.toHaveProperty(
+			"defaultThinkingLevel",
+		);
 	});
 });

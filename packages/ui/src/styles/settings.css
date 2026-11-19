@@ -437,8 +437,9 @@ dialog.set-page::backdrop {
 	filter: brightness(1.08);
 }
 
+/* 两行下拉都要放得下「provider / 模型名」，固定宽度防止切换时行高抖动 */
 .set-models-select {
-	width: 180px;
+	width: 220px;
 }
 
 .set-models-group {

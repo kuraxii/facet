@@ -5,7 +5,7 @@
  * 把选中状态清掉，所以连接层不需要知道会话的存在。
  */
 import type { SessionClient } from "@facet/client-core";
-import type { FacetSettings, ProjectInfo, SessionStatus, SessionSummary } from "@facet/protocol";
+import type { ProjectInfo, SessionStatus, SessionSummary } from "@facet/protocol";
 import { samePath } from "@facet/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -123,8 +123,6 @@ export interface SessionLifecycleOptions {
 	hostEpoch: number;
 	/** 启动目录，用来挑启动时打开的会话 */
 	projectDir: string;
-	/** 新建会话时的默认思考档位 */
-	defaultThinkingLevel: FacetSettings["defaultThinkingLevel"];
 	/** 打开会话之后的收尾，例如把标签摆到主区域 */
 	onSessionOpened?: (file: string) => void;
 	/** 删掉会话之后的收尾，例如清掉相关标签与滚动位置 */
@@ -201,15 +199,7 @@ export interface SessionLifecycle {
 }
 
 export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLifecycle {
-	const {
-		client,
-		connectEpoch,
-		hostEpoch,
-		projectDir,
-		defaultThinkingLevel,
-		onSessionOpened,
-		onSessionRemoved,
-	} = options;
+	const { client, connectEpoch, hostEpoch, projectDir, onSessionOpened, onSessionRemoved } = options;
 	const [sessions, setSessions] = useState<readonly SessionSummary[]>([]);
 	const [statuses, setStatuses] = useState<ReadonlyMap<string, SessionStatus>>(() => new Map());
 	const [activeFile, setActiveFile] = useState<string | undefined>(undefined);
@@ -439,7 +429,7 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 	);
 	openSessionRef.current = openSession;
 
-	/** 新建会话，默认模型交给 pi；这里只带界面的默认思考档位。 */
+	/** 新建会话：默认模型与默认思考档位都交给 pi，它按自己的设置开局。 */
 	const createSession = useCallback(
 		(cwd: string) => {
 			withTrust(cwd, () => {
@@ -447,7 +437,6 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 					async () => {
 						const opened = await client.createSession({
 							...(cwd.length > 0 ? { cwd } : {}),
-							...(defaultThinkingLevel === undefined ? {} : { thinkingLevel: defaultThinkingLevel }),
 						});
 						return opened.file;
 					},
@@ -460,7 +449,7 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 				);
 			});
 		},
-		[client, defaultThinkingLevel, onSessionOpened, runSessionAction, withTrust],
+		[client, onSessionOpened, runSessionAction, withTrust],
 	);
 
 	/**

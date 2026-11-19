@@ -10,6 +10,7 @@
 import type {
 	Action,
 	ActionFrame,
+	AgentDefaults,
 	Capability,
 	Channel,
 	ClientRole,
@@ -599,6 +600,26 @@ export class SessionClient {
 	async diagnostics(): Promise<string> {
 		const result = await this.transport.request("diagnostics", {});
 		return result.text;
+	}
+
+	/**
+	 * pi 的默认设置（默认模型与默认思考档位）。
+	 *
+	 * 存在 pi 自己的设置里，新建会话时由它开局；字段为空表示由 pi 自己决定。
+	 */
+	async getAgentDefaults(): Promise<AgentDefaults> {
+		return await this.transport.request("getAgentDefaults", {});
+	}
+
+	/** 改 pi 的默认设置，只传要改的字段；思考档位传 null 表示清掉。 */
+	async setAgentDefaults(patch: {
+		model?: ModelRef;
+		thinkingLevel?: ThinkingLevel | null;
+	}): Promise<AgentDefaults> {
+		return await this.transport.request("setAgentDefaults", {
+			...(patch.model === undefined ? {} : { model: patch.model }),
+			...(patch.thinkingLevel === undefined ? {} : { thinkingLevel: patch.thinkingLevel }),
+		});
 	}
 
 	/** 读主机上保存的界面偏好设置。 */

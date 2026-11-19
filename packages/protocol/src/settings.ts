@@ -5,7 +5,6 @@
  * 新建会话默认用哪个模型，这里管的是界面怎么显示与其它会话偏好。整份设置作为一个对象读写，
  * 避免逐字段合并带来的半新半旧。
  */
-import type { ThinkingLevel } from "./model.ts";
 
 /**
  * 具体的界面配色方案。
@@ -84,8 +83,6 @@ export interface LayoutSettings {
 export interface FacetSettings {
 	/** 文件格式版本 */
 	version: 1;
-	/** 新建会话采用的默认思考档位，缺省时由模型能力决定 */
-	defaultThinkingLevel?: ThinkingLevel;
 	/** 外观 */
 	appearance: AppearanceSettings;
 	/** 输入 */

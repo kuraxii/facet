@@ -273,8 +273,6 @@ export function SettingsPage({
 									<>
 										{section === "models" ? (
 											<ModelsSection
-												draft={draft}
-												patch={patch}
 												data={data}
 												providers={providers}
 												providersError={providersError}

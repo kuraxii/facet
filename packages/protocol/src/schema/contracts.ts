@@ -264,6 +264,15 @@ export const REQUEST_SCHEMAS = {
 		auth: "admin",
 		params: Unsafe<{ settings: FacetSettings }>(Type.Object({ settings: Type.Object({}) })),
 	},
+	getAgentDefaults: { auth: "public", params: NoParams },
+	setAgentDefaults: {
+		auth: "admin",
+		// thinkingLevel 传 null 表示清掉这一项，交回模型自己决定；不传则不动
+		params: Type.Object({
+			model: Type.Optional(ModelRef),
+			thinkingLevel: Type.Optional(Type.Union([ThinkingLevel, Type.Null()])),
+		}),
+	},
 	saveCredential: {
 		auth: "admin",
 		params: Type.Object({ providerId: Id, apiKey: Id }),

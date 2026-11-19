@@ -615,6 +615,32 @@ function buildRequestUpdateSettings(): (value: unknown) => boolean {
 const checkRequestUpdateSettings = buildRequestUpdateSettings();
 
 /**
+ * getAgentDefaults 的参数判断。
+ *
+ * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
+ */
+function buildRequestGetAgentDefaults(): (value: unknown) => boolean {
+	// @ts-ignore
+	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && true));
+	return check_0;
+}
+
+const checkRequestGetAgentDefaults = buildRequestGetAgentDefaults();
+
+/**
+ * setAgentDefaults 的参数判断。
+ *
+ * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
+ */
+function buildRequestSetAgentDefaults(): (value: unknown) => boolean {
+	// @ts-ignore
+	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && ((value.model === undefined || (!("model" in value) || ((typeof value.model === "object" && value.model !== null && !(Array.isArray(value.model))) && (("provider" in value.model && "id" in value.model) && (typeof value.model.provider === "string" && typeof value.model.id === "string"))))) && (value.thinkingLevel === undefined || (!("thinkingLevel" in value) || ((((((((typeof value.thinkingLevel === "string" && value.thinkingLevel === "off") || (typeof value.thinkingLevel === "string" && value.thinkingLevel === "minimal")) || (typeof value.thinkingLevel === "string" && value.thinkingLevel === "low")) || (typeof value.thinkingLevel === "string" && value.thinkingLevel === "medium")) || (typeof value.thinkingLevel === "string" && value.thinkingLevel === "high")) || (typeof value.thinkingLevel === "string" && value.thinkingLevel === "xhigh")) || (typeof value.thinkingLevel === "string" && value.thinkingLevel === "max")) || value.thinkingLevel === null))))));
+	return check_0;
+}
+
+const checkRequestSetAgentDefaults = buildRequestSetAgentDefaults();
+
+/**
  * saveCredential 的参数判断。
  *
  * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
@@ -1014,6 +1040,8 @@ export const REQUEST_CONTRACTS: Readonly<Record<string, RequestContract | undefi
 	"markSessionsSeen": { auth: "public", check: checkRequestMarkSessionsSeen },
 	"getSettings": { auth: "public", check: checkRequestGetSettings },
 	"updateSettings": { auth: "admin", check: checkRequestUpdateSettings },
+	"getAgentDefaults": { auth: "public", check: checkRequestGetAgentDefaults },
+	"setAgentDefaults": { auth: "admin", check: checkRequestSetAgentDefaults },
 	"saveCredential": { auth: "admin", check: checkRequestSaveCredential },
 	"deleteCredential": { auth: "admin", check: checkRequestDeleteCredential },
 	"diagnostics": { auth: "admin", check: checkRequestDiagnostics },

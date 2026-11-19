@@ -37,6 +37,8 @@ type SystemMethod =
 	| "revealPath"
 	| "getSettings"
 	| "updateSettings"
+	| "getAgentDefaults"
+	| "setAgentDefaults"
 	| "saveCredential"
 	| "deleteCredential"
 	| "diagnostics"
@@ -154,6 +156,17 @@ export const systemHandlers: Pick<RequestHandlerMap, SystemMethod> = {
 	updateSettings: async (params, context): Promise<RequestResults["updateSettings"]> => ({
 		settings: await context.settingsStore.save(params.settings),
 	}),
+
+	getAgentDefaults: (_params, context): RequestResults["getAgentDefaults"] => context.factory.agentDefaults(),
+
+	// 写的是 pi 自己的设置，落盘之后再把实际生效的值读回来，界面不用猜
+	setAgentDefaults: async (params, context): Promise<RequestResults["setAgentDefaults"]> => {
+		await context.factory.setAgentDefaults({
+			...(params.model === undefined ? {} : { model: params.model }),
+			...(params.thinkingLevel === undefined ? {} : { thinkingLevel: params.thinkingLevel }),
+		});
+		return context.factory.agentDefaults();
+	},
 
 	saveCredential: async (params, context): Promise<RequestResults["saveCredential"]> => {
 		await context.factory.saveCredential(params.providerId, params.apiKey);

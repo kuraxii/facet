@@ -53,6 +53,18 @@ export interface ModelInfo extends ModelRef {
 	cost: CostBreakdown;
 }
 
+/**
+ * pi 的默认设置。
+ *
+ * 存在 pi 自己的 `settings.json` 里，新建会话时由它开局；两个字段都空表示由 pi 自己决定。
+ */
+export interface AgentDefaults {
+	/** 默认模型 */
+	model?: ModelRef;
+	/** 默认思考档位 */
+	thinkingLevel?: ThinkingLevel;
+}
+
 /** 提供方及其凭证状态。 */
 export interface ProviderInfo {
 	/** 提供方 id */

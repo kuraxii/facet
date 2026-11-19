@@ -38,6 +38,7 @@ export type { ProviderDialogProps } from "./chat/ProviderDialog.tsx";
 export { ProviderDialog } from "./chat/ProviderDialog.tsx";
 export type { QueueStripProps } from "./chat/QueueStrip.tsx";
 export { QueueStrip } from "./chat/QueueStrip.tsx";
+export { appendQuote, quoteBlock } from "./chat/quote.ts";
 export type { SessionSearchProps } from "./chat/SessionSearch.tsx";
 export { SessionSearch } from "./chat/SessionSearch.tsx";
 export type { SessionSidebarProps } from "./chat/SessionSidebar.tsx";
@@ -136,6 +137,8 @@ export { PanelTabs } from "./panel/panel-tabs.tsx";
 export type { RightPanelProps } from "./panel/right-panel.tsx";
 export { RightPanel } from "./panel/right-panel.tsx";
 export { PanelToggle, SidebarToggle } from "./panel/top-bar.tsx";
+export type { TextMenuProps } from "./text-menu.tsx";
+export { TextMenu } from "./text-menu.tsx";
 export type { CodeThemeOption, UiThemeOption } from "./theme.ts";
 export {
 	CODE_THEME_OPTIONS,

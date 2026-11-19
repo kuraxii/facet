@@ -16,6 +16,11 @@ export const en = {
 		addProject: "Add project",
 		newSession: "New session",
 	},
+	textMenu: {
+		label: "Selected text",
+		copy: "Copy",
+		quote: "Quote",
+	},
 	panel: {
 		tabs: "Right panel tabs",
 		files: "Files",
@@ -532,6 +537,11 @@ export const zhCN = {
 		remove: "移除",
 		addProject: "添加项目",
 		newSession: "新建会话",
+	},
+	textMenu: {
+		label: "选中的文字",
+		copy: "复制",
+		quote: "引用",
 	},
 	panel: {
 		tabs: "右侧栏分页",

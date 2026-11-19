@@ -427,6 +427,45 @@ dialog.dialog.is-picker .dialog-actions {
 	opacity: 0.4;
 }
 
+/* 选中文字的右键菜单 */
+
+/*
+ * 贴光标弹出：落点由组件量过自己的尺寸后写进 `left`/`top`，靠近窗口右边与下边时会往回收。
+ * 层级与标签栏的右键菜单同档：高于弹窗（60），低于悬浮提示（90）。
+ */
+.text-menu {
+	position: fixed;
+	z-index: 70;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	width: var(--text-menu-width);
+	padding: var(--text-menu-padding);
+	border: 1px solid var(--line2);
+	border-radius: 8px;
+	background: var(--card);
+	box-shadow: 0 8px 24px rgb(0 0 0 / 32%);
+}
+
+.text-menu-item {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	height: var(--text-menu-item-height);
+	padding: 0 8px;
+	border: 0;
+	border-radius: 5px;
+	background: transparent;
+	color: var(--t1);
+	font-size: 12px;
+	text-align: left;
+}
+
+.text-menu-item:hover,
+.text-menu-item:focus-visible {
+	background: var(--surface2);
+}
+
 /* 悬浮提示 */
 
 /*

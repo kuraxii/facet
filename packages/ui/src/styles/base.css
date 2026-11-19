@@ -51,6 +51,11 @@
 	--toast-padding-y: 8px;
 	--toast-radius: 10px;
 	--toast-icon-gap: 8px;
+	/* 选中文字菜单：宽度、离窗口边缘的最小距离、内边距与每项高度 */
+	--text-menu-width: 168px;
+	--text-menu-edge: 4px;
+	--text-menu-padding: 4px;
+	--text-menu-item-height: 28px;
 	--context-divider-gap: 12px;
 	--context-divider-padding: 4px;
 	--context-divider-line-height: 1px;

@@ -15,7 +15,7 @@ import {
 	QueueStrip,
 	useI18n,
 } from "@facet/ui";
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 import type { Composer as ComposerState } from "../hooks/useComposer.ts";
 import type { HostConnection } from "../hooks/useHostConnection.ts";
 import type { SessionLifecycle } from "../hooks/useSessionLifecycle.ts";
@@ -51,6 +51,8 @@ export interface ChatAreaProps {
 	errorBar: ReactNode;
 	/** 标签菜单与文本的复制动作 */
 	copyText: (text: string) => void;
+	/** 输入框本身：引用之后要把光标放回它末尾 */
+	composerInput: RefObject<HTMLTextAreaElement | null>;
 }
 
 /** 对话区：内容、提示与输入。 */
@@ -70,6 +72,7 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 		queued,
 		errorBar,
 		copyText,
+		composerInput,
 	} = props;
 	const { t } = useI18n();
 	const client = useHostClient();
@@ -78,7 +81,8 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 		<>
 			<ChatOutline items={transcript.items} container={transcript.scrollElement} />
 			<section className="scroll" ref={transcript.scrollRef}>
-				<div className="column">
+				{/* 正文打上标记：它里面的文字右键多一项「引用」 */}
+				<div className="column" data-quote-source>
 					<ChatTranscript
 						items={transcript.items}
 						canFork={canFork}
@@ -132,6 +136,7 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 						/>
 					)}
 					<Composer
+						ref={composerInput}
 						value={composer.draft}
 						onChange={composer.updateDraft}
 						onSend={composer.send}

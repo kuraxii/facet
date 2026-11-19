@@ -9,7 +9,7 @@
  */
 import { chatActivity } from "@facet/client-core";
 import type { LanguageSetting } from "@facet/i18n";
-import { sessionTabId, terminalTabId } from "@facet/ui";
+import { appendQuote, sessionTabId, TextMenu, terminalTabId } from "@facet/ui";
 import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import { bridge } from "../bridge.ts";
 import { useComposer } from "../hooks/useComposer.ts";
@@ -21,6 +21,7 @@ import { useTerminalPanel } from "../hooks/useTerminalPanel.ts";
 import { useReadMarker, useTranscript } from "../hooks/useTranscript.ts";
 import { useWorkspaceShell } from "../hooks/useWorkspaceShell.ts";
 import { useHostRuntime } from "../host-context.tsx";
+import { placeCaretAtEnd, QUOTE_SOURCE_SELECTOR } from "../selection-quote.ts";
 import { useToast } from "../toast-provider.tsx";
 import { Workbench } from "./workbench.tsx";
 
@@ -199,6 +200,17 @@ export function HostWorkspace({
 		[toast],
 	);
 
+	/** 对话里选中的文字被引用之后把光标放回输入框末尾 */
+	const composerInput = useRef<HTMLTextAreaElement>(null);
+	/** 把选中的文字做成引用块接进草稿 */
+	const quoteInto = useCallback(
+		(text: string): void => {
+			composer.updateDraft((current) => appendQuote(current, text));
+			placeCaretAtEnd(composerInput.current);
+		},
+		[composer],
+	);
+
 	// 快捷键 Ctrl + ` 回到终端标签；没有终端时在当前目录新建一个
 	const tabList = tabs.tabs;
 	const focusTab = tabs.focusTab;
@@ -220,21 +232,26 @@ export function HostWorkspace({
 	}, [focusTab, openTerminal, tabList]);
 
 	return (
-		<Workbench
-			host={host}
-			session={session}
-			shell={shell}
-			tabs={tabs}
-			terminal={terminal}
-			composer={composer}
-			transcript={transcript}
-			languageSetting={languageSetting}
-			onLanguageChange={onLanguageChange}
-			openedSessionId={openedSessionId}
-			closeTab={closeTab}
-			closeTabs={closeTabs}
-			copyText={copyText}
-			openTerminal={openTerminal}
-		/>
+		<>
+			<Workbench
+				host={host}
+				session={session}
+				shell={shell}
+				tabs={tabs}
+				terminal={terminal}
+				composer={composer}
+				transcript={transcript}
+				languageSetting={languageSetting}
+				onLanguageChange={onLanguageChange}
+				openedSessionId={openedSessionId}
+				closeTab={closeTab}
+				closeTabs={closeTabs}
+				copyText={copyText}
+				openTerminal={openTerminal}
+				composerInput={composerInput}
+			/>
+			{/* 整棵工作区只挂一份：可选中文本处给复制，对话正文另加引用 */}
+			<TextMenu onCopy={copyText} onQuote={quoteInto} quoteScope={QUOTE_SOURCE_SELECTOR} />
+		</>
 	);
 }

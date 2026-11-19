@@ -544,12 +544,18 @@ button {
 }
 
 /*
- * 拖动分隔条期间：整页光标统一成列宽光标，文字不可选中。
- * 标记挂在根节点上，由分隔条在按下时写入、松开或卸载时删除。
+ * 拖动分隔条期间的遮罩。
+ *
+ * 铺满视口、透明，只负责命中与光标：拖动时它接下所有指针命中，底下按钮收不到 hover、
+ * 正文不会被顺手选中，指针滑到哪儿都保持列宽光标。挂在 body 上，所以不受任何祖先的
+ * `overflow` 与定位影响；层级在悬浮提示（90）之上。
  */
-:root[data-resizing="col"] * {
-	cursor: col-resize !important;
-	user-select: none !important;
+.pane-resize-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 95;
+	cursor: col-resize;
+	user-select: none;
 }
 
 svg {

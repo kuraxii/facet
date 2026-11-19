@@ -283,6 +283,31 @@ export const REQUEST_SCHEMAS = {
 		params: Type.Object({ providerId: Id }),
 		nonEmpty: ["providerId"],
 	},
+	// 登录用宿主进程发起：浏览器回调要监听回环地址，而且凭证与刷新都由 pi 在宿主里管
+	providerLoginStart: {
+		auth: "admin",
+		params: Type.Object({
+			providerId: Id,
+			// 走账号登录还是填 API key；不给按 API key 处理
+			authType: Type.Optional(Type.Union([Type.Literal("oauth"), Type.Literal("api_key")])),
+		}),
+		nonEmpty: ["providerId"],
+	},
+	// value 为 null 表示这一步不要了（界面上的取消），会连带把整条登录中止
+	providerLoginRespond: {
+		auth: "admin",
+		params: Type.Object({
+			loginId: Id,
+			promptId: Id,
+			value: Type.Union([Type.String(), Type.Null()]),
+		}),
+		nonEmpty: ["loginId"],
+	},
+	providerLoginCancel: {
+		auth: "admin",
+		params: Type.Object({ loginId: Id }),
+		nonEmpty: ["loginId"],
+	},
 	diagnostics: { auth: "admin", params: NoParams },
 	testModel: {
 		auth: "admin",

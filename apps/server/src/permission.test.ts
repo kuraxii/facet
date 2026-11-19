@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AuditLog } from "./audit.ts";
 import type { ServerConfig } from "./config.ts";
 import { startEndpoint } from "./endpoint.ts";
+import { ModelsChannel } from "./models-channel.ts";
 import { ProjectStore } from "./project-store.ts";
 import { SessionHub } from "./session-hub.ts";
 import { SessionsChannel } from "./sessions-channel.ts";
@@ -168,6 +169,7 @@ async function start(overrides: Partial<ServerConfig> = {}): Promise<void> {
 		settingsStore,
 		hostId: "h",
 		sessions: new SessionsChannel(32),
+		modelLog: new ModelsChannel(32),
 		audit: new AuditLog(join(dir, "audit.log")),
 	});
 }

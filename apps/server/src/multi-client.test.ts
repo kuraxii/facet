@@ -20,6 +20,7 @@ import { type Channel, encodeFrame, FrameDecoder, makeChannel } from "@facet/pro
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ServerConfig } from "./config.ts";
 import { startEndpoint } from "./endpoint.ts";
+import { ModelsChannel } from "./models-channel.ts";
 import { ProjectStore } from "./project-store.ts";
 import type { HubAgent } from "./session-hub.ts";
 import { SessionHub } from "./session-hub.ts";
@@ -313,6 +314,7 @@ async function startTestEndpoint(overrides: Partial<ServerConfig> = {}) {
 		}),
 		hostId: "h",
 		sessions: new SessionsChannel(32),
+		modelLog: new ModelsChannel(32),
 	});
 }
 

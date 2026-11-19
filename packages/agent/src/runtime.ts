@@ -6,6 +6,7 @@
  * 谁活着、何时回收由主机侧决定。
  */
 import { join } from "node:path";
+import { registerBunOAuthFlows } from "@earendil-works/pi-ai/bun-oauth";
 import {
 	createAgentSession,
 	createCodemodeExtension,
@@ -28,6 +29,7 @@ import type {
 	ModelInfo,
 	ModelRef,
 	ProviderInfo,
+	ProviderLoginType,
 	SessionSummary,
 	ThinkingLevel,
 } from "@facet/protocol";
@@ -43,6 +45,7 @@ import {
 import { applyAgentDir } from "./paths.ts";
 import { PiAgent } from "./pi-agent.ts";
 import { normalizeProjectPath, type SessionProject, scanSessionProjects } from "./projects.ts";
+import { ProviderLoginService, type ProviderLoginUpdate } from "./provider-login.ts";
 import { SessionCatalog } from "./session-catalog.ts";
 import { readSessionHeader } from "./session-scan.ts";
 
@@ -195,6 +198,8 @@ export class PiAgentFactory {
 	private customBaseUrls: Record<string, string>;
 	/** 会话清单与摘要缓存，按文件缓存读取结果 */
 	private readonly sessionCatalog: SessionCatalog;
+	/** 提供方登录的编排，与具体会话无关 */
+	private readonly providerLogin: ProviderLoginService;
 	private disposed = false;
 
 	private constructor(
@@ -215,10 +220,18 @@ export class PiAgentFactory {
 		this.onError = options.onError;
 		this.trustStore = new ProjectTrustStore(agentDir);
 		this.sessionCatalog = new SessionCatalog({ sessionsDir: this.sessionsDir });
+		this.providerLogin = new ProviderLoginService({
+			runtime: modelRuntime,
+			// OpenAI 的账号登录要一个稳定的安装标识，pi 把它存在自己的设置文件里
+			getDeviceId: () => this.piSettings().getOrCreateDeviceId(),
+		});
 	}
 
 	/** 建立共享资源。凭证与模型配置的路径由 agentDir 推出。 */
 	static async create(options: PiAgentFactoryOptions = {}): Promise<PiAgentFactory> {
+		// pi 的账号登录实现放在单独的模块里，按变量路径懒加载，打包器跟不进去；打出来的产物里
+		// 那条路径指向不存在的文件。pi 为此留了静态注册入口，把九条流程一起打进来，登录时用它。
+		registerBunOAuthFlows();
 		const agentDir = applyAgentDir(options.agentDir);
 		const credentials = new FileCredentialStore(join(agentDir, "auth.json"));
 		const modelConfig = new ModelConfigStore({ file: join(agentDir, "models.json") });
@@ -259,6 +272,9 @@ export class PiAgentFactory {
 			// 只有 pi 给出具体来源（例如环境变量名）时才写出来；存在本机这类状态由状态点表达
 			const source = status.label;
 			const effective = provider.getModels()[0]?.baseUrl ?? this.customBaseUrls[provider.id];
+			// 能走账号登录的提供方标出来；官方给了按钮文字就一起带上，没有就让界面用「登录」
+			const oauth = provider.auth.oauth;
+			const loginLabel = oauth?.loginLabel;
 			return {
 				id: provider.id,
 				name: provider.name,
@@ -266,6 +282,9 @@ export class PiAgentFactory {
 				modelCount: provider.getModels().length,
 				...(source === undefined ? {} : { authSource: source }),
 				...(this.modelRuntime.isUsingSubscription(provider.id) ? { subscription: true } : {}),
+				...(oauth === undefined ? {} : { canLogin: true }),
+				...(loginLabel === undefined ? {} : { loginLabel }),
+				...(this.modelRuntime.isUsingOAuth(provider.id) ? { usingLogin: true } : {}),
 				...(effective === undefined ? {} : { baseUrl: effective }),
 			};
 		});
@@ -338,8 +357,7 @@ export class PiAgentFactory {
 		}
 		await this.modelConfig.removeProvider(providerId);
 		delete this.customBaseUrls[providerId];
-		await this.credentials.delete(providerId);
-		await this.modelRuntime.removeRuntimeApiKey(providerId);
+		await this.modelRuntime.logout(providerId);
 		await this.modelRuntime.refresh({ allowNetwork: false });
 	}
 
@@ -424,10 +442,39 @@ export class PiAgentFactory {
 		return fromConfig === undefined ? undefined : { apiKey: fromConfig };
 	}
 
-	/** 删除提供方的凭证：文件与运行态一起删。 */
+	/**
+	 * 删除提供方的凭证：文件、运行态与登录态一起删。
+	 *
+	 * 走 pi 的 `logout`：它一并摘掉运行态里的密钥并广播状态，自己分步删漏一步就会剩下
+	 * 一份看似已配置的登录态。
+	 */
 	async deleteCredential(providerId: string): Promise<void> {
-		await this.credentials.delete(providerId);
-		await this.modelRuntime.removeRuntimeApiKey(providerId);
+		await this.modelRuntime.logout(providerId);
+	}
+
+	/**
+	 * 开始一条提供方登录。
+	 *
+	 * 流程在后台跑，进展与终局由 `onProviderLogin` 给出；同一提供方已有登录在跑时抛
+	 * `ProviderLoginBusyError`。
+	 */
+	startProviderLogin(providerId: string, authType: ProviderLoginType): { loginId: string } {
+		return this.providerLogin.start(providerId, authType);
+	}
+
+	/** 回答登录中的一步。返回假表示这一步已经不需要回答了。 */
+	respondProviderLogin(loginId: string, promptId: string, value: string | null): boolean {
+		return this.providerLogin.respond(loginId, promptId, value);
+	}
+
+	/** 中止一条登录。 */
+	cancelProviderLogin(loginId: string): boolean {
+		return this.providerLogin.cancel(loginId);
+	}
+
+	/** 订阅登录进展，返回取消订阅函数。 */
+	onProviderLogin(listener: (update: ProviderLoginUpdate) => void): () => void {
+		return this.providerLogin.subscribe(listener);
 	}
 
 	/**
@@ -598,6 +645,8 @@ export class PiAgentFactory {
 	/** 关闭工厂，之后不再建会话。已建会话的回收由调用方负责。 */
 	dispose(): void {
 		this.disposed = true;
+		// 登录可能正卡在等浏览器回调上，没跑完的随工厂一起收掉
+		this.providerLogin.dispose();
 	}
 
 	private assertAlive(): void {

@@ -103,6 +103,13 @@ export const sessionHandlers: Pick<RequestHandlerMap, SessionMethod> = {
 			}
 			return context.sessions.subscribe(channel, params.since, sink);
 		}
+		if (parsed?.kind === "models") {
+			// 模型通道只有一条，标识对不上的按未知通道拒绝
+			if (parsed.id !== context.hostId) {
+				throw new RequestError("unknown_channel", `unsupported channel: ${channel}`);
+			}
+			return context.modelLog.subscribe(channel, params.since, sink);
+		}
 		if (parsed?.kind === "terminal") {
 			// 终端通道按标识对号，登记里没有的按未知通道拒绝
 			if (context.terminals.get(parsed.id) === undefined) {

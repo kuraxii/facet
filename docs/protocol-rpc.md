@@ -19,7 +19,7 @@ apps/server/src/rpc/handlers/*.ts           各领域的具体实现
 
 `src/schema/contracts.ts` 里有三张表：
 
-- `REQUEST_SCHEMAS`：50 个请求方法的参数 Schema 与权限档。`RequestParams` 由它推导，
+- `REQUEST_SCHEMAS`：56 个请求方法的参数 Schema 与权限档。`RequestParams` 由它推导，
   `src/schema/parity.test.ts` 冻结了重构前手写的声明确认两者逐方法完全相同。
 - `DISPATCH_SCHEMAS`：8 个客户端可派发动作。表里没有的 `type` 一律按主机内部事件拒绝，
   客户端不能伪造 `sessions/*`、`chat/delta` 这类只由主机产生的动作。
@@ -51,6 +51,11 @@ TypeBox 的 `Code()` 会带三条 `typebox/*` 的 import，还会把 `pattern`�
 - `handleDispatch`：校验帧与通道种类 → 只读连接直接回拒绝帧 → 查 `DISPATCH_CONTRACTS`
   （查不到按主机内部事件拒绝）→ 校验载荷 → 交给 `chatHandlers` 执行。受理后立即返回，
   结果的成败由通道上的动作与拒绝帧反映。
+
+提供方登录不是一次请求能说完的：`providerLoginStart` 起一条登录，`providerLoginRespond` 回
+当前这一步，`providerLoginCancel` 中止，三者都是 `admin` 档（写入凭证）。进展走主机级的
+`models:/<hostId>` 通道（`models/loginEvent`），要浏览器回调与多步问答的流程因此同样能被
+远端界面驱动。
 
 处理器按领域放在 `rpc/handlers/`：`session-handlers.ts`、`chat-handlers.ts`、
 `terminal-handlers.ts`、`system-handlers.ts`。每个处理器只拿已经校验过的参数，不再做形状

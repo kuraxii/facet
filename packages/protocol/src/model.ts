@@ -97,6 +97,12 @@ export interface ProviderInfo {
 	authSource?: string;
 	/** 是否为订阅类登录（OAuth） */
 	subscription?: boolean;
+	/** 这个提供方能不能走账号登录；不能就只能填 API key */
+	canLogin?: boolean;
+	/** 账号登录的按钮文字，由 pi 给的官方说法，例如「Sign in with ChatGPT」；缺省用「登录」 */
+	loginLabel?: string;
+	/** 当前生效的凭证是不是账号登录（OAuth）拿到的 */
+	usingLogin?: boolean;
 	/** 当前生效的接口地址：内置的取目录里的，自定义的取自己的配置 */
 	baseUrl?: string;
 }
@@ -131,3 +137,107 @@ export interface CustomProviderInfo {
 
 /** 保存自定义提供方的入参，字段要求与 CustomProviderInfo 相同。 */
 export type CustomProviderInput = CustomProviderInfo;
+
+/** 登录可以走的两种凭证类型。 */
+export type ProviderLoginType = "oauth" | "api_key";
+
+/** 登录时的一步单选题的一个选项。 */
+export interface ProviderLoginOption {
+	/** 选项标识，选中后原样带回 */
+	id: string;
+	/** 展示名 */
+	label: string;
+	/** 补充说明，例如这个选项对应哪个账号体系 */
+	description?: string;
+}
+
+/**
+ * 登录过程中主机要用户回答的一步。
+ *
+ * 与扩展的交互分开：这里没有标题、没有表单，只有一问一答。`secret` 要遮住输入，
+ * `manualCode` 是「浏览器授权没回调成功时把地址粘回来」那一步。
+ */
+export interface ProviderLoginPrompt {
+	/** 这一步的标识，应答时原样带回 */
+	promptId: string;
+	/** 要什么：普通文本、密钥、单选、粘回调地址 */
+	kind: "text" | "secret" | "select" | "manualCode";
+	/** 题目 */
+	message: string;
+	/** 输入框占位 */
+	placeholder?: string;
+	/** `select` 的选项，其余类型没有 */
+	options?: readonly ProviderLoginOption[];
+}
+
+/** 登录侧给出的链接。 */
+export interface ProviderLoginLink {
+	/** 地址 */
+	url: string;
+	/** 展示文字，缺省时显示地址本身 */
+	label?: string;
+}
+
+/**
+ * 主机推进登录时推给端点的一步。
+ *
+ * 顺序要紧：`authUrl` / `deviceCode` 之后可能跟着一个 `prompt`，两者同时存在时要一起给出——
+ * 浏览器回调与粘贴地址是赛跑关系，哪边先回都算成功，另一边由 `promptResolved` 收掉。
+ */
+export type ProviderLoginEvent =
+	/** 用户先看一条说明，可能带链接 */
+	| { type: "info"; message: string; links?: readonly ProviderLoginLink[] }
+	/** 要在浏览器里打开的授权地址 */
+	| { type: "authUrl"; url: string; instructions?: string }
+	/** 设备码登录：把 userCode 显示出来，等用户在 verificationUri 上确认 */
+	| {
+			type: "deviceCode";
+			userCode: string;
+			verificationUri: string;
+			/** 轮询间隔，界面只用来算倒计时 */
+			intervalSeconds?: number;
+			/** 有效秒数，缺省表示没有明确期限 */
+			expiresInSeconds?: number;
+	  }
+	/** 需要用户回答的一步 */
+	| { type: "prompt"; prompt: ProviderLoginPrompt }
+	/** 这一步不用答了：回调先回来，或整条登录被取消 */
+	| { type: "promptResolved"; promptId: string }
+	/** 进度说明，例如正在换 token */
+	| { type: "progress"; message: string }
+	/** 登录成功，凭证已经落盘 */
+	| { type: "done" }
+	/** 登录失败，message 是主机侧的原话 */
+	| { type: "failed"; message: string }
+	/** 登录被取消 */
+	| { type: "cancelled" };
+
+/**
+ * 一次登录在端点上的累积状态。
+ *
+ * 日志只给增量，端点把最近一次能用的那些汇总成这一份，界面照着渲染：`prompt` 与它对应的
+ * `authUrl` / `deviceCode` 常常同时在场，一个是等回答，一个是去浏览器里操作。
+ */
+export interface ProviderLoginState {
+	/** 这一次登录的标识 */
+	loginId: string;
+	/** 登录的是哪个提供方 */
+	providerId: string;
+	/** 进行到哪一步：跑着、成了、失败了、被取消了 */
+	status: "running" | "done" | "failed" | "cancelled";
+	/** 待回答的一步，没有就是当前不需要输入 */
+	prompt?: ProviderLoginPrompt;
+	/** 要在浏览器里打开的授权地址 */
+	authUrl?: { url: string; instructions?: string };
+	/** 设备码登录的用户码与验证地址 */
+	deviceCode?: {
+		userCode: string;
+		verificationUri: string;
+		intervalSeconds?: number;
+		expiresInSeconds?: number;
+	};
+	/** 最近一条说明：进度、提示或失败原因 */
+	message?: string;
+	/** 说明附带的链接 */
+	links?: readonly ProviderLoginLink[];
+}

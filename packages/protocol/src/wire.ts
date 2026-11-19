@@ -264,6 +264,11 @@ export interface RequestResults {
 	setAgentDefaults: AgentDefaults;
 	saveCredential: { providers: ProviderInfo[] };
 	deleteCredential: { providers: ProviderInfo[] };
+	/** 登录已经开始，后续进展走 `models:/<hostId>` 通道；同一提供方同时只允许一次 */
+	providerLoginStart: { loginId: string };
+	/** accepted 为假表示这一步已经不需要回答了（回调先回来或整条被取消） */
+	providerLoginRespond: { accepted: boolean };
+	providerLoginCancel: { cancelled: boolean };
 	diagnostics: { text: string };
 	testModel: { ok: boolean; latencyMs: number; message?: string };
 	listCustomProviders: { providers: CustomProviderInfo[] };

@@ -271,7 +271,7 @@ export function ProviderDialog({
 						<label className="set-field">
 							<span className="set-label">{t("providerForm.id")}</span>
 							<input
-								className="set-input mono"
+								className="set-input"
 								value={shownId}
 								// 已经存在的提供方改标识等于换一个提供方，配置对不上，所以只在新建时可改
 								disabled={!isNew}
@@ -290,7 +290,7 @@ export function ProviderDialog({
 					<label className="set-field">
 						<span className="set-label">{t("providerForm.baseUrl")}</span>
 						<input
-							className="set-input mono"
+							className="set-input"
 							value={baseUrl}
 							onChange={(event) => setBaseUrl(event.target.value)}
 							placeholder="https://gateway.example.com/v1"
@@ -351,7 +351,7 @@ export function ProviderDialog({
 					) : (
 						<div className="prov-cred">
 							<input
-								className="set-input mono"
+								className="set-input"
 								type="password"
 								value={key}
 								disabled={isDeletingKey}
@@ -419,7 +419,7 @@ export function ProviderDialog({
 								return (
 									<li key={row_.key} className="prov-model">
 										<input
-											className="set-input mono"
+											className="set-input"
 											value={model.id}
 											onChange={(event) => patchModel(row_.key, { id: event.target.value })}
 											placeholder={t("providerForm.modelId")}
@@ -433,7 +433,7 @@ export function ProviderDialog({
 											aria-label={t("providerForm.modelNameLabel", { index: index + 1 })}
 										/>
 										<input
-											className="set-input mono"
+											className="set-input"
 											type="number"
 											value={model.contextWindow ?? ""}
 											onChange={(event) =>
@@ -445,7 +445,7 @@ export function ProviderDialog({
 											aria-label={t("providerForm.modelContextLabel", { index: index + 1 })}
 										/>
 										<input
-											className="set-input mono"
+											className="set-input"
 											type="number"
 											value={model.maxTokens ?? ""}
 											onChange={(event) =>
@@ -605,7 +605,7 @@ function LoginFlow({
 					<div className="prov-login-field">
 						<input
 							id={prompt.promptId}
-							className="set-input mono"
+							className="set-input"
 							type={prompt.kind === "secret" ? "password" : "text"}
 							value={answer}
 							{...{ "data-autofocus": true }}

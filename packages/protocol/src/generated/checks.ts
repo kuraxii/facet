@@ -713,25 +713,6 @@ function buildRequestTestModel(): (value: unknown) => boolean {
 const checkRequestTestModel = buildRequestTestModel();
 
 /**
- * setProviderBaseUrl 的参数判断。
- *
- * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
- */
-function buildRequestSetProviderBaseUrl(): (value: unknown) => boolean {
-	// @ts-ignore
-	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && (("providerId" in value && "baseUrl" in value) && (typeof value.providerId === "string" && typeof value.baseUrl === "string"))));
-	return (value: unknown): boolean => {
-		if (!check_0(value)) return false;
-		const source = value as Record<string, unknown>;
-		return (
-			typeof source.providerId === "string" && source.providerId.length > 0
-		);
-	};
-}
-
-const checkRequestSetProviderBaseUrl = buildRequestSetProviderBaseUrl();
-
-/**
  * listCustomProviders 的参数判断。
  *
  * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
@@ -1046,7 +1027,6 @@ export const REQUEST_CONTRACTS: Readonly<Record<string, RequestContract | undefi
 	"deleteCredential": { auth: "admin", check: checkRequestDeleteCredential },
 	"diagnostics": { auth: "admin", check: checkRequestDiagnostics },
 	"testModel": { auth: "admin", check: checkRequestTestModel },
-	"setProviderBaseUrl": { auth: "admin", check: checkRequestSetProviderBaseUrl },
 	"listCustomProviders": { auth: "public", check: checkRequestListCustomProviders },
 	"saveCustomProvider": { auth: "admin", check: checkRequestSaveCustomProvider },
 	"removeCustomProvider": { auth: "admin", check: checkRequestRemoveCustomProvider },

@@ -193,7 +193,7 @@ export class ModelConfigStore {
 			if (current === undefined) {
 				return;
 			}
-			// 自定义提供方的地址随它一起删掉，地址覆写那条路径不会走到这里
+			// 名字、地址、协议与模型清单是自定义提供方的声明，随它一起删掉
 			const { models: _models, name: _name, api: _api, baseUrl: _baseUrl, ...rest } = current;
 			if (Object.keys(rest).length === 0) {
 				delete providers[providerId];
@@ -201,44 +201,6 @@ export class ModelConfigStore {
 				providers[providerId] = rest;
 			}
 			await writeFileAtomic(this.file, `${JSON.stringify({ ...config, providers }, null, 2)}\n`);
-		});
-	}
-
-	/** 已配置的提供方地址，键为提供方 id。 */
-	async overrides(): Promise<Record<string, string>> {
-		const config = await this.read();
-		const overrides: Record<string, string> = {};
-		for (const [id, entry] of Object.entries(config.providers ?? {})) {
-			if (typeof entry?.baseUrl === "string" && entry.baseUrl.length > 0) {
-				overrides[id] = entry.baseUrl;
-			}
-		}
-		return overrides;
-	}
-
-	/**
-	 * 设置某个提供方的地址。
-	 *
-	 * 传空串表示恢复默认：删掉这个字段，条目里没有其他内容时连条目一起去掉，文件保持干净。
-	 */
-	async setBaseUrl(providerId: string, value: string): Promise<string | undefined> {
-		const baseUrl = normalizeBaseUrl(value);
-		return await this.exclusive(async () => {
-			const config = await this.read();
-			const providers = { ...(config.providers ?? {}) };
-			const current = providers[providerId] ?? {};
-			if (baseUrl === undefined) {
-				const { baseUrl: _removed, ...rest } = current;
-				if (Object.keys(rest).length === 0) {
-					delete providers[providerId];
-				} else {
-					providers[providerId] = rest;
-				}
-			} else {
-				providers[providerId] = { ...current, baseUrl };
-			}
-			await writeFileAtomic(this.file, `${JSON.stringify({ ...config, providers }, null, 2)}\n`);
-			return baseUrl;
 		});
 	}
 

@@ -151,7 +151,6 @@ interface FrozenRequestParams {
 	/** 用指定模型发一次最小请求，确认凭证、地址与网络是否可用。 */
 	testModel: { provider: string; id: string };
 	/** 设置提供方的接口地址，空串恢复默认。返回更新后的提供方清单。 */
-	setProviderBaseUrl: { providerId: string; baseUrl: string };
 	/** 列出用户自己添加的提供方。 */
 	listCustomProviders: Record<string, never>;
 	/** 新增或修改一个自定义提供方，返回更新后的清单。 */
@@ -244,10 +243,6 @@ describe("参数类型与重构前一致", () => {
 			>(true),
 			diagnostics: assertEqual<RequestParams["diagnostics"], FrozenRequestParams["diagnostics"]>(true),
 			testModel: assertEqual<RequestParams["testModel"], FrozenRequestParams["testModel"]>(true),
-			setProviderBaseUrl: assertEqual<
-				RequestParams["setProviderBaseUrl"],
-				FrozenRequestParams["setProviderBaseUrl"]
-			>(true),
 			listCustomProviders: assertEqual<
 				RequestParams["listCustomProviders"],
 				FrozenRequestParams["listCustomProviders"]

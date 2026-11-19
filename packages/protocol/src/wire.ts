@@ -266,7 +266,6 @@ export interface RequestResults {
 	deleteCredential: { providers: ProviderInfo[] };
 	diagnostics: { text: string };
 	testModel: { ok: boolean; latencyMs: number; message?: string };
-	setProviderBaseUrl: { providers: ProviderInfo[] };
 	listCustomProviders: { providers: CustomProviderInfo[] };
 	saveCustomProvider: { providers: CustomProviderInfo[] };
 	removeCustomProvider: { providers: CustomProviderInfo[] };

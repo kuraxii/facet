@@ -115,16 +115,6 @@ const KNOWN_APIS = [
 	"mistral-conversations",
 ];
 
-/** 凭证来源的展示名。pi 给的是来源分类，这里换成能看懂的说明。 */
-const AUTH_SOURCE_LABELS: Record<string, string> = {
-	stored: "Key stored on this device",
-	runtime: "Key set for this run",
-	environment: "Environment variable",
-	fallback: "Built-in fallback credential",
-	models_json_key: "Key in the model configuration",
-	models_json_command: "Key command in the model configuration",
-};
-
 /**
  * 校验思考档位与模型是否相配。
  *
@@ -199,10 +189,8 @@ export class PiAgentFactory {
 	private readonly trustStore: ProjectTrustStore;
 	/** 凭证文件，写盘与运行态更新都经过它 */
 	private readonly credentials: FileCredentialStore;
-	/** 模型配置里的提供方地址，写盘之后立刻作用到运行态 */
+	/** 提供方配置：自定义提供方的名字、地址、协议与模型清单都写在这里 */
 	private readonly modelConfig: ModelConfigStore;
-	/** 已生效的地址覆写，键为提供方 id */
-	private baseUrlOverrides: Record<string, string>;
 	/** 自定义提供方配置里的地址，键为提供方 id；它们的模型不一定带地址，列表要能显示 */
 	private customBaseUrls: Record<string, string>;
 	/** 会话清单与摘要缓存，按文件缓存读取结果 */
@@ -213,7 +201,6 @@ export class PiAgentFactory {
 		modelRuntime: ModelRuntime,
 		credentials: FileCredentialStore,
 		modelConfig: ModelConfigStore,
-		baseUrlOverrides: Record<string, string>,
 		customBaseUrls: Record<string, string>,
 		options: PiAgentFactoryOptions,
 		agentDir: string,
@@ -221,7 +208,6 @@ export class PiAgentFactory {
 		this.modelRuntime = modelRuntime;
 		this.credentials = credentials;
 		this.modelConfig = modelConfig;
-		this.baseUrlOverrides = baseUrlOverrides;
 		this.customBaseUrls = customBaseUrls;
 		this.agentDir = agentDir;
 		this.sessionDir = options.sessionDir;
@@ -241,23 +227,10 @@ export class PiAgentFactory {
 			modelsPath: join(agentDir, "models.json"),
 			allowModelNetwork: options.allowModelNetwork,
 		});
-		// models.json 里写了地址的提供方启动时就按它生效，与重启之前的行为保持一致
-		const baseUrlOverrides = await modelConfig.overrides();
-		for (const [providerId, baseUrl] of Object.entries(baseUrlOverrides)) {
-			modelRuntime.registerProvider(providerId, { baseUrl });
-		}
 		const customBaseUrls = Object.fromEntries(
 			(await modelConfig.customProviders()).map((entry) => [entry.id, entry.baseUrl]),
 		);
-		return new PiAgentFactory(
-			modelRuntime,
-			credentials,
-			modelConfig,
-			baseUrlOverrides,
-			customBaseUrls,
-			options,
-			agentDir,
-		);
+		return new PiAgentFactory(modelRuntime, credentials, modelConfig, customBaseUrls, options, agentDir);
 	}
 
 	/**
@@ -283,10 +256,9 @@ export class PiAgentFactory {
 	providers(): ProviderInfo[] {
 		return this.modelRuntime.getProviders().map((provider) => {
 			const status = this.modelRuntime.getProviderAuthStatus(provider.id);
-			const source =
-				status.label ?? (status.source === undefined ? undefined : AUTH_SOURCE_LABELS[status.source]);
+			// 只有 pi 给出具体来源（例如环境变量名）时才写出来；存在本机这类状态由状态点表达
+			const source = status.label;
 			const effective = provider.getModels()[0]?.baseUrl ?? this.customBaseUrls[provider.id];
-			const override = this.baseUrlOverrides[provider.id];
 			return {
 				id: provider.id,
 				name: provider.name,
@@ -295,7 +267,6 @@ export class PiAgentFactory {
 				...(source === undefined ? {} : { authSource: source }),
 				...(this.modelRuntime.isUsingSubscription(provider.id) ? { subscription: true } : {}),
 				...(effective === undefined ? {} : { baseUrl: effective }),
-				...(override === undefined ? {} : { baseUrlOverride: override }),
 			};
 		});
 	}
@@ -370,25 +341,6 @@ export class PiAgentFactory {
 		await this.credentials.delete(providerId);
 		await this.modelRuntime.removeRuntimeApiKey(providerId);
 		await this.modelRuntime.refresh({ allowNetwork: false });
-	}
-
-	/**
-	 * 设置某个提供方的接口地址。
-	 *
-	 * 空串恢复默认地址。地址写进 models.json，再注册到运行态，之后的请求立刻按新地址走；
-	 * 已经在跑的会话切换模型后同样生效。
-	 */
-	async setProviderBaseUrl(providerId: string, value: string): Promise<void> {
-		const applied = await this.modelConfig.setBaseUrl(providerId, value);
-		if (applied === undefined) {
-			delete this.baseUrlOverrides[providerId];
-			this.modelRuntime.unregisterProvider(providerId);
-			// 撤掉覆写之后模型目录要重新组合一次,否则读到的仍是旧地址
-			await this.modelRuntime.refresh({ allowNetwork: false });
-			return;
-		}
-		this.baseUrlOverrides[providerId] = applied;
-		this.modelRuntime.registerProvider(providerId, { baseUrl: applied });
 	}
 
 	/**

@@ -43,7 +43,6 @@ type SystemMethod =
 	| "deleteCredential"
 	| "diagnostics"
 	| "testModel"
-	| "setProviderBaseUrl"
 	| "listCustomProviders"
 	| "saveCustomProvider"
 	| "removeCustomProvider";
@@ -203,11 +202,6 @@ export const systemHandlers: Pick<RequestHandlerMap, SystemMethod> = {
 
 	testModel: async (params, context): Promise<RequestResults["testModel"]> =>
 		await context.factory.testModel({ provider: params.provider, id: params.id }),
-
-	setProviderBaseUrl: async (params, context): Promise<RequestResults["setProviderBaseUrl"]> => {
-		await context.factory.setProviderBaseUrl(params.providerId, params.baseUrl);
-		return { providers: context.factory.providers() };
-	},
 
 	listCustomProviders: async (_params, context): Promise<RequestResults["listCustomProviders"]> => ({
 		providers: customProviderList(await context.factory.customProviders()),

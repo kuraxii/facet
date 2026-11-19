@@ -134,7 +134,6 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 					await host.refreshCatalog();
 					return providers;
 				}),
-			setProviderBaseUrl: (providerId, baseUrl) => client.setProviderBaseUrl(providerId, baseUrl),
 			listCustomProviders: () => client.listCustomProviders(),
 			saveCustomProvider: (provider) =>
 				client.saveCustomProvider(provider).then(async (providers) => {

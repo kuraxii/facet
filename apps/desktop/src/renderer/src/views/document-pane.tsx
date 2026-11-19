@@ -15,7 +15,7 @@ import type { HostConnection } from "../hooks/useHostConnection.ts";
 import type { MainTabs } from "../hooks/useMainTabs.ts";
 import type { SessionLifecycle } from "../hooks/useSessionLifecycle.ts";
 import type { TerminalPanel } from "../hooks/useTerminalPanel.ts";
-import { client, terminalClient } from "../runtime.ts";
+import { useHostClient, useHostTerminalClient } from "../host-context.tsx";
 
 export interface DocumentPaneProps {
 	/** 连接域 */
@@ -40,6 +40,8 @@ export interface DocumentPaneProps {
 export function DocumentPane(props: DocumentPaneProps): ReactNode {
 	const { host, session, tabs, terminal, sessionView, emptyCreateCwd, errorBar, chat } = props;
 	const { t } = useI18n();
+	const client = useHostClient();
+	const terminalClient = useHostTerminalClient();
 	const activeTab: MainTab | undefined = tabs.tabs.find((item) => item.id === tabs.activeTabId);
 	const fileTab = activeTab?.kind === "file" ? activeTab : undefined;
 	const commitTab = activeTab?.kind === "commit" ? activeTab : undefined;

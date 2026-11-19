@@ -339,6 +339,10 @@ export class SshHosts {
 				...(user === undefined ? {} : { username: user }),
 				...login,
 				readyTimeout: this.options.connectTimeoutMs ?? 10_000,
+				// 连上之后可能长时间挂在后台（切到别的主机时这条通道仍然活着），
+				// 空转的 SSH 会被 NAT 与防火墙静默回收；定期发保活包让路径维持住
+				keepaliveInterval: 15_000,
+				keepaliveCountMax: 3,
 			};
 		};
 

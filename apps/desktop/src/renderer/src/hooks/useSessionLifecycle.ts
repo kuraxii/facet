@@ -1,13 +1,14 @@
 /**
  * 会话与项目的生命周期。
  *
- * 这一层依赖连接结果（`connectEpoch` 变化就整份重取），不反向通知连接层；换主机时自己
- * 把选中状态清掉，所以连接层不需要知道会话的存在。
+ * 这一层依赖连接结果（`connectEpoch` 变化就整份重取），不反向通知连接层。主机之间靠
+ * 工作区整份挂载隔离：换一台主机时组件跟着换，这里没有「换主机」这个概念。
  */
 import type { SessionClient } from "@facet/client-core";
 import type { ProjectInfo, SessionStatus, SessionSummary } from "@facet/protocol";
 import { samePath } from "@facet/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { HostWorkspaceSnapshot } from "../workspace-state.ts";
 
 /** 打开类操作失败时的提示，带重试入口。 */
 export interface SessionErrorNotice {
@@ -93,10 +94,15 @@ function mergeProject(list: readonly ProjectInfo[], project: ProjectInfo): Proje
 	return next;
 }
 
-/** 启动时打开的会话：启动目录里最近更新的一条，没有则取全部会话里最近的一条。 */
+/**
+ * 启动时打开的会话：启动目录里最近更新的一条，没有则取全部会话里最近的一条。
+ *
+ * 远端主机没有「启动目录」这个概念（那是本机进程被拉起来时所在的目录），给空即按全部
+ * 会话里最近的一条挑。
+ */
 export function pickStartupSession(
 	sessions: readonly SessionSummary[],
-	projectDir: string,
+	projectDir: string | undefined,
 ): SessionSummary | undefined {
 	let scoped: SessionSummary | undefined;
 	let newest: SessionSummary | undefined;
@@ -104,7 +110,7 @@ export function pickStartupSession(
 		if (newest === undefined || session.modified > newest.modified) {
 			newest = session;
 		}
-		if (!samePath(session.cwd, projectDir)) {
+		if (projectDir === undefined || !samePath(session.cwd, projectDir)) {
 			continue;
 		}
 		if (scoped === undefined || session.modified > scoped.modified) {
@@ -114,15 +120,34 @@ export function pickStartupSession(
 	return scoped ?? newest;
 }
 
+/**
+ * 新建会话默认落在哪个项目目录。
+ *
+ * 本机优先用启动目录（桌面被拉起来时所在的仓库），那台主机上没有这个项目时退回清单里的
+ * 第一个；一个项目都没有时为空，界面据此不给「新建会话」的入口。
+ */
+function pickProjectCwd(
+	projects: readonly ProjectInfo[] | undefined,
+	projectDir: string | undefined,
+): string | undefined {
+	if (projectDir !== undefined) {
+		const matched = projects?.find((project) => samePath(project.cwd, projectDir));
+		if (matched !== undefined) {
+			return matched.cwd;
+		}
+	}
+	return projects?.[0]?.cwd;
+}
+
 export interface SessionLifecycleOptions {
 	/** 会话客户端 */
 	client: SessionClient;
 	/** 第几次连接就绪；变化即整份重取 */
 	connectEpoch: number;
-	/** 换主机的次数；变一次就把选中状态清掉 */
-	hostEpoch: number;
-	/** 启动目录，用来挑启动时打开的会话 */
-	projectDir: string;
+	/** 启动目录，用来挑启动时打开的会话；远端主机没有这一项 */
+	projectDir: string | undefined;
+	/** 这台主机上一次离开时的选中会话与落地目录；切回来时从这里接着显示 */
+	snapshot?: HostWorkspaceSnapshot;
 	/** 打开会话之后的收尾，例如把标签摆到主区域 */
 	onSessionOpened?: (file: string) => void;
 	/** 删掉会话之后的收尾，例如清掉相关标签与滚动位置 */
@@ -150,8 +175,8 @@ export interface SessionLifecycle {
 	trustPrompt: TrustPrompt | undefined;
 	/** 拉一次会话清单 */
 	refreshSessions: () => Promise<readonly SessionSummary[] | undefined>;
-	/** 拉一次项目清单 */
-	refreshProjects: () => Promise<void>;
+	/** 拉一次项目清单，返回这一份 */
+	refreshProjects: () => Promise<readonly ProjectInfo[] | undefined>;
 	/** 打开一个会话；已经缓存过的直接切过去 */
 	openSession: (path: string, knownCwd?: string) => void;
 	/** 新建会话 */
@@ -199,14 +224,31 @@ export interface SessionLifecycle {
 }
 
 export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLifecycle {
-	const { client, connectEpoch, hostEpoch, projectDir, onSessionOpened, onSessionRemoved } = options;
-	const [sessions, setSessions] = useState<readonly SessionSummary[]>([]);
-	const [statuses, setStatuses] = useState<ReadonlyMap<string, SessionStatus>>(() => new Map());
-	const [activeFile, setActiveFile] = useState<string | undefined>(undefined);
+	const { client, connectEpoch, projectDir, snapshot, onSessionOpened, onSessionRemoved } = options;
+	/** 会话清单与状态在客户端的 store 里已经是主机的那一份，挂上来先照它显示 */
+	const [sessions, setSessions] = useState<readonly SessionSummary[]>(() =>
+		client.store.sessionList().map((entry) => entry.summary),
+	);
+	const [statuses, setStatuses] = useState<ReadonlyMap<string, SessionStatus>>(() => statusesOf(client));
+	const [activeFile, setActiveFile] = useState<string | undefined>(
+		() => snapshot?.activeSessionFile ?? client.current?.snapshot.file,
+	);
 	const [projects, setProjects] = useState<readonly ProjectInfo[]>([]);
 	const [isProjectsStale, setIsProjectsStale] = useState(false);
 	const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
-	const [createCwd, setCreateCwd] = useState(projectDir);
+	/** 新建会话落在哪个目录：没有项目时为空，界面据此不给「新建会话」的入口 */
+	const [createCwd, setCreateCwd] = useState<string>(() => snapshot?.createCwd ?? projectDir ?? "");
+	/** 新建目录是否已经由用户或项目清单定下来，定下来之后不再自动改 */
+	const createCwdChosen = useRef(createCwd.length > 0);
+
+	// 选中会话与落地目录都只与这台主机有关：变化时写回快照，切回来接着用
+	useEffect(() => {
+		if (snapshot === undefined) {
+			return;
+		}
+		snapshot.activeSessionFile = activeFile;
+		snapshot.createCwd = createCwd.length > 0 ? createCwd : undefined;
+	}, [snapshot, activeFile, createCwd]);
 	const [sessionError, setSessionError] = useState<SessionErrorNotice | undefined>(undefined);
 	const [trustPrompt, setTrustPrompt] = useState<TrustPrompt | undefined>(undefined);
 	const listSeq = useRef(0);
@@ -255,29 +297,23 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 	);
 
 	/** 拉一次项目清单。失败只标脏，已经显示的项目保持原样。 */
-	const refreshProjects = useCallback(async (): Promise<void> => {
+	const refreshProjects = useCallback(async (): Promise<readonly ProjectInfo[] | undefined> => {
 		try {
-			setProjects(await client.listProjects());
+			const list = await client.listProjects();
+			setProjects(list);
 			setIsProjectsStale(false);
+			return list;
 		} catch {
 			setIsProjectsStale(true);
+			return undefined;
 		}
 	}, [client]);
-
-	// 换主机：会话、项目与选中状态都属于上一台主机
-	// biome-ignore lint/correctness/useExhaustiveDependencies: 只在换主机时清空，状态设置函数不必列入
-	useEffect(() => {
-		setSessions([]);
-		setProjects([]);
-		setActiveFile(undefined);
-		setIsProjectsStale(false);
-		setSessionError(undefined);
-	}, [hostEpoch]);
 
 	/**
 	 * 连接就绪：重取项目与会话；启动那一次再挑一个会话打开。
 	 *
-	 * 重连之后不自动开新会话，屏幕上那个由链路续订。
+	 * 重连之后不自动开新会话，屏幕上那个由链路续订。切回一台在后台连着的主机时，会话
+	 * 客户端里那个会话还开着，这里不再去挑「启动会话」把它顶掉。
 	 */
 	const openSessionRef = useRef<(path: string, knownCwd?: string) => void>(() => undefined);
 	useEffect(() => {
@@ -286,12 +322,28 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 		}
 		let cancelled = false;
 		void (async () => {
-			await refreshProjects();
+			const list = await refreshProjects();
 			const pool = (await refreshSessions()) ?? [];
-			if (cancelled || started.current) {
+			if (cancelled) {
+				return;
+			}
+			// 还没有选过落地目录时按项目清单定一个：远端主机没有本机启动目录可退
+			if (!createCwdChosen.current) {
+				const first = pickProjectCwd(list, projectDir);
+				if (first !== undefined) {
+					createCwdChosen.current = true;
+					setCreateCwd(first);
+				}
+			}
+			if (started.current) {
 				return;
 			}
 			started.current = true;
+			// 已经有开着的会话（切回保活主机）：屏幕上的那个由它自己继续
+			if (client.current !== undefined) {
+				setActiveFile(client.current.snapshot.file);
+				return;
+			}
 			const newest = pickStartupSession(pool, projectDir);
 			if (newest !== undefined) {
 				openSessionRef.current(newest.path, newest.cwd);
@@ -300,7 +352,7 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 		return () => {
 			cancelled = true;
 		};
-	}, [connectEpoch, projectDir, refreshProjects, refreshSessions]);
+	}, [client, connectEpoch, projectDir, refreshProjects, refreshSessions]);
 
 	/**
 	 * 跑一次会话切换类操作。
@@ -461,10 +513,18 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 	const createSessionRef = useRef(createSession);
 	createSessionRef.current = createSession;
 	const selectSession = useCallback((path: string) => void openSessionRef.current(path), []);
-	const createSessionAt = useCallback((cwd: string) => {
+	/** 记下用户选的落地目录：定下来之后不再被项目清单自动改掉 */
+	const chooseCreateCwd = useCallback((cwd: string) => {
+		createCwdChosen.current = true;
 		setCreateCwd(cwd);
-		void createSessionRef.current(cwd);
 	}, []);
+	const createSessionAt = useCallback(
+		(cwd: string) => {
+			chooseCreateCwd(cwd);
+			void createSessionRef.current(cwd);
+		},
+		[chooseCreateCwd],
+	);
 
 	/** 会话改名。改的是当前会话时名字会随会话状态一起推过来，列表在这里重拉一次。 */
 	const renameSession = useCallback(
@@ -512,11 +572,11 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 				...(input.name === undefined ? {} : { name: input.name }),
 			});
 			setProjects((current) => mergeProject(current, created));
-			setCreateCwd(created.cwd);
+			chooseCreateCwd(created.cwd);
 			await refreshProjects();
 			await refreshSessions();
 		},
-		[client, refreshProjects, refreshSessions],
+		[chooseCreateCwd, client, refreshProjects, refreshSessions],
 	);
 
 	/** 改名结果直接替换列表里那一条，名字在过滤器与新建提示里同步变化。 */
@@ -589,8 +649,8 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 		cancelTrust,
 		closeProjectDialog,
 		openProjectDialog,
-		setCreateCwd,
 		setSessionError,
+		setCreateCwd: chooseCreateCwd,
 		withTrust,
 		runSessionAction,
 		resetActive,

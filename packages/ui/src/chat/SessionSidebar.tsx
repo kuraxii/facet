@@ -495,11 +495,20 @@ export const SessionSidebar = memo(function SessionSidebar({
 				type="button"
 				className="sb-new"
 				onClick={() => {
+					// 没有可用的项目目录时不给「新建会话」：这台主机上还没有目录可选，
+					// 直接把添加项目摆出来，免得把空路径交给主机
+					if (newSessionCwd.length === 0) {
+						onAddProject();
+						onNavigate?.();
+						return;
+					}
 					onCreate(newSessionCwd);
 					onNavigate?.();
 				}}
-				disabled={!canCreate || newSessionCwd.length === 0}
-				{...tip.handlers(newSessionCwd.length === 0 ? undefined : t("sidebar.newIn", { cwd: newSessionCwd }))}
+				disabled={!canCreate}
+				{...tip.handlers(
+					newSessionCwd.length === 0 ? t("common.addProject") : t("sidebar.newIn", { cwd: newSessionCwd }),
+				)}
 			>
 				<Plus size={14} strokeWidth={1.5} />
 				{t("common.newSession")}

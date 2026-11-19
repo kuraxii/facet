@@ -20,7 +20,7 @@ import type { Composer as ComposerState } from "../hooks/useComposer.ts";
 import type { HostConnection } from "../hooks/useHostConnection.ts";
 import type { SessionLifecycle } from "../hooks/useSessionLifecycle.ts";
 import type { Transcript } from "../hooks/useTranscript.ts";
-import { client } from "../runtime.ts";
+import { useHostClient } from "../host-context.tsx";
 
 export interface ChatAreaProps {
 	/** 连接域 */
@@ -72,6 +72,7 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 		copyText,
 	} = props;
 	const { t } = useI18n();
+	const client = useHostClient();
 	const providerAuth = host.catalog.auth;
 	return (
 		<>

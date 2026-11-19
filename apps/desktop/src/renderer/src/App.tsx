@@ -1,19 +1,19 @@
-import { chatActivity } from "@facet/client-core";
+/**
+ * 界面外壳。
+ *
+ * 外壳之下只有「当前前台的那台主机」一份工作区：换主机就换一份运行时、整棵子树重挂，
+ * 界面里不会同时存在两台主机的节点。后台连着的主机由运行时自己维持，不占 DOM。
+ */
 import type { LanguageSetting } from "@facet/i18n";
-import { I18nProvider, sessionTabId, terminalTabId } from "@facet/ui";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { useComposer } from "./hooks/useComposer.ts";
+import { I18nProvider } from "@facet/ui";
+import { useCallback, useEffect, useState } from "react";
+import { bridge } from "./bridge.ts";
 import { useHostConnection } from "./hooks/useHostConnection.ts";
-import { useMainTabs } from "./hooks/useMainTabs.ts";
-import { useNoticeBridge } from "./hooks/useNoticeBridge.ts";
-import { useSessionLifecycle } from "./hooks/useSessionLifecycle.ts";
-import { useTerminalPanel } from "./hooks/useTerminalPanel.ts";
-import { useReadMarker, useTranscript } from "./hooks/useTranscript.ts";
-import { useWorkspaceShell } from "./hooks/useWorkspaceShell.ts";
-import { bridge, client, terminalClient } from "./runtime.ts";
-import { ToastProvider, useToast } from "./toast-provider.tsx";
+import { useHosts } from "./hooks/useHosts.ts";
+import { HostRuntimeProvider } from "./host-context.tsx";
+import { ToastProvider } from "./toast-provider.tsx";
 import { BootScreen } from "./views/boot-screen.tsx";
-import { Workbench } from "./views/workbench.tsx";
+import { HostWorkspace } from "./views/host-workspace.tsx";
 
 /** 界面外壳参数；语言状态在外层维护，切换语言不重建 AppView 的无关心状态。 */
 interface AppViewProps {
@@ -46,181 +46,8 @@ export function App(): React.JSX.Element {
 }
 
 function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
-	const toast = useToast();
-	const version = useSyncExternalStore(
-		(onChange) => client.store.subscribe(onChange),
-		() => client.store.getVersion(),
-	);
-	void version;
-
-	/** 会话域要在连接成功之后才建好；续订回不来时由连接域叫它退回没有会话的状态 */
-	const sessionDomain = useRef<{ resetActive: () => void } | null>(null);
-	const onSessionLost = useCallback(() => sessionDomain.current?.resetActive(), []);
-	const host = useHostConnection({ onSessionLost });
-
-	/**
-	 * 打开会话、删除会话的收尾都落在标签与滚动位置上，那两处在这之后才建好，
-	 * 这里经 ref 转一层，会话域拿到的始终是同一个回调。
-	 */
-	const focusSessionTab = useRef<(file: string) => void>(() => undefined);
-	const forgetSession = useRef<(path: string) => void>(() => undefined);
-	const onSessionOpened = useCallback((file: string) => focusSessionTab.current(file), []);
-	const onSessionRemoved = useCallback((path: string) => forgetSession.current(path), []);
-
-	const session = useSessionLifecycle({
-		client,
-		connectEpoch: host.connectEpoch,
-		hostEpoch: host.hostEpoch,
-		projectDir: bridge.projectDir,
-		onSessionOpened,
-		onSessionRemoved,
-	});
-	sessionDomain.current = session;
-
-	const sessionView = client.sessionView();
-	const chat = client.chatView();
-	/** 当前会话的标识，图省事时用通道名兜底 */
-	const openedSessionId = client.current?.snapshot.id;
-	// 对话此刻的状态由会话状态得出，界面不自己拼布尔量
-	const activity = chatActivity(sessionView);
-	/** 会话所在的目录，git 命令都在它下面跑 */
-	const sessionCwd = sessionView?.state.cwd;
-	/** 终端能力：主机没装 pty 后端时不给入口 */
-	const canUseTerminal = host.host?.capabilities.includes("terminal") ?? false;
-	/** 新建终端的启动目录：跟着当前会话，没有会话时用第一个项目 */
-	const terminalCwd = sessionCwd ?? session.projects[0]?.cwd;
-
-	const shell = useWorkspaceShell({ settings: host.settings });
-
-	const terminal = useTerminalPanel({
-		client: terminalClient,
-		canUseTerminal,
-		cwd: terminalCwd,
-		connectEpoch: host.connectEpoch,
-		showToast: toast.show,
-	});
-
-	const tabs = useMainTabs({
-		client,
-		session: sessionView,
-		openedSessionId,
-		terminals: terminal.terminals,
-		closedTerminalIds: terminal.closedTerminalIds,
-		hostEpoch: host.hostEpoch,
-		isPanelOnChanges: shell.panel.open && shell.panel.tab === "changes",
-		onOpenSession: session.openSession,
-	});
-
-	// 主机侧通知与插件的 ctx.ui.notify 都走轻提示：后台会话的提示也能被看见
-	useNoticeBridge({ chat, session: sessionView, sessionId: openedSessionId, show: toast.show });
-
-	const transcript = useTranscript({
-		client,
-		chat,
-		activeFile: session.activeFile,
-		openedSessionId,
-		hostEpoch: host.hostEpoch,
-	});
-
-	// 新会话摆到主区域；删掉会话时连标签与滚动位置一起收掉
-	focusSessionTab.current = (file: string) => {
-		const opened = client.current;
-		if (opened === undefined) {
-			return;
-		}
-		tabs.focusTab({
-			id: sessionTabId(file, opened.snapshot.id),
-			kind: "session",
-			file,
-			sessionId: opened.snapshot.id,
-		});
-	};
-	forgetSession.current = (path: string) => {
-		tabs.removeSessionTabs(path);
-		transcript.forgetScroll(path);
-	};
-
-	const activeTab = tabs.tabs.find((item) => item.id === tabs.activeTabId);
-	/** 变更是否正在显示：右栏停在变更分页，或主区打开着变更文档 */
-	const isChangesVisible =
-		(shell.panel.open && shell.panel.tab === "changes") || activeTab?.kind === "changes";
-
-	useReadMarker({
-		client,
-		activeFile: session.activeFile,
-		activity,
-		refreshChanges: tabs.refreshChanges,
-		isChangesVisible,
-	});
-
-	const composer = useComposer({
-		client,
-		session: sessionView,
-		openedSessionId,
-		activeFile: session.activeFile,
-		activity,
-		host: host.host,
-		setSessionError: session.setSessionError,
-		withTrust: session.withTrust,
-		runSessionAction: session.runSessionAction,
-		refreshSessions: session.refreshSessions,
-	});
-
-	/** 开一个终端并把它的标签摆到主区域。 */
-	const openTerminal = useCallback(async () => {
-		const info = await terminal.openTerminal();
-		if (info !== undefined) {
-			tabs.focusTab({ id: terminalTabId(info.id), kind: "terminal", terminalId: info.id });
-		}
-	}, [tabs, terminal]);
-
-	/** 关掉一个标签；终端标签还要一并结束进程。 */
-	const closeTab = useCallback(
-		(id: string) => {
-			const terminalId = tabs.closeTab(id);
-			if (terminalId !== undefined) {
-				void terminal.closeTerminal(terminalId);
-			}
-		},
-		[tabs, terminal],
-	);
-
-	const closeTabs = useCallback(
-		(ids: readonly string[]) => tabs.closeTabs(ids, (terminalId) => void terminal.closeTerminal(terminalId)),
-		[tabs, terminal],
-	);
-
-	/** 标签菜单里的复制动作；成功用复制到的内容回执，失败给出剪贴板自己的说法。 */
-	const copyText = useCallback(
-		(text: string): void => {
-			void navigator.clipboard.writeText(text).then(
-				() => toast.show({ level: "success", message: text }),
-				(error: unknown) =>
-					toast.show({ level: "error", message: error instanceof Error ? error.message : String(error) }),
-			);
-		},
-		[toast],
-	);
-
-	// 快捷键 Ctrl + ` 回到终端标签；没有终端时在当前目录新建一个
-	const tabList = tabs.tabs;
-	const focusTab = tabs.focusTab;
-	useEffect(() => {
-		const onKeyDown = (event: KeyboardEvent): void => {
-			if (event.key !== "`" || !(event.ctrlKey || event.metaKey)) {
-				return;
-			}
-			event.preventDefault();
-			const tab = tabList.find((item) => item.kind === "terminal");
-			if (tab !== undefined) {
-				focusTab(tab);
-				return;
-			}
-			void openTerminal();
-		};
-		window.addEventListener("keydown", onKeyDown);
-		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [focusTab, openTerminal, tabList]);
+	const hosts = useHosts();
+	const host = useHostConnection({ runtime: hosts.runtime, hosts });
 
 	// 连不上与连接中各占一屏，主工作区只在可用之后渲染
 	if (host.phase !== "ready") {
@@ -228,21 +55,13 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 	}
 
 	return (
-		<Workbench
-			host={host}
-			session={session}
-			shell={shell}
-			tabs={tabs}
-			terminal={terminal}
-			composer={composer}
-			transcript={transcript}
-			languageSetting={languageSetting}
-			onLanguageChange={onLanguageChange}
-			openedSessionId={openedSessionId}
-			closeTab={closeTab}
-			closeTabs={closeTabs}
-			copyText={copyText}
-			openTerminal={openTerminal}
-		/>
+		<HostRuntimeProvider runtime={hosts.runtime}>
+			<HostWorkspace
+				key={hosts.activeEndpoint}
+				host={host}
+				languageSetting={languageSetting}
+				onLanguageChange={onLanguageChange}
+			/>
+		</HostRuntimeProvider>
 	);
 }

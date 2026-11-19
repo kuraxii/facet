@@ -8,8 +8,8 @@ import type { HostHandshake, SessionClient, SessionView } from "@facet/client-co
 import type { SlashCommand, ThinkingLevel } from "@facet/protocol";
 import { parseCommand, useI18n } from "@facet/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { bridge } from "../bridge.ts";
 import { blobFromBase64, encodeImage, IMAGE_MAX_BYTES, IMAGE_MIME_TYPES } from "../image-encode.ts";
-import { bridge } from "../runtime.ts";
 import type { SessionErrorNotice } from "./useSessionLifecycle.ts";
 
 /** 草稿在本地保存的键 */

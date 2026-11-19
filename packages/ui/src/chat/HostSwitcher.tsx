@@ -5,7 +5,7 @@
  * 每行显示状态点、名字与地址，当前连着的那台高亮；清单底部是「添加主机」，展开一个填名字与
  * 地址的小表单。
  */
-import { Check, Pencil, Plus, Server, Settings2, X } from "lucide-react";
+import { Check, Pencil, Plus, Power, Server, Settings2, X } from "lucide-react";
 import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { isComposingKey } from "../keys.ts";
@@ -45,10 +45,14 @@ export interface HostSwitcherProps {
 	isOnline: boolean;
 	/** 是否正在自动重连 */
 	isReconnecting: boolean;
+	/** 运行时还活着的端点，含后台连着的；这些行才给「断开」 */
+	connectedEndpoints: readonly string[];
 	/** 连到某个端点 */
 	onConnect: (endpoint: string) => void;
 	/** 添加一台主机；端点重复时返回原因 */
 	onAddHost: (name: string, endpoint: string) => string | undefined;
+	/** 断掉一台主机的连接，保留清单里的条目 */
+	onDisconnect: (endpoint: string) => void;
 	/** 删除一台远程主机 */
 	onRemoveHost: (id: string) => void;
 	/** 改一台远程主机的名字 */
@@ -62,7 +66,9 @@ export function HostSwitcher({
 	hosts,
 	isOnline,
 	isReconnecting,
+	connectedEndpoints,
 	onConnect,
+	onDisconnect,
 	onAddHost,
 	onRemoveHost,
 	onRenameHost,
@@ -199,6 +205,17 @@ export function HostSwitcher({
 												: endpointLabel(host.endpoint)}
 										</span>
 									</button>
+									{connectedEndpoints.includes(host.endpoint) ? (
+										<button
+											type="button"
+											className="host-remove"
+											aria-label={t("host.disconnectLabel", { name: host.name })}
+											{...tip.handlers(t("host.disconnect"))}
+											onClick={() => onDisconnect(host.endpoint)}
+										>
+											<Power size={12} strokeWidth={1.5} />
+										</button>
+									) : null}
 									<button
 										type="button"
 										className="host-remove"

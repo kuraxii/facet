@@ -40,6 +40,9 @@ type SystemMethod =
 	| "setAgentDefaults"
 	| "saveCredential"
 	| "deleteCredential"
+	| "providerLoginStart"
+	| "providerLoginRespond"
+	| "providerLoginCancel"
 	| "diagnostics"
 	| "testModel"
 	| "listCustomProviders"
@@ -175,6 +178,21 @@ export const systemHandlers: Pick<RequestHandlerMap, SystemMethod> = {
 	deleteCredential: async (params, context): Promise<RequestResults["deleteCredential"]> => {
 		await context.factory.deleteCredential(params.providerId);
 		return { providers: context.factory.providers() };
+	},
+
+	// 登录的进展从模型通道推给所有端，这里只把这一次登录开起来
+	providerLoginStart: (params, context): RequestResults["providerLoginStart"] => {
+		return context.factory.startProviderLogin(params.providerId, params.authType ?? "api_key");
+	},
+
+	providerLoginRespond: (params, context): RequestResults["providerLoginRespond"] => {
+		return {
+			accepted: context.factory.respondProviderLogin(params.loginId, params.promptId, params.value),
+		};
+	},
+
+	providerLoginCancel: (params, context): RequestResults["providerLoginCancel"] => {
+		return { cancelled: context.factory.cancelProviderLogin(params.loginId) };
 	},
 
 	diagnostics: async (_params, context): Promise<RequestResults["diagnostics"]> => {

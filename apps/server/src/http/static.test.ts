@@ -13,6 +13,7 @@ import { WebSocket } from "ws";
 import { AuditLog } from "../audit.ts";
 import type { ServerConfig } from "../config.ts";
 import { startEndpoint } from "../endpoint.ts";
+import { ModelsChannel } from "../models-channel.ts";
 import { ProjectStore } from "../project-store.ts";
 import { SessionHub } from "../session-hub.ts";
 import { SessionsChannel } from "../sessions-channel.ts";
@@ -136,6 +137,7 @@ describe("WebSocket 接入", () => {
 			settingsStore: await SettingsStore.open({ file: join(dir, "settings.json") }),
 			hostId: "h",
 			sessions: new SessionsChannel(32),
+			modelLog: new ModelsChannel(32),
 			audit: new AuditLog(join(dir, "audit.log")),
 		});
 	});

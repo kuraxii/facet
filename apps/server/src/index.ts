@@ -5,11 +5,12 @@
  */
 import { join } from "node:path";
 import { PiAgentFactory, projectIdOf } from "@facet/agent";
-import { sessionsChannelFor } from "@facet/protocol";
+import { modelsChannelFor, sessionsChannelFor } from "@facet/protocol";
 import { loadServerConfig, type ServerConfig } from "./config.ts";
 import { type EndpointHandle, startEndpoint } from "./endpoint.ts";
 import { type HostIdentity, loadOrCreateHostId } from "./host-identity.ts";
 import { debugLog, setDebugLog } from "./log.ts";
+import { ModelsChannel } from "./models-channel.ts";
 import { ProjectCatalog } from "./project-catalog.ts";
 import { ProjectExistsError, ProjectStore } from "./project-store.ts";
 import { ChildPtyBackend } from "./pty-server.ts";
@@ -37,6 +38,8 @@ export interface ServerHandle extends EndpointHandle {
 	readonly settingsStore: SettingsStore;
 	/** 会话清单通道，所有端订阅同一条 */
 	readonly sessions: SessionsChannel;
+	/** 模型通道，所有端订阅同一条：提供方登录的进展从这里推 */
+	readonly modelLog: ModelsChannel;
 	/** 终端登记与终端通道 */
 	readonly terminals: TerminalService;
 	/** 关闭端点并释放全部会话与运行时 */
@@ -59,6 +62,11 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 	const hostIdentity = await loadOrCreateHostId({ dataDir: config.dataDir });
 	const hostId = hostIdentity.id;
 	const sessions = new SessionsChannel(config.replayLimit);
+	const modelLog = new ModelsChannel(config.replayLimit);
+	// 登录进展从工厂流向模型通道，所有端看到同一份顺序；回放缓冲让断线重连补齐
+	const stopProviderLogin = factory.onProviderLogin((update) => {
+		modelLog.publishLogin(modelsChannelFor(hostId), update.loginId, update.providerId, update.event);
+	});
 	const projectStore = await ProjectStore.open({ file: join(config.dataDir, "projects.json") });
 	/** 会话目录首次出现时补进项目清单；已有项目保留用户改过的名字。 */
 	const ensureProject = async (cwd: string): Promise<void> => {
@@ -164,6 +172,7 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 		hostId,
 		hostSource: hostIdentity.source,
 		sessions,
+		modelLog,
 		terminals,
 		onSessionsListed: fillSessionNames,
 	});
@@ -182,9 +191,11 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 		projectStore,
 		settingsStore,
 		sessions,
+		modelLog,
 		terminals,
 		close: async () => {
 			clearInterval(evictionTimer);
+			stopProviderLogin();
 			sessionIndex?.stop();
 			sessionWatch.stop();
 			await endpoint.close();

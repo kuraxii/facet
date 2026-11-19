@@ -4,11 +4,12 @@
  * 连接、主机上下文与错误映射都放这里：网关与各领域处理器只依赖这些类型，不依赖端点的
  * 承载方式（WebSocket / 字节流 / HTTP 升级）。
  */
-import { InvalidProviderError, type PiAgentFactory } from "@facet/agent";
+import { InvalidProviderError, type PiAgentFactory, ProviderLoginBusyError } from "@facet/agent";
 import type { Channel, ClientEntry, ClientRole, ErrorCode, OutboundFrame } from "@facet/protocol";
 import type { AuditLog } from "../audit.ts";
 import type { ServerConfig } from "../config.ts";
 import type { HostSource } from "../host-identity.ts";
+import type { ModelsChannel } from "../models-channel.ts";
 import { ProjectExistsError, ProjectNotFoundError, type ProjectStore } from "../project-store.ts";
 import { RevealFailedError } from "../reveal.ts";
 import {
@@ -69,6 +70,8 @@ export interface RpcContext {
 	readonly connections: Set<Connection>;
 	/** 会话清单通道，所有端订阅同一条 */
 	readonly sessions: SessionsChannel;
+	/** 模型通道，所有端订阅同一条：提供方登录的进展从这里推 */
+	readonly modelLog: ModelsChannel;
 	/** 终端登记与终端通道 */
 	readonly terminals: TerminalService;
 	/** 远程操作审计 */
@@ -98,7 +101,7 @@ export function toProtocolError(error: unknown): { code: ErrorCode; message: str
 	if (error instanceof ChannelNotFoundError) {
 		return { code: "unknown_channel", message: error.message };
 	}
-	if (error instanceof InvalidProviderError) {
+	if (error instanceof InvalidProviderError || error instanceof ProviderLoginBusyError) {
 		return { code: "rejected", message: error.message };
 	}
 	if (

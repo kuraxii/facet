@@ -680,6 +680,63 @@ function buildRequestDeleteCredential(): (value: unknown) => boolean {
 const checkRequestDeleteCredential = buildRequestDeleteCredential();
 
 /**
+ * providerLoginStart 的参数判断。
+ *
+ * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
+ */
+function buildRequestProviderLoginStart(): (value: unknown) => boolean {
+	// @ts-ignore
+	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && ("providerId" in value && (typeof value.providerId === "string" && (value.authType === undefined || (!("authType" in value) || ((typeof value.authType === "string" && value.authType === "oauth") || (typeof value.authType === "string" && value.authType === "api_key"))))))));
+	return (value: unknown): boolean => {
+		if (!check_0(value)) return false;
+		const source = value as Record<string, unknown>;
+		return (
+			typeof source.providerId === "string" && source.providerId.length > 0
+		);
+	};
+}
+
+const checkRequestProviderLoginStart = buildRequestProviderLoginStart();
+
+/**
+ * providerLoginRespond 的参数判断。
+ *
+ * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
+ */
+function buildRequestProviderLoginRespond(): (value: unknown) => boolean {
+	// @ts-ignore
+	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && ((("loginId" in value && "promptId" in value) && "value" in value) && ((typeof value.loginId === "string" && typeof value.promptId === "string") && (typeof value.value === "string" || value.value === null)))));
+	return (value: unknown): boolean => {
+		if (!check_0(value)) return false;
+		const source = value as Record<string, unknown>;
+		return (
+			typeof source.loginId === "string" && source.loginId.length > 0
+		);
+	};
+}
+
+const checkRequestProviderLoginRespond = buildRequestProviderLoginRespond();
+
+/**
+ * providerLoginCancel 的参数判断。
+ *
+ * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
+ */
+function buildRequestProviderLoginCancel(): (value: unknown) => boolean {
+	// @ts-ignore
+	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && ("loginId" in value && typeof value.loginId === "string")));
+	return (value: unknown): boolean => {
+		if (!check_0(value)) return false;
+		const source = value as Record<string, unknown>;
+		return (
+			typeof source.loginId === "string" && source.loginId.length > 0
+		);
+	};
+}
+
+const checkRequestProviderLoginCancel = buildRequestProviderLoginCancel();
+
+/**
  * diagnostics 的参数判断。
  *
  * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
@@ -1044,6 +1101,9 @@ export const REQUEST_CONTRACTS: Readonly<Record<string, RequestContract | undefi
 	"setAgentDefaults": { auth: "admin", check: checkRequestSetAgentDefaults },
 	"saveCredential": { auth: "admin", check: checkRequestSaveCredential },
 	"deleteCredential": { auth: "admin", check: checkRequestDeleteCredential },
+	"providerLoginStart": { auth: "admin", check: checkRequestProviderLoginStart },
+	"providerLoginRespond": { auth: "admin", check: checkRequestProviderLoginRespond },
+	"providerLoginCancel": { auth: "admin", check: checkRequestProviderLoginCancel },
 	"diagnostics": { auth: "admin", check: checkRequestDiagnostics },
 	"testModel": { auth: "admin", check: checkRequestTestModel },
 	"listCustomProviders": { auth: "public", check: checkRequestListCustomProviders },

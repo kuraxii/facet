@@ -79,7 +79,9 @@ flowchart BT
 ### 4.3 通道定序与增量订阅（`apps/server`）
 
 - **统一缓冲与原子订阅顺序**：所有定序通道复用泛型 `EventLog<T>` 与无状态辅助函数 `replayAndSubscribe`。带 `sinceSeq` 重连续订时严格保持「`replay` 取历史快照 → `sinks.add` 注册订阅者 → 同步发送补发帧」的顺序，避免同步重入触发新发布时漏帧。
-- **生命周期分开**：主机级单例通道（`sessions-channel`）在端点断开时只清订阅者、保留 `lastSeq`；会话通道（`session-hub`）按引用计数（`holders`）空闲回收；终端通道（`terminals`）独立维护水印背压（`ack`），并在 PTY 销毁时释放。三者不合并成带钩子的通用容器。
+- **生命周期分开**：主机级单例通道（`sessions-channel`、`models-channel`）在端点断开时只清订阅者、
+  保留 `lastSeq`；会话通道（`session-hub`）按引用计数（`holders`）空闲回收；终端通道（`terminals`）
+  独立维护水印背压（`ack`），并在 PTY 销毁时释放。它们不合并成带钩子的通用容器。
 
 ### 4.4 客户端投影与重连（`packages/client-core` 与 `apps/desktop`）
 

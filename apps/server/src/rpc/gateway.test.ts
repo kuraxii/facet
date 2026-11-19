@@ -55,6 +55,7 @@ function makeContext(patch: Record<string, unknown> = {}): RpcContext {
 		hostSource: "machine-id",
 		connections: new Set(),
 		sessions: {},
+		modelLog: {},
 		terminals: {},
 		audit: { record: () => {} },
 		...patch,
@@ -356,7 +357,7 @@ describe("派发去重", () => {
 
 describe("契约表", () => {
 	it("每个方法的权限档只在生成物里声明一次", () => {
-		expect(Object.keys(REQUEST_CONTRACTS)).toHaveLength(53);
+		expect(Object.keys(REQUEST_CONTRACTS)).toHaveLength(56);
 		expect(REQUEST_CONTRACTS.respondUi?.auth).toBe("write");
 		expect(REQUEST_CONTRACTS.saveCredential?.auth).toBe("admin");
 		expect(REQUEST_CONTRACTS.listSessions?.auth).toBe("public");
@@ -365,6 +366,10 @@ describe("契约表", () => {
 		expect(REQUEST_CONTRACTS.setAgentDefaults?.auth).toBe("admin");
 		// 从上游拉模型要带密钥出去，只给管理档
 		expect(REQUEST_CONTRACTS.fetchProviderModels?.auth).toBe("admin");
+		// 登录会写凭证，应答与取消同样只给管理档
+		expect(REQUEST_CONTRACTS.providerLoginStart?.auth).toBe("admin");
+		expect(REQUEST_CONTRACTS.providerLoginRespond?.auth).toBe("admin");
+		expect(REQUEST_CONTRACTS.providerLoginCancel?.auth).toBe("admin");
 	});
 
 	it("派发白名单只含客户端动作", () => {
@@ -379,6 +384,20 @@ describe("契约表", () => {
 	it("每个派发动作都要求非只读", () => {
 		const tiers = Object.values(DISPATCH_CONTRACTS).map((contract) => contract?.auth);
 		expect(tiers.every((tier) => tier === "write")).toBe(true);
+	});
+
+	it("模型通道只有一条，标识对不上的按未知通道拒绝", async () => {
+		const connection = makeConnection();
+		await expect(
+			handleRequest(makeContext(), connection, "subscribe", { channel: "models:/别的" }),
+		).rejects.toMatchObject({ code: "unknown_channel" });
+		// 标识对上时交给模型通道订阅，返回它的序号
+		const context = makeContext({
+			modelLog: { subscribe: () => ({ seq: 3, resync: false }) },
+		});
+		await expect(
+			handleRequest(context, connection, "subscribe", { channel: "models:/host-1" }),
+		).resolves.toEqual({ seq: 3, resync: false });
 	});
 
 	it("已移除的通道种类按未知通道拒绝", async () => {

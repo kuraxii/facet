@@ -6,12 +6,12 @@
  */
 
 /** 通道的种类。每种对应一类可独立定序、独立订阅的资源。 */
-export type ChannelKind = "session" | "chat" | "terminal" | "sessions";
+export type ChannelKind = "session" | "chat" | "terminal" | "sessions" | "models";
 
 /** 通道 URI,形如 `chat:/<sessionId>`。 */
 export type Channel = `${ChannelKind}:/${string}`;
 
-const CHANNEL_PATTERN = /^(session|chat|terminal|sessions):\/(.+)$/;
+const CHANNEL_PATTERN = /^(session|chat|terminal|sessions|models):\/(.+)$/;
 
 /** 拼出通道 URI。 */
 export function makeChannel(kind: ChannelKind, id: string): Channel {
@@ -21,6 +21,16 @@ export function makeChannel(kind: ChannelKind, id: string): Channel {
 /** 会话清单通道,一个主机一条,id 是主机标识。多个端订阅同一条,拿到同一份清单变化。 */
 export function sessionsChannelFor(hostId: string): Channel {
 	return makeChannel("sessions", hostId);
+}
+
+/**
+ * 模型通道,一个主机一条,id 是主机标识。
+ *
+ * 承载与具体会话无关的模型侧状态。目前只有提供方登录的推进：登录要用到浏览器回调
+ * 与多步问答，不是一次请求能说完的，所以用一条可回放的通道推给所有端。
+ */
+export function modelsChannelFor(hostId: string): Channel {
+	return makeChannel("models", hostId);
 }
 
 /** 解析通道 URI。格式不符时返回 undefined,调用方据此拒绝请求。 */

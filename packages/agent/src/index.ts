@@ -18,6 +18,13 @@ export {
 	scanSessionProjects,
 } from "./projects.ts";
 export type {
+	ProviderLoginListener,
+	ProviderLoginRuntime,
+	ProviderLoginStart,
+	ProviderLoginUpdate,
+} from "./provider-login.ts";
+export { ProviderLoginBusyError, ProviderLoginService } from "./provider-login.ts";
+export type {
 	ForkPiAgentOptions,
 	OpenPiAgentOptions,
 	PiAgentFactoryOptions,

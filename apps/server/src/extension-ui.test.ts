@@ -10,6 +10,7 @@ import { StreamTransport } from "../../../packages/transport/src/stream.ts";
 import type { StreamLike } from "../../../packages/transport/src/types.ts";
 import type { ServerConfig } from "./config.ts";
 import { startEndpoint } from "./endpoint.ts";
+import { ModelsChannel } from "./models-channel.ts";
 import { ProjectStore } from "./project-store.ts";
 import { SessionHub } from "./session-hub.ts";
 import { SessionsChannel } from "./sessions-channel.ts";
@@ -55,6 +56,7 @@ async function start(source: string): Promise<void> {
 		hub,
 		hostId: "ui-host",
 		sessions: new SessionsChannel(8),
+		modelLog: new ModelsChannel(8),
 		projectStore: await ProjectStore.open({ file: join(dir, "projects.json") }),
 		settingsStore: await SettingsStore.open({ file: join(dir, "settings.json") }),
 	});

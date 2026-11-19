@@ -2,7 +2,7 @@ import type { ImageBlock, ToolOutput } from "./content.ts";
 import type { DeltaKind, NoticeLevel } from "./event.ts";
 import type { ExtensionUiState, SessionInitialization } from "./extension-ui.ts";
 import type { Message } from "./message.ts";
-import type { ModelInfo, ModelRef, ThinkingLevel } from "./model.ts";
+import type { ModelInfo, ModelRef, ProviderLoginEvent, ThinkingLevel } from "./model.ts";
 import type { StreamingBehavior } from "./request.ts";
 import type { ContextUsage, Maintenance, SessionStatus, SessionSummary, TurnPhase } from "./session.ts";
 import type { TerminalAction } from "./terminal.ts";
@@ -15,6 +15,16 @@ export type SessionsAction =
 	| { type: "sessions/status"; path: string; status: SessionStatus }
 	/** 会话文件被删掉 */
 	| { type: "sessions/removed"; path: string };
+
+/**
+ * 模型通道动作。
+ *
+ * 一个主机一条通道，承载与具体会话无关的模型侧状态：目前只有提供方登录的推进。
+ * 登录与会话无关（凭证属于整个主机），因此不挂在会话通道上。
+ */
+export type ModelsAction =
+	/** 主机侧：登录往前走了一步，端点按 loginId 归入那次登录 */
+	{ type: "models/loginEvent"; loginId: string; providerId: string; event: ProviderLoginEvent };
 
 /** 会话动作。 */
 export type SessionAction =
@@ -93,7 +103,7 @@ export type ChatAction =
 	| { type: "chat/branchMoved"; leafId: string | null };
 
 /** 动作联合。按 `type` 前缀决定归属通道。 */
-export type Action = SessionAction | ChatAction | SessionsAction | TerminalAction;
+export type Action = SessionAction | ChatAction | SessionsAction | TerminalAction | ModelsAction;
 
 /** 动作来源。缺省表示主机侧产生。 */
 export interface ActionOrigin {

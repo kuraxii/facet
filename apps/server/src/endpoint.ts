@@ -27,6 +27,7 @@ import { AuditLog } from "./audit.ts";
 import type { ServerConfig } from "./config.ts";
 import type { HostSource } from "./host-identity.ts";
 import { serveWebRequest } from "./http/static.ts";
+import type { ModelsChannel } from "./models-channel.ts";
 import type { ProjectStore } from "./project-store.ts";
 import { DisabledPtyBackend } from "./pty-server.ts";
 import { type Connection, canManage, RequestError, type RpcContext, toProtocolError } from "./rpc/context.ts";
@@ -181,6 +182,8 @@ export async function startEndpoint(options: {
 	hostSource?: HostSource;
 	/** 会话清单通道 */
 	sessions: SessionsChannel;
+	/** 模型通道：提供方登录的进展从这里推给所有端 */
+	modelLog: ModelsChannel;
 	/** 终端登记与终端通道 */
 	terminals?: TerminalService;
 	/** 远程操作审计，缺省写到数据目录的 audit.log */
@@ -198,6 +201,7 @@ export async function startEndpoint(options: {
 		hostSource: options.hostSource ?? "machine-id",
 		connections: new Set(),
 		sessions: options.sessions,
+		modelLog: options.modelLog,
 		terminals:
 			options.terminals ??
 			new TerminalService({ backend: new DisabledPtyBackend("This host has no terminal backend") }),

@@ -7,10 +7,14 @@
  * 的「保存」才落盘，点「取消」全部丢掉。密钥在一个输入框里改，已配置的另给一个删除开关（同样
  * 要等保存才生效）。新建自定义提供方时标识按名字自动推出。
  * 凭证与清单分别写在两处配置里，所以保存时按「先建提供方、再写凭证」的顺序提交。
+ *
+ * 能走账号登录的提供方（pi 给了登录按钮文字的那些）另有一条登录通路：它不等「保存」，点下去
+ * 就在主机上跑，凭证由 pi 直接落盘，完成后关掉弹窗。登录期间这块区域换成流程给的那几步——
+ * 浏览器授权、设备码、要回答的一步——问答与取消都即时发给主机。
  */
-import type { CustomModelInfo, ModelInfo } from "@facet/protocol";
+import type { CustomModelInfo, ModelInfo, ProviderLoginState } from "@facet/protocol";
 import { Plus, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { Modal } from "../modal.tsx";
 import { API_OPTIONS, apiOptionLabel } from "./provider-api.ts";
@@ -86,6 +90,14 @@ export function ProviderDialog({
 
 	/** 磁盘上此刻有没有密钥，只用于选占位提示与要不要给删除按钮 */
 	const hasCredential = provider?.authenticated === true;
+	/**
+	 * 能不能走账号登录，以及按钮上写什么。
+	 *
+	 * 按钮文字优先用 pi 的官方说法（例如「Sign in with ChatGPT」），没有就用「登录」；不能登录的
+	 * 提供方只留密钥这一条路。
+	 */
+	const canLogin = !isNew && provider?.canLogin === true;
+	const loginLabel = provider?.loginLabel ?? t("providerForm.login");
 	/** 输入的新密钥，草稿：点「保存」才落盘 */
 	const [key, setKey] = useState("");
 	/** 删除密钥的意图，同样是草稿，点「保存」才删 */
@@ -97,6 +109,23 @@ export function ProviderDialog({
 	const [error, setError] = useState<string | undefined>(undefined);
 
 	const shownId = isNew ? id : providerId;
+	/**
+	 * 这个提供方此刻的登录状态。
+	 *
+	 * 状态由主机推过来，多个端看到的同一条；这里只读，不等「保存」。
+	 */
+	const loginState = useSyncExternalStore(data.subscribeProviderLogin, () =>
+		shownId.length === 0 ? undefined : data.providerLogin(shownId),
+	);
+	/** 登录成功：凭证已经落盘，重取提供方清单并关掉弹窗 */
+	const loginStatus = loginState?.status;
+	const finished = loginStatus === "done";
+	useEffect(() => {
+		if (finished) {
+			onChanged();
+			onClose();
+		}
+	}, [finished, onChanged, onClose]);
 
 	/**
 	 * 从上游的 `/v1/models` 拉模型清单填进模型表。
@@ -294,34 +323,68 @@ export function ProviderDialog({
 				) : null}
 
 				<section className="prov-section">
-					<span className="set-label">{t("providerForm.credential")}</span>
-					<div className="prov-cred">
-						<input
-							className="set-input mono"
-							type="password"
-							value={key}
-							disabled={isDeletingKey}
-							onChange={(event) => setKey(event.target.value)}
-							placeholder={
-								hasCredential && !isDeletingKey ? t("providers.apiKeyUpdate") : t("providers.apiKeyMissing")
-							}
-							aria-label={t("providers.apiKeyLabel", { name: custom?.name ?? provider?.name ?? "" })}
-							{...(isCustom ? {} : { "data-autofocus": true })}
-						/>
-						{hasCredential ? (
-							<button
-								type="button"
-								className={isDeletingKey ? "prov-btn is-danger is-armed" : "prov-btn is-danger"}
-								aria-pressed={isDeletingKey}
-								onClick={() => {
-									setKey("");
-									setIsDeletingKey(!isDeletingKey);
-								}}
-							>
-								{isDeletingKey ? t("providers.cancelDeleteCredential") : t("providers.deleteCredential")}
-							</button>
+					<div className="prov-section-head">
+						<span className="set-label">{t("providerForm.credential")}</span>
+						{canLogin ? (
+							<span className="prov-section-actions">
+								<button
+									type="button"
+									className="prov-btn is-ghost"
+									disabled={isBusy || (loginState !== undefined && loginState.status === "running")}
+									onClick={() => {
+										setError(undefined);
+										void data.startProviderLogin(shownId, "oauth").catch((startError: unknown) => {
+											setError(messageOf(startError));
+										});
+									}}
+								>
+									{loginLabel}
+								</button>
+							</span>
 						) : null}
 					</div>
+					{loginState !== undefined && loginState.status === "running" ? (
+						<LoginFlow
+							state={loginState}
+							onRespond={(promptId, value) => {
+								void data.respondProviderLogin(loginState.loginId, promptId, value);
+							}}
+							onCancel={() => {
+								void data.cancelProviderLogin(loginState.loginId);
+							}}
+						/>
+					) : (
+						<div className="prov-cred">
+							<input
+								className="set-input mono"
+								type="password"
+								value={key}
+								disabled={isDeletingKey}
+								onChange={(event) => setKey(event.target.value)}
+								placeholder={
+									hasCredential && !isDeletingKey ? t("providers.apiKeyUpdate") : t("providers.apiKeyMissing")
+								}
+								aria-label={t("providers.apiKeyLabel", { name: custom?.name ?? provider?.name ?? "" })}
+								{...(isCustom ? {} : { "data-autofocus": true })}
+							/>
+							{hasCredential ? (
+								<button
+									type="button"
+									className={isDeletingKey ? "prov-btn is-danger is-armed" : "prov-btn is-danger"}
+									aria-pressed={isDeletingKey}
+									onClick={() => {
+										setKey("");
+										setIsDeletingKey(!isDeletingKey);
+									}}
+								>
+									{isDeletingKey ? t("providers.cancelDeleteCredential") : t("providers.deleteCredential")}
+								</button>
+							) : null}
+						</div>
+					)}
+					{loginState?.status === "failed" && loginState.message !== undefined ? (
+						<p className="prov-error">{loginState.message}</p>
+					) : null}
 				</section>
 
 				{isCustom ? (
@@ -468,5 +531,102 @@ export function ProviderDialog({
 				</span>
 			</footer>
 		</Modal>
+	);
+}
+
+/**
+ * 登录流程里要用户看与要用户答的那一块。
+ *
+ * 只渲染主机给的东西：设备码、授权地址、要回答的一步。进度与终局由样式表达，不写状态文字；
+ * 失败时照样给主机原话，那是事实内容而不是标签。
+ */
+function LoginFlow({
+	state,
+	onRespond,
+	onCancel,
+}: {
+	state: ProviderLoginState;
+	onRespond: (promptId: string, value: string | null) => void;
+	onCancel: () => void;
+}): React.JSX.Element {
+	const { t } = useI18n();
+	const [answer, setAnswer] = useState("");
+	const prompt = state.prompt;
+	const submit = (value: string): void => {
+		if (prompt === undefined || value.trim().length === 0) {
+			return;
+		}
+		setAnswer("");
+		onRespond(prompt.promptId, value.trim());
+	};
+
+	return (
+		<div className="prov-login">
+			{state.deviceCode !== undefined ? (
+				<div className="prov-login-code">
+					<span className="mono">{state.deviceCode.userCode}</span>
+					<button
+						type="button"
+						className="prov-btn is-ghost"
+						onClick={() => window.open(state.deviceCode?.verificationUri, "_blank", "noopener")}
+					>
+						{t("providerForm.loginOpen")}
+					</button>
+				</div>
+			) : null}
+
+			{state.authUrl !== undefined ? (
+				<button
+					type="button"
+					className="prov-btn"
+					onClick={() => window.open(state.authUrl?.url, "_blank", "noopener")}
+				>
+					{t("providerForm.loginOpen")}
+				</button>
+			) : null}
+
+			{prompt !== undefined && prompt.kind === "select" ? (
+				<div className="prov-login-options">
+					{(prompt.options ?? []).map((option) => (
+						<button key={option.id} type="button" className="prov-btn" onClick={() => submit(option.id)}>
+							{option.label}
+						</button>
+					))}
+				</div>
+			) : null}
+
+			{prompt !== undefined && prompt.kind !== "select" ? (
+				<form
+					className="prov-login-answer"
+					onSubmit={(event) => {
+						event.preventDefault();
+						submit(answer);
+					}}
+				>
+					{/* 题目由登录流程给，单独一行；输入框只留占位，免得长句子被截断 */}
+					<label className="prov-login-label" htmlFor={prompt.promptId}>
+						{prompt.message}
+					</label>
+					<div className="prov-login-field">
+						<input
+							id={prompt.promptId}
+							className="set-input mono"
+							type={prompt.kind === "secret" ? "password" : "text"}
+							value={answer}
+							{...{ "data-autofocus": true }}
+							onChange={(event) => setAnswer(event.target.value)}
+							placeholder={prompt.placeholder}
+						/>
+						<button type="submit" className="prov-btn" disabled={answer.trim().length === 0}>
+							{t("providerForm.loginContinue")}
+						</button>
+					</div>
+				</form>
+			) : null}
+
+			<button type="button" className="prov-btn is-danger is-ghost" onClick={onCancel}>
+				{t("providerForm.loginCancel")}
+			</button>
+		</div>
 	);
 }

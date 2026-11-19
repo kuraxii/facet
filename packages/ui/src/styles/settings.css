@@ -647,6 +647,66 @@ dialog.dialog.is-provider[open] {
 	outline-offset: 0;
 }
 
+/* 登录过程中的那一块：设备码、授权按钮、要回答的一步与取消，纵向排列 */
+.prov-login {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: var(--prov-login-gap);
+}
+
+/* 设备码与打开按钮同一行，高度与密钥行一致 */
+.prov-login-code {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	box-sizing: border-box;
+	width: 100%;
+	min-height: var(--prov-login-code-height);
+	padding: 0 12px;
+	border: 1px solid var(--line2);
+	border-radius: 8px;
+	background: var(--surface2);
+}
+
+.prov-login-code .mono {
+	flex: 1;
+	min-width: 0;
+	letter-spacing: 0.08em;
+	color: var(--t1);
+}
+
+/* 单选题的选项：并排换行，点一个就答了 */
+.prov-login-options {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+/* 要回答的一步：题目一行，输入与「继续」一行 */
+.prov-login-answer {
+	display: flex;
+	flex-direction: column;
+	gap: var(--prov-login-gap);
+	width: 100%;
+}
+
+.prov-login-label {
+	color: var(--t2);
+}
+
+.prov-login-field {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+}
+
+.prov-login-field .set-input {
+	flex: 1;
+	min-width: 0;
+}
+
 .prov-btn {
 	display: inline-flex;
 	flex: none;

@@ -7,6 +7,28 @@
 import { readFile, rename } from "node:fs/promises";
 import { writeFileAtomic } from "./atomic-write.ts";
 
+/**
+ * 一个模型写进配置时的形状。
+ *
+ * pi 对 models.json 是**整份**校验：可选字段一旦出现就必须合法（展示名至少一个字符、
+ * 上下文窗口与最大输出必须大于 0），随便哪一条不合，整份配置里的自定义提供方就全没了。
+ * 所以空值与非正数在这里就不写：缺省由 pi 自己的默认值补上，写入的文件也只含确定有效的字段。
+ */
+function modelEntry(model: CustomModelEntry): CustomModelEntry {
+	const name = model.name?.trim();
+	const api = model.api?.trim();
+	return {
+		id: model.id,
+		...(name !== undefined && name.length > 0 ? { name } : {}),
+		...(api !== undefined && api.length > 0 ? { api } : {}),
+		...(model.reasoning === undefined ? {} : { reasoning: model.reasoning }),
+		...(model.contextWindow !== undefined && model.contextWindow > 0
+			? { contextWindow: model.contextWindow }
+			: {}),
+		...(model.maxTokens !== undefined && model.maxTokens > 0 ? { maxTokens: model.maxTokens } : {}),
+	};
+}
+
 /** 配置里一个模型的定义，字段与 models.json 一致，缺省项由运行时补。 */
 export interface CustomModelEntry {
 	/** 模型标识，请求里用它取名 */
@@ -204,7 +226,7 @@ export class ModelConfigStore {
 				name: entry.name,
 				baseUrl: entry.baseUrl,
 				api: entry.api,
-				models: entry.models,
+				models: entry.models.map(modelEntry),
 			};
 			await writeFileAtomic(this.file, `${JSON.stringify({ ...config, providers }, null, 2)}\n`);
 		});

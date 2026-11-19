@@ -72,6 +72,29 @@ describe("自定义提供方", () => {
 		await store.removeProvider("my-gateway");
 		expect(JSON.parse(await readFile(file, "utf8"))).toEqual({ providers: {} });
 	});
+
+	it("空着或不是正数的可选字段不写进配置", async () => {
+		// pi 对 models.json 是整份校验：写进一条 `name: ""` 或 `contextWindow: 0`，整份文件
+		// 都会被它拒收，自定义提供方连同模型一起从目录里消失
+		const store = new ModelConfigStore({ file });
+		await store.saveProvider({
+			...entry,
+			models: [{ id: "local-llama", name: "   ", contextWindow: 0, maxTokens: -1, reasoning: false }],
+		});
+		const written = JSON.parse(await readFile(file, "utf8")) as {
+			providers: Record<string, { models?: unknown }>;
+		};
+		expect(written.providers["my-gateway"]?.models).toEqual([{ id: "local-llama", reasoning: false }]);
+	});
+
+	it("展示名去掉首尾空白后写进配置", async () => {
+		const store = new ModelConfigStore({ file });
+		await store.saveProvider({ ...entry, models: [{ id: "local-llama", name: "  Llama 本地 " }] });
+		const written = JSON.parse(await readFile(file, "utf8")) as {
+			providers: Record<string, { models?: unknown }>;
+		};
+		expect(written.providers["my-gateway"]?.models).toEqual([{ id: "local-llama", name: "Llama 本地" }]);
+	});
 });
 
 describe("配置里写的密钥", () => {

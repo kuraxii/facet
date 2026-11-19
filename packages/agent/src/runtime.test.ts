@@ -177,3 +177,35 @@ describe("会话清单", () => {
 		scoped.dispose();
 	});
 });
+
+describe("自定义提供方", () => {
+	/** 一份最小的自定义提供方输入：地址与协议都合法，模型只填标识。 */
+	function providerInput(name: string | undefined) {
+		return {
+			id: "aimao",
+			name: "aimao",
+			baseUrl: "https://gateway.example.com/v1",
+			api: "openai-completions",
+			models: [{ id: "glm-5.3-flash", name, contextWindow: 1000000, maxTokens: 8192 }],
+		};
+	}
+
+	it("模型的展示名留空也能存下来，提供方留在目录里", async () => {
+		// 写进 models.json 的空 name 会让 pi 整份校验失败，自定义提供方就此从目录里消失
+		await factory.saveCustomProvider(providerInput(""));
+		const saved = await factory.customProviders();
+		expect(saved.map((entry) => entry.id)).toEqual(["aimao"]);
+		expect(saved[0]?.models.map((model) => model.name)).toEqual([undefined]);
+		expect(factory.providers().find((provider) => provider.id === "aimao")?.modelCount).toBe(1);
+	});
+
+	it("不能为 0 的数值字段也按缺省处理", async () => {
+		await factory.saveCustomProvider({
+			...providerInput("GLM 5.3 Flash"),
+			models: [{ id: "glm-5.3-flash", contextWindow: 0, maxTokens: -1 }],
+		});
+		const saved = await factory.customProviders();
+		expect(saved[0]?.models[0]).toEqual({ id: "glm-5.3-flash" });
+		expect(factory.providers().find((provider) => provider.id === "aimao")?.modelCount).toBe(1);
+	});
+});

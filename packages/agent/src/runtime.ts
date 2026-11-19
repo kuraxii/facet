@@ -348,6 +348,14 @@ export class PiAgentFactory {
 		await this.modelConfig.saveProvider({ id, name, baseUrl, api, models });
 		this.customBaseUrls[id] = baseUrl;
 		await this.modelRuntime.refresh({ allowNetwork: false });
+		// pi 对 models.json 是整份校验：任何一处不合法，整份配置里的自定义提供方都会一起消失，
+		// 而且不报错。写完立刻看它到底认没认这个提供方，不认就把出问题的文件摆出来，
+		// 不然界面只看到提供方凭空消失。
+		if (this.modelRuntime.getProvider(id) === undefined) {
+			throw new InvalidProviderError(
+				`pi did not load ${join(this.agentDir, "models.json")}: the provider is missing from the catalog after saving`,
+			);
+		}
 	}
 
 	/** 删除一个自定义提供方：配置、凭证与运行态一起清掉。 */

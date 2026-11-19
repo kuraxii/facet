@@ -10,7 +10,12 @@ import type { AuditLog } from "../audit.ts";
 import type { ServerConfig } from "../config.ts";
 import type { HostSource } from "../host-identity.ts";
 import type { ModelsChannel } from "../models-channel.ts";
-import { ProjectExistsError, ProjectNotFoundError, type ProjectStore } from "../project-store.ts";
+import {
+	ProjectDirectoryError,
+	ProjectExistsError,
+	ProjectNotFoundError,
+	type ProjectStore,
+} from "../project-store.ts";
 import { RevealFailedError } from "../reveal.ts";
 import {
 	type ActionSink,
@@ -106,6 +111,7 @@ export function toProtocolError(error: unknown): { code: ErrorCode; message: str
 	}
 	if (
 		error instanceof ProjectExistsError ||
+		error instanceof ProjectDirectoryError ||
 		error instanceof ProjectNotFoundError ||
 		error instanceof RevealFailedError
 	) {

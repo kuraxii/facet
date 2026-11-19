@@ -7,7 +7,12 @@
 import { type Channel, parseChannel, type RequestParams, type RequestResults } from "@facet/protocol";
 import { type Connection, RequestError, type RpcContext } from "../context.ts";
 import type { RequestHandlerMap } from "../gateway.ts";
-import { requireSubscribableChannel, toSink, unsubscribeChannel } from "../helpers.ts";
+import {
+	requireSubscribableChannel,
+	resolveProjectDirectory,
+	toSink,
+	unsubscribeChannel,
+} from "../helpers.ts";
 
 /** 会话域负责的方法。 */
 type SessionMethod =
@@ -53,15 +58,21 @@ export const sessionHandlers: Pick<RequestHandlerMap, SessionMethod> = {
 	}),
 
 	// 新建会话并返回初始快照；模型与思考档位缺省时由主机侧补齐。
-	createSession: async (params, context: RpcContext): Promise<RequestResults["createSession"]> =>
-		await context.hub.createSession({
-			cwd: params.cwd,
+	//
+	// cwd 由端带过来，必须先按主机自己的磁盘核一遍：端可能还握着另一台机器的路径
+	// （Windows 的 `C:\Program Files\facet` 在 Linux 上就是一条不存在的相对路径），直接透传给
+	// pi 会在数据目录下凭空建出一个同名目录，并把这个路径当成项目登记下来。
+	createSession: async (params, context: RpcContext): Promise<RequestResults["createSession"]> => {
+		const cwd = params.cwd === undefined ? undefined : await resolveProjectDirectory(params.cwd);
+		return await context.hub.createSession({
+			...(cwd === undefined ? {} : { cwd }),
 			model: params.model,
 			thinkingLevel: params.thinkingLevel,
 			tools: params.tools,
 			excludeTools: params.excludeTools,
 			name: params.name,
-		}),
+		});
+	},
 
 	// 打开已有会话,模型与工具集从会话记录恢复。
 	openSession: async (params, context: RpcContext): Promise<RequestResults["openSession"]> =>

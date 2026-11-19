@@ -4,7 +4,7 @@
  * 清单写在 `$XDG_DATA_HOME/facet/projects.json`，没有设置时落在 `~/.local/share/facet`。
  * 只有 Linux 走 XDG 规范；写入先落临时文件再改名，避免中途中断留下半个文件。
  */
-import { readFile, rename } from "node:fs/promises";
+import { readFile, rename, stat } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import { normalizeProjectPath, projectIdOf, writeFileAtomic } from "@facet/agent";
 
@@ -49,6 +49,28 @@ export class ProjectNotFoundError extends Error {
 		this.name = "ProjectNotFoundError";
 		this.id = id;
 	}
+}
+
+/**
+ * 要加进来的目录在主机上不存在或不是目录。
+ *
+ * 与「已经加过」分开报：那一条是用户意图的重发，这一条通常是路径写错、目录被删掉，
+ * 或者路径根本属于另一台机器。自动登记遇到它静默跳过。
+ */
+export class ProjectDirectoryError extends Error {
+	readonly cwd: string;
+
+	constructor(cwd: string) {
+		super(`Project directory does not exist: ${cwd}`);
+		this.name = "ProjectDirectoryError";
+		this.cwd = cwd;
+	}
+}
+
+/** 这个路径此刻是不是一个存在的目录。清单只收这样的目录。 */
+export async function isProjectDirectory(cwd: string): Promise<boolean> {
+	const info = await stat(cwd).catch(() => undefined);
+	return info?.isDirectory() === true;
 }
 
 /** 显示名去掉首尾空白，空串按未设置处理。 */
@@ -105,12 +127,17 @@ export class ProjectStore {
 		return this.projects.get(id);
 	}
 
-	/** 添加一个项目。目录重复或不是绝对路径时报错。 */
+	/** 添加一个项目。目录重复、不是绝对路径或在磁盘上不存在时报错。 */
 	async add(input: { cwd: string; name?: string }): Promise<StoredProject> {
 		if (!isAbsolute(input.cwd)) {
 			throw new Error(`Project directory must be absolute: ${input.cwd}`);
 		}
 		const cwd = normalizeProjectPath(input.cwd);
+		// 清单写进磁盘之后每次开机都会读回来，收下的路径必须是这台机器上真实存在的目录：
+		// 从别的主机带来的路径在这里就拦住，不让它进清单
+		if (!(await isProjectDirectory(cwd))) {
+			throw new ProjectDirectoryError(cwd);
+		}
 		return await this.transact((draft) => {
 			if ([...draft.values()].some((project) => project.cwd === cwd)) {
 				throw new ProjectExistsError(cwd);

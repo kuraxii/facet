@@ -67,10 +67,14 @@ export class EventLog<T> {
 	 *
 	 * since 为 0 或负数表示从头补齐;已有的部分仍会返回,同时用 resync 告知缺口,
 	 * 端点需要重新读取快照与历史来修正状态。
+	 *
+	 * 两种情况算缺口:since 早于缓冲里最旧的一条(中间的动作已经被丢掉),以及 since 比
+	 * 当前序号还大——那份水位不是这条通道产生的(端换过主机或通道重建),照它续订会
+	 * 永远等不到后续动作,必须让它重新同步。
 	 */
 	replay(since: number): ReplayResult<T> {
 		const from = Number.isFinite(since) && since > 0 ? since : 0;
-		const resync = from + 1 < this.oldestSeq;
+		const resync = from > this.seq || from + 1 < this.oldestSeq;
 		return { actions: this.buffer.filter((item) => item.seq > from), resync };
 	}
 }

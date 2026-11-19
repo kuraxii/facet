@@ -3,14 +3,28 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { projectIdOf } from "@facet/agent";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { ProjectExistsError, ProjectNotFoundError, ProjectStore } from "./project-store.ts";
+import {
+	isProjectDirectory,
+	ProjectDirectoryError,
+	ProjectExistsError,
+	ProjectNotFoundError,
+	ProjectStore,
+} from "./project-store.ts";
 
 let root: string;
 let file: string;
 
+/** 用例里的项目目录：清单只收真实存在的目录，所以每个名字都得先建出来。 */
+function dir(name: string): string {
+	return join(root, name);
+}
+
 beforeEach(async () => {
 	root = await mkdtemp(join(tmpdir(), "facet-projects-store-"));
 	file = join(root, "projects.json");
+	for (const name of ["a", "b", "c"]) {
+		await mkdir(dir(name), { recursive: true });
+	}
 });
 
 afterEach(async () => {
@@ -20,29 +34,29 @@ afterEach(async () => {
 describe("项目清单", () => {
 	it("添加后按添加顺序列出，标识由目录派生", async () => {
 		const store = await ProjectStore.open({ file });
-		const first = await store.add({ cwd: "/work/a" });
-		const second = await store.add({ cwd: "/work/b", name: " 压测 " });
+		const first = await store.add({ cwd: dir("a") });
+		const second = await store.add({ cwd: dir("b"), name: " 压测 " });
 
-		expect(first.id).toBe(projectIdOf("/work/a"));
+		expect(first.id).toBe(projectIdOf(dir("a")));
 		expect(first.name).toBeUndefined();
 		expect(first.createdAt).toBeGreaterThan(0);
 		expect(second.name).toBe("压测");
-		expect(store.list().map((project) => project.cwd)).toEqual(["/work/a", "/work/b"]);
-		expect(store.get(second.id)?.cwd).toBe("/work/b");
+		expect(store.list().map((project) => project.cwd)).toEqual([dir("a"), dir("b")]);
+		expect(store.get(second.id)?.cwd).toBe(dir("b"));
 	});
 
 	it("末尾斜杠与已有目录视为同一个", async () => {
 		const store = await ProjectStore.open({ file });
-		await store.add({ cwd: "/work/a" });
-		await expect(store.add({ cwd: "/work/a/" })).rejects.toBeInstanceOf(ProjectExistsError);
+		await store.add({ cwd: dir("a") });
+		await expect(store.add({ cwd: `${dir("a")}/` })).rejects.toBeInstanceOf(ProjectExistsError);
 	});
 
 	it("存进去的目录是清理过的", async () => {
 		const store = await ProjectStore.open({ file });
-		const project = await store.add({ cwd: "/work//a/./" });
-		expect(project.cwd).toBe("/work/a");
-		expect(project.id).toBe(projectIdOf("/work/a"));
-		await expect(store.add({ cwd: "/work/b/../a" })).rejects.toBeInstanceOf(ProjectExistsError);
+		const project = await store.add({ cwd: `${root}//a/./` });
+		expect(project.cwd).toBe(dir("a"));
+		expect(project.id).toBe(projectIdOf(dir("a")));
+		await expect(store.add({ cwd: `${root}/b/../a` })).rejects.toBeInstanceOf(ProjectExistsError);
 	});
 
 	it("读取时按目录重算标识", async () => {
@@ -50,14 +64,32 @@ describe("项目清单", () => {
 			file,
 			JSON.stringify({
 				version: 1,
-				projects: [{ id: "写错了的标识", cwd: "/work//a/./", name: "旧名字", createdAt: 2 }],
+				projects: [{ id: "写错了的标识", cwd: `${root}//a/./`, name: "旧名字", createdAt: 2 }],
 			}),
 			"utf8",
 		);
 		const store = await ProjectStore.open({ file });
 		expect(store.list()).toEqual([
-			{ id: projectIdOf("/work/a"), cwd: "/work/a", name: "旧名字", createdAt: 2 },
+			{ id: projectIdOf(dir("a")), cwd: dir("a"), name: "旧名字", createdAt: 2 },
 		]);
+	});
+
+	it("目录在磁盘上不存在时拒绝，也不写进文件", async () => {
+		const store = await ProjectStore.open({ file });
+		await expect(store.add({ cwd: join(root, "missing") })).rejects.toBeInstanceOf(ProjectDirectoryError);
+		expect(store.list()).toEqual([]);
+		// 落盘的文件里也不能多出这一条：下次开机读回来同样不当项目
+		const reopened = await ProjectStore.open({ file });
+		expect(reopened.list()).toEqual([]);
+	});
+
+	it("路径存在但不是目录时同样拒绝", async () => {
+		const notDir = join(root, "plain.txt");
+		await writeFile(notDir, "x", "utf8");
+		const store = await ProjectStore.open({ file });
+		await expect(store.add({ cwd: notDir })).rejects.toBeInstanceOf(ProjectDirectoryError);
+		expect(await isProjectDirectory(notDir)).toBe(false);
+		expect(await isProjectDirectory(dir("a"))).toBe(true);
 	});
 
 	it("拒绝相对路径", async () => {
@@ -67,7 +99,7 @@ describe("项目清单", () => {
 
 	it("改名与清除自定义名", async () => {
 		const store = await ProjectStore.open({ file });
-		const project = await store.add({ cwd: "/work/a" });
+		const project = await store.add({ cwd: dir("a") });
 		const renamed = await store.rename(project.id, "主应用");
 		expect(renamed.name).toBe("主应用");
 		const cleared = await store.rename(project.id, "   ");
@@ -77,7 +109,7 @@ describe("项目清单", () => {
 
 	it("移除后不再出现在清单里", async () => {
 		const store = await ProjectStore.open({ file });
-		const project = await store.add({ cwd: "/work/a" });
+		const project = await store.add({ cwd: dir("a") });
 		await store.remove(project.id);
 		expect(store.list()).toEqual([]);
 		await expect(store.remove(project.id)).rejects.toBeInstanceOf(ProjectNotFoundError);
@@ -85,11 +117,11 @@ describe("项目清单", () => {
 
 	it("重新打开后清单与自定义名都在", async () => {
 		const store = await ProjectStore.open({ file });
-		const project = await store.add({ cwd: "/work/a", name: "主应用" });
+		const project = await store.add({ cwd: dir("a"), name: "主应用" });
 
 		const reopened = await ProjectStore.open({ file });
 		expect(reopened.list()).toEqual([
-			{ id: project.id, cwd: "/work/a", name: "主应用", createdAt: project.createdAt },
+			{ id: project.id, cwd: dir("a"), name: "主应用", createdAt: project.createdAt },
 		]);
 	});
 
@@ -98,13 +130,13 @@ describe("项目清单", () => {
 			file,
 			JSON.stringify({
 				version: 1,
-				projects: [{ cwd: "/work/a", createdAt: 1 }, { cwd: 123 }, { name: "没有目录" }, "不是对象"],
+				projects: [{ cwd: dir("a"), createdAt: 1 }, { cwd: 123 }, { name: "没有目录" }, "不是对象"],
 			}),
 			"utf8",
 		);
 		const store = await ProjectStore.open({ file });
 		expect(store.list()).toEqual([
-			{ id: projectIdOf("/work/a"), cwd: "/work/a", name: undefined, createdAt: 1 },
+			{ id: projectIdOf(dir("a")), cwd: dir("a"), name: undefined, createdAt: 1 },
 		]);
 	});
 
@@ -132,17 +164,17 @@ describe("项目清单", () => {
 		// 把清单路径换成目录,改名到它上面必然失败
 		await mkdir(nested, { recursive: true });
 
-		await expect(store.add({ cwd: "/work/a" })).rejects.toThrow();
+		await expect(store.add({ cwd: dir("a") })).rejects.toThrow();
 		expect(store.list()).toEqual([]);
 
 		await rm(nested, { recursive: true, force: true });
-		const project = await store.add({ cwd: "/work/a" });
+		const project = await store.add({ cwd: dir("a") });
 		expect(store.list().map((item) => item.id)).toEqual([project.id]);
 	});
 
 	it("改动落盘失败时保留原状态,也不留临时文件", async () => {
 		const store = await ProjectStore.open({ file });
-		const project = await store.add({ cwd: "/work/a", name: "主应用" });
+		const project = await store.add({ cwd: dir("a"), name: "主应用" });
 		const onDisk = await readFile(file, "utf8");
 		// 清单路径换成目录,临时文件改名到它上面必然失败
 		await rm(file);
@@ -161,9 +193,9 @@ describe("项目清单", () => {
 	it("并发改动按顺序落盘,不丢更新", async () => {
 		const store = await ProjectStore.open({ file });
 		const added = await Promise.all([
-			store.add({ cwd: "/work/a" }),
-			store.add({ cwd: "/work/b" }),
-			store.add({ cwd: "/work/c" }),
+			store.add({ cwd: dir("a") }),
+			store.add({ cwd: dir("b") }),
+			store.add({ cwd: dir("c") }),
 		]);
 		await Promise.all([
 			store.rename(added[0].id, "甲"),
@@ -173,25 +205,25 @@ describe("项目清单", () => {
 
 		const reopened = await ProjectStore.open({ file });
 		expect(reopened.list().map((item) => [item.cwd, item.name])).toEqual([
-			["/work/a", "甲"],
-			["/work/c", "丙"],
+			[dir("a"), "甲"],
+			[dir("c"), "丙"],
 		]);
 		expect(store.list().map((item) => [item.cwd, item.name])).toEqual([
-			["/work/a", "甲"],
-			["/work/c", "丙"],
+			[dir("a"), "甲"],
+			[dir("c"), "丙"],
 		]);
 	});
 
 	it("并发的重复添加只有一个成功", async () => {
 		const store = await ProjectStore.open({ file });
-		const results = await Promise.allSettled([store.add({ cwd: "/work/a" }), store.add({ cwd: "/work/a" })]);
+		const results = await Promise.allSettled([store.add({ cwd: dir("a") }), store.add({ cwd: dir("a") })]);
 		expect(results.filter((item) => item.status === "fulfilled")).toHaveLength(1);
 		expect(store.list()).toHaveLength(1);
 	});
 
 	it("写出的文件带版本号", async () => {
 		const store = await ProjectStore.open({ file });
-		await store.add({ cwd: "/work/a" });
+		await store.add({ cwd: dir("a") });
 		const written = JSON.parse(await readFile(file, "utf8")) as { version: number; projects: unknown[] };
 		expect(written.version).toBe(1);
 		expect(written.projects).toHaveLength(1);

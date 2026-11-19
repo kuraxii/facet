@@ -41,12 +41,12 @@ describe("EventLog", () => {
 		expect(result.actions.map((item) => item.seq)).toEqual([2, 3]);
 	});
 
-	it("since 超出当前序号时返回空且不标记缺口", () => {
+	it("since 超出当前序号时标记缺口:那份水位不是这条通道的", () => {
 		const log = new EventLog(4);
 		log.append(statusAction("running"));
 		const result = log.replay(99);
 		expect(result.actions).toEqual([]);
-		expect(result.resync).toBe(false);
+		expect(result.resync).toBe(true);
 	});
 });
 

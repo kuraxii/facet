@@ -12,7 +12,12 @@ import { type HostIdentity, loadOrCreateHostId } from "./host-identity.ts";
 import { debugLog, setDebugLog } from "./log.ts";
 import { ModelsChannel } from "./models-channel.ts";
 import { ProjectCatalog } from "./project-catalog.ts";
-import { ProjectExistsError, ProjectStore } from "./project-store.ts";
+import {
+	isProjectDirectory,
+	ProjectDirectoryError,
+	ProjectExistsError,
+	ProjectStore,
+} from "./project-store.ts";
 import { ChildPtyBackend } from "./pty-server.ts";
 import { SessionHub } from "./session-hub.ts";
 import { SessionIndex } from "./session-index.ts";
@@ -73,10 +78,15 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 		if (cwd.length === 0 || projectStore.get(projectIdOf(cwd)) !== undefined) {
 			return;
 		}
+		// 会话文件里记的 cwd 可能早就不在磁盘上了（目录被删掉、会话从别的主机拷过来），
+		// 这样的路径不进清单：它每次开机都会被当成项目重读一遍
+		if (!(await isProjectDirectory(cwd))) {
+			return;
+		}
 		try {
 			await projectStore.add({ cwd });
 		} catch (error) {
-			if (!(error instanceof ProjectExistsError)) {
+			if (!(error instanceof ProjectExistsError) && !(error instanceof ProjectDirectoryError)) {
 				console.error("Failed to register project automatically", error);
 			}
 		}
@@ -228,7 +238,13 @@ export { debugLog, errorLog, isDebugLogEnabled, setDebugLog } from "./log.ts";
 export type { ProjectSource } from "./project-catalog.ts";
 export { ProjectCatalog } from "./project-catalog.ts";
 export type { ProjectStoreOptions, StoredProject } from "./project-store.ts";
-export { ProjectExistsError, ProjectNotFoundError, ProjectStore } from "./project-store.ts";
+export {
+	isProjectDirectory,
+	ProjectDirectoryError,
+	ProjectExistsError,
+	ProjectNotFoundError,
+	ProjectStore,
+} from "./project-store.ts";
 export type { PtyBackend, PtyHandle, PtySink, PtySpawnOptions } from "./pty-server.ts";
 export { ChildPtyBackend, DisabledPtyBackend } from "./pty-server.ts";
 export type { ActionSink, HubAgent, Subscription } from "./session-hub.ts";

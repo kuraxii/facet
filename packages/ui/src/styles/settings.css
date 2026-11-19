@@ -235,6 +235,11 @@ dialog.set-page::backdrop {
 	background: var(--card2);
 	color: var(--t1);
 	font-size: 12.5px;
+	/*
+	 * 配置界面里的字段一律用界面字体：等宽留给代码、路径、时间与只读的标识展示，
+	 * 输入框里混着等宽与界面字体时，同一张表单看着像是两种控件。
+	 */
+	font-family: var(--font-sans);
 }
 
 /* 改不了的字段只做展示：压暗文字，底色与普通输入框一致，不再多描一道边 */

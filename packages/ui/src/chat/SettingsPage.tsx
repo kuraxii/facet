@@ -348,7 +348,7 @@ function AppearanceSection({
 	/** 字号输入的公共写法：留空或越界时保持原值。 */
 	const sizeInput = (value: number, name: keyof FacetSettings["appearance"]): React.JSX.Element => (
 		<input
-			className="set-input is-number mono"
+			className="set-input"
 			type="number"
 			min={11}
 			max={20}
@@ -420,7 +420,7 @@ function AppearanceSection({
 				</SettingsRow>
 				<SettingsRow title={t("settings.appearancePage.outlineScale")}>
 					<input
-						className="set-input is-number mono"
+						className="set-input"
 						type="number"
 						min={50}
 						max={200}

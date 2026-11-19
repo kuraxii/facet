@@ -306,6 +306,10 @@ Windows：
 
 ### CI
 
+`.github/workflows/pr.yml`：对进 `main` 的 PR（打开、更新、重开）跑五条门禁，不打包、不建
+Release；同一 PR 反复推送只留最新一轮。门禁本身抽成可复用工作流 `.github/workflows/gates.yml`，
+`build.yml` 发包前调用的也是同一份，两处口径不会走偏。
+
 `.github/workflows/build.yml`：推 `v*` 标签（或手动 dispatch）时触发——
 
 1. `ubuntu-24.04` 上先跑五条门禁（`mock:check`、`typecheck`、`lint`、`test`、`build`），不过就不往下走；

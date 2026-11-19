@@ -1,0 +1,29 @@
+# 别人提 PR 时的检查：只跑五条门禁，不打包、不建 Release。
+#
+# 发包与发行由 build.yml 负责，它只在推 `v*` 标签时触发；这里管的是「合进 main 之前先证明
+# 这棵树是好的」。
+
+name: pr
+
+on:
+  pull_request:
+    # 只对进 main 的 PR 跑；分支名不作规定，从哪条分支来都行
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+
+permissions:
+  contents: read
+
+# 同一个 PR 反复推送时只留最新那一轮
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  gates:
+    name: gates
+    uses: ./.github/workflows/gates.yml

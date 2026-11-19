@@ -1,0 +1,31 @@
+# 可复用的门禁：release 流水线（build.yml）与 PR 检查（pr.yml）共用同一份，
+# 免得两处各写一遍、慢慢长歪。
+#
+# 五条命令与 docs/testing.md 里的口径一致：mock:check、typecheck、lint、test、build。
+
+name: gates
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    name: gates
+    runs-on: ubuntu-24.04
+    # 五条门禁在本机约几分钟，CI 上留宽一点，卡住时能自己结束
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - run: npm run mock:check
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test
+      - run: npm run build

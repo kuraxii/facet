@@ -31,24 +31,10 @@ env:
   CI: "1"
 
 jobs:
-  # 门禁：AGENTS.md 要求五条全绿才能往下走，放在这里一次性把关
+  # 门禁：与 PR 检查用的同一份可复用工作流，发包前先证明这棵树是好的
   gates:
     name: gates
-    runs-on: ubuntu-24.04
-    # 五条门禁在本机约三分钟；给宽一点，卡住时能自己结束
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .node-version
-          cache: npm
-      - run: npm ci
-      - run: npm run mock:check
-      - run: npm run typecheck
-      - run: npm run lint
-      - run: npm run test
-      - run: npm run build
+    uses: ./.github/workflows/gates.yml
 
   linux:
     name: linux ${{ matrix.arch }}

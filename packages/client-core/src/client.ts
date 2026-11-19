@@ -39,6 +39,7 @@ import type {
 	SlashCommand,
 	ThinkingLevel,
 	UiResponse,
+	UpstreamModel,
 } from "@facet/protocol";
 import { makeChannel, parseChannel, sessionsChannelFor } from "@facet/protocol";
 import { debugLog, errorLog } from "./log.ts";
@@ -615,6 +616,26 @@ export class SessionClient {
 			...(patch.model === undefined ? {} : { model: patch.model }),
 			...(patch.thinkingLevel === undefined ? {} : { thinkingLevel: patch.thinkingLevel }),
 		});
+	}
+
+	/**
+	 * 从上游的 `/v1/models` 拉模型清单，用来填自定义提供方的模型表。
+	 *
+	 * 没给 `apiKey` 时主机用这个提供方已经存下的密钥；新建的提供方还没存，就把输入框里的值带过来。
+	 */
+	async fetchProviderModels(input: {
+		baseUrl: string;
+		providerId?: string;
+		apiKey?: string;
+		api?: string;
+	}): Promise<{ models: UpstreamModel[]; baseUrl: string }> {
+		const result = await this.transport.request("fetchProviderModels", {
+			baseUrl: input.baseUrl,
+			...(input.providerId === undefined ? {} : { providerId: input.providerId }),
+			...(input.apiKey === undefined ? {} : { apiKey: input.apiKey }),
+			...(input.api === undefined ? {} : { api: input.api }),
+		});
+		return result;
 	}
 
 	/** 读主机上保存的界面偏好设置。 */

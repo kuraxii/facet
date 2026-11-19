@@ -28,6 +28,8 @@ interface ProviderEntry {
 	name?: string;
 	baseUrl?: string;
 	api?: string;
+	/** pi 支持的明文密钥，或 `$ENV` 引用；`!命令` 形式这里不展开 */
+	apiKey?: string;
 	models?: readonly CustomModelEntry[];
 	[key: string]: unknown;
 }
@@ -159,6 +161,30 @@ export class ModelConfigStore {
 			});
 		}
 		return entries;
+	}
+
+	/**
+	 * 某个提供方写在配置里的密钥。
+	 *
+	 * 只认明文与 `$ENV` 引用：`!命令` 那种写法要执行命令才拿得到，属于 pi 的运行时职责，这里
+	 * 不碰。给主机侧自用（例如从上游拉模型清单要带认证），不回给界面。
+	 */
+	async apiKey(providerId: string): Promise<string | undefined> {
+		const config = await this.read();
+		const raw = config.providers?.[providerId]?.apiKey;
+		if (typeof raw !== "string") {
+			return undefined;
+		}
+		const value = raw.trim();
+		if (value.length === 0 || value.startsWith("!")) {
+			return undefined;
+		}
+		const env = /^\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?$/.exec(value);
+		if (env === null) {
+			return value;
+		}
+		const resolved = process.env[env[1] as string]?.trim();
+		return resolved === undefined || resolved.length === 0 ? undefined : resolved;
 	}
 
 	/** 某个提供方在配置里的模型清单，用来判断它是不是自定义提供方。 */

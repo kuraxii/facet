@@ -32,6 +32,7 @@ const markup = renderToStaticMarkup(
 				saveText: async () => false,
 				saveCredential: async () => [],
 				deleteCredential: async () => [],
+				fetchProviderModels: async () => ({ models: [], baseUrl: "" }),
 				listCustomProviders: async () => [],
 				saveCustomProvider: async () => [],
 				removeCustomProvider: async () => [],

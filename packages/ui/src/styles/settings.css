@@ -617,6 +617,13 @@ dialog.dialog.is-provider[open] {
 	gap: 12px;
 }
 
+/* 模型那一段的标题行：左边是标题，右边并排放「从上游获取」与「添加模型」 */
+.prov-section-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
 /* 密钥那一行：输入框直接改，右边是保存与删除；输入框自己不带边框，整行看着是一个字段 */
 .prov-cred {
 	display: flex;

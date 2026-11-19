@@ -12,7 +12,7 @@ import type { Channel } from "./channel.ts";
 import type { SlashCommand } from "./command.ts";
 import type { FileContent, FileEntry, FileWriteResult } from "./file.ts";
 import type { GitCommitDetail, GitCommits, GitDiff, GitStatus } from "./git.ts";
-import type { AgentDefaults, CustomProviderInfo, ModelInfo, ProviderInfo } from "./model.ts";
+import type { AgentDefaults, CustomProviderInfo, ModelInfo, ProviderInfo, UpstreamModel } from "./model.ts";
 import type { ProjectInfo } from "./project.ts";
 import type { REQUEST_SCHEMAS } from "./schema/contracts.ts";
 import type { Entry, SessionListItem, SessionSnapshot } from "./session.ts";
@@ -267,6 +267,8 @@ export interface RequestResults {
 	diagnostics: { text: string };
 	testModel: { ok: boolean; latencyMs: number; message?: string };
 	listCustomProviders: { providers: CustomProviderInfo[] };
+	/** baseUrl 是实际可用的基址：裸站点根补上 /v1 之后与用户填的不同，界面据此回填 */
+	fetchProviderModels: { models: UpstreamModel[]; baseUrl: string };
 	saveCustomProvider: { providers: CustomProviderInfo[] };
 	removeCustomProvider: { providers: CustomProviderInfo[] };
 	listTerminals: { terminals: TerminalInfo[] };

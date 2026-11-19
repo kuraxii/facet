@@ -3,9 +3,8 @@
  *
  * 参数形状已由生成物校验，这里只处理语义：目录必须存在且在项目根内、项目必须登记过。
  */
-import type { CustomProviderEntry } from "@facet/agent";
-import type { CustomProviderInfo, RequestResults } from "@facet/protocol";
-import { PROTOCOL_VERSION } from "@facet/protocol";
+import { type CustomProviderEntry, fetchUpstreamModels } from "@facet/agent";
+import { type CustomProviderInfo, PROTOCOL_VERSION, type RequestResults } from "@facet/protocol";
 import { buildDiagnostics } from "../../diagnostics.ts";
 import { listDirectory, readTextFile, writeTextFile } from "../../files.ts";
 import { gitCommit, gitCommitDiff, gitCommits, gitDiff, gitStatus } from "../../git.ts";
@@ -44,6 +43,7 @@ type SystemMethod =
 	| "diagnostics"
 	| "testModel"
 	| "listCustomProviders"
+	| "fetchProviderModels"
 	| "saveCustomProvider"
 	| "removeCustomProvider";
 
@@ -206,6 +206,23 @@ export const systemHandlers: Pick<RequestHandlerMap, SystemMethod> = {
 	listCustomProviders: async (_params, context): Promise<RequestResults["listCustomProviders"]> => ({
 		providers: customProviderList(await context.factory.customProviders()),
 	}),
+
+	// 界面把输入框里的密钥带过来；没带就按这个提供方此刻能用的认证去解析
+	fetchProviderModels: async (params, context): Promise<RequestResults["fetchProviderModels"]> => {
+		const typed = params.apiKey?.trim();
+		const auth =
+			typed !== undefined && typed.length > 0
+				? { apiKey: typed }
+				: params.providerId === undefined
+					? undefined
+					: await context.factory.providerAuth(params.providerId);
+		return await fetchUpstreamModels({
+			baseUrl: params.baseUrl,
+			api: params.api,
+			apiKey: auth?.apiKey,
+			headers: auth !== undefined && "headers" in auth ? auth.headers : undefined,
+		});
+	},
 
 	saveCustomProvider: async (params, context): Promise<RequestResults["saveCustomProvider"]> => {
 		await context.factory.saveCustomProvider(params.provider);

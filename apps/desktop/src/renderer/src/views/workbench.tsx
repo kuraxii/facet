@@ -134,6 +134,7 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 					await host.refreshCatalog();
 					return providers;
 				}),
+			fetchProviderModels: (input) => client.fetchProviderModels(input),
 			listCustomProviders: () => client.listCustomProviders(),
 			saveCustomProvider: (provider) =>
 				client.saveCustomProvider(provider).then(async (providers) => {

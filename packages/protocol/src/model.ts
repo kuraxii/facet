@@ -54,6 +54,24 @@ export interface ModelInfo extends ModelRef {
 }
 
 /**
+ * 从上游拉到的一个模型。
+ *
+ * 上游的 `/v1/models` 一般只给标识与展示名，其余字段（上下文窗口、是否思考）留给用户填。
+ */
+export interface UpstreamModel {
+	/** 模型标识 */
+	id: string;
+	/** 展示名：上游给了用上游的，没给时从模型信息库补 */
+	name?: string;
+	/** 上下文窗口，模型信息库里查得到才有 */
+	contextWindow?: number;
+	/** 单次输出上限，模型信息库里查得到才有 */
+	maxTokens?: number;
+	/** 是否思考模型，模型信息库里查得到才有 */
+	reasoning?: boolean;
+}
+
+/**
  * pi 的默认设置。
  *
  * 存在 pi 自己的 `settings.json` 里，新建会话时由它开局；两个字段都空表示由 pi 自己决定。

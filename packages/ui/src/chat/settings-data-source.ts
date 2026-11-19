@@ -11,6 +11,7 @@ import type {
 	ModelRef,
 	ProviderInfo,
 	ThinkingLevel,
+	UpstreamModel,
 } from "@facet/protocol";
 
 export interface SettingsDataSource {
@@ -33,6 +34,13 @@ export interface SettingsDataSource {
 	saveCredential: (providerId: string, apiKey: string) => Promise<ProviderInfo[]>;
 	/** 删除提供方凭证，返回更新后的提供方清单 */
 	deleteCredential: (providerId: string) => Promise<ProviderInfo[]>;
+	/** 从上游拉模型清单（能力字段已用模型信息库补过）；没给 apiKey 时主机用该提供方已存下的密钥 */
+	fetchProviderModels: (input: {
+		baseUrl: string;
+		providerId?: string;
+		apiKey?: string;
+		api?: string;
+	}) => Promise<{ models: UpstreamModel[]; baseUrl: string }>;
 	/** 列出自定义提供方 */
 	listCustomProviders: () => Promise<CustomProviderInfo[]>;
 	/** 保存自定义提供方，返回更新后的清单 */

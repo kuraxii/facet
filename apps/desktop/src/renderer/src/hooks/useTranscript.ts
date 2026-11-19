@@ -19,8 +19,6 @@ export interface TranscriptOptions {
 	activeFile: string | undefined;
 	/** 当前会话标识，换会话时重置补历史的闸门 */
 	openedSessionId: string | undefined;
-	/** 换主机的次数；变一次就忘掉记下的滚动位置 */
-	hostEpoch: number;
 }
 
 export interface Transcript {
@@ -38,7 +36,7 @@ export interface Transcript {
 }
 
 export function useTranscript(options: TranscriptOptions): Transcript {
-	const { client, chat, activeFile, openedSessionId, hostEpoch } = options;
+	const { client, chat, activeFile, openedSessionId } = options;
 	/** 每个会话文件上次的滚动位置，切回标签时恢复 */
 	const scrollPositions = useRef(new Map<string, ScrollRestore>());
 
@@ -113,12 +111,6 @@ export function useTranscript(options: TranscriptOptions): Transcript {
 	const forgetScroll = useCallback((file: string) => {
 		scrollPositions.current.delete(file);
 	}, []);
-
-	// 换主机：另一台主机上的同名文件与这里的滚动位置无关
-	// biome-ignore lint/correctness/useExhaustiveDependencies: 只在换主机时清空
-	useEffect(() => {
-		scrollPositions.current.clear();
-	}, [hostEpoch]);
 
 	return { items, scrollRef, scrollElement, isPinned, scrollToBottom, forgetScroll };
 }

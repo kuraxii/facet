@@ -6,38 +6,16 @@
  * 这一层不引用连接层与终端层的 Hook。
  */
 import type { SessionClient, SessionView } from "@facet/client-core";
-import type {
-	FileContent,
-	GitCommit,
-	GitCommitDetail,
-	GitCommits,
-	GitFileChange,
-	GitStatus,
-} from "@facet/protocol";
+import type { FileContent, GitCommit, GitFileChange } from "@facet/protocol";
 import { changesTabId, commitTabId, fileTabId, type MainTab, sessionTabId, terminalTabId } from "@facet/ui";
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { isCurrentSessionTab } from "../main-tabs.ts";
-
-/** 变更页的数据：工作树状态、是否在取、失败原因。 */
-export interface ChangesState {
-	readonly status?: GitStatus;
-	readonly isLoading: boolean;
-	readonly error?: string;
-}
-
-/** 提交历史的数据、加载状态与失败原因。 */
-export interface CommitsState {
-	readonly data?: GitCommits;
-	readonly isLoading: boolean;
-	readonly error?: string;
-}
-
-/** 每个提交标签的改动详情。 */
-export interface CommitDetailState {
-	readonly detail?: GitCommitDetail;
-	readonly isLoading: boolean;
-	readonly error?: string;
-}
+import type {
+	ChangesState,
+	CommitDetailState,
+	CommitsState,
+	HostWorkspaceSnapshot,
+} from "../workspace-state.ts";
 
 export interface MainTabsOptions {
 	/** 会话客户端 */
@@ -50,8 +28,8 @@ export interface MainTabsOptions {
 	terminals: readonly { id: string; cwd: string; shell: string; restored: boolean }[];
 	/** 本端关掉的终端，避免清单还没刷新时又补回标签 */
 	closedTerminalIds: RefObject<Set<string>>;
-	/** 换主机的次数；变一次就把标签整份清掉 */
-	hostEpoch: number;
+	/** 这台主机上一次离开时的标签与内容；切回来时从这里接着显示 */
+	snapshot?: HostWorkspaceSnapshot;
 	/** 右栏此刻是否停在变更分页 */
 	isPanelOnChanges: boolean;
 	/** 切换到一个还没打开的会话标签时交给上层打开 */
@@ -108,19 +86,42 @@ export interface MainTabs {
 }
 
 export function useMainTabs(options: MainTabsOptions): MainTabs {
-	const { client, session, openedSessionId, terminals, closedTerminalIds, isPanelOnChanges, onOpenSession } =
-		options;
-	const [tabs, setTabs] = useState<MainTab[]>([]);
-	const [activeTabId, setActiveTabId] = useState<string | undefined>(undefined);
+	const {
+		client,
+		session,
+		openedSessionId,
+		terminals,
+		closedTerminalIds,
+		snapshot,
+		isPanelOnChanges,
+		onOpenSession,
+	} = options;
+	const [tabs, setTabs] = useState<MainTab[]>(() => snapshot?.tabs ?? []);
+	const [activeTabId, setActiveTabId] = useState<string | undefined>(() => snapshot?.activeTabId);
 	/** 用户主动关掉的会话标签，避免会话更新时又自动补回来 */
 	const closedSessionTabIds = useRef(new Set<string>());
-	const [fileContents, setFileContents] = useState<Readonly<Record<string, FileContent>>>({});
+	const [fileContents, setFileContents] = useState<Readonly<Record<string, FileContent>>>(
+		() => snapshot?.fileContents ?? {},
+	);
 	const [fileError, setFileError] = useState<string | undefined>(undefined);
 	const [changes, setChanges] = useState<ChangesState>({ isLoading: false });
 	const changesSeq = useRef(0);
 	const [commits, setCommits] = useState<CommitsState>({ isLoading: false });
-	const [commitDetails, setCommitDetails] = useState<Record<string, CommitDetailState>>({});
+	const [commitDetails, setCommitDetails] = useState<Record<string, CommitDetailState>>(
+		() => snapshot?.commitDetails ?? {},
+	);
 	const commitRequests = useRef(new Map<string, number>());
+
+	// 每次变化都写回快照：切走这台主机时组件卸载，下次挂回来从这里接着显示
+	useEffect(() => {
+		if (snapshot === undefined) {
+			return;
+		}
+		snapshot.tabs = tabs;
+		snapshot.activeTabId = activeTabId;
+		snapshot.fileContents = fileContents;
+		snapshot.commitDetails = commitDetails;
+	}, [snapshot, tabs, activeTabId, fileContents, commitDetails]);
 
 	const activeTab = tabs.find((item) => item.id === activeTabId);
 	const changesTab = activeTab?.kind === "changes" ? activeTab : undefined;

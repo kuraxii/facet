@@ -31,6 +31,7 @@ import {
 import { X } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
 import { AppFrame } from "../app-frame.tsx";
+import { bridge } from "../bridge.ts";
 import type { Composer } from "../hooks/useComposer.ts";
 import type { HostConnection } from "../hooks/useHostConnection.ts";
 import type { MainTabs as MainTabsState } from "../hooks/useMainTabs.ts";
@@ -40,8 +41,8 @@ import type { Transcript } from "../hooks/useTranscript.ts";
 import type { WorkspaceShell } from "../hooks/useWorkspaceShell.ts";
 import { applyAppearance } from "../hooks/useWorkspaceShell.ts";
 import { LOCAL_TARGET } from "../host-connection.ts";
+import { useHostClient } from "../host-context.tsx";
 import { toTabItems } from "../main-tabs.ts";
-import { bridge, client } from "../runtime.ts";
 import { WindowControls } from "../WindowControls.tsx";
 import { ChatArea } from "./chat-area.tsx";
 import { DocumentPane } from "./document-pane.tsx";
@@ -95,6 +96,7 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 		openTerminal,
 	} = props;
 	const { t } = useI18n();
+	const client = useHostClient();
 	const sessionView = client.sessionView();
 	const chat: ChatView | undefined = client.chatView();
 	const activity = chatActivity(sessionView);
@@ -159,7 +161,7 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 			diagnostics: () => client.diagnostics(),
 			saveText: (suggestedName, text) => bridge.saveText(suggestedName, text),
 		}),
-		[host.refreshCatalog],
+		[client, host.refreshCatalog],
 	);
 	const draftCommand = parseCommand(composer.draft.trim());
 	const isExtensionCommand =
@@ -322,7 +324,9 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 								hosts={host.hostList.hosts}
 								isOnline={host.isOnline}
 								isReconnecting={host.isReconnecting}
-								onConnect={(next) => void host.selectHost(next)}
+								connectedEndpoints={host.connectedEndpoints}
+								onConnect={host.selectHost}
+								onDisconnect={host.disconnectHost}
 								onAddHost={host.addHost}
 								onRemoveHost={host.removeHost}
 								onRenameHost={host.renameHost}

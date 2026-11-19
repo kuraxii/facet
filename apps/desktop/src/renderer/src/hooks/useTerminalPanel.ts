@@ -9,6 +9,7 @@ import type { TerminalInfo } from "@facet/protocol";
 import type { ToastInput } from "@facet/ui";
 import type { TerminalAppearance } from "@facet/ui-terminal";
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
+import type { HostWorkspaceSnapshot } from "../workspace-state.ts";
 
 /**
  * 读一份终端外观。
@@ -59,6 +60,8 @@ export interface TerminalPanelOptions {
 	cwd: string | undefined;
 	/** 第几次连接就绪；变化时重取清单 */
 	connectEpoch: number;
+	/** 这台主机上一次离开时的终端状态；切回来时接着用 */
+	snapshot?: HostWorkspaceSnapshot;
 	/** 弹一条轻提示：开终端失败时给事实与重试入口 */
 	showToast: (input: Omit<ToastInput, "now">) => void;
 }
@@ -79,10 +82,11 @@ export interface TerminalPanel {
 }
 
 export function useTerminalPanel(options: TerminalPanelOptions): TerminalPanel {
-	const { client, canUseTerminal, cwd, connectEpoch, showToast } = options;
+	const { client, canUseTerminal, cwd, connectEpoch, snapshot, showToast } = options;
 	const [terminals, setTerminals] = useState<TerminalInfo[]>([]);
 	const [appearance, setAppearance] = useState<TerminalAppearance>(readTerminalAppearance);
-	const closedTerminalIds = useRef(new Set<string>());
+	// 本端关掉的终端跟着主机走：切回来时同一批终端不该又冒出来
+	const closedTerminalIds = useRef(snapshot?.closedTerminalIds ?? new Set<string>());
 
 	/** 重新取终端清单。连不上或主机没有终端能力时按空处理。 */
 	const refreshTerminals = useCallback(async (): Promise<readonly TerminalInfo[]> => {

@@ -9,7 +9,7 @@
  * 拖动区与按钮都不渲染。
  */
 import { type ReactNode, useEffect, useRef } from "react";
-import { bridge } from "./runtime.ts";
+import { bridge } from "./bridge.ts";
 import { readWindowControls, WindowControls } from "./WindowControls.tsx";
 export function AppFrame({
 	children,

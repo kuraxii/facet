@@ -69,6 +69,7 @@ flowchart BT
 
 - **AOT 运行时守卫**：RPC 请求与客户端动作的类型约定写在 `packages/protocol/src/schema/contracts.ts`，由 `packages/protocol/scripts/gen-checks.mjs` 生成零依赖守卫到 `packages/protocol/src/generated/checks.ts`（提交入库）。
 - **入站不信任**：传输层与网关入口收到的原始 JSON 必须先过 `SERVER_FRAME_CONTRACTS`、`REQUEST_CONTRACTS` 或 `DISPATCH_CONTRACTS`，才允许进入业务处理器。处理器里不写零散的字段断言，不出现未经校验的 `as Action`。
+- **落盘路径只认本机的**：`createSession` 的 `cwd`、项目清单的 `add` 都先按主机自己的磁盘核对（`resolveProjectDirectory` / `isProjectDirectory`），不存在或不是目录的一律拒绝；扫描历史会话遇到脏 `cwd` 静默跳过。端可能还握着另一台机器的路径（Windows 的 `C:\Program Files\facet` 在 Linux 上就是一条相对路径），在这里挡住之后它既进不了 `projects.json`，也不会在数据目录下凭空建出同名目录。
 - **幂等去重**：`apps/server/src/rpc/gateway.ts` 维护有界的 `(clientId, clientSeq)` 去重窗口。重复投递的已成功 `dispatch` 绝不二次执行副作用；重复投递的已拒绝 `dispatch` 原样返回同一条 `rejectionReason`。
 
 ### 4.2 Agent 防腐层与状态机（`packages/agent`）
@@ -88,7 +89,8 @@ flowchart BT
 - **重连闭环**：指数退避重连调度与连接就绪后的 `resume()` 续订都内聚在 `packages/client-core`，对 UI 只暴露只读的连接状态快照与 `reconnectNow()`。
 - **精确核销**：`pendingSend` 存在各自的会话槽位里，按 `clientSeq` 索引，不绑定到隐式的 `this.active` 单槽；收到带 `origin.clientSeq` 的确认帧时只核销对应那一条。
 - **引用透明与按需重绘**：`reduceSession` 与 `reduceChat` 在状态没有实际变化时原样返回入参引用；`SessionStore.apply()` 只在视图引用或乐观发送状态变化时调用 `markChanged()`。
-- **前端 Hooks 单向**：`App.tsx` 只是布局组装壳，状态逻辑按 `useHostConnection`（底层）→ `useSessionLifecycle` / `useTerminalPanel` / `useComposer` / `useWorkspaceShell`（中上层）单向依赖，禁止跨 Hook 双向同步与 `useEffect` 乒乓依赖。
+- **按主机隔离**：每台主机一套运行时（`host-runtime.ts`：传输、会话客户端、终端客户端与连接链路，按端点存在注册表里）。界面里同时只挂当前主机的一份工作区，切走即卸载、切回按工作区快照（标签、文件内容、选中会话、落地目录）重建；后台主机的连接不停，只有显式断开才退订、关连接并丢掉它的快照。
+- **前端 Hooks 单向**：`App.tsx` 只挑当前主机的运行时并把工作区摆出来，其余状态逻辑在工作区内部按 `useHostConnection`（底层）→ `useSessionLifecycle` / `useTerminalPanel` / `useComposer` / `useWorkspaceShell`（中上层）单向依赖，禁止跨 Hook 双向同步与 `useEffect` 乒乓依赖。
 
 ## 5. 高频场景开发步骤
 

@@ -20,7 +20,7 @@ import {
 	writeSidebarWidth,
 } from "@facet/ui";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { bridge } from "../runtime.ts";
+import { bridge } from "../bridge.ts";
 import { readWindowControls } from "../WindowControls.tsx";
 
 /** 窄屏断点：880px 以下侧栏变抽屉，与样式表里的媒体查询保持一致。 */

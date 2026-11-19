@@ -36,8 +36,14 @@ if (isDev) {
 	app.setPath("userData", `${app.getPath("userData")}-dev`);
 }
 
-/** 默认打开的项目目录,可用 FACET_PROJECT_DIR 覆盖 */
-const projectDir = process.env.FACET_PROJECT_DIR?.trim() || process.cwd();
+/**
+ * 默认打开的项目目录。
+ *
+ * 显式配置的 FACET_PROJECT_DIR 优先；开发态退回进程的工作目录（多半就是仓库根），打包之后
+ * 不再退回 cwd——从桌面快捷方式起来时它是安装目录，Windows 上就是 `C:\Program Files\facet`，
+ * 这条路径既不是用户的项目，远端主机上也根本不存在。
+ */
+const projectDir = process.env.FACET_PROJECT_DIR?.trim() || (isDev ? process.cwd() : "");
 
 /**
  * 外部主机端点。
@@ -197,7 +203,7 @@ function createWindow(): BrowserWindow {
 			zoomFactor: uiScale / 100,
 			additionalArguments: [
 				`--facet-host-mode=${externalEndpoint === undefined ? "local" : "external"}`,
-				`--facet-project=${projectDir}`,
+				...(projectDir.length === 0 ? [] : [`--facet-project=${projectDir}`]),
 				`--facet-platform=${process.platform}`,
 				`--facet-version=${app.getVersion()}`,
 				`--facet-ui-scale=${uiScale}`,

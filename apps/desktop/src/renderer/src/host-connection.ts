@@ -48,10 +48,10 @@ export function cleanHostError(error: unknown): Error {
 	return Object.assign(new Error(stripped), typeof code === "string" ? { code } : {});
 }
 
-/** 建一个走主进程通道的传输。readTarget 每次重连都会重新读，切换主机后立即生效。 */
+/** 建一个走主进程通道的传输。一个实例只连一台主机：端点固定在这份闭包里。 */
 export function makeTransport(
 	bridge: HostChannelBridge,
-	readTarget: () => string,
+	endpoint: string,
 	/** 本次连接要用的 SSH 密码，用户刚在弹窗里填过才有 */
 	readPassword: () => string | undefined = () => undefined,
 ): StreamTransport {
@@ -60,9 +60,8 @@ export function makeTransport(
 
 	const transport = new StreamTransport({
 		createStream: async () => {
-			const target = readTarget();
 			const channel = await bridge.openHostChannel(
-				target,
+				endpoint,
 				{
 					onData: (chunk) => dataListener?.(chunk),
 					onClose: (reason) => closeListener?.(reason),

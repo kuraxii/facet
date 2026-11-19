@@ -1387,6 +1387,49 @@ describe("SessionClient", () => {
 		expect(client.store.sessionStatus("/work/a/s1.jsonl").activity).toBe("running");
 	});
 
+	it("disposeHost 之后清单、登录与两条通道的水位都不留", async () => {
+		const { transport, client } = createClient(2, { initialPages: 1, pageSize: 5 });
+		const listChannel = "sessions:/h" as Channel;
+		const modelChannel = "models:/h" as Channel;
+		await client.openSession("/tmp/s1.jsonl");
+		transport.emit(listChannel, {
+			type: "sessions/changed",
+			summary: {
+				id: "s1",
+				path: "/work/a/s1.jsonl",
+				cwd: "/work/a",
+				name: undefined,
+				parentSessionPath: undefined,
+				created: 1,
+				modified: 2,
+				firstMessage: "你好",
+			},
+			status: { activity: "idle", settle: undefined, pendingInput: 0, seenAt: 0 },
+		});
+		transport.emit(modelChannel, {
+			type: "models/loginEvent",
+			loginId: "l1",
+			providerId: "anthropic",
+			event: { type: "info", message: "开始登录" },
+		});
+		expect(client.store.sessionList()).toHaveLength(1);
+		expect(client.store.providerLogin("anthropic")).toBeDefined();
+
+		await client.disposeHost();
+
+		expect(client.store.sessionList()).toEqual([]);
+		expect(client.store.providerLogin("anthropic")).toBeUndefined();
+		expect(client.store.sessionListSeq).toBe(0);
+		expect(client.store.providerLoginSeq).toBe(0);
+		expect(client.host).toBeUndefined();
+		expect(client.current).toBeUndefined();
+		// 会话通道在放开时就退了订
+		const unsubscribed = transport.calls
+			.filter((call) => call.method === "unsubscribe")
+			.map((call) => (call.params as { channel: Channel }).channel);
+		expect(unsubscribed).toEqual(expect.arrayContaining([SESSION, CHAT]));
+	});
+
 	it("重复 attach 不叠加动作监听", async () => {
 		const { transport, client } = createClient(2, { initialPages: 1, pageSize: 5 });
 		await client.openSession("/tmp/s1.jsonl");

@@ -543,6 +543,30 @@ export class SessionStore {
 		}
 	}
 
+	/**
+	 * 丢掉属于这台主机的全部状态。
+	 *
+	 * 与 `clear()` 的区别是会连清单、登录与两条通道的水位一起清：换主机或断开主机之后
+	 * 这些都属于上一台，留着会让新主机的清单补不上（水位比它的序号还大），也会让旧主机
+	 * 的登录进度接着显示。
+	 */
+	resetHost(): void {
+		const had =
+			this.sessions.size > 0 ||
+			this.chats.size > 0 ||
+			this.sessionIndex.size > 0 ||
+			this.providerLogins.size > 0;
+		this.sessions.clear();
+		this.chats.clear();
+		this.sessionIndex.clear();
+		this.providerLogins.clear();
+		this.sessionIndexSeq = 0;
+		this.modelLogSeq = 0;
+		if (had) {
+			this.markChanged();
+		}
+	}
+
 	subscribe(listener: (version: number) => void): () => void {
 		this.listeners.add(listener);
 		return () => {

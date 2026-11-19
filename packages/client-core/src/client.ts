@@ -1296,6 +1296,26 @@ export class SessionClient {
 		await this.exclusive(() => this.releaseAllUnlocked());
 	}
 
+	/**
+	 * 放开与这台主机的全部关系。
+	 *
+	 * 与 `release()` 不同：那个只放掉当前开着的会话，清单与登录状态还留着，同一台主机上
+	 * 关掉再重开会话时用得到；换主机或断开主机之后这些东西都属于上一台，必须一并清掉。
+	 * 退订先做，手里还握着一条能用的连接时主机才会注销对应的订阅。
+	 */
+	async disposeHost(): Promise<void> {
+		await this.exclusive(async () => {
+			await this.releaseAllUnlocked();
+			this.stopActions?.();
+			this.stopActions = undefined;
+			this.stopState?.();
+			this.stopState = undefined;
+			this.handshake = undefined;
+			this.trustCache.clear();
+			this.state.resetHost();
+		});
+	}
+
 	/** 退掉这两个通道的订阅并丢掉它们的视图。 */
 	private async releaseChannels(opened: OpenedSession): Promise<void> {
 		for (const channel of [opened.sessionChannel, opened.chatChannel]) {

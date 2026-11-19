@@ -5,23 +5,15 @@
  * 保存失败时保留用户正在编辑的输入，可以直接重试。
  */
 import type { LanguageSetting } from "@facet/i18n";
-import type {
-	CustomProviderInfo,
-	FacetSettings,
-	LiveMotion,
-	ModelInfo,
-	ModelRef,
-	ProviderInfo,
-} from "@facet/protocol";
+import type { FacetSettings, LiveMotion, ProviderInfo } from "@facet/protocol";
 import { X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { Modal } from "../modal.tsx";
 import { CODE_THEME_OPTIONS, UI_THEME_OPTIONS } from "../theme.ts";
-import { ProvidersSection } from "./ProvidersSection.tsx";
-import { providerRows } from "./provider-rows.ts";
+import { ModelsSection } from "./ModelsSection.tsx";
 import type { SettingsDataSource } from "./settings-data-source.ts";
-import { SettingsGroup, SettingsRow } from "./settings-layout.tsx";
+import { SettingsGroup, SettingsRow, StatusNote } from "./settings-layout.tsx";
 import { UI_SCALE_STEPS } from "./ui-scale.ts";
 
 /** 设置分类。 */
@@ -75,27 +67,6 @@ export interface SettingsPageProps {
 	 * 关掉之后内容照常显示，控件不可用，也不会有自动保存。
 	 */
 	canEdit?: boolean;
-}
-
-/** 一段加载或保存失败的信息，带重试。 */
-function StatusNote({
-	message,
-	onRetry,
-	tone,
-}: {
-	message: string;
-	onRetry: () => void;
-	tone: "error" | "pending";
-}) {
-	const { t } = useI18n();
-	return (
-		<div className={tone === "error" ? "set-note is-error" : "set-note"}>
-			<span>{message}</span>
-			<button type="button" className="set-note-action" onClick={onRetry}>
-				{t("common.retry")}
-			</button>
-		</div>
-	);
 }
 
 export function SettingsPage({
@@ -295,7 +266,6 @@ export function SettingsPage({
 									<StatusNote
 										message={t("settings.readFailed", { error: loadError })}
 										onRetry={loadSettings}
-										tone="error"
 									/>
 								)}
 								{isLoading ? <p className="set-hint">{t("settings.loading")}</p> : null}
@@ -319,7 +289,6 @@ export function SettingsPage({
 											<StatusNote
 												message={t("settings.saveFailed", { error: saveError })}
 												onRetry={() => void save(draft)}
-												tone="error"
 											/>
 										)}
 									</>
@@ -332,210 +301,6 @@ export function SettingsPage({
 		</Modal>
 	);
 }
-
-/** 模型键，模型可见性与选择器共用。 */
-function modelKey(model: ModelRef): string {
-	return `${model.provider}/${model.id}`;
-}
-
-/**
- * 模型设置。
- *
- * 一页里放三件事：新建会话采用的默认模型与思考档位、已配置的提供方（含凭证与地址）、可用模型的
- * 连通性测试。档位按所选模型是否支持思考来筛，不支持时只留「不思考」。
- */
-function ModelsSection({
-	draft,
-	patch,
-	data,
-	providers,
-	providersError,
-	onReloadProviders,
-}: {
-	draft: FacetSettings;
-	patch: (change: (current: FacetSettings) => FacetSettings) => void;
-	data: SettingsDataSource;
-	providers: readonly ProviderInfo[] | undefined;
-	providersError: string | undefined;
-	onReloadProviders: () => void;
-}) {
-	const { t } = useI18n();
-	const [models, setModels] = useState<readonly ModelInfo[] | undefined>(undefined);
-	const [error, setError] = useState<string | undefined>(undefined);
-	/** 每个模型的测试结果，键为 provider/model */
-	const [tests, setTests] = useState<
-		Record<string, { ok: boolean; latencyMs: number; message?: string } | undefined>
-	>({});
-	/** 正在测试的模型 */
-	const [testing, setTesting] = useState<string | undefined>(undefined);
-	/** 自定义提供方的完整配置，提供方列表与模型筛选用同一份 */
-	const [customs, setCustoms] = useState<readonly CustomProviderInfo[] | undefined>(undefined);
-
-	/** 发一次最小请求，结果留在该模型下面。 */
-	const runTest = async (model: ModelInfo) => {
-		const key = modelKey(model);
-		setTesting(key);
-		try {
-			const result = await data.testModel({ provider: model.provider, id: model.id });
-			setTests((current) => ({ ...current, [key]: result }));
-		} catch (testError) {
-			setTests((current) => ({
-				...current,
-				[key]: {
-					ok: false,
-					latencyMs: 0,
-					message: testError instanceof Error ? testError.message : String(testError),
-				},
-			}));
-		} finally {
-			setTesting(undefined);
-		}
-	};
-
-	const load = useCallback(async () => {
-		setError(undefined);
-		try {
-			setModels(await data.loadModels());
-		} catch (loadError) {
-			setError(loadError instanceof Error ? loadError.message : String(loadError));
-		}
-	}, [data]);
-
-	useEffect(() => {
-		if (models !== undefined) {
-			return;
-		}
-		void load();
-	}, [load, models]);
-
-	useEffect(() => {
-		if (customs !== undefined) {
-			return;
-		}
-		void data
-			.listCustomProviders()
-			.then(setCustoms)
-			.catch(() => setCustoms([]));
-	}, [customs, data]);
-
-	if (error !== undefined) {
-		return (
-			<>
-				<h2 className="set-section-title">{t("settings.models")}</h2>
-				<StatusNote
-					message={t("settings.modelsPage.readFailed", { error })}
-					onRetry={() => void load()}
-					tone="error"
-				/>
-			</>
-		);
-	}
-	if (models === undefined) {
-		return (
-			<>
-				<h2 className="set-section-title">{t("settings.models")}</h2>
-				<p className="set-hint">{t("settings.modelsPage.loading")}</p>
-			</>
-		);
-	}
-
-	// 只列已配置提供方的模型：没配置凭证的提供方用不了，列出来只是噪声。两者都读到之前先不筛
-	const usable =
-		providers === undefined || customs === undefined
-			? models
-			: (() => {
-					const configured = new Set(
-						providerRows(providers, customs)
-							.filter(({ provider, custom }) => provider.authenticated || custom !== undefined)
-							.map(({ provider }) => provider.id),
-					);
-					return models.filter((model) => configured.has(model.provider));
-				})();
-
-	return (
-		<>
-			<h2 className="set-section-title">{t("settings.models")}</h2>
-			<SettingsGroup label={t("settings.modelsPage.defaultSettings")}>
-				<SettingsRow title={t("settings.modelsPage.defaultThinking")}>
-					<select
-						className="set-input"
-						value={draft.defaultThinkingLevel ?? ""}
-						onChange={(event) => {
-							const value = event.target.value;
-							patch((current) => ({
-								...current,
-								...(value.length === 0
-									? { defaultThinkingLevel: undefined }
-									: { defaultThinkingLevel: value as ThinkingLevelValue }),
-							}));
-						}}
-						aria-label={t("settings.modelsPage.defaultThinking")}
-					>
-						<option value="">{t("settings.modelsPage.modelDefault")}</option>
-						{THINKING_LEVEL_OPTIONS.map((level) => (
-							<option key={level} value={level}>
-								{level}
-							</option>
-						))}
-					</select>
-				</SettingsRow>
-			</SettingsGroup>
-
-			<ProvidersSection
-				providers={providers}
-				error={providersError}
-				// 凭证变了，可用模型的范围也跟着变
-				onReload={() => {
-					onReloadProviders();
-					void load();
-				}}
-				data={data}
-				customs={customs}
-				onCustomsChange={setCustoms}
-			/>
-
-			<h3 className="set-group-title set-group-title-lg">{t("settings.modelsPage.available")}</h3>
-			<ul className="set-list set-list-scroll">
-				{usable.map((model) => {
-					const key = modelKey(model);
-					const probe = tests[key];
-					return (
-						<li key={key} className="set-row is-block">
-							<div className="set-row-head">
-								<span className="set-row-name ell">
-									{model.provider} / {model.name}
-								</span>
-								{probe === undefined ? null : (
-									<span className={probe.ok ? "set-badge is-on" : "set-badge is-off"}>
-										{probe.ok
-											? t("settings.modelsPage.probeAvailable", { latency: probe.latencyMs })
-											: t("settings.modelsPage.probeUnavailable")}
-									</span>
-								)}
-								<button
-									type="button"
-									className="set-row-action"
-									disabled={testing === key}
-									onClick={() => void runTest(model)}
-								>
-									{testing === key ? t("settings.modelsPage.testing") : t("settings.modelsPage.test")}
-								</button>
-							</div>
-							{probe?.message === undefined ? null : <p className="set-row-error">{probe.message}</p>}
-						</li>
-					);
-				})}
-				{usable.length === 0 ? (
-					<li className="set-row set-row-empty">{t("settings.modelsPage.noModels")}</li>
-				) : null}
-			</ul>
-		</>
-	);
-}
-
-/** 思考档位的取值，与协议里的 ThinkingLevel 一致。 */
-const THINKING_LEVEL_OPTIONS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
-type ThinkingLevelValue = (typeof THINKING_LEVEL_OPTIONS)[number];
 
 /** 运行中动效的选项，顺序与设置页列出的顺序一致。 */
 const LIVE_MOTION_OPTIONS: ReadonlyArray<{

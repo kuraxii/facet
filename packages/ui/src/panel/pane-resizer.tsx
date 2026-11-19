@@ -4,10 +4,12 @@
  * 按住拖动改宽度：拖动期间直接写根节点上的宽度变量，不经过 React 渲染。每移动一次就
  * setState 会把整个界面重画一遍，流式输出时尤其卡；松手时才提交一次，由宿主保存。
  *
- * 拖动期间在根节点上挂 `data-resizing="col"`：样式表据此把整页光标统一成列宽光标并锁住
- * 文字选区，指针滑出分隔条时不会忽然变回箭头，也不会顺手选中背后的正文。
+ * 拖动期间在 body 上铺一层透明遮罩：整屏的命中与光标都归它，指针滑出分隔条时不会忽然变回
+ * 箭头，底下的按钮收不到 hover，正文也不会被顺手选中。遮罩只在开始与结束各渲染一次，拖动
+ * 过程中仍然不经过 React。
  */
-import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef } from "react";
+import { type PointerEvent as ReactPointerEvent, useCallback, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { clampPaneWidth } from "./pane-width.ts";
 
 /** 分隔条参数。 */
@@ -30,20 +32,6 @@ export interface PaneResizerProps {
 	onWidthChange: (width: number) => void;
 }
 
-/**
- * 挂上或摘掉拖动期间的全局标记。
- *
- * 标记只能挂在 `<html>` 上：`cursor` 与 `user-select` 要盖住整页，挂在分隔条自己身上只对
- * 那一小块生效。
- */
-function setResizingLock(on: boolean): void {
-	if (on) {
-		document.documentElement.dataset.resizing = "col";
-		return;
-	}
-	delete document.documentElement.dataset.resizing;
-}
-
 export function PaneResizer({
 	className,
 	label,
@@ -55,16 +43,15 @@ export function PaneResizer({
 	onWidthChange,
 }: PaneResizerProps) {
 	const dragging = useRef<{ startX: number; startWidth: number; current: number } | undefined>(undefined);
-
-	// 拖动中途组件被卸掉（切布局、关面板）时也要把全局标记摘掉，否则光标会一直停在列宽形态
-	useEffect(() => () => setResizingLock(false), []);
+	/** 拖动中才挂遮罩；组件中途被卸掉时遮罩跟着它一起走 */
+	const [isDragging, setIsDragging] = useState(false);
 
 	const handlePointerDown = useCallback(
 		(event: ReactPointerEvent<HTMLHRElement>) => {
 			event.preventDefault();
 			dragging.current = { startX: event.clientX, startWidth: width, current: width };
 			event.currentTarget.setPointerCapture(event.pointerId);
-			setResizingLock(true);
+			setIsDragging(true);
 		},
 		[width],
 	);
@@ -101,7 +88,7 @@ export function PaneResizer({
 		(event: ReactPointerEvent<HTMLHRElement>) => {
 			const start = dragging.current;
 			dragging.current = undefined;
-			setResizingLock(false);
+			setIsDragging(false);
 			if (event.currentTarget.hasPointerCapture(event.pointerId)) {
 				event.currentTarget.releasePointerCapture(event.pointerId);
 			}
@@ -114,18 +101,23 @@ export function PaneResizer({
 	);
 
 	return (
-		<hr
-			className={className}
-			aria-orientation="vertical"
-			aria-label={label}
-			aria-valuenow={width}
-			aria-valuemin={min}
-			aria-valuemax={max}
-			onPointerDown={handlePointerDown}
-			onPointerMove={handlePointerMove}
-			onPointerUp={finishDrag}
-			onPointerCancel={finishDrag}
-			onLostPointerCapture={finishDrag}
-		/>
+		<>
+			<hr
+				className={className}
+				aria-orientation="vertical"
+				aria-label={label}
+				aria-valuenow={width}
+				aria-valuemin={min}
+				aria-valuemax={max}
+				onPointerDown={handlePointerDown}
+				onPointerMove={handlePointerMove}
+				onPointerUp={finishDrag}
+				onPointerCancel={finishDrag}
+				onLostPointerCapture={finishDrag}
+			/>
+			{isDragging
+				? createPortal(<div className="pane-resize-overlay" aria-hidden="true" />, document.body)
+				: null}
+		</>
 	);
 }

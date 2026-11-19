@@ -271,6 +271,7 @@ describe("参数类型与重构前一致", () => {
 			>(true),
 		};
 		expect(Object.values(proofs).every((value) => value === true)).toBe(true);
-		expect(Object.keys(proofs)).toHaveLength(51);
+		// 51 减去已经撤掉的 setProviderBaseUrl；新增的方法不进这份「重构前参数表」
+		expect(Object.keys(proofs)).toHaveLength(50);
 	});
 });

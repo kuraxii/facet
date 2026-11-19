@@ -242,6 +242,71 @@ dialog.set-page::backdrop {
 	color: var(--t3);
 }
 
+/*
+ * 下拉列表。
+ *
+ * `appearance: base-select` 把浏览器自己的系统菜单换成界面这一套：触发器沿用 `.set-input`，
+ * 弹层与右键菜单同款（`--card2` 底、1px 描边、8px 圆角、一层阴影），当前值用 `--surface3`
+ * 底标出，不画对勾。不支持这个属性的引擎退回系统菜单，触发器样式照旧。
+ */
+select.set-input,
+select.set-input::picker(select) {
+	appearance: base-select;
+}
+
+/* 箭头占的那段宽度由 `::picker-icon` 自己带，文字不靠它留白 */
+select.set-input {
+	padding-right: 4px;
+}
+
+select.set-input::picker-icon {
+	color: var(--t3);
+	transition: rotate var(--dur-fast) var(--ease);
+}
+
+/* 展开时箭头朝上，与输入区两个芯片的展开箭头一致 */
+select.set-input:open::picker-icon {
+	rotate: 180deg;
+}
+
+select.set-input::picker(select) {
+	/* 与触发器拉开一点距离，不压住边框 */
+	margin-block: 4px;
+	min-width: anchor-size(width);
+	max-width: min(420px, calc(100vw - 32px));
+	max-height: 320px;
+	overflow-y: auto;
+	padding: 4px;
+	border: 1px solid var(--line2);
+	border-radius: 8px;
+	background: var(--card2);
+	box-shadow: 0 8px 24px rgb(0 0 0 / 32%);
+	scrollbar-gutter: stable;
+}
+
+select.set-input option {
+	padding: 5px 8px;
+	border-radius: 6px;
+	color: var(--t2);
+	font-size: 12.5px;
+}
+
+select.set-input option:hover,
+select.set-input option:focus-visible {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+select.set-input option:checked {
+	background: var(--surface3);
+	color: var(--t1);
+}
+
+/* 当前值靠底色区分，与界面里其它菜单一致，不再多画一个对勾 */
+select.set-input option::checkmark {
+	display: none;
+}
+
 .set-check {
 	display: flex;
 	align-items: center;

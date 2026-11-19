@@ -25,8 +25,8 @@ export interface EditorPalette {
 	accent: string;
 	/** 选区底色 */
 	selection: string;
-	/** 当前行底色 */
-	activeLine: string;
+	/** 比正文底色浅一档的表面：搜索命中、面板与折叠标记用它 */
+	raised: string;
 	/** 标题到第一行正文的间距 */
 	headGap: string;
 	/** 等宽字体栈 */
@@ -43,7 +43,7 @@ export function readEditorPalette(): EditorPalette {
 		muted: readVar("--t3", "#71717a"),
 		accent: readVar("--acc", "#fafafa"),
 		selection: readVar("--surface3", "#3f3f46"),
-		activeLine: readVar("--surface2", "#27272a"),
+		raised: readVar("--surface2", "#27272a"),
 		headGap: readVar("--editor-head-gap", "4px"),
 		monoFont: readVar("--font-editor", readVar("--font-mono", "ui-monospace, monospace")),
 		fontSize: readVar("--editor-size", "13px"),
@@ -73,19 +73,21 @@ export function editorTheme(palette: EditorPalette): Extension {
 				border: "none",
 				color: palette.muted,
 			},
-			".cm-activeLine": { backgroundColor: palette.activeLine },
-			".cm-activeLineGutter": { backgroundColor: palette.activeLine },
 			"&.cm-focused .cm-cursor": { borderLeftColor: palette.accent },
+			/*
+			 * 选区两种画法共用一套配色：只读态是浏览器原生选区（`::selection`），编辑态是
+			 * CM6 自己画的那层（`.cm-selectionBackground`）。
+			 */
 			"&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": {
 				backgroundColor: palette.selection,
 			},
-			".cm-selectionMatch": { backgroundColor: palette.activeLine },
+			".cm-selectionMatch": { backgroundColor: palette.raised },
 			".cm-searchMatch": {
-				backgroundColor: palette.activeLine,
+				backgroundColor: palette.raised,
 				outline: `1px solid ${palette.accent}`,
 			},
 			".cm-panels": {
-				backgroundColor: palette.activeLine,
+				backgroundColor: palette.raised,
 				color: palette.foreground,
 			},
 			".cm-panels input, .cm-panels button": {

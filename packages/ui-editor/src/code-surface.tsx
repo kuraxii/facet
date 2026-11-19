@@ -1,9 +1,12 @@
 /**
  * 代码面。
  *
- * 用 CodeMirror 6 画只读或可编辑的文件内容：行号、语法高亮、括号匹配、当前行、搜索面板与
- * 折叠。语言按文件名推断，语言包按需加载，加载期间先按纯文本显示；语言与只读都放在
- * compartment 里，切文件或切换编辑态时只重配这两样，不重建整个编辑器。
+ * 用 CodeMirror 6 画只读或可编辑的文件内容：行号、语法高亮、括号匹配、搜索面板与折叠。
+ * 语言按文件名推断，语言包按需加载，加载期间先按纯文本显示；语言与只读都放在 compartment
+ * 里，切文件或切换编辑态时只重配这两样，不重建整个编辑器。
+ *
+ * 选区一律由 CM6 的 `drawSelection()` 画；双击选词由这里自己补一次派发，原因见
+ * `wordRangeAt` 那一组函数与 `EditorView.domEventHandlers` 里的注释。
  */
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import {
@@ -16,19 +19,42 @@ import {
 } from "@codemirror/language";
 import { languages } from "@codemirror/language-data";
 import { searchKeymap } from "@codemirror/search";
-import { Compartment, EditorState } from "@codemirror/state";
-import {
-	drawSelection,
-	EditorView,
-	highlightActiveLine,
-	highlightActiveLineGutter,
-	keymap,
-	lineNumbers,
-} from "@codemirror/view";
+import { Compartment, EditorSelection, EditorState } from "@codemirror/state";
+import { drawSelection, EditorView, keymap, lineNumbers } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { useEffect, useRef } from "react";
 import { editorTheme, readEditorPalette } from "./editor-theme.ts";
 import { isMarkdownPath } from "./markdown-file.ts";
+import { wordRangeAt } from "./word.ts";
+
+/**
+ * 双击选词。
+ *
+ * CM6 自己那条双击路径（`mousedown` 里按 `event.detail === 2` 取词）在 6.43.15 上不生效：
+ * 词被浏览器选中、DOM 选区也有，但 CM6 没有派发选区，而 `drawSelection()` 把原生选区涂成了
+ * 透明，画面上等于没选中。这里在 `dblclick` 上自己算一次词的范围并派发，选区仍由
+ * `drawSelection()` 画（多行铺满、圆角一致）。
+ *
+ * 三击（整行）与拖选走的是 CM6 自己的路径，不受影响。
+ */
+const doubleClickSelection = EditorView.domEventHandlers({
+	dblclick: (event, view) => {
+		const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+		if (pos === null) {
+			return false;
+		}
+		const line = view.state.doc.lineAt(pos);
+		const range = wordRangeAt(line.text, pos - line.from);
+		if (range === undefined) {
+			return false;
+		}
+		view.dispatch({
+			selection: EditorSelection.range(line.from + range.from, line.from + range.to),
+			userEvent: "select.pointer",
+		});
+		return true;
+	},
+});
 
 /** 语法着色：只挑几类常用的 token，颜色取自界面的语义色。 */
 const HIGHLIGHT_STYLE = HighlightStyle.define([
@@ -131,13 +157,12 @@ export function CodeSurface({
 				doc: initialText.current,
 				extensions: [
 					lineNumbers(),
-					highlightActiveLineGutter(),
 					history(),
 					drawSelection(),
+					doubleClickSelection,
 					indentOnInput(),
 					bracketMatching(),
 					foldGutter(),
-					highlightActiveLine(),
 					syntaxHighlighting(HIGHLIGHT_STYLE),
 					themeSlot.current.of(editorTheme(readEditorPalette())),
 					readOnlySlot.current.of([

@@ -33,7 +33,8 @@
 	--code-line-number: var(--t3);
 	--ms-font-sans: var(--font-sans);
 	--ms-size-code-max-height: 360px;
-	font-size: 14px;
+	/* 字号跟着 `.md` 走：这里再写一个固定值就会把正文的字号定在它上面 */
+	font-size: inherit;
 	line-height: 1.7;
 }
 

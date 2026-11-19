@@ -5,7 +5,7 @@
 # 直接用 arm runner 走同一条 `npm ci` → `@electron/rebuild` 的路径更省事；Windows 也一样，
 # 自带的 Node 运行时与 Electron 二进制都按 runner 的平台下载。
 #
-# 产物只作为 workflow artifact 留着（默认 90 天），不自动建 Release。
+# 产物既作为 workflow artifact 留 90 天，也在推标签时挂到同名的 GitHub Release 上。
 
 name: build
 
@@ -16,7 +16,7 @@ on:
   # 手动跑一次也能出包，用来验证流水线本身
   workflow_dispatch:
 
-# 只读仓库：这条流水线不写 releases，也不回写分支
+# 建 Release 要写权限；其余 job 只用得上读
 permissions:
   contents: read
 
@@ -212,3 +212,49 @@ jobs:
           path: apps/desktop/dist/*-setup.exe
           if-no-files-found: error
           retention-days: 90
+
+  # 只在推标签时把三份产物挂到 GitHub Release；手动 dispatch 只验证流水线，不建版本
+  release:
+    name: release
+    needs:
+      - linux
+      - windows
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      # 版本号来自仓库里的 package.json，与打标签前那次发版提交一致
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: facet-*
+          # 三份 artifact 解到同一个目录，下面按扩展名取文件
+          merge-multiple: true
+          path: dist
+
+      - name: 核对要发布的文件
+        run: |
+          ls -lh dist
+          for ext in rpm deb tar.gz exe; do
+            count=$(ls -1 dist/*."$ext" 2>/dev/null | wc -l)
+            if [ "$count" -lt 1 ]; then
+              echo "dist 下没有 .$ext"
+              exit 1
+            fi
+          done
+
+      - name: 建 Release 并上传产物
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # 只挂六个 Linux 包与 Windows 安装包；blockmap 与 latest.yml 是自动更新用的，
+        # 应用里没有更新功能，不往 Release 上放
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            dist/*.rpm dist/*.deb dist/*.tar.gz dist/*-setup.exe \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "facet ${GITHUB_REF_NAME#v}" \
+            --generate-notes \
+            --verify-tag

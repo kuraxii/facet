@@ -313,9 +313,11 @@ Windows：
    在 `rockylinux:8` 容器里跑（原生模块按 glibc 2.28 编），打包仍在 runner 上做，最后核对
    产物的 glibc 底线不超过 2.31；
 3. `windows-latest` 上先核对 server 产物里是 `bin/node.exe`，再出 x64 的 NSIS 安装包（`--publish never`，只留本机）；
-4. 产物按平台作为 workflow artifact 上传：Linux 六个包、Windows 一份 `facet-<版本>-x64-setup.exe`，保留 90 天，不自动建 Release；
-5. Windows job 缓存 Electron、自带 Node 运行时与 NSIS 工具链，缓存键跟着 `package-lock.json` 与 `.node-version` 走；
-6. 版本号取自标签：`v0.1.0` → `0.1.0`，手动 dispatch 时用 `apps/desktop/package.json` 里的版本。
+4. 产物按平台作为 workflow artifact 上传（Linux 六个包、Windows 一份 `facet-<版本>-x64-setup.exe`），保留 90 天；
+5. 推标签时再跑一个 `release` job：把三份 artifact 解到同一个目录，用 `gh release create` 建同名的
+   GitHub Release 并挂上六个 Linux 包与 Windows 安装包（手动 dispatch 不建 Release）；
+6. Windows job 缓存 Electron、自带 Node 运行时与 NSIS 工具链，缓存键跟着 `package-lock.json` 与 `.node-version` 走；
+7. 版本号取自仓库里的 `package.json`，与打标签前那次发版提交一致，流水线不反填。
 
 macOS 不在流水线里，也没有适配。
 

@@ -4,6 +4,8 @@
  * 内置与自定义放在同一份列表里：pi 的目录本来就把两者一起列出来，再按 models.json 里有没有
  * 模型清单标一下来源，同一个提供方只出现一次。
  */
+
+import type { Translate } from "@facet/i18n";
 import type { CustomProviderInfo, ProviderInfo } from "@facet/protocol";
 
 /** 列表里的一行。 */
@@ -46,4 +48,23 @@ export function providerRows(
 		});
 	}
 	return rows;
+}
+
+/** 地址里看得懂的那一段：去掉协议与末尾斜杠。 */
+function hostOf(baseUrl: string): string {
+	return baseUrl.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+}
+
+/**
+ * 列表行下面那行来源。
+ *
+ * 接口地址一眼能对上「这个提供方连的是哪儿」，内置与自定义都写它；后面跟模型数量。
+ */
+export function providerMeta(row: ProviderRow, t: Translate): string {
+	const baseUrl = row.custom?.baseUrl ?? row.provider.baseUrl;
+	const origin = baseUrl === undefined || baseUrl.trim().length === 0 ? row.provider.id : hostOf(baseUrl);
+	if (row.provider.modelCount <= 0) {
+		return origin;
+	}
+	return `${origin} · ${t("providers.modelsCount", { count: row.provider.modelCount })}`;
 }

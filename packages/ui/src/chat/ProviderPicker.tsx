@@ -1,23 +1,22 @@
 /**
  * 添加提供商的挑选弹窗。
  *
- * 只列还没配置的提供方，按名字搜索过滤。选中一个就在行内填 API key，存完它出现在设置页的
- * 已配置列表里，也从这里消失。自定义提供方一律算已配置，不在这里出现。
+ * 只列还没配置的提供方，按名字搜索过滤。选中一个就交给提供方编辑弹窗去填地址与凭证，存完它
+ * 出现在设置页的已配置列表里，也从这里消失。自定义提供方一律算已配置，不在这里出现。
  */
-import { Search, X } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { Plus, Search, X } from "lucide-react";
+import { useMemo, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
-import { isComposingKey } from "../keys.ts";
 import { Modal } from "../modal.tsx";
-import type { ProviderRow } from "./provider-rows.ts";
+import { type ProviderRow, providerMeta } from "./provider-rows.ts";
 
 /** 挑选弹窗参数。 */
 export interface ProviderPickerProps {
 	/** 全部提供方，含自定义 */
 	rows: readonly ProviderRow[];
-	/** 存下某个提供方的凭证；失败时抛出并显示在那一行下面 */
-	onSaveCredential: (providerId: string, key: string) => Promise<void>;
-	/** 转到新建自定义提供方的表单 */
+	/** 选中一个还没配置的提供方 */
+	onPick: (providerId: string) => void;
+	/** 转到新建自定义提供方 */
 	onCreateCustom: () => void;
 	onClose: () => void;
 }
@@ -27,15 +26,9 @@ function isAdded(row: ProviderRow): boolean {
 	return row.provider.authenticated || row.custom !== undefined;
 }
 
-export function ProviderPicker({ rows, onSaveCredential, onCreateCustom, onClose }: ProviderPickerProps) {
+export function ProviderPicker({ rows, onPick, onCreateCustom, onClose }: ProviderPickerProps) {
 	const { t } = useI18n();
 	const [query, setQuery] = useState("");
-	/** 展开输入凭证的提供方 */
-	const [editingId, setEditingId] = useState<string | undefined>(undefined);
-	const [key, setKey] = useState("");
-	const [busyId, setBusyId] = useState<string | undefined>(undefined);
-	const [failure, setFailure] = useState<{ providerId: string; message: string } | undefined>(undefined);
-	const searchRef = useRef<HTMLInputElement>(null);
 
 	// 已经在用的不列：有凭证的、自定义的都不在这里
 	const pending = useMemo(() => rows.filter((row) => !isAdded(row)), [rows]);
@@ -49,20 +42,6 @@ export function ProviderPicker({ rows, onSaveCredential, onCreateCustom, onClose
 						row.provider.id.toLowerCase().includes(keyword),
 				);
 
-	const save = async (providerId: string): Promise<void> => {
-		setBusyId(providerId);
-		setFailure(undefined);
-		try {
-			await onSaveCredential(providerId, key);
-			setEditingId(undefined);
-			setKey("");
-		} catch (error) {
-			setFailure({ providerId, message: error instanceof Error ? error.message : String(error) });
-		} finally {
-			setBusyId(undefined);
-		}
-	};
-
 	return (
 		<Modal open onClose={onClose} label={t("picker.title")} className="is-picker">
 			<div className="dialog-head">
@@ -73,9 +52,8 @@ export function ProviderPicker({ rows, onSaveCredential, onCreateCustom, onClose
 			</div>
 
 			<label className="picker-search">
-				<Search size={14} strokeWidth={1.6} />
+				<Search size={14} strokeWidth={1.6} aria-hidden="true" />
 				<input
-					ref={searchRef}
 					data-autofocus
 					className="picker-search-input"
 					value={query}
@@ -88,53 +66,18 @@ export function ProviderPicker({ rows, onSaveCredential, onCreateCustom, onClose
 			<ul className="picker-list">
 				{visible.map((row) => {
 					const provider = row.provider;
-					const isBusy = busyId === provider.id;
 					return (
 						<li key={provider.id} className="picker-row">
-							<div className="picker-row-head">
+							<span className="set-models-mark" aria-hidden="true">
+								{provider.name.slice(0, 1).toUpperCase()}
+							</span>
+							<span className="set-models-text">
 								<span className="picker-name ell">{provider.name}</span>
-								<button
-									type="button"
-									className="set-row-action"
-									onClick={() => {
-										setFailure(undefined);
-										setKey("");
-										setEditingId(editingId === provider.id ? undefined : provider.id);
-									}}
-								>
-									{t("picker.add")}
-								</button>
-							</div>
-
-							{editingId === provider.id ? (
-								<div className="picker-key">
-									<input
-										className="set-input mono picker-key-input"
-										type="password"
-										value={key}
-										onChange={(event) => setKey(event.target.value)}
-										onKeyDown={(event) => {
-											if (event.key === "Enter" && !isComposingKey(event) && key.trim().length > 0) {
-												void save(provider.id);
-											}
-										}}
-										placeholder={t("picker.apiKeyPlaceholder")}
-										aria-label={t("picker.apiKeyLabel", { name: provider.name })}
-									/>
-									<button
-										type="button"
-										className="set-save"
-										disabled={isBusy || key.trim().length === 0}
-										onClick={() => void save(provider.id)}
-									>
-										{isBusy ? t("picker.saving") : t("common.save")}
-									</button>
-								</div>
-							) : null}
-
-							{failure?.providerId === provider.id ? (
-								<p className="set-row-error">{failure.message}</p>
-							) : null}
+								<span className="set-models-meta ell">{providerMeta(row, t)}</span>
+							</span>
+							<button type="button" className="set-models-action" onClick={() => onPick(provider.id)}>
+								{t("picker.add")}
+							</button>
 						</li>
 					);
 				})}
@@ -147,6 +90,7 @@ export function ProviderPicker({ rows, onSaveCredential, onCreateCustom, onClose
 
 			<div className="dialog-actions">
 				<button type="button" className="set-reset" onClick={onCreateCustom}>
+					<Plus size={13} strokeWidth={2} aria-hidden="true" />
 					{t("picker.addCustom")}
 				</button>
 				<button type="button" className="set-save" onClick={onClose}>

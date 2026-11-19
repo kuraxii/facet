@@ -199,6 +199,39 @@
 	--indent-rail-icon: 14px;
 	--indent-rail-gap: 8px;
 	--indent-rail-label: calc(var(--indent-rail-icon) + var(--indent-rail-gap));
+	/* 设置页模型一栏：标题行、默认设置卡片与两个分组之间的距离 */
+	--set-models-gap: 16px;
+	--set-models-group-gap: 8px;
+	/* 提供方与可用模型的卡片：整组圆角，行内上下与左右内边距 */
+	--set-models-list-radius: 10px;
+	--set-models-row-padding-y: 9px;
+	--set-models-row-padding-x: 12px;
+	/* 行首字母圆牌的直径、字号，以及它到右边文字的间距 */
+	--set-models-mark-size: 26px;
+	--set-models-mark-gap: 10px;
+	/* 名字那行与来源那行之间的距离 */
+	--set-models-meta-gap: 1px;
+	/* 行尾凭证状态点的直径，以及它到「编辑」按钮的距离 */
+	--set-models-dot: 6px;
+	--set-models-dot-gap: 12px;
+	/* 行内动作按钮（编辑、测试）：高度、横向内边距与圆角 */
+	--set-models-action-height: 26px;
+	--set-models-action-padding-x: 10px;
+	--set-models-action-radius: 7px;
+	/* 提供方编辑弹窗：宽度，以及头部与正文的左右内边距 */
+	--prov-dialog-width: 640px;
+	--prov-dialog-padding-x: 24px;
+	--prov-dialog-padding-y: 18px;
+	/* 弹窗里字段之间、并排两个字段之间与各分区之间的距离 */
+	--prov-field-gap: 14px;
+	--prov-field-columns-gap: 12px;
+	--prov-section-gap: 10px;
+	/* 弹窗里的按钮：高度与横向内边距 */
+	--prov-btn-height: 30px;
+	--prov-btn-padding-x: 12px;
+	/* 模型行：六列的宽度与列间距离，表头与每行共用同一组 */
+	--prov-model-columns: 1.3fr 1fr 0.75fr 0.75fr 40px 28px;
+	--prov-model-gap: 8px;
 }
 
 /*
@@ -251,7 +284,7 @@
 	.sb-opts,
 	.panel-body,
 	.set-content,
-	.set-list-scroll,
+	.prov-body,
 	.search-results,
 	.picker-list,
 	.cmd-pop,
@@ -279,7 +312,7 @@
 	.sb-opts,
 	.panel-body,
 	.set-content,
-	.set-list-scroll,
+	.prov-body,
 	.search-results,
 	.picker-list,
 	.cmd-pop,
@@ -307,7 +340,7 @@
 	.sb-opts,
 	.panel-body,
 	.set-content,
-	.set-list-scroll,
+	.prov-body,
 	.search-results,
 	.picker-list,
 	.cmd-pop,
@@ -330,7 +363,7 @@
 	.sb-opts,
 	.panel-body,
 	.set-content,
-	.set-list-scroll,
+	.prov-body,
 	.search-results,
 	.picker-list,
 	.cmd-pop,
@@ -356,7 +389,7 @@
 	.sb-opts,
 	.panel-body,
 	.set-content,
-	.set-list-scroll,
+	.prov-body,
 	.search-results,
 	.picker-list,
 	.cmd-pop,
@@ -385,7 +418,7 @@
 	.sb-opts,
 	.panel-body,
 	.set-content,
-	.set-list-scroll,
+	.prov-body,
 	.search-results,
 	.picker-list,
 	.cmd-pop,
@@ -414,7 +447,7 @@
 		.sb-opts,
 		.panel-body,
 		.set-content,
-		.set-list-scroll,
+		.prov-body,
 		.search-results,
 		.picker-list,
 		.cmd-pop,

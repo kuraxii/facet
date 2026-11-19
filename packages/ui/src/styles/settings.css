@@ -1,4 +1,4 @@
-/* 设置窗口、设置分组与提供方表单。 */
+/* 设置窗口、设置分组、模型页与提供方编辑弹窗。 */
 
 /* 设置是浮在应用上的一层窗：遮罩沿用对话框的 `::backdrop`，窗口自己定尺寸 */
 dialog.set-page[open] {
@@ -75,23 +75,6 @@ dialog.set-page::backdrop {
 	background: var(--bg);
 }
 
-/* 添加提供商：列表下面一整条虚线按钮，点开可搜索的挑选弹窗 */
-.set-add-provider {
-	width: 100%;
-	height: 36px;
-	margin-top: 10px;
-	border: 1px dashed var(--line2);
-	border-radius: 9px;
-	background: transparent;
-	color: var(--t2);
-	font-size: 12.5px;
-}
-
-.set-add-provider:hover {
-	border-color: var(--t3);
-	color: var(--t1);
-}
-
 .set-lock {
 	min-width: 0;
 	margin: 0;
@@ -116,10 +99,6 @@ dialog.set-page::backdrop {
 	color: var(--t3);
 	font-size: 11.5px;
 	font-weight: 400;
-}
-
-.set-group-title-lg {
-	margin-top: 18px;
 }
 
 .set-card {
@@ -232,22 +211,6 @@ dialog.set-page::backdrop {
 	font-weight: 600;
 }
 
-.set-list-scroll {
-	max-height: 320px;
-	overflow-y: auto;
-	/* 超过 320px 才滚动，滚动条出现时行宽不变 */
-	scrollbar-gutter: stable;
-}
-
-.set-toggle {
-	display: flex;
-	flex: none;
-	align-items: center;
-	gap: 6px;
-	color: var(--t3);
-	font-size: 11.5px;
-}
-
 .set-field {
 	display: flex;
 	flex-direction: column;
@@ -272,6 +235,11 @@ dialog.set-page::backdrop {
 	background: var(--card2);
 	color: var(--t1);
 	font-size: 12.5px;
+}
+
+/* 改不了的字段只做展示：压暗文字，底色与普通输入框一致，不再多描一道边 */
+.set-input:disabled {
+	color: var(--t3);
 }
 
 .set-check {
@@ -355,52 +323,6 @@ dialog.set-page::backdrop {
 	color: var(--t1);
 }
 
-.set-row.is-block {
-	flex-direction: column;
-	align-items: stretch;
-	gap: 6px;
-	padding: 8px 10px;
-}
-
-.set-row-head {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	min-width: 0;
-}
-
-.set-row-action {
-	flex: none;
-	height: 24px;
-	padding: 0 10px;
-	border: 1px solid var(--line);
-	border-radius: 6px;
-	background: transparent;
-	color: var(--t2);
-	font-size: 11.5px;
-}
-
-.set-row-action:hover:not(:disabled) {
-	background: var(--surface3);
-	color: var(--t1);
-}
-
-.set-row-action.is-danger:hover:not(:disabled) {
-	border-color: var(--err);
-	color: var(--err);
-}
-
-.set-row-edit {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-}
-
-.set-row-edit .set-input {
-	flex: 1;
-	min-width: 0;
-}
-
 .set-row-error {
 	margin: 0;
 	color: var(--err);
@@ -411,10 +333,6 @@ dialog.set-page::backdrop {
 	flex: none;
 	color: var(--t3);
 	font-size: 11.5px;
-}
-
-.set-row-empty {
-	color: var(--t3);
 }
 
 .set-badge {
@@ -430,16 +348,6 @@ dialog.set-page::backdrop {
 	border-color: var(--line2);
 	background: var(--surface3);
 	color: var(--t2);
-}
-
-.set-badge.is-off {
-	border-color: var(--err);
-	color: var(--err);
-}
-
-.set-badge.is-on {
-	border-color: var(--acc);
-	color: var(--acc);
 }
 
 .set-note {
@@ -492,13 +400,406 @@ dialog.set-page::backdrop {
 	cursor: default;
 }
 
-.prov-form {
+/*
+ * 模型页：标题行右侧是「添加提供商」，下面依次是默认设置卡片、已配置的提供方与可用模型。
+ * 提供方与模型都以卡片列表出现，整组只有一个外框，行与行之间是一条发丝线。
+ */
+.set-models {
 	display: flex;
 	flex-direction: column;
-	gap: 10px;
-	margin-top: 8px;
-	padding: 12px;
-	border: 1px solid var(--line);
-	border-radius: 10px;
+	gap: var(--set-models-gap);
+	max-width: 620px;
+}
+
+.set-models-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+/* 「添加提供商」是这一页唯一的主动作，用强调色填充 */
+.set-models-add {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	gap: 6px;
+	height: 30px;
+	padding: 0 12px;
+	border: 0;
+	border-radius: 7px;
+	background: var(--acc-fill);
+	color: var(--on-acc);
+	font-size: 12.5px;
+}
+
+.set-models-add:hover {
+	filter: brightness(1.08);
+}
+
+.set-models-select {
+	width: 180px;
+}
+
+.set-models-group {
+	display: flex;
+	flex-direction: column;
+	gap: var(--set-models-group-gap);
+}
+
+.set-models-group-title {
+	margin: 0;
+	color: var(--t2);
+	font-size: 12px;
+	font-weight: 500;
+}
+
+/* 卡片列表：底色露在 1px 的缝隙里，就是行与行之间的分隔线 */
+.set-models-list {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	margin: 0;
+	padding: 0;
+	border: 1px solid var(--line2);
+	border-radius: var(--set-models-list-radius);
+	background: var(--line2);
+	overflow: hidden;
+	list-style: none;
+}
+
+.set-models-row {
+	display: flex;
+	align-items: center;
+	gap: var(--set-models-mark-gap);
+	min-width: 0;
+	padding: var(--set-models-row-padding-y) var(--set-models-row-padding-x);
+	background: var(--card);
+}
+
+/* 行首字母牌：提供方名字的第一个字母，只做视觉区分 */
+.set-models-mark {
+	display: grid;
+	flex: none;
+	place-items: center;
+	width: var(--set-models-mark-size);
+	height: var(--set-models-mark-size);
+	border-radius: 50%;
+	background: color-mix(in srgb, var(--acc) 14%, transparent);
+	color: var(--acc);
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.set-models-text {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: var(--set-models-meta-gap);
+	min-width: 0;
+}
+
+.set-models-title {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+}
+
+.set-models-name {
+	color: var(--t1);
+	font-size: 13px;
+}
+
+.set-models-meta {
+	color: var(--t2);
+	font-size: 11.5px;
+}
+
+/* 凭证状态：已配置用成功色，缺凭证用告警色，行里只出现这个点 */
+.set-models-dot {
+	flex: none;
+	width: var(--set-models-dot);
+	height: var(--set-models-dot);
+	margin-left: calc(var(--set-models-dot-gap) - var(--set-models-mark-gap));
+	border-radius: 50%;
+}
+
+.set-models-dot.is-on {
+	background: var(--dot-ok);
+}
+
+.set-models-dot.is-off {
+	background: var(--dot-warn);
+}
+
+.set-models-latency {
+	flex: none;
+	color: var(--t3);
+	font-size: 11.5px;
+}
+
+.set-models-action {
+	flex: none;
+	height: var(--set-models-action-height);
+	padding: 0 var(--set-models-action-padding-x);
+	border: 1px solid var(--line2);
+	border-radius: var(--set-models-action-radius);
+	background: transparent;
+	color: var(--t2);
+	font-size: 12px;
+}
+
+.set-models-action:hover:not(:disabled) {
 	background: var(--surface2);
+	color: var(--t1);
+}
+
+.set-models-action:disabled {
+	color: var(--t3);
+	cursor: default;
+}
+
+/*
+ * 提供方编辑弹窗：头部与底部固定，中间的正文自己滚。用 flex 竖排而不是整层滚动，
+ * 保存与取消不会跟着表单滚出视野。
+ */
+dialog.dialog.is-provider[open] {
+	display: flex;
+	flex-direction: column;
+	width: min(var(--prov-dialog-width), calc(100vw - 48px));
+	padding: 0;
+	overflow: hidden;
+}
+
+.prov-head {
+	display: flex;
+	flex: none;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+	padding: var(--prov-dialog-padding-y) var(--prov-dialog-padding-x) 0;
+}
+
+.prov-head .dialog-title {
+	font-size: 16px;
+}
+
+.prov-body {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: var(--prov-field-gap);
+	min-height: 0;
+	padding: var(--prov-field-gap) var(--prov-dialog-padding-x) var(--prov-dialog-padding-y);
+	overflow-y: auto;
+}
+
+/* 名称与标识并排，其余字段各占一行 */
+.prov-pair {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: var(--prov-field-columns-gap);
+}
+
+.prov-section {
+	display: flex;
+	flex-direction: column;
+	gap: var(--prov-section-gap);
+}
+
+.prov-section-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+/* 凭证那一块：左边是状态点与来源，右边是替换与删除 */
+.prov-cred {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	min-height: 40px;
+	padding: 0 12px;
+	border: 1px solid var(--line2);
+	border-radius: 8px;
+	background: var(--surface2);
+}
+
+.prov-cred-state {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+
+.prov-cred-source {
+	color: var(--t3);
+	font-size: 11.5px;
+}
+
+.prov-cred-actions {
+	display: flex;
+	flex: none;
+	gap: 8px;
+}
+
+.prov-key {
+	display: flex;
+	flex: 1;
+	gap: 8px;
+	min-width: 0;
+}
+
+.prov-key .set-input {
+	flex: 1;
+	min-width: 0;
+}
+
+.prov-btn {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	height: var(--prov-btn-height);
+	padding: 0 var(--prov-btn-padding-x);
+	border: 1px solid var(--line2);
+	border-radius: 7px;
+	background: transparent;
+	color: var(--t2);
+	font-size: 12px;
+}
+
+.prov-btn:hover:not(:disabled) {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+.prov-btn:disabled {
+	color: var(--t3);
+	cursor: default;
+}
+
+.prov-btn.is-danger:hover:not(:disabled) {
+	border-color: var(--err);
+	color: var(--err);
+}
+
+.prov-btn.is-ghost {
+	padding: 0 6px;
+	border-color: transparent;
+	color: var(--acc);
+}
+
+.prov-btn.is-icon {
+	width: var(--prov-btn-height);
+	padding: 0;
+	border-color: transparent;
+	color: var(--t3);
+}
+
+.prov-btn.is-icon:hover:not(:disabled) {
+	color: var(--t1);
+}
+
+/* 模型清单：表头与每行共用同一组列宽，字段上下对齐 */
+.prov-model-head,
+.prov-model {
+	display: grid;
+	grid-template-columns: var(--prov-model-columns);
+	gap: var(--prov-model-gap);
+	align-items: center;
+}
+
+.prov-model-head {
+	color: var(--t3);
+	font-size: 11px;
+}
+
+/* 输入框自己带最小宽度，网格列宽会让它撑开：交给列宽决定，超过就截 */
+.prov-model > * {
+	min-width: 0;
+}
+
+.prov-model .set-input {
+	width: 100%;
+}
+
+.prov-models {
+	display: flex;
+	flex-direction: column;
+	gap: var(--prov-model-gap);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.prov-toggle {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+/* 内置提供方的模型读自目录，改不了，只列标识与窗口 */
+.prov-catalog {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.prov-catalog-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	font-size: 12.5px;
+}
+
+.prov-catalog-name {
+	flex: none;
+	max-width: 40%;
+	color: var(--t1);
+}
+
+.prov-catalog-id {
+	flex: 1;
+	min-width: 0;
+	color: var(--t3);
+	font-size: 11.5px;
+}
+
+.prov-catalog-window {
+	flex: none;
+	color: var(--t3);
+	font-size: 11.5px;
+}
+
+.prov-foot {
+	display: flex;
+	flex: none;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 12px var(--prov-dialog-padding-x);
+	border-top: 1px solid var(--line);
+}
+
+.prov-foot-actions,
+.prov-foot-danger {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+/* 可用模型行里的测试结果：状态点加一次往返耗时 */
+.set-models-probe {
+	display: flex;
+	flex: none;
+	align-items: center;
+	gap: 6px;
 }

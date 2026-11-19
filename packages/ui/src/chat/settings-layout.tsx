@@ -5,6 +5,7 @@
  * 控件宽度不一，所以右侧那一列可以放开关、下拉、按钮或一整排色块。
  */
 import type { ReactNode } from "react";
+import { useI18n } from "../i18n/I18nProvider.tsx";
 
 export interface SettingsGroupProps {
 	/** 组标题，省略时只有卡片 */
@@ -38,6 +39,26 @@ export function SettingsRow({ title, children, isStacked = false }: SettingsRowP
 				<span className="set-item-title">{title}</span>
 			</div>
 			{children === undefined ? null : <div className="set-item-control">{children}</div>}
+		</div>
+	);
+}
+
+/** 一段读取或保存失败的信息，带重试。 */
+export interface StatusNoteProps {
+	/** 要显示的那句话，只写事实内容 */
+	message: string;
+	/** 重试 */
+	onRetry: () => void;
+}
+
+export function StatusNote({ message, onRetry }: StatusNoteProps): React.JSX.Element {
+	const { t } = useI18n();
+	return (
+		<div className="set-note is-error">
+			<span>{message}</span>
+			<button type="button" className="set-note-action" onClick={onRetry}>
+				{t("common.retry")}
+			</button>
 		</div>
 	);
 }

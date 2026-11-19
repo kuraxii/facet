@@ -1,6 +1,19 @@
+import { createI18n, translate } from "@facet/i18n";
 import type { CustomProviderInfo, ProviderInfo } from "@facet/protocol";
 import { describe, expect, it } from "vitest";
-import { providerRows } from "./provider-rows.ts";
+import { type ProviderRow, providerMeta, providerRows } from "./provider-rows.ts";
+
+/** 列表行下面那行来源用中文渲染，数字与连接符照原样。 */
+const t = translate(createI18n("zh-CN"));
+
+/** 取第几行那行来源，缺行时直接失败。 */
+function metaAt(rows: readonly ProviderRow[], index: number): string {
+	const row = rows[index];
+	if (row === undefined) {
+		throw new Error(`缺少第 ${index} 行`);
+	}
+	return providerMeta(row, t);
+}
 
 const builtin = (id: string, name: string): ProviderInfo => ({
 	id,
@@ -39,5 +52,19 @@ describe("提供方列表", () => {
 		const rows = providerRows([builtin("zai", "Z.AI")], []);
 		expect(rows).toHaveLength(1);
 		expect(rows[0]?.custom).toBeUndefined();
+	});
+
+	it("行里那行来源写地址与模型数,自定义的地址取自己的配置", () => {
+		const rows = providerRows(
+			[{ ...builtin("zai", "Z.AI"), baseUrl: "https://api.z.ai/v1/" }],
+			[custom("aimao", "aimao")],
+		);
+		expect(metaAt(rows, 0)).toBe("api.z.ai/v1 · 3 个模型");
+		expect(metaAt(rows, 1)).toBe("gateway.example.com/v1 · 2 个模型");
+	});
+
+	it("没有模型、地址也缺失时退回提供方标识", () => {
+		const rows = providerRows([{ ...builtin("zai", "Z.AI"), modelCount: 0 }], []);
+		expect(metaAt(rows, 0)).toBe("zai");
 	});
 });

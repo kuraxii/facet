@@ -34,8 +34,8 @@ export {
 	readHostList,
 	writeHostList,
 } from "./chat/host-list.ts";
-export type { ProviderFormProps } from "./chat/ProviderForm.tsx";
-export { ProviderForm } from "./chat/ProviderForm.tsx";
+export type { ProviderDialogProps } from "./chat/ProviderDialog.tsx";
+export { ProviderDialog } from "./chat/ProviderDialog.tsx";
 export type { QueueStripProps } from "./chat/QueueStrip.tsx";
 export { QueueStrip } from "./chat/QueueStrip.tsx";
 export type { SessionSearchProps } from "./chat/SessionSearch.tsx";

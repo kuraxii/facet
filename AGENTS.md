@@ -1,17 +1,17 @@
 # 开发规范
 
-本文件只写**规则与红线**：依赖禁令、质量门禁、提交与注释规范、界面表达。架构本身——分层
-拓扑、各层不变量、扩展步骤——在 `docs/architecture.md`，改动代码前先看那一份。
+本文件只写**规则与红线**：依赖禁令、提交与注释规范、界面表达。架构本身——分层拓扑、各层
+不变量、扩展步骤——在 `docs/architecture.md`；怎么自检与跑测试在 `docs/testing.md`。
 
 ## 文档索引
 
 | 文档 | 内容 |
 | :--- | :--- |
 | `docs/architecture.md` | 核心原则、Monorepo 拓扑与依赖图、依赖禁令、各层核心不变量、高频场景开发步骤 |
+| `docs/testing.md` | 五条自检命令各查什么、改到什么跑哪几条、流水线怎么跑、常见的坑 |
 | `docs/protocol-rpc.md` | 线格式、帧类型、RPC 方法与单测口径 |
 | `docs/ui_design_specification.md` | 界面设计、配色与尺寸规范 |
 | `docs/i18n.md` | 界面语言与文案规则 |
-| `docs/backlog.md` | 还没做完的能力、验收项与建议顺序 |
 
 ## 架构红线
 
@@ -23,28 +23,11 @@
 - **入站不信任**：网关与传输层收到的原始 JSON 必须先过生成的守卫，处理器里不写零散字段断言，不出现未经校验的 `as Action`。
 - **不合并生命周期不同的容器**：会话通道、`session-hub`、终端通道各自回收，不为消除重复抽成带钩子的通用类。
 
-## 提交前必跑的质量门禁
-
-在仓库根目录依次运行，五条都必须是退出码 `0`：
-
-```bash
-npm run mock:check   # 协议一致性冒烟检查
-npm run typecheck    # 全仓 workspace 与 tools/mock-server 的静态类型检查
-npm run lint         # 代码规范检查（含 React Hooks 依赖规则）
-npm run test         # 全仓单元测试、类型等价测试与混沌集成测试
-npm run build        # 全仓生产构建
-```
-
-任何一条失败都算阻断项：先修好再提交，不带着红灯往 `dev` 或 `main` 推进。
-
 # 开发与提交规范
 
-- 分支模型：`main` 为可运行主线；`dev` 承载最终态的文档与基础架构，定稿后合入 `main`，此后开发从 `main` 切出；`feature-<name>` 与 `fix-<name>` 均从 `main` 切出并合回 `main`。
-- 交付到 `main` 的是最终态的文档与可运行的基础架构，中间态与草稿不进入 `main`。
-- `dev` 上允许中途提交；合入 `main` 之前，本文件「提交前必跑的质量门禁」那五条必须全绿。
-- 新功能 MUST 在 `feature-<name>` 分支开发，完成后合入 `main`；合入用 squash，使 `main` 上一个功能对应一条提交。
-- 缺陷修复用 `fix-<name>`，文档与规范改动提交到 `dev`。
-- 一个分支 SHOULD 只动一个模块（`packages/` 下的一个包或 `apps/` 下的一个应用）的代码，遵循最小改动原则。
+- `main` 始终是可运行主线：交付进去的是最终态的文档与可运行的基础架构，中间态与草稿不进入 `main`。
+- 分支名不作规定，开不开分支、叫什么由当时的需要决定。
+- 一次提交 SHOULD 只动一个模块（`packages/` 下的一个包或 `apps/` 下的一个应用）的代码，遵循最小改动原则。
 - 跨模块改动只允许依赖声明、导入路径、类型定义、构建与配置文件这类使改动生效所必需的部分，且 MUST 在提交说明正文点名涉及的其他模块。
 - 依赖方向单向，禁止反向引用：`protocol ← agent / client-core / transport ← ui ← apps`。
 - `protocol` MUST 保持零运行时依赖。`client-core` 与 `ui` MUST NOT 引入 `electron`、`node:*`。`services` MUST NOT 引入 `electron` 与 React。
@@ -56,6 +39,16 @@ npm run build        # 全仓生产构建
 - 不提交 `node_modules/`、`out/`、`dist/`、编辑器临时文件与本地数据目录。
 - 需求与设计变更同步更新 `docs/` 下对应文档，并与代码在同一分支提交。
 - 不得主动触发 CI。推分支不等于出包：打 `v*` 标签（会触发 `build.yml`）、`workflow_dispatch`、`gh run rerun`、删除重建标签，全部算「触发构建」，只有用户明确要求时才做。日常提交与推送只推分支，不动标签。
+
+# 发版
+
+- 版本号写在仓库文件里：根 `package.json` 与 `apps/desktop/package.json`。产物名与
+  `app.getVersion()` 都取自后者，两处 MUST 一致。
+- 改版本只用 `node scripts/sync-version.mjs <版本>`，它一次改这两处；不接受只改一处，也不
+  接受流水线从标签反填。
+- 发版顺序固定：维护者先指定版本 → 改版本号 → 提交一次发布提交（`chore(release): <版本>`）
+  → 在这条提交上打 `v<版本>` 标签。标签 MUST 指向带该版本号的提交，否则产物名与源码对不上。
+- 推标签会触发发行流水线，属于「不得主动触发 CI」的范围：只在发版时由用户明确要求才做。
 
 # 注释规范
 

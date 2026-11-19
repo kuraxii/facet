@@ -50,9 +50,18 @@ export interface HoverTip {
 	render(): ReactNode;
 }
 
+/**
+ * 浮层外观。
+ *
+ * `plain` 是带内边距的一段文字；`card` 不给内边距，内容自己划分区段、自己给留白——
+ * 需要整条分隔线通到浮层边缘的卡片（例如提交悬浮卡）用它。
+ */
+export type HoverTipVariant = "plain" | "card";
+
 /** 浮层的落点、内容与两个指针事件。 */
 interface TipBoxProps {
 	anchor: TipAnchor;
+	variant: HoverTipVariant;
 	onEnter: () => void;
 	onLeave: () => void;
 	children: ReactNode;
@@ -64,7 +73,7 @@ interface TipBoxProps {
  * 先按触发元素的落点摆好，挂载之后量一次自己的尺寸：超出视口右缘就往左收，下方放不下
  * 就翻到触发元素上方。量尺寸要等它进了 DOM，因此只在位置变化时再校正一次。
  */
-function TipBox({ anchor, onEnter, onLeave, children }: TipBoxProps): ReactNode {
+function TipBox({ anchor, variant, onEnter, onLeave, children }: TipBoxProps): ReactNode {
 	const ref = useRef<HTMLDivElement>(null);
 	const [place, setPlace] = useState({ left: anchor.left, top: anchor.bottom + TIP_GAP });
 
@@ -85,7 +94,7 @@ function TipBox({ anchor, onEnter, onLeave, children }: TipBoxProps): ReactNode 
 	return createPortal(
 		<div
 			ref={ref}
-			className="pop-tip"
+			className={variant === "card" ? "pop-tip pop-tip-card" : "pop-tip"}
 			style={{ left: place.left, top: place.top }}
 			onPointerEnter={onEnter}
 			onPointerLeave={onLeave}
@@ -97,7 +106,7 @@ function TipBox({ anchor, onEnter, onLeave, children }: TipBoxProps): ReactNode 
 }
 
 /** 一份悬浮提示的状态机。一个组件里只用一份，多处触发元素共用它。 */
-export function useHoverTip(): HoverTip {
+export function useHoverTip(variant: HoverTipVariant = "plain"): HoverTip {
 	const [shown, setShown] = useState<{ anchor: TipAnchor; label: ReactNode } | undefined>(undefined);
 	const timer = useRef<number | undefined>(undefined);
 
@@ -137,11 +146,11 @@ export function useHoverTip(): HoverTip {
 			return null;
 		}
 		return (
-			<TipBox anchor={shown.anchor} onEnter={clear} onLeave={hideSoon}>
+			<TipBox anchor={shown.anchor} variant={variant} onEnter={clear} onLeave={hideSoon}>
 				{shown.label}
 			</TipBox>
 		);
-	}, [shown, clear, hideSoon]);
+	}, [shown, clear, hideSoon, variant]);
 
 	return { handlers, render };
 }

@@ -493,3 +493,147 @@
 	color: var(--t3);
 	font-size: 11px;
 }
+
+/*
+ * 提交悬浮卡：三段——作者与时间加说明、改动规模、短哈希与远端链接，段与段之间一条发丝线。
+ * 浮层本身不留内边距（提示用 `card` 外观），留白全在这里给。
+ */
+.commitTip {
+	display: flex;
+	flex-direction: column;
+	width: var(--commit-tip-width);
+	max-width: 100%;
+	color: var(--t2);
+}
+
+/* 第一段：作者与时间、说明第一行、正文 */
+.commitTipMain {
+	display: flex;
+	flex-direction: column;
+	gap: var(--commit-tip-lead-gap);
+	padding: var(--commit-tip-padding-y) var(--commit-tip-padding-x);
+}
+
+.commitTipHead {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--commit-tip-row-gap);
+	margin: 0;
+	color: var(--t2);
+	font-size: 13px;
+	line-height: 1.4;
+}
+
+.commitTipAuthor {
+	color: var(--t1);
+	font-weight: 500;
+}
+
+.commitTipIcon {
+	flex: none;
+	color: var(--t3);
+}
+
+/*
+ * 说明第一行与正文同一套字体：同色同字号，只靠位置分开，各自按行数折起来收省略号——
+ * 卡片高度才不会顶到提示的上限。
+ */
+.commitTipSubject {
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: var(--commit-tip-subject-lines);
+	margin: 0;
+	overflow: hidden;
+	color: var(--t1);
+	font-size: var(--commit-tip-text-size);
+	line-height: var(--commit-tip-line-height);
+}
+
+.commitTipBody {
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: var(--commit-tip-body-lines);
+	margin: 0;
+	overflow: hidden;
+	color: var(--t1);
+	font-size: var(--commit-tip-text-size);
+	line-height: var(--commit-tip-line-height);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+/* 第二段与第三段：上下留白比第一段小，上面一条发丝线与上一段分开 */
+.commitTipBand {
+	display: flex;
+	align-items: center;
+	gap: var(--commit-tip-row-gap);
+	padding: var(--commit-tip-band-padding-y) var(--commit-tip-padding-x);
+	border-top: 1px solid var(--line);
+	font-size: 13px;
+	line-height: 1.4;
+}
+
+/* 改动规模是一句话：文件数、增删行数各是一段，段与段之间的逗号也是一段 */
+.commitTipStats {
+	display: flex;
+	flex-wrap: wrap;
+	margin: 0;
+	color: var(--t2);
+	font-variant-numeric: tabular-nums;
+}
+
+.commitTipStatSep {
+	/* 英文的逗号后面带一个空格，flex 子项会把行尾空白吃掉，这里按原样保留 */
+	white-space: pre;
+}
+
+.commitTipAdded {
+	color: var(--add);
+}
+
+.commitTipRemoved {
+	color: var(--del);
+}
+
+/* 第三段：提交图标、短哈希、复制、分隔线与远端链接 */
+.commitTipAccent {
+	flex: none;
+	color: var(--acc);
+}
+
+/* 短哈希与复制是一颗按钮：点哈希或者点后面的图标都复制完整哈希 */
+.commitTipHash {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--changes-stat-gap);
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--acc);
+}
+
+.commitTipHash:hover {
+	color: var(--t1);
+}
+
+.commitTipSha {
+	font-family: var(--font-mono);
+	letter-spacing: 0.01em;
+}
+
+.commitTipDivider {
+	color: var(--line2);
+}
+
+.commitTipLink {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--commit-tip-row-gap);
+	color: var(--acc);
+	text-decoration: none;
+}
+
+.commitTipLink:hover {
+	text-decoration: underline;
+}

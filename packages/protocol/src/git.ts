@@ -24,6 +24,16 @@ export interface GitFileChange {
 	binary: boolean;
 }
 
+/** 一次提交相对第一父提交的改动规模。 */
+export interface GitCommitStats {
+	/** 改动的文件数 */
+	filesChanged: number;
+	/** 新增行数 */
+	insertions: number;
+	/** 删除行数 */
+	deletions: number;
+}
+
 /** 最近的一条提交。 */
 export interface GitCommit {
 	/** 完整提交哈希 */
@@ -32,8 +42,16 @@ export interface GitCommit {
 	shortSha: string;
 	/** 提交说明的第一行 */
 	subject: string;
+	/** 说明里第一行之后的内容，段落之间保留空行；没有正文时为空串 */
+	body: string;
+	/** 作者名 */
+	authorName: string;
+	/** 作者邮箱 */
+	authorEmail: string;
 	/** 作者时间，ISO 8601 */
 	authorDate: string;
+	/** 改动规模；合并提交自身没有差异，此时为空 */
+	stats?: GitCommitStats;
 }
 
 /** 提交清单。 */
@@ -42,6 +60,8 @@ export interface GitCommits {
 	isRepo: boolean;
 	/** 从新到旧排列的提交 */
 	commits: readonly GitCommit[];
+	/** 远端仓库在浏览器里的地址（`https://host/owner/repo`，不带 `.git`），用来打开提交页；没有远端时为空 */
+	webUrl?: string;
 }
 
 /** 某一次提交相对第一父提交的改动。 */

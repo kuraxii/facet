@@ -1,6 +1,6 @@
 {
 	"name": "@facet/desktop",
-	"version": "0.1.1",
+	"version": "0.1.2",
 	"description": "Facet 是 pi 编码助手的桌面端：主机与界面分进程，可以连本机也可以连远程。",
 	"homepage": "https://github.com/kuraxii/facet",
 	"repository": {

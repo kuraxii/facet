@@ -10,6 +10,7 @@ import type {
 	Channel,
 	Entry,
 	Message,
+	ProviderLoginState,
 	SessionListItem,
 	SessionSnapshot,
 	SessionStatus,
@@ -100,6 +101,10 @@ export class SessionStore {
 	private readonly chats = new Map<Channel, ChatSlot>();
 	/** 会话清单，按会话文件路径索引；多个端拿到的是主机推的同一份 */
 	private readonly sessionIndex = new Map<string, SessionListItem>();
+	/** 进行中与刚结束的登录，按 loginId 索引 */
+	private readonly providerLogins = new Map<string, ProviderLoginState>();
+	/** 模型通道已应用到的序号，重连时据此续订 */
+	private modelLogSeq = 0;
 	/** 清单通道已应用的序号 */
 	private sessionIndexSeq = 0;
 	private readonly listeners = new Set<(version: number) => void>();
@@ -181,6 +186,32 @@ export class SessionStore {
 		this.markChanged();
 	}
 
+	/**
+	 * 某个提供方此刻的登录状态。
+	 *
+	 * 同一提供方同时只允许一条登录，所以按提供方取就够；取最后插进来的那一条，旧的那次已经
+	 * 收尾的登录留着不影响这里。
+	 */
+	providerLogin(providerId: string): ProviderLoginState | undefined {
+		let found: ProviderLoginState | undefined;
+		for (const state of this.providerLogins.values()) {
+			if (state.providerId === providerId) {
+				found = state;
+			}
+		}
+		return found;
+	}
+
+	/** 模型通道已应用到的序号，重连时据此续订。 */
+	get providerLoginSeq(): number {
+		return this.modelLogSeq;
+	}
+
+	/** 记录模型通道订阅返回的序号。 */
+	markProviderLoginSeq(seq: number): void {
+		this.modelLogSeq = seq;
+	}
+
 	/** 清单里某个会话此刻的状态，清单里没有时按空闲算。 */
 	sessionStatus(path: string): SessionStatus {
 		return this.sessionIndex.get(path)?.status ?? IDLE_SESSION_STATUS;
@@ -241,6 +272,14 @@ export class SessionStore {
 			this.sessionIndexSeq = Math.max(this.sessionIndexSeq, frame.serverSeq);
 			return;
 		}
+		if (parsed.kind === "models") {
+			if (frame.serverSeq <= this.modelLogSeq) {
+				return;
+			}
+			this.applyProviderLogin(frame.action);
+			this.modelLogSeq = Math.max(this.modelLogSeq, frame.serverSeq);
+			return;
+		}
 		if (parsed.kind === "session") {
 			const slot = this.sessions.get(frame.channel) ?? this.createSessionSlot(frame.channel);
 			if (this.isDuplicate(frame, slot.lastSeq)) {
@@ -268,6 +307,82 @@ export class SessionStore {
 				this.markChanged();
 			}
 		}
+	}
+
+	/**
+	 * 归约一条登录进展。
+	 *
+	 * 增量只带最近一步，这里把它合进那次登录的状态：新登录从 running 起，终局之后不再改。
+	 */
+	private applyProviderLogin(action: Action): void {
+		if (action.type !== "models/loginEvent") {
+			return;
+		}
+		const { loginId, providerId, event } = action;
+		const previous = this.providerLogins.get(loginId);
+		if (previous === undefined) {
+			// 新的一条：同一提供方上一次的登录到这里作废，留着只会在日志里越积越多
+			for (const [key, state] of this.providerLogins) {
+				if (state.providerId === providerId) {
+					this.providerLogins.delete(key);
+				}
+			}
+		}
+		const base: ProviderLoginState = previous ?? { loginId, providerId, status: "running" };
+		// 终局之后再来的动作只可能是迟到的进度，丢掉
+		if (previous?.status !== undefined && previous.status !== "running") {
+			return;
+		}
+		let next: ProviderLoginState;
+		switch (event.type) {
+			case "prompt":
+				next = { ...base, prompt: event.prompt };
+				break;
+			case "promptResolved":
+				next = base.prompt?.promptId === event.promptId ? { ...base, prompt: undefined } : base;
+				break;
+			case "authUrl":
+				next = {
+					...base,
+					authUrl: {
+						url: event.url,
+						...(event.instructions === undefined ? {} : { instructions: event.instructions }),
+					},
+				};
+				break;
+			case "deviceCode":
+				next = {
+					...base,
+					deviceCode: {
+						userCode: event.userCode,
+						verificationUri: event.verificationUri,
+						...(event.intervalSeconds === undefined ? {} : { intervalSeconds: event.intervalSeconds }),
+						...(event.expiresInSeconds === undefined ? {} : { expiresInSeconds: event.expiresInSeconds }),
+					},
+				};
+				break;
+			case "info":
+				next = {
+					...base,
+					message: event.message,
+					...(event.links === undefined ? {} : { links: event.links }),
+				};
+				break;
+			case "progress":
+				next = { ...base, message: event.message };
+				break;
+			case "done":
+				next = { ...base, status: "done", prompt: undefined };
+				break;
+			case "failed":
+				next = { ...base, status: "failed", prompt: undefined, message: event.message };
+				break;
+			case "cancelled":
+				next = { ...base, status: "cancelled", prompt: undefined };
+				break;
+		}
+		this.providerLogins.set(loginId, next);
+		this.markChanged();
 	}
 
 	/** 归约一条清单动作。认不出的动作原样跳过，清单仍然可用。 */

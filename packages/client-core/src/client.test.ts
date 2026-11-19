@@ -166,7 +166,8 @@ class FakeTransport implements SessionTransport {
 					if (this.failSubscribe.has(channel)) {
 						throw new Error("subscribe 失败");
 					}
-					if (this.unknownSession && !channel.startsWith("sessions:")) {
+					// 只对会话通道生效：模型通道与清单通道跟主机重启没有关系
+					if (this.unknownSession && channel.startsWith("session:")) {
 						// 主机刚重启时不认识旧会话,重新打开之后就记得了
 						this.unknownSession = false;
 						throw Object.assign(new Error("会话不存在:s1"), { code: "unknown_session" });
@@ -293,8 +294,8 @@ describe("SessionClient", () => {
 		const subscriptions = transport.calls
 			.filter((call) => call.method === "subscribe")
 			.map((call) => (call.params as { channel: Channel }).channel)
-			// 清单通道在 attach 时就订上了，与打开会话无关
-			.filter((channel) => !channel.startsWith("sessions:"));
+			// 清单通道与模型通道在 attach 时就订上了，与打开会话无关
+			.filter((channel) => !channel.startsWith("sessions:") && !channel.startsWith("models:"));
 		expect(subscriptions).toEqual([SESSION, CHAT]);
 		expect(client.current?.sessionId).toBe("s1");
 	});
@@ -1341,7 +1342,7 @@ describe("SessionClient", () => {
 			.slice(before)
 			.filter((call) => call.method === "subscribe")
 			.map((call) => call.params as { channel: Channel; since?: number })
-			.filter((call) => !call.channel.startsWith("sessions:"));
+			.filter((call) => !call.channel.startsWith("sessions:") && !call.channel.startsWith("models:"));
 		expect(subscriptions.map((call) => call.since)).toEqual([2, 1]);
 	});
 
@@ -1354,7 +1355,7 @@ describe("SessionClient", () => {
 			.slice(before)
 			.filter((call) => call.method === "subscribe")
 			.map((call) => (call.params as { channel: Channel }).channel)
-			.filter((channel) => !channel.startsWith("sessions:"));
+			.filter((channel) => !channel.startsWith("sessions:") && !channel.startsWith("models:"));
 		// 两个通道各订阅一次，重复的那次并在同一个流程里
 		expect(subscribes).toEqual([SESSION, CHAT]);
 	});

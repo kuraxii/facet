@@ -51,3 +51,8 @@
 - **`mock:check` 占端口**：冒烟会起假主机，端口被占时会直接失败，先看有没有残留进程。
 - **CI 与本机的 glibc 不一样**：本机产物只能在本机这类新系统上跑，能给老系统的包从 CI 取
   （判据是 `node scripts/check-glibc.mjs --max 2.31`）。
+- **`npm run dev` 的界面点不动，先看根节点有没有套 StrictMode**：开发态双挂载之后这棵树的
+  更新进不了根队列，界面停在第一次提交的画面上——看着正常，按钮与快捷键全没反应，控制台却
+  一条报错都没有。渲染层的入口因此不套 StrictMode；`npm run dev` 与打包产物的差别只在渲染层
+  是否走 vite dev server，要判断是不是同一类问题，用 `electron apps/desktop/out/main/index.js`
+  跑打包后的渲染层对照一下。

@@ -134,6 +134,13 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 					await host.refreshCatalog();
 					return providers;
 				}),
+			// 登录的进展走模型通道，状态由 client 的 session store 持有；这里只做转接
+			providerLogin: (providerId) => client.store.providerLogin(providerId),
+			subscribeProviderLogin: (listener) => client.store.subscribe(listener),
+			startProviderLogin: (providerId, authType) => client.startProviderLogin(providerId, authType),
+			respondProviderLogin: (loginId, promptId, value) =>
+				client.respondProviderLogin(loginId, promptId, value),
+			cancelProviderLogin: (loginId) => client.cancelProviderLogin(loginId),
 			fetchProviderModels: (input) => client.fetchProviderModels(input),
 			listCustomProviders: () => client.listCustomProviders(),
 			saveCustomProvider: (provider) =>

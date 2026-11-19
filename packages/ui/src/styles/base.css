@@ -229,6 +229,10 @@
 	/* 弹窗里的按钮：高度与横向内边距 */
 	--prov-btn-height: 30px;
 	--prov-btn-padding-x: 12px;
+	/* 登录那一块：设备码、授权按钮、要回答的一步，彼此之间的距离 */
+	--prov-login-gap: 10px;
+	/* 设备码那一行的高度，与密钥行同高，切换时不跳 */
+	--prov-login-code-height: 40px;
 	/* 模型行：六列的宽度与列间距离，表头与每行共用同一组 */
 	--prov-model-columns: 1.3fr 1fr 0.75fr 0.75fr 40px 28px;
 	--prov-model-gap: 8px;

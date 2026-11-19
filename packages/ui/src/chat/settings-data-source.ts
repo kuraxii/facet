@@ -10,6 +10,8 @@ import type {
 	ModelInfo,
 	ModelRef,
 	ProviderInfo,
+	ProviderLoginState,
+	ProviderLoginType,
 	ThinkingLevel,
 	UpstreamModel,
 } from "@facet/protocol";
@@ -34,6 +36,16 @@ export interface SettingsDataSource {
 	saveCredential: (providerId: string, apiKey: string) => Promise<ProviderInfo[]>;
 	/** 删除提供方凭证，返回更新后的提供方清单 */
 	deleteCredential: (providerId: string) => Promise<ProviderInfo[]>;
+	/** 某个提供方此刻的登录状态；没有登录过时为空 */
+	providerLogin: (providerId: string) => ProviderLoginState | undefined;
+	/** 订阅登录状态变化，返回取消订阅函数 */
+	subscribeProviderLogin: (listener: () => void) => () => void;
+	/** 开始一条登录，返回这次登录的标识 */
+	startProviderLogin: (providerId: string, authType: ProviderLoginType) => Promise<string>;
+	/** 回答登录中的一步；`value` 传 null 表示放弃整条登录 */
+	respondProviderLogin: (loginId: string, promptId: string, value: string | null) => Promise<boolean>;
+	/** 中止一条登录 */
+	cancelProviderLogin: (loginId: string) => Promise<boolean>;
 	/** 从上游拉模型清单（能力字段已用模型信息库补过）；没给 apiKey 时主机用该提供方已存下的密钥 */
 	fetchProviderModels: (input: {
 		baseUrl: string;

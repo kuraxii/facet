@@ -289,11 +289,6 @@ export const REQUEST_SCHEMAS = {
 		params: Type.Object({ provider: Id, id: Id }),
 		nonEmpty: ["provider", "id"],
 	},
-	setProviderBaseUrl: {
-		auth: "admin",
-		params: Type.Object({ providerId: Id, baseUrl: Type.String() }),
-		nonEmpty: ["providerId"],
-	},
 	listCustomProviders: { auth: "public", params: NoParams },
 	saveCustomProvider: {
 		auth: "admin",

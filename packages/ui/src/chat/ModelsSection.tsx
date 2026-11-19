@@ -18,7 +18,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { ProviderDialog } from "./ProviderDialog.tsx";
 import { ProviderPicker } from "./ProviderPicker.tsx";
-import { type ProviderRow, providerMeta, providerRows } from "./provider-rows.ts";
+import { type ProviderRow, providerRows } from "./provider-rows.ts";
 import type { SettingsDataSource } from "./settings-data-source.ts";
 import { SettingsGroup, SettingsRow, StatusNote } from "./settings-layout.tsx";
 
@@ -375,7 +375,7 @@ export function ModelsSection({
 	);
 }
 
-/** 提供方列表里的一行：行首是名字首字母，行尾是凭证状态与「编辑」。 */
+/** 提供方列表里的一行：行首是名字首字母，行尾只在不缺密钥时不加标记，缺的时候给一个告警点。 */
 function ProviderListRow({ row, onEdit }: { row: ProviderRow; onEdit: () => void }): React.JSX.Element {
 	const { t } = useI18n();
 	const { provider, custom } = row;
@@ -384,18 +384,13 @@ function ProviderListRow({ row, onEdit }: { row: ProviderRow; onEdit: () => void
 			<span className="set-models-mark" aria-hidden="true">
 				{provider.name.slice(0, 1).toUpperCase()}
 			</span>
-			<span className="set-models-text">
-				<span className="set-models-title">
-					<span className="set-models-name ell">{provider.name}</span>
-					{custom === undefined ? null : <span className="set-badge is-custom">{t("providers.custom")}</span>}
-				</span>
-				<span className="set-models-meta ell">{providerMeta(row, t)}</span>
+			<span className="set-models-title">
+				<span className="set-models-name ell">{provider.name}</span>
+				{custom === undefined ? null : <span className="set-badge is-custom">{t("providers.custom")}</span>}
 			</span>
-			<span
-				className={provider.authenticated ? "set-models-dot is-on" : "set-models-dot is-off"}
-				role="status"
-				aria-label={provider.authenticated ? t("providers.credential") : t("providers.credentialMissing")}
-			/>
+			{provider.authenticated ? null : (
+				<span className="set-models-dot is-off" role="status" aria-label={t("providers.credentialMissing")} />
+			)}
 			<button type="button" className="set-models-action" onClick={onEdit}>
 				{t("providers.edit")}
 			</button>

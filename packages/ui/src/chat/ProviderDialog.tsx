@@ -1,15 +1,17 @@
 /**
  * 提供方编辑弹窗。
  *
- * 一个提供方要改的东西都收在这里：接口地址、凭证与模型清单。内置提供方的名字、协议与模型由
- * pi 的目录给定，只能换地址与凭证；自定义提供方全部可改；新建时标识按名字自动推出。
+ * 一个提供方要改的东西都收在这里：密钥，自定义提供方还有地址、协议与模型清单。内置提供方的
+ * 名字、地址、协议与模型全由 pi 的目录给定，这里只能改密钥——要改地址就得自己建一个自定义
+ * 提供方。这一页是份草稿：名字、地址、协议、模型、密钥的替换与删除都只改本地状态，点弹窗底部
+ * 的「保存」才落盘，点「取消」全部丢掉。密钥在一个输入框里改，已配置的另给一个删除开关（同样
+ * 要等保存才生效）。新建自定义提供方时标识按名字自动推出。
  * 凭证与清单分别写在两处配置里，所以保存时按「先建提供方、再写凭证」的顺序提交。
  */
 import type { CustomModelInfo, ModelInfo } from "@facet/protocol";
 import { Plus, X } from "lucide-react";
 import { useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
-import { isComposingKey } from "../keys.ts";
 import { Modal } from "../modal.tsx";
 import { API_OPTIONS, apiOptionLabel } from "./provider-api.ts";
 import type { ProviderRow } from "./provider-rows.ts";
@@ -76,18 +78,18 @@ export function ProviderDialog({
 	/** 标识；新建时跟着名字走，用户改过之后就不再覆盖 */
 	const [id, setId] = useState(custom?.id ?? "");
 	const [idTouched, setIdTouched] = useState(!isNew);
-	const [baseUrl, setBaseUrl] = useState(custom?.baseUrl ?? provider?.baseUrlOverride ?? "");
+	const [baseUrl, setBaseUrl] = useState(custom?.baseUrl ?? "");
 	const [api, setApi] = useState(custom?.api ?? API_OPTIONS[0]?.value ?? "openai-completions");
 	const [rows, setRows] = useState<ModelRow[]>(() =>
 		custom === undefined ? [modelRow()] : custom.models.map((model) => modelRow(model)),
 	);
 
-	/** 凭证是否已配置；弹窗里刚换过的以这里为准，不等上层刷新 */
-	const [hasCredential, setHasCredential] = useState(provider?.authenticated === true);
-	/** 正在输入的凭证；新建时随保存一起写入 */
+	/** 磁盘上此刻有没有密钥，只用于选占位提示与要不要给删除按钮 */
+	const hasCredential = provider?.authenticated === true;
+	/** 输入的新密钥，草稿：点「保存」才落盘 */
 	const [key, setKey] = useState("");
-	/** 已配置凭证时是否展开了输入框 */
-	const [isReplacing, setIsReplacing] = useState(provider?.authenticated !== true);
+	/** 删除密钥的意图，同样是草稿，点「保存」才删 */
+	const [isDeletingKey, setIsDeletingKey] = useState(false);
 	const [isBusy, setIsBusy] = useState(false);
 	const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 	const [error, setError] = useState<string | undefined>(undefined);
@@ -137,52 +139,17 @@ export function ProviderDialog({
 					api,
 					models: rows.map((item) => ({ ...item.model, id: item.model.id.trim() })),
 				});
-			} else if (baseUrl !== (provider?.baseUrlOverride ?? "")) {
-				await data.setProviderBaseUrl(shownId, baseUrl);
 			}
-			// 凭证与地址分两处存放：地址走上面那一步，凭证统一在这里写，新建的提供方到这一步才存在
-			if (key.trim().length > 0) {
+			// 密钥与提供方配置分两处存放：配置走上面那一步，密钥的两种改动都在这里落盘
+			if (isDeletingKey) {
+				await data.deleteCredential(shownId);
+			} else if (key.trim().length > 0) {
 				await data.saveCredential(shownId, key.trim());
 			}
 			onChanged();
 			onClose();
 		} catch (saveError) {
 			setError(messageOf(saveError));
-		} finally {
-			setIsBusy(false);
-		}
-	};
-
-	/** 已存在的提供方换凭证：不等整张表单，存完就能看到状态变成已配置。 */
-	const commitKey = async (): Promise<void> => {
-		if (key.trim().length === 0) {
-			return;
-		}
-		setIsBusy(true);
-		setError(undefined);
-		try {
-			await data.saveCredential(shownId, key.trim());
-			setKey("");
-			setHasCredential(true);
-			setIsReplacing(false);
-			onChanged();
-		} catch (saveError) {
-			setError(messageOf(saveError));
-		} finally {
-			setIsBusy(false);
-		}
-	};
-
-	const removeKey = async (): Promise<void> => {
-		setIsBusy(true);
-		setError(undefined);
-		try {
-			await data.deleteCredential(shownId);
-			setHasCredential(false);
-			setIsReplacing(true);
-			onChanged();
-		} catch (removeError) {
-			setError(messageOf(removeError));
 		} finally {
 			setIsBusy(false);
 		}
@@ -253,17 +220,18 @@ export function ProviderDialog({
 					</div>
 				) : null}
 
-				<label className="set-field">
-					<span className="set-label">{t("providerForm.baseUrl")}</span>
-					<input
-						className="set-input mono"
-						value={baseUrl}
-						onChange={(event) => setBaseUrl(event.target.value)}
-						placeholder={provider?.baseUrl ?? "https://gateway.example.com/v1"}
-						aria-label={t("providerForm.baseUrl")}
-						{...(!isCustom ? { "data-autofocus": true } : {})}
-					/>
-				</label>
+				{isCustom ? (
+					<label className="set-field">
+						<span className="set-label">{t("providerForm.baseUrl")}</span>
+						<input
+							className="set-input mono"
+							value={baseUrl}
+							onChange={(event) => setBaseUrl(event.target.value)}
+							placeholder="https://gateway.example.com/v1"
+							aria-label={t("providerForm.baseUrl")}
+						/>
+					</label>
+				) : null}
 
 				{isCustom ? (
 					<label className="set-field">
@@ -286,64 +254,31 @@ export function ProviderDialog({
 				<section className="prov-section">
 					<span className="set-label">{t("providerForm.credential")}</span>
 					<div className="prov-cred">
-						<span className="prov-cred-state">
-							<i
-								className={hasCredential ? "set-models-dot is-on" : "set-models-dot is-off"}
-								role="status"
-								aria-label={hasCredential ? t("providers.credential") : t("providers.credentialMissing")}
-							/>
-							{provider?.authSource === undefined ? null : (
-								<span className="prov-cred-source mono">{provider.authSource}</span>
-							)}
-						</span>
-
-						{hasCredential && !isReplacing ? (
-							<span className="prov-cred-actions">
-								<button type="button" className="prov-btn" onClick={() => setIsReplacing(true)}>
-									{t("providers.replaceCredential")}
-								</button>
-								<button
-									type="button"
-									className="prov-btn is-danger"
-									disabled={isBusy}
-									onClick={() => void removeKey()}
-								>
-									{t("providers.deleteCredential")}
-								</button>
-							</span>
-						) : (
-							<span className="prov-key">
-								<input
-									className="set-input mono"
-									type="password"
-									value={key}
-									onChange={(event) => setKey(event.target.value)}
-									onKeyDown={(event) => {
-										if (event.key === "Enter" && !isComposingKey(event)) {
-											if (isNew) {
-												void save();
-											} else {
-												void commitKey();
-											}
-										}
-									}}
-									placeholder={t("providers.apiKeyPlaceholder")}
-									aria-label={t("providers.apiKeyLabel", {
-										name: custom?.name ?? provider?.name ?? "",
-									})}
-								/>
-								{isNew ? null : (
-									<button
-										type="button"
-										className="set-save"
-										disabled={isBusy || key.trim().length === 0}
-										onClick={() => void commitKey()}
-									>
-										{isBusy ? t("providers.saving") : t("common.save")}
-									</button>
-								)}
-							</span>
-						)}
+						<input
+							className="set-input mono"
+							type="password"
+							value={key}
+							disabled={isDeletingKey}
+							onChange={(event) => setKey(event.target.value)}
+							placeholder={
+								hasCredential && !isDeletingKey ? t("providers.apiKeyUpdate") : t("providers.apiKeyMissing")
+							}
+							aria-label={t("providers.apiKeyLabel", { name: custom?.name ?? provider?.name ?? "" })}
+							{...(isCustom ? {} : { "data-autofocus": true })}
+						/>
+						{hasCredential ? (
+							<button
+								type="button"
+								className={isDeletingKey ? "prov-btn is-danger is-armed" : "prov-btn is-danger"}
+								aria-pressed={isDeletingKey}
+								onClick={() => {
+									setKey("");
+									setIsDeletingKey(!isDeletingKey);
+								}}
+							>
+								{isDeletingKey ? t("providers.cancelDeleteCredential") : t("providers.deleteCredential")}
+							</button>
+						) : null}
 					</div>
 				</section>
 

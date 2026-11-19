@@ -79,10 +79,8 @@ export interface ProviderInfo {
 	authSource?: string;
 	/** 是否为订阅类登录（OAuth） */
 	subscription?: boolean;
-	/** 当前生效的接口地址 */
+	/** 当前生效的接口地址：内置的取目录里的，自定义的取自己的配置 */
 	baseUrl?: string;
-	/** 写在模型配置里的地址覆写，没有覆写时为空 */
-	baseUrlOverride?: string;
 }
 
 /** 自定义提供方里的一个模型。 */

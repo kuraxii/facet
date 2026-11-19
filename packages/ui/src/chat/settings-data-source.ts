@@ -33,8 +33,6 @@ export interface SettingsDataSource {
 	saveCredential: (providerId: string, apiKey: string) => Promise<ProviderInfo[]>;
 	/** 删除提供方凭证，返回更新后的提供方清单 */
 	deleteCredential: (providerId: string) => Promise<ProviderInfo[]>;
-	/** 设置提供方的接口地址，空串恢复默认，返回更新后的提供方清单 */
-	setProviderBaseUrl: (providerId: string, baseUrl: string) => Promise<ProviderInfo[]>;
 	/** 列出自定义提供方 */
 	listCustomProviders: () => Promise<CustomProviderInfo[]>;
 	/** 保存自定义提供方，返回更新后的清单 */

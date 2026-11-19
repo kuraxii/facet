@@ -502,6 +502,7 @@ dialog.set-page::backdrop {
 
 .set-models-title {
 	display: flex;
+	flex: 1;
 	align-items: center;
 	gap: 6px;
 	min-width: 0;
@@ -616,12 +617,11 @@ dialog.dialog.is-provider[open] {
 	gap: 12px;
 }
 
-/* 凭证那一块：左边是状态点与来源，右边是替换与删除 */
+/* 密钥那一行：输入框直接改，右边是保存与删除；输入框自己不带边框，整行看着是一个字段 */
 .prov-cred {
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
-	gap: 12px;
+	gap: 8px;
 	min-height: 40px;
 	padding: 0 12px;
 	border: 1px solid var(--line2);
@@ -629,34 +629,15 @@ dialog.dialog.is-provider[open] {
 	background: var(--surface2);
 }
 
-.prov-cred-state {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	min-width: 0;
-}
-
-.prov-cred-source {
-	color: var(--t3);
-	font-size: 11.5px;
-}
-
-.prov-cred-actions {
-	display: flex;
-	flex: none;
-	gap: 8px;
-}
-
-.prov-key {
-	display: flex;
-	flex: 1;
-	gap: 8px;
-	min-width: 0;
-}
-
-.prov-key .set-input {
+.prov-cred .set-input {
 	flex: 1;
 	min-width: 0;
+	border: 0;
+	background: transparent;
+}
+
+.prov-cred .set-input:focus-visible {
+	outline-offset: 0;
 }
 
 .prov-btn {
@@ -686,6 +667,13 @@ dialog.dialog.is-provider[open] {
 
 .prov-btn.is-danger:hover:not(:disabled) {
 	border-color: var(--err);
+	color: var(--err);
+}
+
+/* 已经按下、还没生效的危险按钮：直接就是错误色，再点一下收回 */
+.prov-btn.is-danger.is-armed {
+	border-color: var(--err);
+	background: var(--errbg);
 	color: var(--err);
 }
 
@@ -784,13 +772,19 @@ dialog.dialog.is-provider[open] {
 	display: flex;
 	flex: none;
 	align-items: center;
-	justify-content: space-between;
 	gap: 12px;
 	padding: 12px var(--prov-dialog-padding-x);
 	border-top: 1px solid var(--line);
 }
 
-.prov-foot-actions,
+/* 取消与保存固定贴右，左边的删除提供方靠这一条自动间距顶到另一头 */
+.prov-foot-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-left: auto;
+}
+
 .prov-foot-danger {
 	display: flex;
 	align-items: center;

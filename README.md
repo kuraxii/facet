@@ -250,6 +250,16 @@ npm run dist                   # 先打独立主机产物，再按宿主平台�
 npm run dist -w @facet/desktop # 只出安装包，要求主机产物已经打好
 ```
 
+版本号写在仓库里：根 `package.json` 与 `apps/desktop/package.json`（产物名与 `app.getVersion()`
+都取自后者）。发版时由维护者指定版本、改好版本号、提交一次发布提交，再在提交上打
+`v<版本>` 标签；流水线按仓库里的版本构建，不从标签反填。
+
+```bash
+node scripts/sync-version.mjs 0.2.0   # 两处一起改成 0.2.0
+git commit -am "chore(release): 0.2.0" # 发布提交
+git tag -a v0.2.0 -m "facet 0.2.0" && git push origin main v0.2.0
+```
+
 Linux 产物在 `apps/desktop/dist/`，归档名里的架构串随格式变（由 electron-builder 决定，不手写）：
 
 | 格式 | x86_64 | arm64 | 说明 |
@@ -336,10 +346,10 @@ macOS 不在流水线里，也没有适配。
 ## 文档
 
 - `docs/architecture.md`：分层拓扑、依赖禁令、各层不变量与扩展步骤
+- `docs/testing.md`：五条自检命令、改到什么跑哪几条、流水线与常见的坑
 - `docs/ui_design_specification.md`：界面设计说明
 - `docs/i18n.md`：界面语言与文案规则
-- `docs/backlog.md`：还没做完的能力、验收项、设计取舍与建议顺序
-- `AGENTS.md`：规则与红线（依赖禁令、质量门禁、分支、提交与注释规范）
+- `AGENTS.md`：规则与红线（依赖禁令、分支、提交与注释规范）
 
 ## 插件与 skill
 

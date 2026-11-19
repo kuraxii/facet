@@ -97,11 +97,6 @@ jobs:
           # 容器里以 root 写的 node_modules 交回 runner 用户，后续步骤才写得动
           sudo chown -R "$(id -u):$(id -g)" node_modules
 
-      # 版本号取自标签：v0.1.0 → 0.1.0。手跑时保持 package.json 里的版本
-      - name: 写入版本号
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: npm pkg set version="${GITHUB_REF_NAME#v}" --workspace @facet/desktop
-
       # 先打 server 再让 electron-builder 动 node_modules：node-pty 是 N-API 模块，同一份
       # .node 在 Node 与 Electron 下都能加载，但顺序固定下来，将来换成 ABI 相关的原生模块
       # 时不会拷错那一份
@@ -178,15 +173,6 @@ jobs:
             windows-downloads-
 
       - run: npm ci
-
-      # 版本号取自标签：v0.1.0 → 0.1.0。手跑时保持 package.json 里的版本。
-      # 用 pwsh 而不是 bash：Windows runner 上的 bash 是 Git Bash，能跑但要依赖它的 PATH
-      - name: 写入版本号
-        if: startsWith(github.ref, 'refs/tags/v')
-        shell: pwsh
-        run: |
-          $version = $env:GITHUB_REF_NAME -replace '^v', ''
-          npm pkg set "version=$version" --workspace @facet/desktop
 
       # 顺序与 linux job 一致：先打 server 产物
       - name: 打独立的 server 产物

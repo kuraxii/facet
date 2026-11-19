@@ -62,9 +62,6 @@ function readString(value: unknown, fallback: string): string {
 	return typeof value === "string" ? value : fallback;
 }
 
-/** 思考档位。 */
-const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
-
 /**
  * 把读进来的内容收成一份设置。
  *
@@ -77,12 +74,8 @@ export function parseSettings(value: unknown): FacetSettings {
 	const appearance = isRecord(value.appearance) ? value.appearance : {};
 	const input = isRecord(value.input) ? value.input : {};
 	const layout = isRecord(value.layout) ? value.layout : {};
-	const defaultThinkingLevel = readChoice(value.defaultThinkingLevel, THINKING_LEVELS, "medium");
 	return {
 		version: FILE_VERSION,
-		...(typeof value.defaultThinkingLevel === "string" && THINKING_LEVELS.includes(defaultThinkingLevel)
-			? { defaultThinkingLevel }
-			: {}),
 		appearance: {
 			theme: readChoice<ThemeMode>(
 				appearance.theme,

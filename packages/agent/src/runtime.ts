@@ -19,10 +19,18 @@ import {
 	ModelRuntime,
 	ProjectTrustStore,
 	SessionManager,
+	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { facetAskUserQuestion } from "@facet/plugin-ask-user-question";
 import sessionNames from "@facet/plugin-session-names";
-import type { ModelInfo, ModelRef, ProviderInfo, SessionSummary, ThinkingLevel } from "@facet/protocol";
+import type {
+	AgentDefaults,
+	ModelInfo,
+	ModelRef,
+	ProviderInfo,
+	SessionSummary,
+	ThinkingLevel,
+} from "@facet/protocol";
 import { toModelInfo } from "./convert.ts";
 import { FileCredentialStore } from "./credential-store.ts";
 import { ExtensionUi } from "./extension-ui.ts";
@@ -434,6 +442,63 @@ export class PiAgentFactory {
 	async deleteCredential(providerId: string): Promise<void> {
 		await this.credentials.delete(providerId);
 		await this.modelRuntime.removeRuntimeApiKey(providerId);
+	}
+
+	/**
+	 * pi 的默认设置。
+	 *
+	 * 读的是 pi 自己的设置（`agentDir/settings.json` 里的 `defaultProvider`、`defaultModel` 与
+	 * `defaultThinkingLevel`），新建会话时由 pi 用它开局，facet 不另存一份。
+	 */
+	agentDefaults(): AgentDefaults {
+		const settings = this.piSettings();
+		const provider = settings.getDefaultProvider();
+		const id = settings.getDefaultModel();
+		const thinkingLevel = settings.getDefaultThinkingLevel();
+		const model =
+			provider === undefined || provider.length === 0 || id === undefined || id.length === 0
+				? undefined
+				: { provider, id };
+		return {
+			...(model === undefined ? {} : { model }),
+			...(thinkingLevel === undefined ? {} : { thinkingLevel }),
+		};
+	}
+
+	/**
+	 * 改 pi 的默认设置，只写给了的字段：落盘之后才返回，写失败往上抛。
+	 *
+	 * `thinkingLevel` 传 `null` 表示清掉这一项，交回模型自己决定——pi 的
+	 * `SettingsManager` 没有删除接口，所以直接改它持有的那份全局设置再存。
+	 */
+	async setAgentDefaults(patch: { model?: ModelRef; thinkingLevel?: ThinkingLevel | null }): Promise<void> {
+		const settings = this.piSettings();
+		if (patch.model !== undefined) {
+			settings.setDefaultModelAndProvider(patch.model.provider, patch.model.id);
+		}
+		if (patch.thinkingLevel !== undefined) {
+			// null 表示清掉这一项：pi 落盘时值为 undefined 的键会被丢掉
+			const level = patch.thinkingLevel === null ? undefined : patch.thinkingLevel;
+			settings.setDefaultThinkingLevel(level as ThinkingLevel);
+		}
+		await settings.flush();
+		const failure = settings.drainErrors()[0];
+		if (failure !== undefined) {
+			throw failure.error;
+		}
+	}
+
+	/**
+	 * pi 的设置管理器。
+	 *
+	 * 只用来读写 agentDir 下的全局设置，项目级设置与它无关；按需建一次，之后共用同一个实例，
+	 * 免得每次读取都重新解析一遍文件。
+	 */
+	private piSettingsManager: SettingsManager | undefined;
+
+	private piSettings(): SettingsManager {
+		this.piSettingsManager ??= SettingsManager.create(this.agentDir, this.agentDir);
+		return this.piSettingsManager;
 	}
 
 	/** 目录里的全部模型，含未配置凭证的模型，是否可用由调用方判断。 */

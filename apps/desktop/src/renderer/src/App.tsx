@@ -72,7 +72,6 @@ function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 		connectEpoch: host.connectEpoch,
 		hostEpoch: host.hostEpoch,
 		projectDir: bridge.projectDir,
-		defaultThinkingLevel: host.settings.defaultThinkingLevel,
 		onSessionOpened,
 		onSessionRemoved,
 	});

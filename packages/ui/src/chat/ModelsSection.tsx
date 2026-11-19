@@ -5,7 +5,14 @@
  * 提供方的地址、凭证与自定义清单都收在同一个编辑弹窗里，列表行只留名字、来源、凭证状态与
  * 「编辑」；凭证状态用行尾的小圆点表示，不在行里排一排按钮。
  */
-import type { CustomProviderInfo, FacetSettings, ModelInfo, ModelRef, ProviderInfo } from "@facet/protocol";
+import type {
+	AgentDefaults,
+	CustomProviderInfo,
+	ModelInfo,
+	ModelRef,
+	ProviderInfo,
+	ThinkingLevel,
+} from "@facet/protocol";
 import { Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
@@ -36,10 +43,6 @@ interface ProbeResult {
 
 /** 模型页参数。 */
 export interface ModelsSectionProps {
-	/** 正在编辑的设置 */
-	draft: FacetSettings;
-	/** 改一处草稿 */
-	patch: (change: (current: FacetSettings) => FacetSettings) => void;
 	/** 数据来源 */
 	data: SettingsDataSource;
 	/** pi 目录里的提供方，含自定义 */
@@ -51,8 +54,6 @@ export interface ModelsSectionProps {
 }
 
 export function ModelsSection({
-	draft,
-	patch,
 	data,
 	providers,
 	providersError,
@@ -67,6 +68,10 @@ export function ModelsSection({
 	const [testing, setTesting] = useState<string | undefined>(undefined);
 	/** 自定义提供方的完整配置，提供方列表与模型筛选用同一份 */
 	const [customs, setCustoms] = useState<readonly CustomProviderInfo[] | undefined>(undefined);
+	/** pi 自己的默认设置：存在 pi 的设置里，新建会话由它开局 */
+	const [defaults, setDefaults] = useState<AgentDefaults | undefined>(undefined);
+	/** 正在写 pi 的默认设置 */
+	const [isSavingDefaults, setIsSavingDefaults] = useState(false);
 	/** 添加提供商的挑选弹窗 */
 	const [isPickerOpen, setIsPickerOpen] = useState(false);
 	/** 正在编辑的提供方；打开新表单时 `row` 为空 */
@@ -102,6 +107,40 @@ export function ModelsSection({
 		}
 		void loadCustoms();
 	}, [customs, loadCustoms]);
+
+	useEffect(() => {
+		let alive = true;
+		void data
+			.loadAgentDefaults()
+			.then((loaded) => {
+				if (alive) {
+					setDefaults(loaded);
+				}
+			})
+			.catch(() => undefined);
+		return () => {
+			alive = false;
+		};
+	}, [data]);
+
+	/** 改 pi 的默认设置：写完以主机读回的值重新对齐。 */
+	const changeDefaults = async (patch: {
+		model?: ModelRef;
+		thinkingLevel?: ThinkingLevel | null;
+	}): Promise<void> => {
+		setIsSavingDefaults(true);
+		try {
+			setDefaults(await data.saveAgentDefaults(patch));
+		} catch {
+			// 写不进去就按主机上实际生效的值回位
+			void data
+				.loadAgentDefaults()
+				.then(setDefaults)
+				.catch(() => undefined);
+		} finally {
+			setIsSavingDefaults(false);
+		}
+	};
 
 	/** 提供方或凭证变过：清单与可用模型都要重读，可用范围跟着凭证走。 */
 	const reloadProviders = useCallback(() => {
@@ -154,18 +193,53 @@ export function ModelsSection({
 			</header>
 
 			<SettingsGroup>
+				<SettingsRow title={t("settings.modelsPage.defaultModel")}>
+					<select
+						className="set-input set-models-select"
+						value={defaults?.model === undefined ? "" : modelKey(defaults.model)}
+						disabled={isSavingDefaults || usable === undefined}
+						onChange={(event) => {
+							const separator = event.target.value.indexOf("/");
+							if (separator > 0) {
+								void changeDefaults({
+									model: {
+										provider: event.target.value.slice(0, separator),
+										id: event.target.value.slice(separator + 1),
+									},
+								});
+							}
+						}}
+						aria-label={t("settings.modelsPage.defaultModel")}
+					>
+						{defaults?.model === undefined ? (
+							<option value="">{t("settings.modelsPage.modelDefault")}</option>
+						) : null}
+						{(usable ?? []).map((model) => (
+							<option key={modelKey(model)} value={modelKey(model)}>
+								{model.provider} / {model.name}
+							</option>
+						))}
+						{/* pi 里存着的模型可能已经不在可用范围里（换过凭证或删过提供方），也列出来 */}
+						{defaults?.model === undefined ||
+						(usable ?? []).some(
+							(model) => modelKey(model) === modelKey(defaults.model as ModelRef),
+						) ? null : (
+							<option value={modelKey(defaults.model)}>
+								{defaults.model.provider} / {defaults.model.id}
+							</option>
+						)}
+					</select>
+				</SettingsRow>
 				<SettingsRow title={t("settings.modelsPage.defaultThinking")}>
 					<select
 						className="set-input set-models-select"
-						value={draft.defaultThinkingLevel ?? ""}
+						value={defaults?.thinkingLevel ?? ""}
+						disabled={isSavingDefaults}
 						onChange={(event) => {
 							const value = event.target.value;
-							patch((current) => ({
-								...current,
-								...(value.length === 0
-									? { defaultThinkingLevel: undefined }
-									: { defaultThinkingLevel: value as ThinkingLevelValue }),
-							}));
+							void changeDefaults({
+								thinkingLevel: value.length === 0 ? null : (value as ThinkingLevelValue),
+							});
 						}}
 						aria-label={t("settings.modelsPage.defaultThinking")}
 					>
@@ -313,9 +387,7 @@ function ProviderListRow({ row, onEdit }: { row: ProviderRow; onEdit: () => void
 			<span className="set-models-text">
 				<span className="set-models-title">
 					<span className="set-models-name ell">{provider.name}</span>
-					<span className={custom === undefined ? "set-badge" : "set-badge is-custom"}>
-						{custom === undefined ? t("providers.builtin") : t("providers.custom")}
-					</span>
+					{custom === undefined ? null : <span className="set-badge is-custom">{t("providers.custom")}</span>}
 				</span>
 				<span className="set-models-meta ell">{providerMeta(row, t)}</span>
 			</span>

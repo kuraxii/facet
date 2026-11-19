@@ -147,6 +147,8 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 					return providers;
 				}),
 			testModel: (model) => client.testModel(model),
+			loadAgentDefaults: () => client.getAgentDefaults(),
+			saveAgentDefaults: (patch) => client.setAgentDefaults(patch),
 			diagnostics: () => client.diagnostics(),
 			saveText: (suggestedName, text) => bridge.saveText(suggestedName, text),
 		}),

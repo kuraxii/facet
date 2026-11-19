@@ -8,7 +8,7 @@ import { Plus, Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { Modal } from "../modal.tsx";
-import { type ProviderRow, providerMeta } from "./provider-rows.ts";
+import type { ProviderRow } from "./provider-rows.ts";
 
 /** 挑选弹窗参数。 */
 export interface ProviderPickerProps {
@@ -71,10 +71,7 @@ export function ProviderPicker({ rows, onPick, onCreateCustom, onClose }: Provid
 							<span className="set-models-mark" aria-hidden="true">
 								{provider.name.slice(0, 1).toUpperCase()}
 							</span>
-							<span className="set-models-text">
-								<span className="picker-name ell">{provider.name}</span>
-								<span className="set-models-meta ell">{providerMeta(row, t)}</span>
-							</span>
+							<span className="picker-name ell">{provider.name}</span>
 							<button type="button" className="set-models-action" onClick={() => onPick(provider.id)}>
 								{t("picker.add")}
 							</button>
@@ -89,8 +86,8 @@ export function ProviderPicker({ rows, onPick, onCreateCustom, onClose }: Provid
 			</ul>
 
 			<div className="dialog-actions">
-				<button type="button" className="set-reset" onClick={onCreateCustom}>
-					<Plus size={13} strokeWidth={2} aria-hidden="true" />
+				<button type="button" className="prov-btn is-ghost" onClick={onCreateCustom}>
+					<Plus size={13} strokeWidth={2.2} aria-hidden="true" />
 					{t("picker.addCustom")}
 				</button>
 				<button type="button" className="set-save" onClick={onClose}>

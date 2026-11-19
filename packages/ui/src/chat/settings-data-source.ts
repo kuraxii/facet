@@ -3,13 +3,28 @@
  *
  * 由宿主接到主机上；界面不关心这些调用背后是本地还是远端。
  */
-import type { CustomProviderInfo, FacetSettings, ModelInfo, ModelRef, ProviderInfo } from "@facet/protocol";
+import type {
+	AgentDefaults,
+	CustomProviderInfo,
+	FacetSettings,
+	ModelInfo,
+	ModelRef,
+	ProviderInfo,
+	ThinkingLevel,
+} from "@facet/protocol";
 
 export interface SettingsDataSource {
 	/** 读设置 */
 	loadSettings: () => Promise<FacetSettings>;
 	/** 保存设置，失败时抛错 */
 	saveSettings: (settings: FacetSettings) => Promise<FacetSettings>;
+	/** 读 pi 的默认设置（默认模型与默认思考档位），为空表示由 pi 自己决定 */
+	loadAgentDefaults: () => Promise<AgentDefaults>;
+	/** 改 pi 的默认设置，只传要改的字段；思考档位传 null 表示清掉 */
+	saveAgentDefaults: (patch: {
+		model?: ModelRef;
+		thinkingLevel?: ThinkingLevel | null;
+	}) => Promise<AgentDefaults>;
 	/** 读提供方清单，含授权状态与模型数量 */
 	loadProviders: () => Promise<ProviderInfo[]>;
 	/** 读全部模型，模型选择与可见性都用它 */

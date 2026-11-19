@@ -238,11 +238,13 @@ scripts/build-fonts.sh <字体目录>
 
 | 路径 | 内容 | 覆盖方式 |
 |---|---|---|
-| `~/.pi/agent`（开发态 `~/.pi/agent-dev`） | 凭证 `auth.json`、模型 `models.json`、设置、会话目录 | `FACET_AGENT_DIR` |
+| `~/.pi/agent`（开发态 `~/.pi/agent-dev`） | 凭证 `auth.json`、模型 `models.json`、设置、会话目录 | `FACET_AGENT_DIR`（开发态 `FACET_DEV_AGENT_DIR`） |
 | `$XDG_DATA_HOME/facet`（缺省 `~/.local/share/facet`） | 主机身份 `host.json`、项目清单 `projects.json`、界面设置 `settings.json`、终端登记 `terminals.json`、审计 `audit.log`；独立启动时还有发现文件 `endpoint.json` | `FACET_DATA_DIR` |
 | `$XDG_CONFIG_HOME/facet`（缺省 `~/.config/facet`） | 桌面本地记录 `desktop.json`：窗口位置与尺寸 | — |
 
 开发实例的三处目录都带 `-dev` 后缀：数据目录是 `~/.local/share/facet-dev`，配置目录是 `~/.config/facet-dev`，pi 数据目录是 `~/.pi/agent-dev`。`npm run dev`（即 `dev:split`）、`dev:host`、`dev:desktop` 都用这一套，因此开发时跑的东西与装好的包互不影响，`projects.json`、主机身份与 pi 会话各有一份。
+
+开发态取 pi 数据目录时只认 `FACET_DEV_AGENT_DIR`，不认 `FACET_AGENT_DIR` 与 `PI_CODING_AGENT_DIR`：主机在自己进程里把 pi 数据目录写回环境并传给子进程，从 facet 自带的终端、或从 pi 拉起的 shell 里启动开发时，这两个变量已经指向真实目录，跟着走就会把开发期的会话与凭证写进 `~/.pi/agent`。启动日志会打出实际生效的两个目录。
 
 Windows 上没有 XDG 变量，按家目录推导：数据目录是 `%USERPROFILE%\.local\share\facet`（开发态 `facet-dev`），pi 数据目录是 `%USERPROFILE%\.pi\agent`，桌面本地记录落在 Electron 的 `%APPDATA%\facet\desktop.json`。
 
@@ -312,7 +314,7 @@ Windows：
 - 安装包未签名：别的机器上首次运行会触发 SmartScreen 提示，正式分发要配代码签名证书
 - 数据与配置目录仍按家目录推导：`%USERPROFILE%\.local\share\facet`（开发态 `facet-dev`）、`%USERPROFILE%\.pi\agent`
 
-开发时桌面用 `process.execPath` 加 `ELECTRON_RUN_AS_NODE=1` 拉起 `out/main/server.js`，server 再起同目录的 `pty-server.js`；打包后桌面改为拉起独立产物 `resources/server/bin/node resources/server/lib/server.mjs`（Windows 上是 `bin\node.exe`）。
+开发与打包都用同一份独立产物起主机：桌面拉起 `resources/server/bin/node resources/server/lib/server.mjs`（Windows 上是 `bin\node.exe`），开发态则是 `apps/desktop/dist-server/bin/node dist-server/lib/server.mjs`；`npm run dev`（即 `dev:split`）由脚本先起这份产物，桌面按固定 socket 连过去。原生模块只按 Node ABI 编一次，与桌面那份 Electron 运行时互不相干。
 
 ### CI
 
@@ -341,7 +343,8 @@ macOS 不在流水线里，也没有适配。
 |---|---|
 | `FACET_HOST`、`FACET_PORT` | 给出任意一个就改成监听 TCP；缺省只开本地 socket（unix socket 或 Windows 命名管道） |
 | `FACET_HOST_NAME` | 主机展示名 |
-| `FACET_AGENT_DIR` | pi 数据目录 |
+| `FACET_AGENT_DIR` | pi 数据目录，发布版生效；开发态不读它 |
+| `FACET_DEV_AGENT_DIR` | 开发态的 pi 数据目录，缺省 `~/.pi/agent-dev` |
 | `FACET_SESSION_DIR` | 会话文件目录，缺省按工作目录分组 |
 | `FACET_DATA_DIR` | 应用数据目录 |
 | `FACET_REPLAY_LIMIT` | 每个通道保留的动作条数 |

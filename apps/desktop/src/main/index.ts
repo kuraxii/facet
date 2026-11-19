@@ -1,7 +1,6 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
-import { DEFAULT_AGENT_DIR, DEV_AGENT_DIR } from "@facet/agent";
 import { createI18n, readLanguageSetting, resolveLanguage, translate } from "@facet/i18n";
 import { app, BrowserWindow, dialog, ipcMain, screen, shell } from "electron";
 import { HostChannels, LOCAL_TARGET } from "./host-channel.ts";
@@ -11,6 +10,7 @@ import {
 	hostSocketPath,
 	type LocalHost,
 	readDiscovery,
+	resolveAgentDir,
 	resolveDataDir,
 } from "./host-daemon.ts";
 import { countBusySessions } from "./host-query.ts";
@@ -55,7 +55,7 @@ const READY_WAIT_MS = 20_000;
 const dataDir = resolveDataDir(process.env, { isDev });
 
 /** 本机 pi 数据目录：发布版与 pi 共用，开发态用独立的 agent-dev */
-const agentDir = process.env.FACET_AGENT_DIR?.trim() || (isDev ? DEV_AGENT_DIR : DEFAULT_AGENT_DIR);
+const agentDir = resolveAgentDir(process.env, { isDev });
 
 /** server 怎么起：用独立产物里自带的 Node；没有产物时为空，界面会显示连不上并能重试 */
 const hostLaunch = resolveHostLaunch();
@@ -536,6 +536,8 @@ app.whenReady().then(async () => {
 				env: {
 					...hostLaunch.env,
 					FACET_AGENT_DIR: agentDir,
+					// 开发态连 pi 的目录也一起钉住：继承来的 PI_CODING_AGENT_DIR 在主机侧优先级更高
+					...(isDev ? { PI_CODING_AGENT_DIR: agentDir } : {}),
 					...(isDev ? { FACET_DEBUG: "1" } : {}),
 					// 开发态自己拉起的 server 跟着桌面一起退，免得留下一堆进程；打包后由主机自己管生命周期
 					...(isDev ? { FACET_PARENT_PID: String(process.pid) } : {}),

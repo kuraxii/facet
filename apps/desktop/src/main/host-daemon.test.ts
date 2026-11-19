@@ -7,6 +7,7 @@ import {
 	hostSocketPath,
 	isProcessAlive,
 	readDiscoveryFile,
+	resolveAgentDir,
 	resolveDataDir,
 } from "./host-daemon.ts";
 
@@ -97,6 +98,27 @@ describe("resolveDataDir", () => {
 	it("按 XDG_DATA_HOME 取，没有或不是绝对路径时用家目录", () => {
 		expect(resolveDataDir({ XDG_DATA_HOME: "/xdg" })).toBe(join("/xdg", "facet"));
 		expect(resolveDataDir({ XDG_DATA_HOME: "relative" })).toBe(join(homedir(), ".local", "share", "facet"));
+	});
+});
+
+describe("resolveAgentDir", () => {
+	it("发布版与 pi 共用 ~/.pi/agent，也认 FACET_AGENT_DIR", () => {
+		expect(resolveAgentDir({})).toBe(join(homedir(), ".pi", "agent"));
+		expect(resolveAgentDir({ FACET_AGENT_DIR: "/data/agent" })).toBe("/data/agent");
+	});
+
+	it("开发态只认 FACET_DEV_AGENT_DIR，继承来的真实目录不参与", () => {
+		expect(resolveAgentDir({}, { isDev: true })).toBe(join(homedir(), ".pi", "agent-dev"));
+		expect(resolveAgentDir({ FACET_DEV_AGENT_DIR: "/data/agent-dev" }, { isDev: true })).toBe(
+			"/data/agent-dev",
+		);
+		// facet 自带的终端与 pi 的 shell 都会带上这两个变量，指向真实目录
+		expect(
+			resolveAgentDir(
+				{ FACET_AGENT_DIR: "/data/agent", PI_CODING_AGENT_DIR: "/data/agent" },
+				{ isDev: true },
+			),
+		).toBe(join(homedir(), ".pi", "agent-dev"));
 	});
 });
 

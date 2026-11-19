@@ -8,7 +8,6 @@
  * 已经自带右键菜单的地方（侧栏行、标签栏）会先 `preventDefault()`，这里见到就退出，不会
  * 弹出第二份菜单。
  */
-import { Copy, Quote } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useI18n } from "./i18n/I18nProvider.tsx";
 
@@ -192,7 +191,6 @@ export function TextMenu({ onCopy, onQuote, quoteScope }: TextMenuProps): React.
 					onCopy(menu.text);
 				}}
 			>
-				<Copy size={13} strokeWidth={1.5} />
 				<span>{t("textMenu.copy")}</span>
 			</button>
 			{menu.canQuote ? (
@@ -205,7 +203,6 @@ export function TextMenu({ onCopy, onQuote, quoteScope }: TextMenuProps): React.
 						onQuote?.(menu.text);
 					}}
 				>
-					<Quote size={13} strokeWidth={1.5} />
 					<span>{t("textMenu.quote")}</span>
 				</button>
 			) : null}

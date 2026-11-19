@@ -726,6 +726,25 @@ function buildRequestListCustomProviders(): (value: unknown) => boolean {
 const checkRequestListCustomProviders = buildRequestListCustomProviders();
 
 /**
+ * fetchProviderModels 的参数判断。
+ *
+ * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
+ */
+function buildRequestFetchProviderModels(): (value: unknown) => boolean {
+	// @ts-ignore
+	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && ("baseUrl" in value && (((typeof value.baseUrl === "string" && (value.providerId === undefined || (!("providerId" in value) || typeof value.providerId === "string"))) && (value.apiKey === undefined || (!("apiKey" in value) || typeof value.apiKey === "string"))) && (value.api === undefined || (!("api" in value) || typeof value.api === "string"))))));
+	return (value: unknown): boolean => {
+		if (!check_0(value)) return false;
+		const source = value as Record<string, unknown>;
+		return (
+			typeof source.baseUrl === "string" && source.baseUrl.length > 0
+		);
+	};
+}
+
+const checkRequestFetchProviderModels = buildRequestFetchProviderModels();
+
+/**
  * saveCustomProvider 的参数判断。
  *
  * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
@@ -1028,6 +1047,7 @@ export const REQUEST_CONTRACTS: Readonly<Record<string, RequestContract | undefi
 	"diagnostics": { auth: "admin", check: checkRequestDiagnostics },
 	"testModel": { auth: "admin", check: checkRequestTestModel },
 	"listCustomProviders": { auth: "public", check: checkRequestListCustomProviders },
+	"fetchProviderModels": { auth: "admin", check: checkRequestFetchProviderModels },
 	"saveCustomProvider": { auth: "admin", check: checkRequestSaveCustomProvider },
 	"removeCustomProvider": { auth: "admin", check: checkRequestRemoveCustomProvider },
 	"listTerminals": { auth: "public", check: checkRequestListTerminals },

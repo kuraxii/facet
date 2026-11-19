@@ -356,13 +356,15 @@ describe("派发去重", () => {
 
 describe("契约表", () => {
 	it("每个方法的权限档只在生成物里声明一次", () => {
-		expect(Object.keys(REQUEST_CONTRACTS)).toHaveLength(52);
+		expect(Object.keys(REQUEST_CONTRACTS)).toHaveLength(53);
 		expect(REQUEST_CONTRACTS.respondUi?.auth).toBe("write");
 		expect(REQUEST_CONTRACTS.saveCredential?.auth).toBe("admin");
 		expect(REQUEST_CONTRACTS.listSessions?.auth).toBe("public");
 		// 默认模型存在 pi 的设置里：读是公开的，写要管理档
 		expect(REQUEST_CONTRACTS.getAgentDefaults?.auth).toBe("public");
 		expect(REQUEST_CONTRACTS.setAgentDefaults?.auth).toBe("admin");
+		// 从上游拉模型要带密钥出去，只给管理档
+		expect(REQUEST_CONTRACTS.fetchProviderModels?.auth).toBe("admin");
 	});
 
 	it("派发白名单只含客户端动作", () => {

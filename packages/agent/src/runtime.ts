@@ -390,6 +390,40 @@ export class PiAgentFactory {
 		}
 	}
 
+	/**
+	 * 解析某个提供方此刻能用的请求认证。
+	 *
+	 * 走 pi 自己的解析链：`auth.json` 里的凭证、`models.json` 里写的密钥或取密钥的命令、环境
+	 * 变量都算，所以界面不用关心用户当初把密钥存在哪。只给主机侧自用（例如从上游拉模型清单），
+	 * 密钥不回给界面。
+	 */
+	async providerAuth(
+		providerId: string,
+	): Promise<{ apiKey?: string; headers?: Record<string, string | null> } | undefined> {
+		// 一、走 pi 的解析链：凭证文件、models.json 的密钥或取密钥的命令、环境变量都算
+		try {
+			const resolved = await this.modelRuntime.getAuth(providerId);
+			const apiKey = resolved?.auth.apiKey;
+			const headers = resolved?.auth.headers;
+			if (apiKey !== undefined || (headers !== undefined && Object.keys(headers).length > 0)) {
+				return {
+					...(apiKey === undefined ? {} : { apiKey }),
+					...(headers === undefined ? {} : { headers: { ...headers } }),
+				};
+			}
+		} catch {
+			// 运行态里还没有这个提供方（例如配置文件是刚被改过的）时退到下面两级
+		}
+		// 二、凭证文件里的 api_key
+		const credential = await this.credentials.read(providerId);
+		if (credential?.type === "api_key" && credential.key !== undefined && credential.key.length > 0) {
+			return { apiKey: credential.key };
+		}
+		// 三、models.json 里写的明文密钥（或 $ENV 引用）
+		const fromConfig = await this.modelConfig.apiKey(providerId);
+		return fromConfig === undefined ? undefined : { apiKey: fromConfig };
+	}
+
 	/** 删除提供方的凭证：文件与运行态一起删。 */
 	async deleteCredential(providerId: string): Promise<void> {
 		await this.credentials.delete(providerId);

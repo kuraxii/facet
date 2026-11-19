@@ -90,11 +90,53 @@ export function ProviderDialog({
 	const [key, setKey] = useState("");
 	/** 删除密钥的意图，同样是草稿，点「保存」才删 */
 	const [isDeletingKey, setIsDeletingKey] = useState(false);
+	/** 正在从上游拉模型 */
+	const [isFetching, setIsFetching] = useState(false);
 	const [isBusy, setIsBusy] = useState(false);
 	const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 	const [error, setError] = useState<string | undefined>(undefined);
 
 	const shownId = isNew ? id : providerId;
+
+	/**
+	 * 从上游的 `/v1/models` 拉模型清单填进模型表。
+	 *
+	 * 有的网关要密钥才给列表：带上密钥框里刚填的那个，没填就由主机按这个提供方已有的认证去解析。
+	 * 已经填了标识的行原样保留（用户可能改过名字与窗口），只把还没有的补在后面。
+	 */
+	const fetchModels = async (): Promise<void> => {
+		setIsFetching(true);
+		setError(undefined);
+		try {
+			const fetched = await data.fetchProviderModels({
+				baseUrl: baseUrl.trim(),
+				...(isNew ? {} : { providerId: shownId }),
+				...(key.trim().length > 0 ? { apiKey: key.trim() } : {}),
+				api,
+			});
+			// 裸站点根被补成 /v1 之后与用户填的不同，回填给他看（仍是草稿，保存才落盘）
+			if (fetched.baseUrl.length > 0 && fetched.baseUrl !== baseUrl.trim()) {
+				setBaseUrl(fetched.baseUrl);
+			}
+			if (fetched.models.length === 0) {
+				setError(t("providerForm.fetchModelsEmpty"));
+				return;
+			}
+			setRows((current) => {
+				const kept = current.filter((item) => item.model.id.trim().length > 0);
+				// 标识完全相同才跳过：已有的行原样保留，展示名、窗口等一个字都不动；大小写不同算新模型
+				const known = new Set(kept.map((item) => item.model.id.trim()));
+				const added = fetched.models
+					.filter((model) => !known.has(model.id.trim()))
+					.map((model) => modelRow({ ...model }));
+				return [...kept, ...added];
+			});
+		} catch (fetchError) {
+			setError(messageOf(fetchError));
+		} finally {
+			setIsFetching(false);
+		}
+	};
 
 	const patchModel = (key_: string, change: Partial<CustomModelInfo>): void => {
 		setRows((current) =>
@@ -286,14 +328,24 @@ export function ProviderDialog({
 					<section className="prov-section">
 						<div className="prov-section-head">
 							<span className="set-label">{t("providerForm.models")}</span>
-							<button
-								type="button"
-								className="prov-btn is-ghost"
-								onClick={() => setRows((current) => [...current, modelRow()])}
-							>
-								<Plus size={13} strokeWidth={2} aria-hidden="true" />
-								{t("providerForm.addModel")}
-							</button>
+							<span className="prov-section-actions">
+								<button
+									type="button"
+									className="prov-btn is-ghost"
+									disabled={isFetching || baseUrl.trim().length === 0}
+									onClick={() => void fetchModels()}
+								>
+									{t("providerForm.fetchModels")}
+								</button>
+								<button
+									type="button"
+									className="prov-btn is-ghost"
+									onClick={() => setRows((current) => [...current, modelRow()])}
+								>
+									<Plus size={13} strokeWidth={2} aria-hidden="true" />
+									{t("providerForm.addModel")}
+								</button>
+							</span>
 						</div>
 						<div className="prov-model-head" aria-hidden="true">
 							<span>{t("providerForm.modelId")}</span>

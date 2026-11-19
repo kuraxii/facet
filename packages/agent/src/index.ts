@@ -36,3 +36,17 @@ export {
 	statSessionFile,
 } from "./session-scan.ts";
 export type * from "./types.ts";
+export type {
+	CatalogIndex,
+	FetchUpstreamModelsOptions,
+	FetchUpstreamModelsResult,
+} from "./upstream-models.ts";
+export {
+	buildCatalogIndex,
+	catalogLookupKeys,
+	enrichUpstreamModels,
+	fetchUpstreamModels,
+	looksLikeModelList,
+	modelListCandidates,
+	parseUpstreamModels,
+} from "./upstream-models.ts";

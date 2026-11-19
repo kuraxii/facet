@@ -290,6 +290,18 @@ export const REQUEST_SCHEMAS = {
 		nonEmpty: ["provider", "id"],
 	},
 	listCustomProviders: { auth: "public", params: NoParams },
+	// 从上游的 /v1/models 拉一份模型清单，填自定义提供方的模型表；
+	// 没带 apiKey 时用该提供方已经存下的密钥，新建的提供方还没存，就靠界面把输入框里的值带过来
+	fetchProviderModels: {
+		auth: "admin",
+		params: Type.Object({
+			baseUrl: Type.String(),
+			providerId: Type.Optional(Id),
+			apiKey: Type.Optional(Type.String()),
+			api: Type.Optional(Id),
+		}),
+		nonEmpty: ["baseUrl"],
+	},
 	saveCustomProvider: {
 		auth: "admin",
 		params: Type.Object({

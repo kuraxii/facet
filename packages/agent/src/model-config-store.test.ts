@@ -73,3 +73,31 @@ describe("自定义提供方", () => {
 		expect(JSON.parse(await readFile(file, "utf8"))).toEqual({ providers: {} });
 	});
 });
+
+describe("配置里写的密钥", () => {
+	it("认明文与 $ENV 引用,不展开 !命令", async () => {
+		await writeFile(
+			file,
+			JSON.stringify({
+				providers: {
+					plain: { apiKey: "sk-plain" },
+					env: { apiKey: "$FACET_TEST_KEY" },
+					braced: { apiKey: "$" + "{FACET_TEST_KEY}" },
+					command: { apiKey: "!echo sk" },
+					missing: {},
+				},
+			}),
+			"utf8",
+		);
+		const store = new ModelConfigStore({ file });
+		process.env.FACET_TEST_KEY = "sk-env";
+		expect(await store.apiKey("plain")).toBe("sk-plain");
+		expect(await store.apiKey("env")).toBe("sk-env");
+		expect(await store.apiKey("braced")).toBe("sk-env");
+		// 命令要执行才拿得到,属于 pi 的运行时职责
+		expect(await store.apiKey("command")).toBeUndefined();
+		expect(await store.apiKey("missing")).toBeUndefined();
+		process.env.FACET_TEST_KEY = "";
+		expect(await store.apiKey("env")).toBeUndefined();
+	});
+});

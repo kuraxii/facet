@@ -17,11 +17,16 @@ describe("自带字体", () => {
 		dependencies?: Record<string, string>;
 	};
 
-	it("代码字体按三个字重声明,并指向完整的 CN woff2", () => {
+	it("代码字体只声明 400 与 600 两档", () => {
 		const weights = [...fonts.matchAll(/font-weight: (\d+);/g)].map((match) => match[1]);
-		expect(weights).toEqual(["400", "500", "600"]);
-		expect(fonts.match(/url\("\.\.\/assets\/fonts\/maple-mono-cn-\d+\.woff2"\)/g)).toHaveLength(3);
+		expect(weights).toEqual(["400", "600"]);
+		expect(fonts.match(/url\("\.\.\/assets\/fonts\/maple-mono-cn-\d+\.woff2"\)/g)).toHaveLength(2);
 		expect(fonts).toContain('font-family: "Maple Mono CN"');
+	});
+
+	it("代码字体的汉字交给界面中文字体兜底", () => {
+		// 子集里没有汉字与全角标点，等宽栈必须自己带上中文，否则会落到各机器自己的回退
+		expect(base).toMatch(/--font-mono:\s*"Maple Mono CN", "Noto Sans SC Variable",/);
 	});
 
 	it("代码字体直接使用完整 CN 文件,不再依赖外部分片包", () => {
@@ -39,7 +44,7 @@ describe("自带字体", () => {
 	it("界面字体与代码字体的变量三处一致", () => {
 		expect(index).toContain('@import "./fonts.css";');
 		expect(base).toMatch(/--font-sans: Inter,/);
-		expect(base).toMatch(/--font-mono: "Maple Mono CN",/);
+		expect(base).toMatch(/--font-mono:\s*"Maple Mono CN",/);
 		// markstream 的字体走同一个变量,不再单独写一份字体列表
 		expect(markdown).toContain("--ms-font-sans: var(--font-sans);");
 	});

@@ -42,8 +42,7 @@ apps/desktop/dist-server/
 
 开发态跑的是同一份产物（`apps/desktop/dist-server`），也用自带的 Node 启动，所以原生模块
 （`node-pty`）只需要针对 Node ABI 构建一次，不必再为 Electron 的 ABI 编一遍。
-`npm run dev` 会先打一次产物再起两边；只跑 `dev:desktop` 时要求产物已经存在，否则控制台会提
-示先 `npm run build:server`。
+`npm run dev` 会先打一次产物再起两边，产物不在时由它现打，不用单独 `npm run build:server`。
 
 远程那台机器装上包（rpm/deb 都装到 `/opt/Facet`），桌面通过 SSH 就能把它拉起来，不需要拷贝目录。
 
@@ -55,21 +54,20 @@ apps/desktop/dist-server/
 
 ```bash
 npm run dev            # 打产物 → 起 server → 起桌面；桌面退出时 server 一起收掉
-npm run dev:desktop    # 只起桌面；socket 连不上时自己拉起 server
 npm run dev:host       # 只起 server，桌面起来后自己连上它
 npm run dev:split      # 与 dev 相同，保留这个更明确的名字
 ```
 
 `dev` 的编排在 `scripts/dev-split.mjs`：两边输出各加前缀，桌面退出（或 Ctrl+C）时把 server
-一起收掉；单独跑 `dev:desktop` 时，桌面自己拉起的 server 会带上 `FACET_PARENT_PID`，桌面进程
-消失后 2 秒内自行结束，不留孤儿进程。要分开看两边日志时用 `npm run dev:host` 加
-`npm run dev:desktop` 各起一个终端。
+一起收掉。要分开看两边日志时用 `npm run dev:host` 加 `npm run dev -w @facet/desktop` 各起一个
+终端。不另设只起桌面的脚本：桌面在开发态找不到主机时会自己去拉一个，而它拉起来的主机按发布
+版的数据目录算，会把正在跑的安装版 `facet.sock` 抢走；先 `dev:host` 起来再连就没有这一步。
 
 开发与打包走同一条路：不给 `FACET_ENDPOINT` 就是本机主机，差别只在开发实例的数据目录带
 `-dev` 后缀（socket 也就叫 `facet-dev.sock`）。要连别处的主机（TCP 端点，或 `ssh://` 远程主机）用 `FACET_ENDPOINT`：
 
 ```bash
-FACET_ENDPOINT=ws://192.168.1.20:4319/endpoint npm run dev:desktop
+FACET_ENDPOINT=ws://192.168.1.20:4319/endpoint npm run dev -w @facet/desktop
 ```
 
 ## 连接方式与身份
@@ -242,7 +240,7 @@ scripts/build-fonts.sh <字体目录>
 | `$XDG_DATA_HOME/facet`（缺省 `~/.local/share/facet`） | 主机身份 `host.json`、项目清单 `projects.json`、界面设置 `settings.json`、终端登记 `terminals.json`、审计 `audit.log`；独立启动时还有发现文件 `endpoint.json` | `FACET_DATA_DIR` |
 | `$XDG_CONFIG_HOME/facet`（缺省 `~/.config/facet`） | 桌面本地记录 `desktop.json`：窗口位置与尺寸 | — |
 
-开发实例的三处目录都带 `-dev` 后缀：数据目录是 `~/.local/share/facet-dev`，配置目录是 `~/.config/facet-dev`，pi 数据目录是 `~/.pi/agent-dev`。`npm run dev`（即 `dev:split`）、`dev:host`、`dev:desktop` 都用这一套，因此开发时跑的东西与装好的包互不影响，`projects.json`、主机身份与 pi 会话各有一份。
+开发实例的三处目录都带 `-dev` 后缀：数据目录是 `~/.local/share/facet-dev`，配置目录是 `~/.config/facet-dev`，pi 数据目录是 `~/.pi/agent-dev`。`npm run dev`（即 `dev:split`）与 `dev:host` 都用这一套，因此开发时跑的东西与装好的包互不影响，`projects.json`、主机身份与 pi 会话各有一份。
 
 开发态取 pi 数据目录时只认 `FACET_DEV_AGENT_DIR`，不认 `FACET_AGENT_DIR` 与 `PI_CODING_AGENT_DIR`：主机在自己进程里把 pi 数据目录写回环境并传给子进程，从 facet 自带的终端、或从 pi 拉起的 shell 里启动开发时，这两个变量已经指向真实目录，跟着走就会把开发期的会话与凭证写进 `~/.pi/agent`。启动日志会打出实际生效的两个目录。
 

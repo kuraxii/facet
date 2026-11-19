@@ -159,7 +159,7 @@ export class ChildPtyBackend implements PtyBackend {
 			return this.child;
 		}
 		const child = spawn(process.execPath, [this.entry], {
-			// ELECTRON_RUN_AS_NODE 随环境下传：桌面拉起的本机主机用的就是 Electron 自带的 Node
+			// 用主机自己的运行时：开发与打包下 `process.execPath` 都是产物里自带的 Node
 			env: this.childEnv,
 			stdio: ["ignore", "inherit", "inherit", "ipc"],
 		});

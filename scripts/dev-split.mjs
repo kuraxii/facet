@@ -7,39 +7,18 @@
 
 import { execFileSync, spawn } from "node:child_process";
 import { access } from "node:fs/promises";
-import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { devServerEnv } from "./dev-dirs.mjs";
 
 /** 仓库根目录 */
 const root = fileURLToPath(new URL("..", import.meta.url));
-
-/**
- * 开发实例的数据目录：带 -dev 后缀，与装好的包分开。
- *
- * 桌面在开发模式下按同一规则取目录，两边算法不一致就接不上对方写下的 endpoint.json。
- */
-function devAgentDir(env) {
-	return env.FACET_AGENT_DIR?.trim() || join(homedir(), ".pi", "agent-dev");
-}
-
-function devDataDir(env) {
-	const explicit = env.FACET_DATA_DIR?.trim();
-	if (explicit !== undefined && explicit.length > 0) {
-		return explicit;
-	}
-	const xdg = env.XDG_DATA_HOME?.trim();
-	const base = xdg !== undefined && isAbsolute(xdg) ? xdg : join(homedir(), ".local", "share");
-	return join(base, "facet-dev");
-}
 
 /** 等主机端点响应，最长等 30 秒 */
 const READY_WAIT_MS = 30_000;
 const POLL_INTERVAL_MS = 200;
 
 const children = [];
-
-/** 主机的数据目录：开发实例带 -dev 后缀 */
 
 /** 起一个子进程并把输出加上前缀转出来。args 第一项以路径分隔符开头时按命令直接跑。 */
 function run(label, args, env) {
@@ -74,10 +53,9 @@ function run(label, args, env) {
 }
 
 /** 轮询固定 socket，server 起来之前桌面就连会一直失败。 */
-async function waitForHost() {
+async function waitForHost(dataDir) {
 	// 连接位置是固定契约：优先运行目录里的 <数据目录名>.sock，没有运行目录时在数据目录下
 	const runtime = process.env.XDG_RUNTIME_DIR?.trim();
-	const dataDir = devDataDir(process.env);
 	const socket =
 		runtime !== undefined && runtime.length > 0 && isAbsolute(runtime)
 			? join(runtime, `${dataDir.split("/").pop()}.sock`)
@@ -108,18 +86,21 @@ process.on("SIGTERM", shutdown);
 
 // 产物要与打包后完全一致，所以每次启动都重新打一遍（esbuild 一两百毫秒）
 execFileSync("node", ["scripts/build-server.mjs"], { cwd: root, stdio: "inherit" });
+const { env, dataDir, agentDir } = devServerEnv(process.env);
+console.log(`[split] 数据目录 ${dataDir}`);
+console.log(`[split] pi 数据目录 ${agentDir}`);
 const artifact = join(root, "apps", "desktop", "dist-server");
 const server = run("server", [join(artifact, "bin", "node"), join(artifact, "lib", "server.mjs")], {
-	FACET_DATA_DIR: devDataDir(process.env),
-	FACET_AGENT_DIR: devAgentDir(process.env),
+	...env,
 	// 桌面意外消失时 server 也自己收尾，不留孤儿进程
 	FACET_PARENT_PID: String(process.pid),
 });
 console.log(`[split] 等 server 建出 socket`);
-if (!(await waitForHost())) {
+if (!(await waitForHost(dataDir))) {
 	console.log(`[split] server ${READY_WAIT_MS} 毫秒内没就绪，仍然启动桌面`);
 }
-const desktop = run("desktop", ["run", "dev", "-w", "@facet/desktop"], {});
+// 桌面在开发态按同一个目录取值，这里显式交过去，inherit 来的 FACET_AGENT_DIR 不再参与
+const desktop = run("desktop", ["run", "dev", "-w", "@facet/desktop"], { FACET_DEV_AGENT_DIR: agentDir });
 
 /** 开发时两边绑在一起：桌面退出就把 server 一起收掉。 */
 let stopping = false;

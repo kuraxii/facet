@@ -33,7 +33,7 @@
 - `protocol` MUST 保持零运行时依赖。`client-core` 与 `ui` MUST NOT 引入 `electron`、`node:*`。`services` MUST NOT 引入 `electron` 与 React。
 - `plugins/` 下的 pi 扩展与 skill 只依赖 pi SDK、pi-tui 与 typebox，不引用 `@facet/*`；适配 facet 专有能力时做运行时能力检测，缺失时返回明确错误。
 - 需要随 facet 分发的扩展加进 `packages/agent/src/runtime.ts` 的 `BUILTIN_EXTENSIONS`，作为内联扩展注入；不得把它写进 pi 的 agent 目录。需要压过用户同名扩展的内置插件，同时加进 `PRIORITY_BUILTIN_PATHS`。
-- `apps/server` MUST NOT 依赖 `electron`：主机与它起的子进程一律按 Node 运行，桌面只负责用 `process.execPath` 加 `ELECTRON_RUN_AS_NODE=1` 把它拉起来，并把环境原样传给它的子进程。
+- `apps/server` MUST NOT 依赖 `electron`：主机与它起的子进程一律按 Node 运行，桌面只负责用独立产物里自带的 `bin/node` 跑 `lib/server.mjs`（开发态是 `apps/desktop/dist-server`，打包后是 `resources/server`）把它拉起来，并把环境原样传给它的子进程。
 - 提交说明用中文，格式 `<type>(<scope>): <结果>`，`type` 取 `feat` / `fix` / `docs` / `chore` / `refactor` / `perf` / `test`，`scope` 为包名或应用名。
 - 提交说明只描述改动完成后的状态与原因，不记录被放弃的做法。
 - 不提交 `node_modules/`、`out/`、`dist/`、编辑器临时文件与本地数据目录。

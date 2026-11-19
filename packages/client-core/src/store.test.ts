@@ -1,4 +1,11 @@
-import type { ActionFrame, AssistantMessage, Entry, SessionSnapshot, SessionSummary } from "@facet/protocol";
+import type {
+	ActionFrame,
+	AssistantMessage,
+	Entry,
+	ProviderLoginEvent,
+	SessionSnapshot,
+	SessionSummary,
+} from "@facet/protocol";
 import { describe, expect, it } from "vitest";
 import { isHistoryMessageId } from "./message-id.ts";
 import type { ChannelGap } from "./store.ts";
@@ -601,5 +608,89 @@ describe("文本提取", () => {
 		};
 		expect(messageDisplayText(view)).toBe("写到一半");
 		expect(messageDisplayText({ ...view, streaming: {} })).toBe("");
+	});
+});
+
+describe("模型通道的登录进展", () => {
+	const modelsChannel = "models:/h" as const;
+
+	/** 造一条登录进展帧。 */
+	function loginFrame(loginId: string, serverSeq: number, event: ProviderLoginEvent) {
+		return {
+			type: "action" as const,
+			channel: modelsChannel,
+			serverSeq,
+			origin: undefined,
+			action: { type: "models/loginEvent" as const, loginId, providerId: "gateway", event },
+		};
+	}
+
+	it("按步骤累积成一份状态：授权地址、设备码、待答的一步", () => {
+		const store = new SessionStore();
+		store.apply(
+			loginFrame("l1", 1, { type: "authUrl", url: "https://example.com/a", instructions: "去浏览器" }),
+		);
+		store.apply(
+			loginFrame("l1", 2, {
+				type: "deviceCode",
+				userCode: "ABCD-1234",
+				verificationUri: "https://example.com/d",
+				intervalSeconds: 5,
+			}),
+		);
+		store.apply(
+			loginFrame("l1", 3, {
+				type: "prompt",
+				prompt: { promptId: "p1", kind: "secret", message: "密钥" },
+			}),
+		);
+		const state = store.providerLogin("gateway");
+		expect(state?.status).toBe("running");
+		expect(state?.authUrl?.url).toBe("https://example.com/a");
+		expect(state?.deviceCode?.userCode).toBe("ABCD-1234");
+		expect(state?.prompt?.promptId).toBe("p1");
+		expect(store.providerLoginSeq).toBe(3);
+	});
+
+	it("promptResolved 只收掉那一步", () => {
+		const store = new SessionStore();
+		store.apply(
+			loginFrame("l1", 1, { type: "prompt", prompt: { promptId: "p1", kind: "text", message: "账号" } }),
+		);
+		store.apply(loginFrame("l1", 2, { type: "promptResolved", promptId: "别的" }));
+		expect(store.providerLogin("gateway")?.prompt?.promptId).toBe("p1");
+		store.apply(loginFrame("l1", 3, { type: "promptResolved", promptId: "p1" }));
+		expect(store.providerLogin("gateway")?.prompt).toBeUndefined();
+	});
+
+	it("终局之后再来的进展丢掉", () => {
+		const store = new SessionStore();
+		store.apply(loginFrame("l1", 1, { type: "done" }));
+		store.apply(loginFrame("l1", 2, { type: "progress", message: "迟到的进度" }));
+		const state = store.providerLogin("gateway");
+		expect(state?.status).toBe("done");
+		expect(state?.message).toBeUndefined();
+	});
+
+	it("失败把主机原话留在状态里", () => {
+		const store = new SessionStore();
+		store.apply(loginFrame("l1", 1, { type: "failed", message: "Port 1455 is in use" }));
+		expect(store.providerLogin("gateway")?.status).toBe("failed");
+		expect(store.providerLogin("gateway")?.message).toBe("Port 1455 is in use");
+	});
+
+	it("同一提供方再开一条登录时顶掉上一条", () => {
+		const store = new SessionStore();
+		store.apply(loginFrame("l1", 1, { type: "failed", message: "Port 1455 is in use" }));
+		store.apply(loginFrame("l2", 2, { type: "progress", message: "换 token" }));
+		expect(store.providerLogin("gateway")?.loginId).toBe("l2");
+		expect(store.providerLogin("gateway")?.status).toBe("running");
+	});
+
+	it("序号不大于已应用的帧丢掉", () => {
+		const store = new SessionStore();
+		store.apply(loginFrame("l1", 5, { type: "progress", message: "第五步" }));
+		store.apply(loginFrame("l1", 5, { type: "progress", message: "重复" }));
+		expect(store.providerLogin("gateway")?.message).toBe("第五步");
 	});
 });

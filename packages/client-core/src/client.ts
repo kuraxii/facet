@@ -30,6 +30,7 @@ import type {
 	ModelRef,
 	ProjectInfo,
 	ProviderInfo,
+	ProviderLoginType,
 	RequestMethod,
 	RequestParams,
 	RequestResults,
@@ -41,7 +42,7 @@ import type {
 	UiResponse,
 	UpstreamModel,
 } from "@facet/protocol";
-import { makeChannel, parseChannel, sessionsChannelFor } from "@facet/protocol";
+import { makeChannel, modelsChannelFor, parseChannel, sessionsChannelFor } from "@facet/protocol";
 import { debugLog, errorLog } from "./log.ts";
 import { isHistoryMessageId } from "./message-id.ts";
 import type { ChatView, SessionView } from "./state.ts";
@@ -393,6 +394,9 @@ export class SessionClient {
 		void this.followSessionList().catch((error: unknown) => {
 			debugLog("client", "Failed to subscribe to the session list", { error: String(error) });
 		});
+		void this.followModelLog().catch((error: unknown) => {
+			debugLog("client", "Failed to subscribe to the model log", { error: String(error) });
+		});
 	}
 
 	/**
@@ -415,6 +419,24 @@ export class SessionClient {
 		if (result.resync || this.state.sessionList().length === 0) {
 			await this.refreshSessionList();
 		}
+	}
+
+	/**
+	 * 订阅模型通道。
+	 *
+	 * 提供方登录的进展从这里推给所有端：登录要用浏览器回调与多步问答，一次请求说不完。
+	 * 补不上缺口时不做别的——登录本身跑在主机上，界面重新发起即可。
+	 */
+	async followModelLog(): Promise<void> {
+		const hostId = this.handshake?.hostId;
+		if (hostId === undefined) {
+			return;
+		}
+		const result = await this.transport.request("subscribe", {
+			channel: modelsChannelFor(hostId),
+			since: this.state.providerLoginSeq,
+		});
+		this.state.markProviderLoginSeq(result.seq);
 	}
 
 	/**
@@ -488,6 +510,28 @@ export class SessionClient {
 	async deleteCredential(providerId: string): Promise<ProviderInfo[]> {
 		const result = await this.transport.request("deleteCredential", { providerId });
 		return result.providers;
+	}
+
+	/**
+	 * 开始一条提供方登录，返回这次登录的标识。
+	 *
+	 * 流程跑在主机上，进展从模型通道推过来；同一提供方已有登录在跑时主机侧拒绝。
+	 */
+	async startProviderLogin(providerId: string, authType: ProviderLoginType = "api_key"): Promise<string> {
+		const result = await this.transport.request("providerLoginStart", { providerId, authType });
+		return result.loginId;
+	}
+
+	/** 回答登录中的一步。返回假表示这一步已经不需要回答了。 */
+	async respondProviderLogin(loginId: string, promptId: string, value: string | null): Promise<boolean> {
+		const result = await this.transport.request("providerLoginRespond", { loginId, promptId, value });
+		return result.accepted;
+	}
+
+	/** 中止一条登录。 */
+	async cancelProviderLogin(loginId: string): Promise<boolean> {
+		const result = await this.transport.request("providerLoginCancel", { loginId });
+		return result.cancelled;
 	}
 
 	/** 模型清单，指定提供方时只列该提供方的模型。 */
@@ -936,6 +980,9 @@ export class SessionClient {
 		// 清单通道与打开的会话无关，重连后总要续订一次
 		await this.followSessionList().catch((error: unknown) => {
 			debugLog("client", "Failed to subscribe to the session list after reconnect", { error: String(error) });
+		});
+		await this.followModelLog().catch((error: unknown) => {
+			debugLog("client", "Failed to subscribe to the model log after reconnect", { error: String(error) });
 		});
 		const runtime = this.active;
 		if (runtime === undefined) {

@@ -44,15 +44,19 @@
 	top: 0;
 	right: 0;
 	left: 0;
-	z-index: 0;
+	z-index: var(--z-content);
 	height: var(--chrome-height);
 	-webkit-app-region: drag;
 }
 
-/* 顶带：第一行的整条，列轨道由 subgrid 从 `.app` 继承 */
+/*
+ * 顶带：第一行的整条，列轨道由 subgrid 从 `.app` 继承。
+ *
+ * 它自成一层次（`--z-chrome`），所以窗口按钮簇不能放在里面；簇直接挂在 `.app` 下。
+ */
 .app-chrome {
 	position: relative;
-	z-index: 2;
+	z-index: var(--z-chrome);
 	display: grid;
 	grid-area: 1 / 1 / 2 / -1;
 	grid-template-columns: subgrid;
@@ -134,15 +138,14 @@
 }
 
 /*
- * 窗口按钮：右上角的固定簇，不占列轨道。
- *
- * 固定而不是挤在右栏那一格里：右栏收起或进抽屉时列轨道会收到 0，按钮因此不会失业。
+ * 窗口按钮：右上角的固定簇，`.app` 的直接子元素（不能放进带 `--z-chrome` 的顶带里，
+ * 否则会被锁在那一层）。它是全仓唯一浮在抽屉之上的顶带控件，恒定可点。
  */
 .window-controls {
 	position: fixed;
 	top: 0;
 	right: 0;
-	z-index: 1;
+	z-index: var(--z-window-controls);
 	display: flex;
 	min-width: var(--window-controls-width);
 	height: var(--chrome-height);
@@ -171,6 +174,21 @@
 .window-btn.is-close:hover {
 	background: var(--errbg);
 	color: var(--err);
+}
+
+/*
+ * 抽屉遮罩：左右两个抽屉共用一层，铺满视口（含顶带）。
+ *
+ * 它压在顶带之上，所以点顶带空白处也算「点外面」；它之下才是正文与顶带，之上是全高抽屉，
+ * 窗口按钮簇（`--z-window-controls`）又在抽屉之上，抽屉开着也能最小化与关闭。
+ */
+.drawer-scrim {
+	position: fixed;
+	inset: 0;
+	z-index: var(--z-drawer-scrim);
+	border: 0;
+	background: rgb(0 0 0 / 45%);
+	cursor: pointer;
 }
 
 /*
@@ -261,7 +279,7 @@
 	position: fixed;
 	top: calc(var(--chrome-height) + 12px);
 	right: 16px;
-	z-index: 200;
+	z-index: var(--z-toast);
 	padding: 6px 10px;
 	border: 1px solid var(--line2);
 	border-radius: 8px;

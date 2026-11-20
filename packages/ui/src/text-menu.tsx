@@ -132,6 +132,8 @@ export function TextMenu({ onCopy, onQuote, quoteScope }: TextMenuProps): React.
 		};
 		const onKeyDown = (event: KeyboardEvent): void => {
 			if (event.key === "Escape") {
+				// 吃掉这次按键：外层（抽屉）看 `defaultPrevented`，一次 Esc 只关最内层
+				event.preventDefault();
 				close();
 			}
 		};

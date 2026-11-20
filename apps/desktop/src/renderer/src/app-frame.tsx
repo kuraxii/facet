@@ -74,10 +74,12 @@ export function AppFrame({
 	return (
 		<div className={appClassName(isNarrow, sidebarVisible, panelVisible)} ref={appRef}>
 			{controls === undefined ? null : <div className="app-drag" />}
-			<div className="app-chrome">
-				{chrome ?? <div className="chrome-slot is-main" />}
-				{controls === undefined ? null : <WindowControls controls={controls} />}
-			</div>
+			<div className="app-chrome">{chrome ?? <div className="chrome-slot is-main" />}</div>
+			{/*
+			 * 窗口按钮簇直接挂在 `.app` 下：顶带带 `--z-chrome` 自成一层次，
+			 * 放在里面的话 `--z-window-controls` 会被锁在那一层，压不过遮罩与抽屉。
+			 */}
+			{controls === undefined ? null : <WindowControls controls={controls} />}
 			{children}
 		</div>
 	);

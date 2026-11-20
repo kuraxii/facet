@@ -165,6 +165,7 @@ export function HostSwitcher({
 												onRenameHost(host.id, renaming.draft);
 												setRenaming(undefined);
 											} else if (event.key === "Escape") {
+												event.preventDefault();
 												setRenaming(undefined);
 											}
 										}}

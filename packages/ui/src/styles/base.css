@@ -201,6 +201,22 @@
 	--panel-width: 0px;
 	/* 窗口按钮簇的总宽：三个按钮排成一组，固定贴在窗口右上角 */
 	--window-controls-width: calc(var(--window-button-width) * 3);
+	/*
+	 * 层级刻度：全仓只认这九个名字，样式里不再写裸数字（顺序与叠放关系见 `docs/layout.md` §4）。
+	 *
+	 * 顶带用 `--z-chrome` 自成一层次，所以窗口按钮簇必须放在它外面（直接挂在 `.app` 下），
+	 * 否则会被锁在顶带那一层里，`40` 再大也会被遮罩与抽屉盖住。
+	 */
+	--z-content: 0;
+	--z-content-local: 3;
+	--z-chrome: 10;
+	--z-drawer-scrim: 20;
+	--z-drawer: 30;
+	--z-window-controls: 40;
+	--z-popup: 60;
+	--z-tip: 90;
+	--z-drag-overlay: 95;
+	--z-toast: 200;
 	/* 滚动条占的宽度，以及其中拇指的宽度；轨道其余部分是透明的 */
 	--scrollbar-width: 8px;
 	--scrollbar-thumb: 4px;
@@ -699,7 +715,7 @@ button {
 .pane-resize-overlay {
 	position: fixed;
 	inset: 0;
-	z-index: 95;
+	z-index: var(--z-drag-overlay);
 	cursor: col-resize;
 	user-select: none;
 }

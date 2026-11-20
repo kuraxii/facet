@@ -288,14 +288,17 @@ export function MainTabs({
 		};
 		const onKeyDown = (event: KeyboardEvent): void => {
 			if (event.key === "Escape") {
+				// 吃掉这次按键，外层抽屉看 `defaultPrevented`；挂在 document 上，
+				// 才比抽屉挂在 window 上的监听先跑
+				event.preventDefault();
 				closeMenu();
 			}
 		};
 		document.addEventListener("pointerdown", onPointerDown);
-		window.addEventListener("keydown", onKeyDown);
+		document.addEventListener("keydown", onKeyDown);
 		return () => {
 			document.removeEventListener("pointerdown", onPointerDown);
-			window.removeEventListener("keydown", onKeyDown);
+			document.removeEventListener("keydown", onKeyDown);
 		};
 	}, [closeMenu, isMenuOpen]);
 
@@ -312,14 +315,15 @@ export function MainTabs({
 		};
 		const onKeyDown = (event: KeyboardEvent): void => {
 			if (event.key === "Escape") {
+				event.preventDefault();
 				closeContextMenu();
 			}
 		};
 		document.addEventListener("pointerdown", onPointerDown);
-		window.addEventListener("keydown", onKeyDown);
+		document.addEventListener("keydown", onKeyDown);
 		return () => {
 			document.removeEventListener("pointerdown", onPointerDown);
-			window.removeEventListener("keydown", onKeyDown);
+			document.removeEventListener("keydown", onKeyDown);
 		};
 	}, [closeContextMenu, contextMenu]);
 

@@ -321,7 +321,7 @@ select.set-input::picker-icon {
 /* 叠在原生文字上的那一行，走 `.ell` 省略 */
 .set-select-label {
 	position: relative;
-	z-index: 1;
+	z-index: var(--z-content-local);
 	align-self: center;
 	padding: 0 var(--set-select-icon-slot) 0 var(--set-select-inset);
 	color: var(--t1);

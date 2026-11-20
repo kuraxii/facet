@@ -140,7 +140,7 @@
 	left: 0;
 	right: 0;
 	bottom: calc(100% + 6px);
-	z-index: 30;
+	z-index: var(--z-popup);
 	display: flex;
 	flex-direction: column;
 	gap: 1px;
@@ -383,7 +383,7 @@
 	position: absolute;
 	bottom: calc(100% + 6px);
 	left: 0;
-	z-index: 30;
+	z-index: var(--z-popup);
 	display: flex;
 	flex-direction: column;
 	gap: 2px;

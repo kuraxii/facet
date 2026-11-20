@@ -431,11 +431,11 @@ dialog.dialog.is-picker .dialog-actions {
 
 /*
  * 贴光标弹出：落点由组件量过自己的尺寸后写进 `left`/`top`，靠近窗口右边与下边时会往回收。
- * 层级与标签栏的右键菜单同档：高于弹窗（60），低于悬浮提示（90）。
+ * 层级走 `--z-popup`：与其它行内弹层、右键菜单同档，低于悬浮提示与轻提示。
  */
 .text-menu {
 	position: fixed;
-	z-index: 70;
+	z-index: var(--z-popup);
 	display: flex;
 	flex-direction: column;
 	gap: 1px;
@@ -473,8 +473,8 @@ dialog.dialog.is-picker .dialog-actions {
  */
 .pop-tip {
 	position: fixed;
-	/* 提示要比它所在的浮层高：右键菜单是 70，弹窗是 60，提示落在最上面一层 */
-	z-index: 90;
+	/* 悬浮提示在弹层之上（`--z-tip`），但低于分隔条拖动遮罩与轻提示 */
+	z-index: var(--z-tip);
 	max-width: var(--tool-tip-width);
 	max-height: var(--tool-tip-height);
 	overflow: auto;
@@ -509,14 +509,13 @@ dialog.dialog.is-picker .dialog-actions {
 
 /*
  * 右下角一列，新的在下。挂到 body 上，主区与右栏的 overflow 都裁不到它。
- * 层级低于悬浮提示：提示压在轻提示上也不会被挡住。
+ * 轻提示是全局最高一档（`--z-toast`），压在弹层、提示与抽屉之上。
  */
 .toast-host {
 	position: fixed;
 	right: var(--toast-edge);
 	bottom: var(--toast-edge);
-	/* 提示是浮层里最低的一档：右键菜单 70、弹窗 60、悬浮提示 90 */
-	z-index: 50;
+	z-index: var(--z-toast);
 	display: flex;
 	flex-direction: column;
 	gap: var(--toast-gap);

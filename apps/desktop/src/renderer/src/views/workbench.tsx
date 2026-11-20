@@ -224,6 +224,7 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 				composerInput={composerInput}
 			/>
 		);
+	const panelTabs = <PanelTabs tab={shell.panel.tab} onTabChange={shell.setPanelTab} />;
 	/*
 	 * 右栏开关与分页放在哪一格，看右列此刻有没有宽度：有就占右栏那一格（与正文列对齐），
 	 * 没有（右栏收起、中档被预算折起、窄档整列不存在）就贴在中间那格右端，仍在窗口按钮左侧。
@@ -231,24 +232,28 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 	 * 开关的展开态看的是「此刻看不看得见」，不是意图位：中档被预算折起时点一下就是要把它
 	 * 调出来，而不是把意图位关掉。
 	 */
-	const panelControls = (
+	const bandPanelControls = (
 		<>
+			{/* 窄档抽屉开着时这个开关留在原地（被盖住）：关掉之后焦点要还给它 */}
 			<PanelToggle
-				isOpen={shell.panelVisible}
-				onToggle={() => shell.updatePanel({ open: !shell.panelVisible })}
+				isOpen={shell.isNarrow ? shell.isPanelDrawerOpen : shell.panelVisible}
+				onToggle={shell.togglePanel}
 			/>
-			{shell.panel.open ? (
-				<PanelTabs
-					tab={shell.panel.tab}
-					// 切分页也是一次主动交互：被预算折起时点分页就直接把它调出来
-					onTabChange={(tab) => shell.updatePanel({ tab, open: true })}
-				/>
-			) : null}
+			{shell.isNarrow || !shell.panel.open ? null : panelTabs}
+		</>
+	);
+	/* 窄档抽屉的顶头：分页与关闭按钮都在这一条 36px 里 */
+	const panelDrawerHead = (
+		<>
+			<PanelToggle isOpen onToggle={shell.closeDrawer} />
+			{panelTabs}
 		</>
 	);
 	const hasPanelColumn = shell.panelVisible && !shell.isNarrow;
-	/* 抽屉态（窄档）由意图位决定，平铺态由预算判定的结果决定 */
-	const renderPanel = shell.isNarrow ? shell.panel.open : shell.panelVisible;
+	/* 窄档看抽屉，平铺看预算判定的结果 */
+	const renderPanel = shell.isNarrow ? shell.isPanelDrawerOpen : shell.panelVisible;
+	/* 窄档与右栏收起时，开关都留在中格（抽屉开着时它被遮罩盖住） */
+	const showBandPanelControls = !hasPanelColumn;
 	return (
 		<CodeThemeProvider value={shell.codeTheme}>
 			<AppFrame
@@ -275,31 +280,33 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 							)}
 						</div>
 						<div className="chrome-slot is-main">
-							{/* 侧栏展开时开关在它自己的头部里，收起之后才回到主区左上角 */}
+							{/*
+							 * 侧栏展开时开关在它自己的头部里，收起之后才回到主区左上角。
+							 * 窄档抽屉开着时这个开关留在原地（被抽屉与遮罩盖住）：抽屉关掉之后
+							 * 焦点要还给它，元素不能在打开期间就被卸载掉。
+							 */}
 							{shell.isNarrow ? (
-								shell.isDrawerOpen ? null : (
-									<SidebarToggle isOpen={false} onToggle={shell.toggleSidebar} />
-								)
+								<SidebarToggle isOpen={false} onToggle={shell.toggleSidebar} />
 							) : shell.isSidebarOpen ? null : (
 								<SidebarToggle isOpen={false} onToggle={shell.toggleSidebar} />
 							)}
-							{hasPanelColumn ? null : (
+							{showBandPanelControls ? (
 								<>
 									<span className="chrome-spacer" />
-									{panelControls}
+									{bandPanelControls}
 								</>
-							)}
+							) : null}
 						</div>
-						{hasPanelColumn ? <div className="chrome-slot is-panel is-open">{panelControls}</div> : null}
+						{hasPanelColumn ? <div className="chrome-slot is-panel is-open">{bandPanelControls}</div> : null}
 					</>
 				}
 			>
 				<div className={shell.className}>
-					{shell.isDrawerOpen ? (
+					{shell.isDrawerOpen || shell.isPanelDrawerOpen ? (
 						<button
 							type="button"
-							className="sb-backdrop"
-							aria-label={t("app.closeSidebar")}
+							className="drawer-scrim"
+							aria-label={t("app.closeDrawer")}
 							onClick={shell.closeDrawer}
 						/>
 					) : null}
@@ -390,6 +397,7 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 							onWidthChange={shell.isNarrow ? undefined : (width) => shell.updatePanel({ width })}
 							maxWidth={shell.panelMaxWidth}
 							onDraggingChange={shell.setPaneResizing}
+							head={shell.isNarrow ? panelDrawerHead : undefined}
 						>
 							{shell.panel.tab === "changes" ? (
 								<ChangesPane

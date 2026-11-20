@@ -289,6 +289,7 @@ export const SessionSidebar = memo(function SessionSidebar({
 	const trapFocus = useCallback(
 		(event: React.KeyboardEvent<HTMLDivElement>) => {
 			if (event.key === "Escape") {
+				event.preventDefault();
 				event.stopPropagation();
 				closeFilter(true);
 				return;
@@ -373,7 +374,10 @@ export const SessionSidebar = memo(function SessionSidebar({
 			closeProjectMenu();
 		};
 		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key === "Escape") closeProjectMenu();
+			if (event.key !== "Escape") return;
+			// 吃掉这次按键：外层抽屉看 `defaultPrevented`，一次 Esc 只关最内层
+			event.preventDefault();
+			closeProjectMenu();
 		};
 		const onScroll = () => closeProjectMenu();
 		const frame = requestAnimationFrame(() => {
@@ -411,7 +415,10 @@ export const SessionSidebar = memo(function SessionSidebar({
 			closeSessionMenu();
 		};
 		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key === "Escape") closeSessionMenu();
+			if (event.key !== "Escape") return;
+			// 吃掉这次按键：外层抽屉看 `defaultPrevented`，一次 Esc 只关最内层
+			event.preventDefault();
+			closeSessionMenu();
 		};
 		const onScroll = () => closeSessionMenu();
 		const frame = requestAnimationFrame(() => {
@@ -705,6 +712,7 @@ export const SessionSidebar = memo(function SessionSidebar({
 										void submitRename(menuProject.cwd);
 									}
 									if (event.key === "Escape") {
+										event.preventDefault();
 										setRenaming(undefined);
 									}
 								}}
@@ -803,6 +811,7 @@ export const SessionSidebar = memo(function SessionSidebar({
 										void submitSessionRename();
 									}
 									if (event.key === "Escape") {
+										event.preventDefault();
 										setSessionRename(undefined);
 									}
 								}}

@@ -232,7 +232,7 @@
 .fileHeader {
 	position: sticky;
 	top: 0;
-	z-index: 2;
+	z-index: var(--z-content-local);
 	height: var(--changes-header-height);
 	border-bottom: 1px solid var(--line);
 	background: var(--bg);
@@ -456,7 +456,7 @@
 
 .commitDot {
 	position: relative;
-	z-index: 1;
+	z-index: var(--z-content-local);
 	width: var(--commit-graph-width);
 	height: var(--commit-graph-width);
 	border: 2px solid var(--acc);

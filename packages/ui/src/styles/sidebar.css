@@ -43,7 +43,7 @@
 	position: absolute;
 	top: 0;
 	bottom: 0;
-	z-index: 3;
+	z-index: var(--z-content-local);
 	/* 命中区 6px：只有 `--sidebar-hit-inset`（1px）压进列表内容，其余 5px 落在接缝外侧的主区上，
 	   贴右缘那条滚动条（沟槽 8px、拇指居中 4px）因此照旧可点。负的 right 就是把盒子往外推
 	   的那一步；伸出去的部分靠上面 `.sb` 放宽的剪辑区才活得下来 */
@@ -63,7 +63,7 @@
 
 .sb-head {
 	position: relative;
-	z-index: 2;
+	z-index: var(--z-content-local);
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -161,7 +161,7 @@
 	top: calc(100% + 4px);
 	right: 0;
 	left: 0;
-	z-index: 30;
+	z-index: var(--z-popup);
 	padding: 6px;
 	border: 1px solid var(--line2);
 	border-radius: 8px;
@@ -274,7 +274,7 @@
 	top: auto;
 	right: auto;
 	bottom: auto;
-	z-index: 60;
+	z-index: var(--z-popup);
 }
 
 .sb-menu-actions {
@@ -620,7 +620,7 @@
 	position: absolute;
 	bottom: calc(100% + 8px);
 	left: 0;
-	z-index: 40;
+	z-index: var(--z-popup);
 	width: 248px;
 	padding: 6px;
 	border: 1px solid var(--line2);
@@ -756,37 +756,29 @@
 	gap: 6px;
 }
 
-/* 窄档：侧栏收成贴左缘的抽屉 */
-.sb-backdrop {
-	display: none;
-}
-
+/* 窄档：侧栏收成贴左缘的全高抽屉，从窗口顶边到底边 */
 .app.is-narrow .sb {
-	position: absolute;
+	position: fixed;
 	inset: 0 auto 0 0;
-	z-index: 40;
+	z-index: var(--z-drawer);
 	width: min(300px, 84vw);
-	padding-top: 10px;
+	/* 顶部 36px 是抽屉自己的顶头（头部就在里面），所以基类那 4px 上内边距让给顶头 */
+	padding-top: 0;
 	transform: translateX(-100%);
 	transition: transform var(--dur-fast) var(--ease);
 }
 
-/* 抽屉里的头部在侧栏内，控件到新建按钮的 8px 由头部自己的下边距给 */
+/*
+ * 抽屉顶头：28px 的图标按钮加 4px 上下内边距正好一条顶带的高度，
+ * 左边补上与正文行一致的内边距；下面 4px 是头部到新建按钮的距离。
+ */
 .app.is-narrow .sb .sb-head {
-	padding-bottom: 8px;
+	height: var(--chrome-height);
+	padding: 4px var(--sidebar-edge);
+	margin-bottom: 4px;
 }
 
 .app.is-narrow .sb.is-open {
 	transform: none;
 	box-shadow: 0 0 40px rgb(0 0 0 / 45%);
-}
-
-.app.is-narrow .sb-backdrop {
-	position: absolute;
-	inset: 0;
-	z-index: 30;
-	display: block;
-	border: none;
-	background: rgb(0 0 0 / 45%);
-	cursor: pointer;
 }

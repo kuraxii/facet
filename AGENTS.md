@@ -8,6 +8,7 @@
 | 文档 | 内容 |
 | :--- | :--- |
 | `docs/architecture.md` | 核心原则、Monorepo 拓扑与依赖图、依赖禁令、各层核心不变量、高频场景开发步骤 |
+| `docs/layout.md` | 外壳档位、列宽的真值来源、浮层与层级约定 |
 | `docs/testing.md` | 五条自检命令各查什么、改到什么跑哪几条、流水线怎么跑、常见的坑 |
 | `docs/protocol-rpc.md` | 线格式、帧类型、RPC 方法与单测口径 |
 | `docs/ui_design_specification.md` | 界面设计、配色与尺寸规范 |

@@ -22,7 +22,7 @@
 	margin: 0;
 	border: 0;
 	cursor: row-resize;
-	z-index: 2;
+	z-index: var(--z-content-local);
 }
 
 .term-dock-grip:hover {

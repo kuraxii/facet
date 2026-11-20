@@ -1,8 +1,9 @@
 /**
  * 右侧栏。
  *
- * 只有正文与左缘那条可以拖动的分隔条，宽度拖一次记一次。分页与收起在窗口顶部那条带里，
- * 由外壳排布。窄屏时右栏是浮层、宽度由样式定，外壳不给宽度，这里也就不渲染分隔条。
+ * 只有正文与左缘那条可以拖动的分隔条，宽度拖一次记一次。平铺时分页与收起在窗口顶部那条
+ * 带里，由外壳排布；窄档下右栏是浮在全高抽屉、顶头由外壳当 `head` 传进来（分页与关闭按钮），
+ * 宽度也由样式定，此时不给宽度，这里不渲染分隔条。
  */
 import type { ReactNode } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
@@ -18,11 +19,20 @@ export interface RightPanelProps {
 	maxWidth?: number | undefined;
 	/** 拖动开始与结束的提示，外壳用它在拖动期间锁住折叠 */
 	onDraggingChange?: ((dragging: boolean) => void) | undefined;
+	/** 抽屉顶头（窄档）：分页与关闭按钮；平铺时不传 */
+	head?: ReactNode;
 	/** 分页内容 */
 	children: ReactNode;
 }
 
-export function RightPanel({ width, onWidthChange, maxWidth, onDraggingChange, children }: RightPanelProps) {
+export function RightPanel({
+	width,
+	onWidthChange,
+	maxWidth,
+	onDraggingChange,
+	head,
+	children,
+}: RightPanelProps) {
 	const { t } = useI18n();
 	return (
 		<aside className="panel">
@@ -39,6 +49,7 @@ export function RightPanel({ width, onWidthChange, maxWidth, onDraggingChange, c
 					onDraggingChange={onDraggingChange}
 				/>
 			)}
+			{head === undefined ? null : <div className="panel-head">{head}</div>}
 			<div className="panel-body" role="tabpanel">
 				{children}
 			</div>

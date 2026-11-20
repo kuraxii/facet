@@ -6,7 +6,7 @@
 	top: 10%;
 	bottom: 10%;
 	left: var(--outline-inset);
-	z-index: 3;
+	z-index: var(--z-content-local);
 	display: flex;
 	/* 竖轨宽度由变量给出，组件只在容器留得下这么宽时才渲染 */
 	width: var(--outline-rail-width);

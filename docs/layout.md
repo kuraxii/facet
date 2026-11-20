@@ -1,0 +1,189 @@
+# 布局
+
+本文件是外壳布局的架构真值：档位语义、列宽的两个来源、抽屉与层级。**规则与红线**在仓库根的 `AGENTS.md`，界面视觉与文案在 `docs/ui_design_specification.md`；两边口径不一致时以本文为准，并在同一分支把设计稿对齐。
+
+状态：方案 C 已按 PR1 / PR2 / PR3 全部落地，当前代码与本文一致。
+
+## 1. 总体结构（方案 C）
+
+三层，自外向内：
+
+1. **单一 CSS Grid 外壳**：顶带（`var(--chrome-height)` 那一行）与正文（`1fr` 那一行）在同一个 grid 容器里，共享同一组 `grid-template-columns`：
+
+   ```css
+   .app {
+     grid-template-columns: var(--col-sidebar) minmax(0, 1fr) var(--col-panel);
+     grid-template-rows: var(--chrome-height) minmax(0, 1fr);
+   }
+   ```
+
+   顶带与 `.shell` 都是 `grid-column: 1 / -1` 的行，并用 `grid-template-columns: subgrid` 继承同一组列轨道；三格与三列各自用 `grid-column` 定位。宽度对齐因此是**派生结果**，顶带里不再有任何宽度计算或宽度同步代码。
+
+2. **双层宽度变量**：
+
+   | 变量 | 含义 | 写入方 | 读取方 |
+   | :--- | :--- | :--- | :--- |
+   | `--sidebar-width`、`--panel-width` | **偏好宽**：用户拖出来的意图，跟本地存储走 | `PaneResizer` 拖动期间直接写在 `.app` 上；`AppFrame` 在非拖动时对齐到存储值 | 只作为下一行的输入 |
+   | `--col-sidebar`、`--col-panel` | **实占宽**：当前布局里这一列真正占的横向空间 | 样式表由偏好宽派生；折叠态与窄档抽屉态为 `0px` | 列轨道、`.sb`、`.panel`、顶带三格 |
+
+   派生只写在 `.app` 一处，折叠与窄档只在它上面覆写被折起的那一列。手动收起与预算折起走同一条路：两栏各一个显隐类名，样式只看类名，不关心是被谁折起的：
+
+   ```css
+   .app { --col-sidebar: var(--sidebar-width); --col-panel: var(--panel-width); }
+   /* 窄档：两栏都是抽屉，实占宽归零 */
+   .app.is-narrow { --col-sidebar: 0px; --col-panel: 0px; }
+   /* 栏位显隐：手动收起与中档预算折起共用，只把那一列的实占宽归零，偏好宽不动 */
+   .app.is-sidebar-hidden { --col-sidebar: 0px; }
+   .app.is-panel-hidden { --col-panel: 0px; }
+   ```
+
+   拖动仍然只写偏好宽，实占宽由 CSS 跟着算，**拖动期间不经过 React 渲染**（`PaneResizer` 的既有前提）。
+
+3. **档位与折叠单处判定**：两个纯模块，都不读窗口：
+   - `apps/desktop/src/renderer/src/resolve-layout.ts`：阈值常量（`LAYOUT_BREAKPOINT_PX = 880`、`LAYOUT_WIDE_BREAKPOINT_PX = 1100`、`MAIN_MIN_WIDTH = 420`）、`resolveLayout()` 与 `clampDragMax()`，全程纯函数，单测在 `resolve-layout.test.ts`。
+   - `apps/desktop/src/renderer/src/layout-mode.ts`：一个 `matchMedia` 与结果类名（`is-narrow` / `is-wide`），结果写到 `.app` 与根节点上。
+
+   样式表**不再写档位 `@media`**；`@media` 只留给与档位无关的细节（滚动条、`prefers-*`、对比度）。`packages/ui-terminal` 不认外壳类名，按自身宽度用容器查询响应。
+
+## 2. 三档语义
+
+| 档 | 视口（CSS px） | 左栏 | 正文 | 右栏 | 判定 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| 宽 | `≥ 1100px` | 平铺，可拖 | 剩余宽度 | 平铺，可拖 | 只看意图位 |
+| 中 | `880–1099px` | 双栏预算折叠：正文 + 至多一个边栏 | 不小于 `--main-min` | 同左 | `resolveLayout()` |
+| 窄 | `< 880px` | 全高抽屉 | 满宽 | 全高抽屉 | `matchMedia` |
+
+**中档（预算折叠）**：
+
+- 判据是预算：`sidebarPref + MAIN_MIN_WIDTH + panelPref <= viewportWidth` 时两栏平铺；超了就把优先级低的那一栏折起，保留 `priorityPane` 那一栏。
+- 优先级跟着用户走：手动打开一栏、切它的分页、拖它的分隔条，都把 `priorityPane` 换到这一栏；所以被折起的一栏点一下就换边，而不是把另一栏也关掉。
+- 折叠只改实占宽，不改偏好宽；视口回到 `≥ 1100px` 时按偏好宽与用户意图无感恢复。
+- 重算时机只有四个：意图位变化、偏好宽提交（`pointerup`）、视口 `resize`、优先级换边。**不用 `ResizeObserver`** 看内部容器（折起会让容器变宽，看容器就是折展死循环）；**拖动期间整段锁定**，否则折起会先卸载分隔条，`lostpointercapture` 那次收尾会把一个没人在看的宽度提交上去。
+- 弃用 `clamp()` 硬挤压：夹紧能吸收的缺口只有 `480 − 260 = 220px`，而 `881px` 视口的缺口是 200–379px，实测会整段退化到下限，正文仍不足（见 §5.1）。
+
+**窄档（单栏 + 抽屉）**：
+
+- 正文满宽，`--col-sidebar`、`--col-panel` 都是 `0px`。
+- 两侧抽屉**互斥**（同一时刻最多一个，用一枚互斥枚举表达，不是两个布尔量）：开一个自动关另一个；抽屉从窗口顶边到底边（`position: fixed`，`inset: 0` 的对应侧），表面、左边线、阴影从 `y=0` 起连续，顶部 36px 就是它自己的顶头（见 §4）。
+- 抽屉开合不写回宽档的意图位：拉宽后仍按 `panel.open` 与侧栏收起位平铺。
+- 两侧共用一层遮罩（`.drawer-scrim`），盖住正文与顶带，点它、点 `Esc`、点抽屉自己的关闭按钮都关抽屉；关闭后焦点还给打开它的那个顶带开关（开关在抽屉开着时仍留在 DOM 里）。
+- 抽屉用传统 `position: fixed` + 可控遮罩 + `Esc` + 点外部关闭。**不使用 `popover="auto"`**：Top Layer 压过一切，`z-index` 无法让窗口按钮浮在抽屉之上；且 `popover` 的 Esc 没有可拦截的 `cancel` 事件，与仓库现有 `Modal` 依赖 `onCancel` + `preventDefault` 的做法冲突。
+
+**数值口径**：
+
+| 变量 | 值 | 含义 |
+| :--- | :--- | :--- |
+| `--chat-column-max` | `780px` | 正文**最佳阅读上限**，窄档退到 `--chat-column-max-narrow`（`760px`） |
+| `--main-min` | `420px` | 正文**最小可用宽**：输入区一行 chip 放得下、气泡不塌。与阅读上限是两回事，不要互相顶替 |
+| `--sidebar-width` 范围 | `220–420px`（缺省 `272`） | 偏好宽，落盘 |
+| `--panel-width` 范围 | `260–480px`（缺省 `320`） | 偏好宽，落盘 |
+
+## 3. 三条工程硬约束
+
+### 约束 1：窗口按钮防撞
+
+自绘三按钮（`--window-button-width × 3 = 132px`）作为**右上角独立的 `fixed` 簇**常驻，不占列轨道，因此右栏收起或进抽屉都不会让它们失业。代价是它们可能压住顶带中栏，所以：
+
+```css
+:root { --window-controls-width: calc(var(--window-button-width) * 3); }
+
+.chrome-slot.is-main {
+  padding-inline-end: max(0px, calc(var(--window-controls-width) - var(--col-panel)));
+}
+
+.chrome-slot.is-panel {
+  padding-inline-end: var(--window-controls-width);
+}
+```
+
+中栏让出的宽度等于「窗口按钮簇宽度减去右栏实占宽」：右栏展开且够宽时让 `0`，右栏收起（`--col-panel: 0`）时让满 `132px`。右栏那一格再自己扣掉这段，两格的内容因此都不会钻到按钮底下。
+
+### 约束 2：双栏拖拽上限钳制
+
+中档拖动时，`PaneResizer` 的实时上限必须按空间预算钳住，不能让用户拖出一个「松手就被折起」的宽度（`resolve-layout.ts` 的 `clampDragMax()`）：
+
+```ts
+const budget = viewportWidth - MAIN_MIN_WIDTH - (另一栏可见 ? 另一栏宽度 : 0);
+const max = Math.max(min, Math.min(MAX_WIDTH, budget)); // 下限优先，不被钳到下限以下
+```
+
+- 拖动过程中只钳上限，不触发折叠；松手提交的宽度一定是折完还能放下的宽度。
+- 钳制命中时不写盘，分隔条保持不动并给出「已到底」的指针反馈，避免 §5 里的拖拽假死。
+
+### 约束 3：跨 Portal 的 Esc 协调
+
+提示、右键菜单、toast 等浮层 Portal 到 `document.body`，在抽屉的 DOM 子树之外。因此**不靠 `stopPropagation()`** 区分内外层，统一用默认动作：
+
+- 所有内层浮层（会话行内重命名、右键菜单、`text-menu`、`Modal`）处理 `Escape` 时必须调用 `event.preventDefault()`。
+- 抽屉的全局 `Escape` 监听**首行**必须是 `if (event.defaultPrevented) return;`。
+
+一次 `Esc` 只关最内层，抽屉留在原地。
+
+## 4. 层级刻度
+
+`:root` 里只留这组命名刻度，样式里不再写裸 `z-index`：
+
+| 变量 | 值 | 成员 |
+| :--- | ---: | :--- |
+| `--z-content` | `0` | 正文内容、顶带拖拽区 |
+| `--z-content-local` | `3` | 正文内的局部贴靠：分隔条命中区、对话导航竖轨、吸顶行、终端拖动条、侧栏头部 |
+| `--z-chrome` | `10` | 顶带基础层：`.app-chrome` 与常规顶带控件 |
+| `--z-drawer-scrim` | `20` | 抽屉遮罩：盖住正文与顶带，点顶带空白也能关抽屉 |
+| `--z-drawer` | `30` | 左右全高抽屉：从 `y = 0` 连续到底边，顶部不被顶带截断 |
+| `--z-window-controls` | `40` | 右上角 `132px` 窗口按钮簇：唯一浮在抽屉之上的顶带控件，恒定可点 |
+| `--z-popup` | `60` | 行内弹层与右键菜单：侧栏弹层、标签菜单、命令列表、chip 弹层、主机切换、选中文字菜单 |
+| `--z-tip` | `90` | 悬浮提示 |
+| `--z-drag-overlay` | `95` | 分隔条拖动遮罩 |
+| `--z-toast` | `200` | 轻提示、缩放徽标 |
+
+顺序的含义固定：抽屉遮罩盖住正文与顶带，全高抽屉压在遮罩上（表面与左边线从顶边连续到底），只有窗口按钮簇始终浮在抽屉之上；抽屉之外的弹层与提示再往上。弹窗不用这组值：`<dialog>` 走浏览器 Top Layer。
+
+**层叠上下文**：窗口按钮簇必须是 `.app` 的直接子元素，不能放在 `.app-chrome` 里——后者带 `--z-chrome`，会自己成一层层叠上下文，把簇里的 `40` 锁在 `10` 里，遮罩和抽屉照样能盖住它。
+
+**窄档抽屉顶头**：抽屉盖过整条顶带，自身顶部 `var(--chrome-height)`（`36px`）这一条就是它的顶头：左抽屉放侧栏头部与关闭按钮，右抽屉放分页与关闭按钮，两者都不再把控件留在顶带里；右抽屉顶头右侧设 `padding-inline-end: var(--window-controls-width)`，避让始终在上面的窗口按钮簇。顶头里的控件保留 `-webkit-app-region: no-drag`。
+
+## 5. 取舍依据（为什么不用夹紧、为什么不看容器）
+
+### 5.1 中档夹紧算穿
+
+CSS `clamp(min, val, max)` 在 `max < min` 时返回 `min`，实测（`--main-min: 780px`，侧栏 `420`）：
+
+| 视口 | 夹紧结果 | 正文实得 |
+| ---: | ---: | ---: |
+| 881 | 260（退化到下限） | 201 |
+| 900 | 260 | 220 |
+| 1100 | 260 | 420 |
+| 1280 | 440 | 420 |
+
+夹紧只有在视口足够大时才有意义，中档整段失效。根因是 `220 + 260 + 420 = 900`：低于 900px 的视口三栏在数学上就不共存，而窄档阈值是 880。（这也是 §2 用预算折叠替代夹紧的原因。）
+
+### 5.2 拖拽假死
+
+夹紧后屏幕画的是实占宽、拖动改的是偏好宽：指针在动、分隔线不动，松手却把「从未显示过的宽度」写进本地存储。约束 2 与 §2 的折叠语义一起解决它。
+
+### 5.3 顶带与浮层两个宽度源
+
+顶带读偏好宽、浮层读样式常量，两者差 `--panel-width − min(360px, 92vw)`；顶带的分页按钮因此会悬在正文上方。§1 的实占宽收口消掉这一条。
+
+### 5.4 浮层不占顶栏、层级散落
+
+浮层相对 `.shell` 定位，顶边从 `36px` 起，顶带那一条仍是别的东西；`z-index` 有 26 处裸数字，右栏浮层（`25`）压在主区菜单（`30`）之下。§2 的全高抽屉与 §4 的刻度消掉这两条（PR3）。
+
+## 6. 落地顺序
+
+| PR | 提交 | 范围 | 独立验收 |
+| :--- | :--- | :--- | :--- |
+| PR1 | `refactor(ui): 外壳改单一 Grid，列宽拆成偏好宽与实占宽` | 单一 Grid 外壳、`--col-*` 派生、`--main-min`、断点单处 + 类名、窗口按钮固定簇与约束 1、删档位 `@media`（终端改容器查询）。**不改交互行为** | 顶带与列在 `640 / 881 / 900 / 1100 / 1280` 各档对齐；拖动分隔条顶带跟随；缩放到 80 / 150 后布局与终端列数正常 |
+| PR2 | `feat(ui): 中档预算折叠` | `resolveLayout()` / `clampDragMax()` 纯函数 + 单测、意图位与结果位分离、显隐类名与约束 2 的上限钳制 | 1280 → 640 → 1280 往返折叠与恢复符合意图；拖动分隔条不触发折叠；手动开栏时预算让位 |
+| PR3 | `fix(ui): 抽屉占满全高、遮罩与层级刻度` | 抽屉 `fixed` 全高、遮罩、互斥、焦点返回、约束 3 的 Esc 协调、§4 刻度替换全部裸 `z-index` | 一次 `Esc` 只关最内层；抽屉表面从 `y=0` 通到底；窗口按钮在抽屉之上可点 |
+
+状态：PR1、PR2、PR3 均已落地。
+
+配套：`resolveLayout({ viewportWidth, sidebarPref, panelPref, sidebarIntent, panelIntent, priorityPane })` 返回档位与两栏显隐，`clampDragMax()` 给出拖动上限；单测在 `apps/desktop/src/renderer/src/resolve-layout.test.ts`，覆盖 `640 / 879 / 880 / 881 / 899 / 900 / 1012 / 1099 / 1100 / 1280`、非法输入与优先级换边。样式里的 `--col-*` 只是它的渲染兜底。
+
+## 7. 不在本次范围
+
+- 不引入 Top Layer（`popover`）承载抽屉。
+- 不改业务组件（对话、变更、编辑器、设置页）的内部布局。
+- 不合并生命周期不同的运行时容器（会话通道、`session-hub`、终端通道），`AGENTS.md` 的红线照旧。
+- 断点不做成用户可配置项。

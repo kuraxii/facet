@@ -13,6 +13,7 @@ import {
 	PANEL_MAX_WIDTH,
 	PANEL_MIN_WIDTH,
 	type RightPanelState,
+	type RightPanelTab,
 	readPanelState,
 	readSidebarWidth,
 	resolveUiTheme,
@@ -25,8 +26,10 @@ import {
 } from "@facet/ui";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { bridge } from "../bridge.ts";
+import { type NarrowDrawer, toggleNarrowDrawer } from "../drawer-state.ts";
 import { readLayoutIsNarrow, subscribeLayout } from "../layout-mode.ts";
 import { clampDragMax, type LayoutPane, type LayoutResolution, resolveLayout } from "../resolve-layout.ts";
+import { useDrawerBehavior } from "./useDrawerBehavior.ts";
 
 /** 两份布局结果是否等价；等价时不触发重渲染。 */
 function sameLayout(left: LayoutResolution, right: LayoutResolution): boolean {
@@ -103,6 +106,8 @@ export interface WorkspaceShell {
 	isSidebarCollapsed: boolean;
 	/** 侧栏此刻是否可见 */
 	isSidebarOpen: boolean;
+	/** 右抽屉是否开着（窄档） */
+	isPanelDrawerOpen: boolean;
 	/** 左栏此刻是否占列（宽档/中档下要么是意图，要么是中档预算留下的那一栏） */
 	sidebarVisible: boolean;
 	/** 右栏此刻是否占列 */
@@ -145,6 +150,10 @@ export interface WorkspaceShell {
 	setSettingsSection: (section: SettingsSection) => void;
 	/** 改右栏状态并写回本地 */
 	updatePanel: (patch: Partial<RightPanelState>) => void;
+	/** 开关右栏：窄档切抽屉，宽档与中档改意图位 */
+	togglePanel: () => void;
+	/** 切右栏分页；窄档把抽屉调出来，中档被折起时把预算让给它 */
+	setPanelTab: (tab: RightPanelTab) => void;
 	/** 应用本机界面缩放 */
 	changeUiScale: (next: number) => void;
 	/** 代码块主题，浅色与深色各取一份 */
@@ -153,8 +162,11 @@ export interface WorkspaceShell {
 
 export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShell {
 	const { settings } = options;
-	/** 窄屏时侧栏是抽屉，这个开关控制它展开；宽屏时侧栏常驻，另行记收起的意图 */
-	const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+	/**
+	 * 窄档里开着哪一个抽屉（两侧互斥）。它是临时视图，不写回宽档的意图位：
+	 * 窗口拉宽后仍按 `panel.open` 与侧栏收起位平铺。
+	 */
+	const [narrowDrawer, setNarrowDrawer] = useState<NarrowDrawer | undefined>(undefined);
 	const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 	const [isSearchOpen, setIsSearchOpen] = useState(false);
 	const [sidebarWidth, setSidebarWidth] = useState(() => readSidebarWidth(window.localStorage));
@@ -166,6 +178,10 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 	/** 缩放浮层的定时器 */
 	const zoomBadgeTimer = useRef<number | undefined>(undefined);
 	const isNarrow = useSyncExternalStore(subscribeLayout, readLayoutIsNarrow);
+	/** 左抽屉是否开着 */
+	const isDrawerOpen = narrowDrawer === "sidebar";
+	/** 右抽屉是否开着 */
+	const isPanelDrawerOpen = narrowDrawer === "panel";
 	/** 最近一次被用户主动打开或调宽的那一栏：中档预算不够时保留它 */
 	const [priorityPane, setPriorityPane] = useState<LayoutPane>("sidebar");
 	/** 分隔条是否正在拖：拖动期间锁住折叠结果 */
@@ -211,6 +227,13 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 		window.addEventListener("resize", apply);
 		return () => window.removeEventListener("resize", apply);
 	}, [isResizing, sidebarWidth, panel.width, sidebarIntent, panelIntent, priorityPane]);
+
+	// 离开窄档就把抽屉收掉：抽屉是窄档的临时视图，拉宽后由意图位接管
+	useEffect(() => {
+		if (!isNarrow) {
+			setNarrowDrawer(undefined);
+		}
+	}, [isNarrow]);
 
 	// 设置变化时应用外观
 	useEffect(() => {
@@ -296,7 +319,7 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 	const isSidebarOpen = layout.sidebarVisible || (isNarrow && isDrawerOpen);
 	const toggleSidebar = useCallback(() => {
 		if (isNarrow) {
-			setIsDrawerOpen((open) => !open);
+			setNarrowDrawer((current) => toggleNarrowDrawer(current, "sidebar"));
 			return;
 		}
 		/*
@@ -363,7 +386,33 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 	);
 
 	const setSearchOpen = useCallback((open: boolean) => setIsSearchOpen(open), []);
-	const closeDrawer = useCallback(() => setIsDrawerOpen(false), []);
+	const closeDrawer = useCallback(() => setNarrowDrawer(undefined), []);
+
+	/** 开关右栏：窄档切抽屉（不动宽档的意图位），平铺时改意图位 */
+	const togglePanel = useCallback(() => {
+		if (isNarrow) {
+			setNarrowDrawer((current) => toggleNarrowDrawer(current, "panel"));
+			return;
+		}
+		updatePanel({ open: !layout.panelVisible });
+	}, [isNarrow, layout.panelVisible, updatePanel]);
+
+	/** 切分页：窄档把抽屉调出来，宽档与中档顺手把右栏打开（被折起时预算换边） */
+	const setPanelTab = useCallback(
+		(tab: RightPanelTab) => {
+			if (isNarrow) {
+				setNarrowDrawer("panel");
+				updatePanel({ tab });
+				return;
+			}
+			updatePanel({ tab, open: true });
+		},
+		[isNarrow, updatePanel],
+	);
+
+	// 两个抽屉各挂一份 Escape 与焦点归还；同一时刻只有一个开着，所以两份互不打扰
+	useDrawerBehavior({ isOpen: isNarrow && isDrawerOpen, onClose: closeDrawer });
+	useDrawerBehavior({ isOpen: isNarrow && isPanelDrawerOpen, onClose: closeDrawer });
 	const openSettings = useCallback(() => setView("settings"), []);
 	const closeSettings = useCallback(() => setView("chat"), []);
 
@@ -379,6 +428,7 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 	return {
 		isNarrow,
 		isDrawerOpen,
+		isPanelDrawerOpen,
 		isSidebarCollapsed,
 		isSidebarOpen,
 		sidebarVisible: layout.sidebarVisible,
@@ -402,6 +452,8 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 		closeSettings,
 		setSettingsSection,
 		updatePanel,
+		togglePanel,
+		setPanelTab,
 		changeUiScale,
 		codeTheme,
 	};

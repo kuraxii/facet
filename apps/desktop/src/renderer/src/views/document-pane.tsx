@@ -106,7 +106,7 @@ export function DocumentPane(props: DocumentPaneProps): ReactNode {
 						loadDiff={(file: GitFileChange) =>
 							client.gitDiff(changesTab.cwd, file.path, file.status === "untracked")
 						}
-						onRefresh={() => void tabs.refreshChanges()}
+						onRefresh={() => void tabs.refreshChanges({ force: true })}
 						commits={tabs.commits.data}
 						commitsLoading={tabs.commits.isLoading}
 						commitsError={tabs.commits.error}

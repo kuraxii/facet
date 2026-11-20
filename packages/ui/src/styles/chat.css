@@ -1066,17 +1066,15 @@
 	color: var(--t1);
 }
 
-/* 窄屏：正文列与滚动区收边 */
-@media (max-width: 880px) {
-	.main {
-		--chat-gutter-x: 12px;
-	}
+/* 窄档：正文列与滚动区收边 */
+.app.is-narrow .main {
+	--chat-gutter-x: 12px;
+}
 
-	.column {
-		width: min(100%, var(--chat-column-max-narrow));
-	}
+.app.is-narrow .column {
+	width: min(100%, var(--chat-column-max-narrow));
+}
 
-	.scroll {
-		padding: 44px calc(var(--chat-gutter-x) - var(--scrollbar-width)) 8px var(--chat-gutter-x);
-	}
+.app.is-narrow .scroll {
+	padding: 44px calc(var(--chat-gutter-x) - var(--scrollbar-width)) 8px var(--chat-gutter-x);
 }

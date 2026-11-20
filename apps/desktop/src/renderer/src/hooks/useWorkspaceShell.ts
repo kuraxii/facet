@@ -21,21 +21,7 @@ import {
 } from "@facet/ui";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { bridge } from "../bridge.ts";
-import { readWindowControls } from "../WindowControls.tsx";
-
-/** 窄屏断点：880px 以下侧栏变抽屉，与样式表里的媒体查询保持一致。 */
-const narrowQuery = window.matchMedia("(max-width: 880px)");
-
-function subscribeResize(listener: () => void): () => void {
-	narrowQuery.addEventListener("change", listener);
-	return () => {
-		narrowQuery.removeEventListener("change", listener);
-	};
-}
-
-function readIsNarrow(): boolean {
-	return narrowQuery.matches;
-}
+import { readLayoutIsNarrow, subscribeLayout } from "../layout-mode.ts";
 
 /** 系统是否偏浅色。 */
 function prefersLight(): boolean {
@@ -123,8 +109,6 @@ export interface WorkspaceShell {
 	uiScale: number;
 	/** 缩放变化后短暂显示的百分比浮层 */
 	zoomBadge: number | undefined;
-	/** 窗口按钮；浏览器端没有 */
-	windowControls: ReturnType<typeof readWindowControls>;
 	/** 外壳类名 */
 	className: string;
 	/** 侧栏开关在两套行为之间切换 */
@@ -163,9 +147,7 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 	const [zoomBadge, setZoomBadge] = useState<number | undefined>(undefined);
 	/** 缩放浮层的定时器 */
 	const zoomBadgeTimer = useRef<number | undefined>(undefined);
-	const isNarrow = useSyncExternalStore(subscribeResize, readIsNarrow);
-	/** 窗口按钮；浏览器端没有。桥上的方法引用稳定，这个对象只要建一次 */
-	const windowControls = useMemo(() => readWindowControls(bridge), []);
+	const isNarrow = useSyncExternalStore(subscribeLayout, readLayoutIsNarrow);
 
 	// 设置变化时应用外观
 	useEffect(() => {
@@ -299,7 +281,6 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 		panel,
 		uiScale,
 		zoomBadge,
-		windowControls,
 		className: shellClassName(isSidebarOpen, isDrawerOpen, isSidebarCollapsed, isNarrow),
 		toggleSidebar,
 		updateSidebarWidth,

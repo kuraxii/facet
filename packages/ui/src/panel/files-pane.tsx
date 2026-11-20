@@ -8,7 +8,7 @@
  */
 
 import type { FileEntry } from "@facet/protocol";
-import { File as FileGlyph, RefreshCw } from "lucide-react";
+import { File as FileGlyph, PanelLeftClose, RefreshCw } from "lucide-react";
 import {
 	type CSSProperties,
 	type KeyboardEvent as ReactKeyboardEvent,
@@ -29,6 +29,8 @@ export interface FilesPaneProps {
 	onOpenFile: (path: string) => void;
 	/** 当前打开的文件，用来高亮 */
 	selectedPath?: string;
+	/** 收起这一栏；不给时不显示收起按钮（整列独占时没地方可收） */
+	onCollapse?: (() => void) | undefined;
 }
 
 /** 一层目录的加载状态。 */
@@ -48,7 +50,7 @@ interface Row {
 	depth: number;
 }
 
-export function FilesPane({ loadDirectory, onOpenFile, selectedPath }: FilesPaneProps) {
+export function FilesPane({ loadDirectory, onOpenFile, selectedPath, onCollapse }: FilesPaneProps) {
 	// 文件行的完整路径与读取失败的原文都走这份提示
 	const tip = useHoverTip();
 	const { t } = useI18n();
@@ -132,15 +134,22 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath }: FilesPane
 	const header = (
 		<div className="tree-head">
 			<span className="tree-root">{t("panel.projectFiles")}</span>
-			<button
-				type="button"
-				className="ib"
-				aria-label={t("panel.refreshFiles")}
-				disabled={root?.isLoading === true}
-				onClick={refresh}
-			>
-				<RefreshCw size={13} strokeWidth={1.5} />
-			</button>
+			<div className="tree-head-actions">
+				{onCollapse === undefined ? null : (
+					<button type="button" className="ib" aria-label={t("panel.collapseTree")} onClick={onCollapse}>
+						<PanelLeftClose size={13} strokeWidth={1.5} />
+					</button>
+				)}
+				<button
+					type="button"
+					className="ib"
+					aria-label={t("panel.refreshFiles")}
+					disabled={root?.isLoading === true}
+					onClick={refresh}
+				>
+					<RefreshCw size={13} strokeWidth={1.5} />
+				</button>
+			</div>
 		</div>
 	);
 

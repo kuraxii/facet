@@ -694,3 +694,48 @@ describe("模型通道的登录进展", () => {
 		expect(store.providerLogin("gateway")?.message).toBe("第五步");
 	});
 });
+
+describe("工作树通道", () => {
+	const workspaceChannel = "workspace:/work/a" as const;
+
+	/** 造一条工作树变化帧。 */
+	function changeFrame(serverSeq: number, history: boolean) {
+		return {
+			type: "action" as const,
+			channel: workspaceChannel,
+			serverSeq,
+			origin: undefined,
+			action: { type: "workspace/changed" as const, history },
+		};
+	}
+
+	it("每来一条变化推一次版本，历史单独记", () => {
+		const store = new SessionStore();
+		store.apply(changeFrame(1, false));
+		store.apply(changeFrame(2, true));
+		expect(store.workspaceRevision(workspaceChannel)).toBe(2);
+		expect(store.workspaceHistoryRevision(workspaceChannel)).toBe(1);
+	});
+
+	it("序号不大于已应用的帧丢掉", () => {
+		const store = new SessionStore();
+		store.apply(changeFrame(3, false));
+		store.apply(changeFrame(3, false));
+		expect(store.workspaceRevision(workspaceChannel)).toBe(1);
+	});
+
+	it("补不上缺口时按整体变了推一次", () => {
+		const store = new SessionStore();
+		store.bumpWorkspace(workspaceChannel);
+		expect(store.workspaceRevision(workspaceChannel)).toBe(1);
+	});
+
+	it("换主机之后水位与计数都不留", () => {
+		const store = new SessionStore();
+		store.apply(changeFrame(4, true));
+		store.markWorkspaceSeq(workspaceChannel, 4);
+		store.resetHost();
+		expect(store.workspaceRevision(workspaceChannel)).toBe(0);
+		expect(store.workspaceSeq(workspaceChannel)).toBe(0);
+	});
+});

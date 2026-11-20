@@ -15,6 +15,7 @@ import type {
 } from "@facet/protocol";
 import { Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { Select, type SelectOption } from "../common/select.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { ProviderDialog } from "./ProviderDialog.tsx";
 import { ProviderPicker } from "./ProviderPicker.tsx";
@@ -25,6 +26,30 @@ import { SettingsGroup, SettingsRow, StatusNote } from "./settings-layout.tsx";
 /** 模型键，模型可见性与选择器共用。 */
 function modelKey(model: ModelRef): string {
 	return `${model.provider}/${model.id}`;
+}
+
+/**
+ * 默认模型下拉的选项。
+ *
+ * 顺序是：没选默认模型时的「由模型决定」占位、当前能用的模型、以及 pi 里存着但已经不在
+ * 可用范围里的那一个（换过凭证或删过提供方也会列出来，否则这个值在界面上会「消失」）。
+ */
+function modelOptions(
+	current: ModelRef | undefined,
+	usable: readonly ModelInfo[] | undefined,
+	defaultLabel: string,
+): SelectOption[] {
+	const options: SelectOption[] = [];
+	if (current === undefined) {
+		options.push({ value: "", label: defaultLabel });
+	}
+	for (const model of usable ?? []) {
+		options.push({ value: modelKey(model), label: `${model.provider} / ${model.name}` });
+	}
+	if (current !== undefined && !(usable ?? []).some((model) => modelKey(model) === modelKey(current))) {
+		options.push({ value: modelKey(current), label: `${current.provider} / ${current.id}` });
+	}
+	return options;
 }
 
 /** 思考档位的取值，与协议里的 ThinkingLevel 一致。 */
@@ -194,62 +219,36 @@ export function ModelsSection({
 
 			<SettingsGroup>
 				<SettingsRow title={t("settings.modelsPage.defaultModel")}>
-					<select
-						className="set-input set-models-select"
+					<Select
 						value={defaults?.model === undefined ? "" : modelKey(defaults.model)}
+						options={modelOptions(defaults?.model, usable, t("settings.modelsPage.modelDefault"))}
 						disabled={isSavingDefaults || usable === undefined}
-						onChange={(event) => {
-							const separator = event.target.value.indexOf("/");
+						onChange={(value) => {
+							const separator = value.indexOf("/");
 							if (separator > 0) {
 								void changeDefaults({
-									model: {
-										provider: event.target.value.slice(0, separator),
-										id: event.target.value.slice(separator + 1),
-									},
+									model: { provider: value.slice(0, separator), id: value.slice(separator + 1) },
 								});
 							}
 						}}
-						aria-label={t("settings.modelsPage.defaultModel")}
-					>
-						{defaults?.model === undefined ? (
-							<option value="">{t("settings.modelsPage.modelDefault")}</option>
-						) : null}
-						{(usable ?? []).map((model) => (
-							<option key={modelKey(model)} value={modelKey(model)}>
-								{model.provider} / {model.name}
-							</option>
-						))}
-						{/* pi 里存着的模型可能已经不在可用范围里（换过凭证或删过提供方），也列出来 */}
-						{defaults?.model === undefined ||
-						(usable ?? []).some(
-							(model) => modelKey(model) === modelKey(defaults.model as ModelRef),
-						) ? null : (
-							<option value={modelKey(defaults.model)}>
-								{defaults.model.provider} / {defaults.model.id}
-							</option>
-						)}
-					</select>
+						ariaLabel={t("settings.modelsPage.defaultModel")}
+					/>
 				</SettingsRow>
 				<SettingsRow title={t("settings.modelsPage.defaultThinking")}>
-					<select
-						className="set-input set-models-select"
+					<Select
 						value={defaults?.thinkingLevel ?? ""}
+						options={[
+							{ value: "", label: t("settings.modelsPage.modelDefault") },
+							...THINKING_LEVEL_OPTIONS.map((level) => ({ value: level, label: level })),
+						]}
 						disabled={isSavingDefaults}
-						onChange={(event) => {
-							const value = event.target.value;
+						onChange={(value) => {
 							void changeDefaults({
 								thinkingLevel: value.length === 0 ? null : (value as ThinkingLevelValue),
 							});
 						}}
-						aria-label={t("settings.modelsPage.defaultThinking")}
-					>
-						<option value="">{t("settings.modelsPage.modelDefault")}</option>
-						{THINKING_LEVEL_OPTIONS.map((level) => (
-							<option key={level} value={level}>
-								{level}
-							</option>
-						))}
-					</select>
+						ariaLabel={t("settings.modelsPage.defaultThinking")}
+					/>
 				</SettingsRow>
 			</SettingsGroup>
 

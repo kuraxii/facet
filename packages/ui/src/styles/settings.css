@@ -259,24 +259,95 @@ select.set-input::picker(select) {
 	appearance: base-select;
 }
 
-/* 箭头占的那段宽度由 `::picker-icon` 自己带，文字不靠它留白 */
+/*
+ * 触发器：文字在整只按钮里居中。
+ *
+ * `base-select` 把 `<select>` 铺成一个按钮盒，默认把选中的值排在左边、箭头跟在右边；这里
+ * 让内容居中，箭头改成贴右缘的绝对定位，文字才真的落在按钮中间，而不是中间偏左。
+ */
 select.set-input {
-	padding-right: 4px;
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	/* 宽度跟着当前值走，最宽到 `--set-select-max-width`：`base-select` 下 `width: auto`
+	   取的就是选中的那一项 */
+	width: auto;
+	max-width: var(--set-select-max-width);
+	/* 左边是文字到边框的留白，右边给箭头留出位置，文字因此落在「左边框到箭头」的中间 */
+	padding: 0 var(--set-select-icon-slot) 0 var(--set-select-inset);
+	text-align: center;
+	/* 原生那段文字只用来撑宽度、不画出来（见 `.set-select`），但也不能折行：折了按钮会变高 */
+	white-space: nowrap;
 }
 
+/*
+ * 箭头：固定的 chevron-down，展开与收起一个样。
+ *
+ * 原生 `::picker-icon` 是浏览器自己的三角，这里清掉它的内容，用同一块盒子画一个遮罩出来的
+ * chevron：遮罩只取 alpha，颜色跟着 `--t3` 走，深浅主题都对得上。位置固定在右缘，不参与
+ * 文字排版，也不随展开翻面。
+ */
 select.set-input::picker-icon {
-	color: var(--t3);
-	transition: rotate var(--dur-fast) var(--ease);
+	content: "";
+	position: absolute;
+	right: var(--set-select-icon-inset);
+	top: 50%;
+	translate: 0 -50%;
+	width: var(--set-select-icon);
+	height: var(--set-select-icon);
+	background-color: var(--t3);
+	mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+	mask-repeat: no-repeat;
+	mask-size: 100% 100%;
 }
 
-/* 展开时箭头朝上，与输入区两个芯片的展开箭头一致 */
-select.set-input:open::picker-icon {
-	rotate: 180deg;
+/*
+ * 下拉的外框。
+ *
+ * `<select>` 只负责语义、按当前值撑出的宽度与右缘的箭头，选中的文字由叠在上面的标签显示
+ * （见 `common/select.tsx`）：原生那段文字藏在浏览器 shadow DOM 里，加不了省略号。标签走
+ * `.ell`，与侧栏会话行同一套省略。
+ */
+.set-select {
+	display: grid;
+	max-width: var(--set-select-max-width);
+}
+
+.set-select > * {
+	grid-area: 1 / 1;
+}
+
+/* 叠在原生文字上的那一行，走 `.ell` 省略 */
+.set-select-label {
+	position: relative;
+	z-index: 1;
+	align-self: center;
+	padding: 0 var(--set-select-icon-slot) 0 var(--set-select-inset);
+	color: var(--t1);
+	text-align: center;
+	pointer-events: none;
+}
+
+/* 原生文字只用来撑宽度，不再画出来 */
+.set-select select {
+	color: transparent;
+}
+
+.set-select:has(select:disabled) .set-select-label {
+	color: var(--t3);
 }
 
 select.set-input::picker(select) {
 	/* 与触发器拉开一点距离，不压住边框 */
 	margin-block: 4px;
+	/*
+	 * 弹层与触发器右缘对齐，比按钮宽时朝左长：设置页里的下拉都贴在行尾，朝左长才不会
+	 * 顶出内容区。左边实在放不下时翻成左对齐，保证整块还在视口里。
+	 */
+	inset-inline-end: anchor(right);
+	inset-inline-start: auto;
+	position-try-fallbacks: flip-inline;
 	min-width: anchor-size(width);
 	max-width: min(420px, calc(100vw - 32px));
 	max-height: 320px;
@@ -286,7 +357,11 @@ select.set-input::picker(select) {
 	border-radius: 8px;
 	background: var(--card2);
 	box-shadow: 0 8px 24px rgb(0 0 0 / 32%);
-	scrollbar-gutter: stable;
+	/*
+	 * 这里不预留滚动条沟槽：沟槽只有右边有，会在选项高亮的左右留出不一样的空档。弹层
+	 * 打开期间内容不会变，滚动条出现时也不需要靠沟槽防抖动。
+	 */
+	scrollbar-gutter: auto;
 }
 
 select.set-input option {
@@ -505,11 +580,6 @@ select.set-input option::checkmark {
 
 .set-models-add:hover {
 	filter: brightness(1.08);
-}
-
-/* 两行下拉都要放得下「provider / 模型名」，固定宽度防止切换时行高抖动 */
-.set-models-select {
-	width: 220px;
 }
 
 .set-models-group {

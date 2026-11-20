@@ -8,6 +8,7 @@ import type { LanguageSetting } from "@facet/i18n";
 import type { FacetSettings, LiveMotion, ProviderInfo } from "@facet/protocol";
 import { X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Select } from "../common/select.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { Modal } from "../modal.tsx";
 import { CODE_THEME_OPTIONS, UI_THEME_OPTIONS } from "../theme.ts";
@@ -225,32 +226,26 @@ export function SettingsPage({
 							<SettingsGroup label={t("settings.local")}>
 								{languageSetting === undefined || onLanguageChange === undefined ? null : (
 									<SettingsRow title={t("settings.language")}>
-										<select
-											className="set-input"
+										<Select
 											value={languageSetting}
-											onChange={(event) => onLanguageChange(event.target.value as LanguageSetting)}
-											aria-label={t("settings.language")}
-										>
-											<option value="auto">{t("language.system")}</option>
-											<option value="en">{t("language.en")}</option>
-											<option value="zh-CN">{t("language.zh-CN")}</option>
-										</select>
+											options={[
+												{ value: "auto", label: t("language.system") },
+												{ value: "en", label: t("language.en") },
+												{ value: "zh-CN", label: t("language.zh-CN") },
+											]}
+											onChange={(value) => onLanguageChange(value as LanguageSetting)}
+											ariaLabel={t("settings.language")}
+										/>
 									</SettingsRow>
 								)}
 								{uiScale === undefined || onUiScaleChange === undefined ? null : (
 									<SettingsRow title={t("settings.uiScale")}>
-										<select
-											className="set-input"
-											value={uiScale}
-											onChange={(event) => onUiScaleChange(Number(event.target.value))}
-											aria-label={t("settings.uiScale")}
-										>
-											{UI_SCALE_STEPS.map((step) => (
-												<option key={step} value={step}>
-													{step}%
-												</option>
-											))}
-										</select>
+										<Select
+											value={String(uiScale)}
+											options={UI_SCALE_STEPS.map((step) => ({ value: String(step), label: `${step}%` }))}
+											onChange={(value) => onUiScaleChange(Number(value))}
+											ariaLabel={t("settings.uiScale")}
+										/>
 									</SettingsRow>
 								)}
 							</SettingsGroup>
@@ -397,18 +392,12 @@ function AppearanceSection({
 					</div>
 				</SettingsRow>
 				<SettingsRow title={t("settings.appearancePage.liveMotion")}>
-					<select
-						className="set-input"
+					<Select
 						value={appearance.liveMotion}
-						onChange={(event) => patchAppearance({ liveMotion: event.target.value as LiveMotion })}
-						aria-label={t("settings.appearancePage.liveMotion")}
-					>
-						{LIVE_MOTION_OPTIONS.map((option) => (
-							<option key={option.id} value={option.id}>
-								{t(option.labelKey)}
-							</option>
-						))}
-					</select>
+						options={LIVE_MOTION_OPTIONS.map((option) => ({ value: option.id, label: t(option.labelKey) }))}
+						onChange={(value) => patchAppearance({ liveMotion: value as LiveMotion })}
+						ariaLabel={t("settings.appearancePage.liveMotion")}
+					/>
 				</SettingsRow>
 				<SettingsRow title={t("settings.appearancePage.reducedMotion")}>
 					<input
@@ -475,22 +464,14 @@ function AppearanceSection({
 
 			<SettingsGroup label={t("settings.appearancePage.codeTheme")}>
 				<SettingsRow title={t("settings.appearancePage.codeTheme")}>
-					<select
-						className="set-input"
+					<Select
 						value={appearance.codeTheme}
-						onChange={(event) =>
-							patchAppearance({
-								codeTheme: event.target.value as FacetSettings["appearance"]["codeTheme"],
-							})
+						options={CODE_THEME_OPTIONS.map((option) => ({ value: option.id, label: option.label }))}
+						onChange={(value) =>
+							patchAppearance({ codeTheme: value as FacetSettings["appearance"]["codeTheme"] })
 						}
-						aria-label={t("settings.appearancePage.codeTheme")}
-					>
-						{CODE_THEME_OPTIONS.map((option) => (
-							<option key={option.id} value={option.id}>
-								{option.label}
-							</option>
-						))}
-					</select>
+						ariaLabel={t("settings.appearancePage.codeTheme")}
+					/>
 				</SettingsRow>
 			</SettingsGroup>
 		</>
@@ -511,20 +492,20 @@ function InputSection({
 			<h2 className="set-section-title">{t("settings.inputPage.title")}</h2>
 			<SettingsGroup label={t("settings.inputPage.sending")}>
 				<SettingsRow title={t("settings.inputPage.sendKey")}>
-					<select
-						className="set-input"
+					<Select
 						value={draft.input.sendKey}
-						onChange={(event) =>
+						options={[
+							{ value: "enter", label: t("settings.inputPage.enter") },
+							{ value: "shiftEnter", label: t("settings.inputPage.shiftEnter") },
+						]}
+						onChange={(value) =>
 							patch((current) => ({
 								...current,
-								input: { ...current.input, sendKey: event.target.value as FacetSettings["input"]["sendKey"] },
+								input: { ...current.input, sendKey: value as FacetSettings["input"]["sendKey"] },
 							}))
 						}
-						aria-label={t("settings.inputPage.sendKey")}
-					>
-						<option value="enter">{t("settings.inputPage.enter")}</option>
-						<option value="shiftEnter">{t("settings.inputPage.shiftEnter")}</option>
-					</select>
+						ariaLabel={t("settings.inputPage.sendKey")}
+					/>
 				</SettingsRow>
 			</SettingsGroup>
 

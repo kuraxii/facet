@@ -90,6 +90,8 @@ export type { ScrollRestore, StickToBottom } from "./chat/use-stick-to-bottom.ts
 export { useStickToBottom } from "./chat/use-stick-to-bottom.ts";
 export type { ScrollAreaProps } from "./common/scroll-area.tsx";
 export { ScrollArea, ScrollRow } from "./common/scroll-area.tsx";
+export type { SelectOption, SelectProps } from "./common/select.tsx";
+export { Select } from "./common/select.tsx";
 export type { I18nProviderProps, I18nValue } from "./i18n/I18nProvider.tsx";
 export { I18nProvider, useI18n } from "./i18n/I18nProvider.tsx";
 export type { CodeBlockShape } from "./markdown/code-block-state.ts";

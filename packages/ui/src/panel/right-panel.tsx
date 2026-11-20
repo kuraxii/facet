@@ -14,11 +14,15 @@ export interface RightPanelProps {
 	width?: number | undefined;
 	/** 拖动分隔条时给出新宽度 */
 	onWidthChange?: ((width: number) => void) | undefined;
+	/** 分隔条此刻能拖到的最大宽度；不给用 `PANEL_MAX_WIDTH`。中档按空间预算给出 */
+	maxWidth?: number | undefined;
+	/** 拖动开始与结束的提示，外壳用它在拖动期间锁住折叠 */
+	onDraggingChange?: ((dragging: boolean) => void) | undefined;
 	/** 分页内容 */
 	children: ReactNode;
 }
 
-export function RightPanel({ width, onWidthChange, children }: RightPanelProps) {
+export function RightPanel({ width, onWidthChange, maxWidth, onDraggingChange, children }: RightPanelProps) {
 	const { t } = useI18n();
 	return (
 		<aside className="panel">
@@ -28,10 +32,11 @@ export function RightPanel({ width, onWidthChange, children }: RightPanelProps) 
 					label={t("panel.resizePanel")}
 					width={width}
 					min={PANEL_MIN_WIDTH}
-					max={PANEL_MAX_WIDTH}
+					max={maxWidth ?? PANEL_MAX_WIDTH}
 					cssVar="--panel-width"
 					side="start"
 					onWidthChange={onWidthChange}
+					onDraggingChange={onDraggingChange}
 				/>
 			)}
 			<div className="panel-body" role="tabpanel">

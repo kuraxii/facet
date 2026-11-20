@@ -26,6 +26,18 @@
 	--col-panel: 0px;
 }
 
+/*
+ * 栏位显隐：手动收起与中档预算折起共用这两条，列轨道归零后顶带与正文一起动。
+ * 偏好宽不动，所以窗口拉宽或用户再开时仍按原来拖出来的宽度排。
+ */
+.app.is-sidebar-hidden {
+	--col-sidebar: 0px;
+}
+
+.app.is-panel-hidden {
+	--col-panel: 0px;
+}
+
 /* 拖动区盖住整条顶带，格子里的控件自己标 no-drag */
 .app-drag {
 	position: absolute;

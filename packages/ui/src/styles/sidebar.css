@@ -30,8 +30,11 @@
 	overflow-clip-margin: var(--divider-hit-width);
 }
 
-/* 宽屏收起左栏 */
-.shell.is-sb-hidden .sb {
+/*
+ * 宽档与中档收起左栏；窄档的抽屉另有显示规则，不能在这里 display: none。
+ * 档位判断放在 `:where()` 里，这条规则只负责显隐，不与档位规则比权重。
+ */
+.app.is-sidebar-hidden:where(:not(.is-narrow)) .sb {
 	display: none;
 }
 

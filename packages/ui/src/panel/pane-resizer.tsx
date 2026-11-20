@@ -8,7 +8,7 @@
  * 箭头，底下的按钮收不到 hover，正文也不会被顺手选中。遮罩只在开始与结束各渲染一次，拖动
  * 过程中仍然不经过 React。
  */
-import { type PointerEvent as ReactPointerEvent, useCallback, useRef, useState } from "react";
+import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { clampPaneWidth } from "./pane-width.ts";
 
@@ -30,6 +30,13 @@ export interface PaneResizerProps {
 	side: "start" | "end";
 	/** 松手时提交最终宽度 */
 	onWidthChange: (width: number) => void;
+	/**
+	 * 拖动开始与结束的提示。
+	 *
+	 * 外壳用它在拖动期间锁住布局档位：分隔条正在拖的时候把一栏折起，会先卸载分隔条，
+	 * 拿不到 `pointerup` 的那次收尾会把一个没人在看的宽度提交上去。
+	 */
+	onDraggingChange?: ((dragging: boolean) => void) | undefined;
 }
 
 export function PaneResizer({
@@ -41,10 +48,24 @@ export function PaneResizer({
 	cssVar,
 	side,
 	onWidthChange,
+	onDraggingChange,
 }: PaneResizerProps) {
 	const dragging = useRef<{ startX: number; startWidth: number; current: number } | undefined>(undefined);
 	/** 拖动中才挂遮罩；组件中途被卸掉时遮罩跟着它一起走 */
 	const [isDragging, setIsDragging] = useState(false);
+	/** 拖动状态回调放 ref 里：拖动过程中它换引用不该重绑指针事件 */
+	const draggingListener = useRef(onDraggingChange);
+	draggingListener.current = onDraggingChange;
+
+	// 拖动到一半被卸载时补发一次「结束」：否则外壳会一直以为还在拖，折叠永远锁着
+	useEffect(() => {
+		return () => {
+			if (dragging.current !== undefined) {
+				dragging.current = undefined;
+				draggingListener.current?.(false);
+			}
+		};
+	}, []);
 
 	const handlePointerDown = useCallback(
 		(event: ReactPointerEvent<HTMLHRElement>) => {
@@ -52,6 +73,7 @@ export function PaneResizer({
 			dragging.current = { startX: event.clientX, startWidth: width, current: width };
 			event.currentTarget.setPointerCapture(event.pointerId);
 			setIsDragging(true);
+			draggingListener.current?.(true);
 		},
 		[width],
 	);
@@ -91,6 +113,9 @@ export function PaneResizer({
 			setIsDragging(false);
 			if (event.currentTarget.hasPointerCapture(event.pointerId)) {
 				event.currentTarget.releasePointerCapture(event.pointerId);
+			}
+			if (start !== undefined) {
+				draggingListener.current?.(false);
 			}
 			// 松手时才提交：宿主保存宽度，并把变量对齐到同一个值
 			if (start !== undefined && start.current !== width) {

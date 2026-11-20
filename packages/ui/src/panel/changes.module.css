@@ -213,11 +213,9 @@
 	padding-left: 12px;
 }
 
+/* 滚动行为与沟槽由全局的 `scroll-y` 给：这里只约定它占满剩余高度 */
 .docScroll {
 	flex: 1;
-	min-height: 0;
-	overflow: auto;
-	scrollbar-gutter: stable;
 }
 
 /*
@@ -302,8 +300,8 @@
 	}
 }
 
+/* 横向溢出由全局的 `scroll-x` 接：这里只管等宽字体与行高，行自己不换行 */
 .diffBody {
-	overflow-x: auto;
 	font-family: var(--font-mono);
 	font-size: 11.5px;
 	line-height: var(--changes-line-height);
@@ -398,12 +396,9 @@
 	font-size: 11px;
 }
 
+/* 滚动行为与沟槽由全局的 `scroll-y` 给：展开后列表自己滚动，行宽不跟着变 */
 .commitList {
 	flex: 1;
-	min-height: 0;
-	overflow: auto;
-	/* 展开后列表自己滚动，滚动条出现时行宽不变 */
-	scrollbar-gutter: stable;
 }
 
 .commitSkeleton {

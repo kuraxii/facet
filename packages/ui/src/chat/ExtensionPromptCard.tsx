@@ -269,7 +269,9 @@ export function ExtensionPromptCard({ prompt, canRespond, onRespond }: Extension
 									))}
 								</ul>
 							) : null}
-							{prompt.kind === "editor" ? <pre className={s.prefill}>{prompt.prefill ?? ""}</pre> : null}
+							{prompt.kind === "editor" ? (
+								<pre className={`scroll-both ${s.prefill}`}>{prompt.prefill ?? ""}</pre>
+							) : null}
 						</>
 					)}
 				</div>
@@ -468,7 +470,7 @@ export function ExtensionPromptCard({ prompt, canRespond, onRespond }: Extension
 						) : null}
 					</div>
 					{customActive || preview === undefined ? null : (
-						<pre className={s.preview} data-extension-preview>
+						<pre className={`scroll-both ${s.preview}`} data-extension-preview>
 							{preview}
 						</pre>
 					)}

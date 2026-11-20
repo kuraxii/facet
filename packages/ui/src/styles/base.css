@@ -279,8 +279,9 @@
  * 标准属性只作为没有伪元素的引擎的回退。
  *
  * 规则只挂在真正会滚的容器上，不用 `*`：通配选择器会让每个元素都参与一次样式重算。
- * 第三方组件自己的滚动容器（CodeMirror 的 `.cm-scroller`、xterm 的 `.xterm-viewport`）
- * 按各自的类名列在里面，它们的 DOM 不在我们手里，加不了 `scroll-y`。
+ * 第三方组件自己的滚动容器（CodeMirror 的 `.cm-scroller`、xterm 的 `.xterm-viewport`、
+ * markstream 里画表格与代码块的那几个节点）按各自的类名列在里面，它们的 DOM 不在我们手里，
+ * 加不了 `scroll-y`。
  */
 
 /**
@@ -302,6 +303,32 @@
 }
 
 /**
+ * 只横向滚动的区域。
+ *
+ * 内容按真实宽度铺开（补丁行、长代码行），滚动条落在容器下缘；纵向由外层容器或内容自身
+ * 撑开，这里不参与。沟槽只影响纵向，横向没有可预留的量。
+ */
+.scroll-x {
+	min-width: 0;
+	overflow-x: auto;
+	overflow-y: hidden;
+	overscroll-behavior: contain;
+}
+
+/**
+ * 两个方向都可能溢出的区域。
+ *
+ * 预览正文与带边框的输入盒属于这一类：内容按自己的宽度排，横向靠滚动而不是裁剪；纵向
+ * 与 `scroll-y` 一致，始终预留沟槽。
+ */
+.scroll-both {
+	min-height: 0;
+	overflow: auto;
+	scrollbar-gutter: var(--scroll-gutter, stable);
+	overscroll-behavior: contain;
+}
+
+/**
  * 滚动区域里的一行。
  *
  * `--scroll-inset` 是这一行相对容器边缘的横向留白，行自己设；滚动条沟槽已经占掉右侧
@@ -315,6 +342,8 @@
 /* 会滚动的容器：文字区、弹层与浮层、代码块与编辑器、终端标签栏 */
 :where(
 	.scroll-y,
+	.scroll-x,
+	.scroll-both,
 	.scroll,
 	.sb-opts,
 	.panel-body,
@@ -335,6 +364,16 @@
 	.diff-body,
 	dialog.dialog,
 	.cm-scroller,
+	/* markstream 渲染器内部的滚动容器：类名在依赖里，改不了 DOM，只能按选择器列 */
+	.markstream-react .table-node-wrapper,
+	.markstream-react .code-block-node,
+	.markstream-react .code-block-content,
+	.markstream-react .code-editor-fallback-surface,
+	.markstream-react .code-fallback-plain,
+	.markstream-react pre[data-markstream-pre="1"],
+	.markstream-react .mermaid-modal-body,
+	.markstream-react .overflow-auto,
+	.markstream-react .overflow-x-auto,
 	.xterm-viewport
 )::-webkit-scrollbar {
 	width: var(--scrollbar-width);
@@ -344,6 +383,8 @@
 
 :where(
 	.scroll-y,
+	.scroll-x,
+	.scroll-both,
 	.scroll,
 	.sb-opts,
 	.panel-body,
@@ -364,6 +405,16 @@
 	.diff-body,
 	dialog.dialog,
 	.cm-scroller,
+	/* markstream 渲染器内部的滚动容器：类名在依赖里，改不了 DOM，只能按选择器列 */
+	.markstream-react .table-node-wrapper,
+	.markstream-react .code-block-node,
+	.markstream-react .code-block-content,
+	.markstream-react .code-editor-fallback-surface,
+	.markstream-react .code-fallback-plain,
+	.markstream-react pre[data-markstream-pre="1"],
+	.markstream-react .mermaid-modal-body,
+	.markstream-react .overflow-auto,
+	.markstream-react .overflow-x-auto,
 	.xterm-viewport
 )::-webkit-scrollbar-button {
 	display: none;
@@ -373,6 +424,8 @@
 
 :where(
 	.scroll-y,
+	.scroll-x,
+	.scroll-both,
 	.scroll,
 	.sb-opts,
 	.panel-body,
@@ -393,10 +446,22 @@
 	.diff-body,
 	dialog.dialog,
 	.cm-scroller,
+	/* markstream 渲染器内部的滚动容器：类名在依赖里，改不了 DOM，只能按选择器列 */
+	.markstream-react .table-node-wrapper,
+	.markstream-react .code-block-node,
+	.markstream-react .code-block-content,
+	.markstream-react .code-editor-fallback-surface,
+	.markstream-react .code-fallback-plain,
+	.markstream-react pre[data-markstream-pre="1"],
+	.markstream-react .mermaid-modal-body,
+	.markstream-react .overflow-auto,
+	.markstream-react .overflow-x-auto,
 	.xterm-viewport
 )::-webkit-scrollbar-track,
 :where(
 	.scroll-y,
+	.scroll-x,
+	.scroll-both,
 	.scroll,
 	.sb-opts,
 	.panel-body,
@@ -417,6 +482,16 @@
 	.diff-body,
 	dialog.dialog,
 	.cm-scroller,
+	/* markstream 渲染器内部的滚动容器：类名在依赖里，改不了 DOM，只能按选择器列 */
+	.markstream-react .table-node-wrapper,
+	.markstream-react .code-block-node,
+	.markstream-react .code-block-content,
+	.markstream-react .code-editor-fallback-surface,
+	.markstream-react .code-fallback-plain,
+	.markstream-react pre[data-markstream-pre="1"],
+	.markstream-react .mermaid-modal-body,
+	.markstream-react .overflow-auto,
+	.markstream-react .overflow-x-auto,
 	.xterm-viewport
 )::-webkit-scrollbar-corner {
 	background: var(--scrollbar-track-color);
@@ -424,6 +499,8 @@
 
 :where(
 	.scroll-y,
+	.scroll-x,
+	.scroll-both,
 	.scroll,
 	.sb-opts,
 	.panel-body,
@@ -444,6 +521,16 @@
 	.diff-body,
 	dialog.dialog,
 	.cm-scroller,
+	/* markstream 渲染器内部的滚动容器：类名在依赖里，改不了 DOM，只能按选择器列 */
+	.markstream-react .table-node-wrapper,
+	.markstream-react .code-block-node,
+	.markstream-react .code-block-content,
+	.markstream-react .code-editor-fallback-surface,
+	.markstream-react .code-fallback-plain,
+	.markstream-react pre[data-markstream-pre="1"],
+	.markstream-react .mermaid-modal-body,
+	.markstream-react .overflow-auto,
+	.markstream-react .overflow-x-auto,
 	.xterm-viewport
 )::-webkit-scrollbar-thumb {
 	border: calc((var(--scrollbar-width) - var(--scrollbar-thumb)) / 2) solid transparent;
@@ -454,6 +541,8 @@
 
 :where(
 	.scroll-y,
+	.scroll-x,
+	.scroll-both,
 	.scroll,
 	.sb-opts,
 	.panel-body,
@@ -474,6 +563,16 @@
 	.diff-body,
 	dialog.dialog,
 	.cm-scroller,
+	/* markstream 渲染器内部的滚动容器：类名在依赖里，改不了 DOM，只能按选择器列 */
+	.markstream-react .table-node-wrapper,
+	.markstream-react .code-block-node,
+	.markstream-react .code-block-content,
+	.markstream-react .code-editor-fallback-surface,
+	.markstream-react .code-fallback-plain,
+	.markstream-react pre[data-markstream-pre="1"],
+	.markstream-react .mermaid-modal-body,
+	.markstream-react .overflow-auto,
+	.markstream-react .overflow-x-auto,
 	.xterm-viewport
 )::-webkit-scrollbar-thumb:hover {
 	background: var(--scrollbar-thumb-color-hover);
@@ -484,6 +583,8 @@
 @supports not (scrollbar-color: auto) {
 	:where(
 		.scroll-y,
+		.scroll-x,
+		.scroll-both,
 		.scroll,
 		.sb-opts,
 		.panel-body,
@@ -504,6 +605,16 @@
 		.diff-body,
 		dialog.dialog,
 		.cm-scroller,
+		/* markstream 渲染器内部的滚动容器：类名在依赖里，改不了 DOM，只能按选择器列 */
+		.markstream-react .table-node-wrapper,
+		.markstream-react .code-block-node,
+		.markstream-react .code-block-content,
+		.markstream-react .code-editor-fallback-surface,
+		.markstream-react .code-fallback-plain,
+		.markstream-react pre[data-markstream-pre="1"],
+		.markstream-react .mermaid-modal-body,
+		.markstream-react .overflow-auto,
+		.markstream-react .overflow-x-auto,
 		.xterm-viewport
 	) {
 		/* 复位成 auto：非 auto 的宽度会反过来关掉 `::-webkit-scrollbar` */

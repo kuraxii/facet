@@ -60,7 +60,6 @@
 	font-size: 12px;
 	line-height: 1.5;
 	white-space: pre-wrap;
-	overflow: auto;
 }
 
 .extension-card-prefill {
@@ -75,7 +74,6 @@
 	color: var(--t2);
 	font-family: var(--font-mono);
 	white-space: pre-wrap;
-	overflow: auto;
 }
 
 .extension-options {

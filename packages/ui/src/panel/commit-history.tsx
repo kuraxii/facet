@@ -57,7 +57,7 @@ export function CommitHistory({ commits, isLoading, error, onCommitPress }: Comm
 				{count === undefined ? null : <span className={styles.commitCount}>{count}</span>}
 			</button>
 			{isOpen ? (
-				<div className={styles.commitList}>
+				<div className={`scroll-y ${styles.commitList}`}>
 					{error === undefined ? null : <p className={`${styles.note} ${styles.noteError}`}>{error}</p>}
 					{isLoading && commits === undefined ? (
 						<>

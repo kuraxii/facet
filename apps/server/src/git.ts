@@ -4,7 +4,7 @@
  * 变更侧栏只看 git：工作树相对 HEAD 的差异，已暂存与未暂存合成一份。主机侧执行 git 命令，
  * 远端主机读的是它自己的仓库；非仓库、超时、输出超限都收成明确的结果，不往界面上抛原始报错。
  */
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
@@ -35,6 +35,15 @@ const MAX_PATCH_BYTES = 400 * 1024;
 
 /** 未跟踪文件统计行数时最多读这么多。 */
 const MAX_UNTRACKED_BYTES = 1024 * 1024;
+
+/**
+ * 一次探测最多收多少条改动。
+ *
+ * 到这条数就停：再往下读既没人看得完，`diff --numstat` 与逐个未跟踪文件读行数的开销也
+ * 会随着文件数线性涨。到上限的那次探测把已解析的部分交出去并标 `truncated`，界面据此
+ * 停掉自动刷新，等用户聚焦或明说要刷新时再探一次。
+ */
+const STATUS_LIMIT = 5000;
 
 /** 一次 git 调用的结果。 */
 interface GitResult {
@@ -131,54 +140,154 @@ interface StatusRecord {
 }
 
 /**
- * 解析 `git status --porcelain=v2 -z` 的输出。
+ * 流式解析 `git status --porcelain=v2 --branch -z` 的输出。
  *
  * 记录按 NUL 分隔：普通改动是 `1 <XY> … <path>`，重命名是 `2 <XY> … <path>` 后面再跟一个
- * NUL 分隔的旧路径，未跟踪是 `? <path>`，冲突是 `u …`。`#` 开头的是分支信息，跳过。
+ * NUL 分隔的旧路径，未跟踪是 `? <path>`，冲突是 `u …`；`# branch.*` 是分支信息，在 `-z`
+ * 下同样以 NUL 结尾。
+ *
+ * 按块喂进来，凑够一条才解析，所以 `git status` 可以边产出边消费：到上限就能立刻停，
+ * 不必等整段输出落进内存。
  */
-export function parseStatusRecords(output: string): StatusRecord[] {
-	const tokens = output.split("\u0000");
-	const records: StatusRecord[] = [];
-	for (let index = 0; index < tokens.length; index += 1) {
-		const token = tokens[index];
-		if (token === undefined || token.length === 0 || token.startsWith("#")) {
-			continue;
+export class StatusParser {
+	/** 已经解析出来的改动记录，按 git 的输出顺序 */
+	readonly records: StatusRecord[] = [];
+	/** 当前分支；游离 HEAD 时是 `(detached)` */
+	branch: string | undefined;
+	/** 上游分支与领先落后 */
+	upstream: GitStatus["upstream"] = undefined;
+	/** 还没凑成一条的尾巴 */
+	private buffer = "";
+	/** 上一条是重命名，下一段是它的旧路径 */
+	private expectsOldPath = false;
+	/** 已经多出来一条，说明超过上限了 */
+	private overflowed = false;
+
+	/** 到多少条就停 */
+	private readonly limit: number;
+
+	constructor(limit: number) {
+		this.limit = limit;
+	}
+
+	/** 已经超过上限：调用方据此中止 `git status`，不再往下解析。 */
+	get isFull(): boolean {
+		return this.overflowed;
+	}
+
+	/**
+	 * 喂一段输出，返回到上限了没有。
+	 *
+	 * 到上限之后剩下的片段直接丢掉：那一批已经不该再往界面上带。
+	 */
+	push(chunk: string): boolean {
+		if (this.overflowed) {
+			return true;
 		}
-		const kind = token[0];
-		if (kind === "?") {
-			records.push({ status: "untracked", path: token.slice(2) });
-			continue;
-		}
-		if (kind === "!") {
-			continue;
-		}
-		if (kind === "u") {
-			// 冲突记录的路径是第 11 段
-			const path = token.split(" ").slice(10).join(" ");
-			if (path.length > 0) {
-				records.push({ status: "conflicted", path });
+		this.buffer += chunk;
+		let separator = this.buffer.indexOf("\u0000");
+		while (separator >= 0) {
+			const token = this.buffer.slice(0, separator);
+			this.buffer = this.buffer.slice(separator + 1);
+			this.apply(token);
+			if (this.overflowed) {
+				return true;
 			}
-			continue;
+			separator = this.buffer.indexOf("\u0000");
 		}
-		if (kind === "1" || kind === "2") {
-			const fields = token.split(" ");
-			const xy = fields[1] ?? "..";
-			// 重命名记录在路径前多一段 `<X><score>`（例如 R100）
-			const path = fields.slice(kind === "2" ? 9 : 8).join(" ");
-			if (path.length === 0) {
-				continue;
+		return false;
+	}
+
+	/** 解析一条完整的 NUL 分隔记录。 */
+	private apply(token: string): void {
+		if (this.expectsOldPath) {
+			this.expectsOldPath = false;
+			const last = this.records[this.records.length - 1];
+			if (last !== undefined) {
+				last.oldPath = token;
 			}
-			const status = statusOf(xy[0] ?? ".", xy[1] ?? ".");
-			if (kind === "2") {
-				const oldPath = tokens[index + 1];
-				index += 1;
-				records.push({ status, path, ...(oldPath === undefined ? {} : { oldPath }) });
-				continue;
-			}
-			records.push({ status, path });
+			return;
+		}
+		if (token.length === 0) {
+			return;
+		}
+		if (token.startsWith("# ")) {
+			this.applyBranch(token);
+			return;
+		}
+		const record = parseRecordToken(token);
+		if (record === undefined) {
+			return;
+		}
+		this.records.push(record.record);
+		this.expectsOldPath = record.expectsOldPath;
+		// 上限是「最多这么多条」：多出来的那一条不留下，只用来标记超过了
+		if (this.records.length > this.limit) {
+			this.records.pop();
+			this.overflowed = true;
+			this.expectsOldPath = false;
 		}
 	}
-	return records;
+
+	/** 把一行 `# branch.*` 合进分支信息。 */
+	private applyBranch(line: string): void {
+		const fields = line.slice(2).split(" ");
+		if (fields[0] === "branch.head") {
+			this.branch = fields[1] === "(detached)" ? "(detached)" : fields[1];
+			return;
+		}
+		if (fields[0] === "branch.upstream") {
+			this.upstream = { name: fields.slice(1).join(" "), ahead: 0, behind: 0 };
+			return;
+		}
+		if (fields[0] === "branch.ab") {
+			const ahead = Number.parseInt((fields[1] ?? "+0").replace("+", ""), 10) || 0;
+			const behind = Number.parseInt((fields[2] ?? "-0").replace("-", ""), 10) || 0;
+			this.upstream = { name: this.upstream?.name ?? "", ahead, behind };
+		}
+	}
+}
+
+/**
+ * 解析一条文件记录。
+ *
+ * 重命名与复制（`2`）的旧路径是后面单独一段，这里只标出「下一条是旧路径」，由调用方接。
+ */
+function parseRecordToken(token: string): { record: StatusRecord; expectsOldPath: boolean } | undefined {
+	const kind = token[0];
+	if (kind === "!") {
+		return undefined;
+	}
+	if (kind === "?") {
+		const path = token.slice(2);
+		return path.length === 0 ? undefined : { record: { status: "untracked", path }, expectsOldPath: false };
+	}
+	if (kind === "u") {
+		// 冲突记录的路径是第 11 段
+		const path = token.split(" ").slice(10).join(" ");
+		return path.length === 0 ? undefined : { record: { status: "conflicted", path }, expectsOldPath: false };
+	}
+	if (kind !== "1" && kind !== "2") {
+		return undefined;
+	}
+	const fields = token.split(" ");
+	const xy = fields[1] ?? "..";
+	// 重命名记录在路径前多一段 `<X><score>`（例如 R100）
+	const path = fields.slice(kind === "2" ? 9 : 8).join(" ");
+	if (path.length === 0) {
+		return undefined;
+	}
+	return {
+		record: { status: statusOf(xy[0] ?? ".", xy[1] ?? "."), path },
+		expectsOldPath: kind === "2",
+	};
+}
+
+/** 一次性解析整段输出：先攒齐再交给 `StatusParser`，测试与短输出用得上。 */
+export function parseStatusRecords(output: string): StatusRecord[] {
+	const parser = new StatusParser(Number.POSITIVE_INFINITY);
+	parser.push(output);
+	return parser.records;
 }
 
 /** 一个文件的增删行数。 */
@@ -249,65 +358,162 @@ async function countUntracked(cwd: string, path: string): Promise<NumstatEntry> 
 	}
 }
 
-/** 从 `git status -b` 的输出里取分支信息。 */
-function parseBranch(output: string): Pick<GitStatus, "branch" | "upstream"> {
-	let branch: string | undefined;
-	let upstream: GitStatus["upstream"];
-	for (const line of output.split("\n")) {
-		if (!line.startsWith("# branch.")) {
-			continue;
-		}
-		const fields = line.slice(2).split(" ");
-		if (fields[0] === "branch.head") {
-			branch = fields[1] === "(detached)" ? "(detached)" : fields[1];
-		}
-		if (fields[0] === "branch.upstream") {
-			upstream = { name: fields.slice(1).join(" "), ahead: 0, behind: 0 };
-		}
-		if (fields[0] === "branch.ab") {
-			const ahead = Number.parseInt((fields[1] ?? "+0").replace("+", ""), 10) || 0;
-			const behind = Number.parseInt((fields[2] ?? "-0").replace("-", ""), 10) || 0;
-			upstream = { name: upstream?.name ?? "", ahead, behind };
-		}
+/** 一次探测的结果。 */
+interface StatusProbe extends Pick<GitStatus, "branch" | "upstream"> {
+	/** 这个目录是不是 git 仓库 */
+	isRepo: boolean;
+	/** 解析出来的改动记录，可能被截断 */
+	records: StatusRecord[];
+	/** 到上限就停了，记录只是前一批 */
+	truncated: boolean;
+}
+
+/**
+ * 流式跑一条 git 命令。
+ *
+ * `onChunk` 返回真表示不用再读了：这里会把它 kill 掉，函数照样等到进程收尾再返回，调用方
+ * 拿到的 `aborted` 就是那一刻的状态。输出多的场景（`git status` 在大仓里）只能这么做：
+ * 等全量 buffer 再截断的话，进程仍然要把整棵树走完。
+ */
+function runGitStreaming(
+	args: readonly string[],
+	options: { cwd: string; timeoutMs?: number },
+	onChunk: (chunk: string) => boolean,
+): Promise<{ code: number | null; stderr: string; aborted: boolean }> {
+	return new Promise((resolvePromise) => {
+		const child = spawn("git", ["-C", options.cwd, "--no-pager", ...args], {
+			env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" },
+			windowsHide: true,
+		});
+		let stderr = "";
+		let aborted = false;
+		const timer = setTimeout(() => {
+			aborted = true;
+			child.kill();
+		}, options.timeoutMs ?? GIT_TIMEOUT_MS);
+		child.stdout.setEncoding("utf8");
+		child.stdout.on("data", (chunk: string) => {
+			if (aborted) {
+				return;
+			}
+			if (onChunk(chunk)) {
+				// 到上限了：进程不必再往下走，但照样等它收尾再交差
+				aborted = true;
+				child.kill();
+			}
+		});
+		child.stderr.setEncoding("utf8");
+		child.stderr.on("data", (chunk: string) => {
+			// 只留尾部：出错时给界面的是最后那句话，不必攒整个 stderr
+			stderr = (stderr + chunk).slice(-4096);
+		});
+		const settle = (code: number | null): void => {
+			clearTimeout(timer);
+			resolvePromise({ code, stderr, aborted });
+		};
+		child.on("error", (error: unknown) => {
+			stderr = stderr.length > 0 ? stderr : String(error);
+			settle(null);
+		});
+		child.on("close", (code) => settle(code));
+	});
+}
+
+/**
+ * git 说「这里不是一个有工作树的仓库」时的两种说法。
+ *
+ * 前者是目录根本不在仓库里，后者是裸仓库——裸仓库没有工作树可看，对变更页来说和不是仓库
+ * 是一回事。
+ */
+function isNotRepository(stderr: string): boolean {
+	return /not a git repository/i.test(stderr) || /must be run in a work tree/i.test(stderr);
+}
+
+/**
+ * 探一次工作树状态。
+ *
+ * 一条 `git status --porcelain=v2 --branch -z -uall` 同时给分支与改动：`-z` 下 `# branch.*`
+ * 头同样是 NUL 结尾，所以分支信息与文件条目一次读完，不必再单跑一条带 `-b` 的命令。
+ * 到上限就 kill，并把已经解析出来的交回去。
+ */
+async function probeStatus(cwd: string, limit: number): Promise<StatusProbe> {
+	const parser = new StatusParser(limit);
+	const result = await runGitStreaming(
+		["status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all"],
+		{ cwd },
+		(chunk) => parser.push(chunk),
+	);
+	if (result.aborted && !parser.isFull) {
+		throw new Error(`git status timed out after ${GIT_TIMEOUT_MS}ms`);
 	}
-	return { ...(branch === undefined ? {} : { branch }), ...(upstream === undefined ? {} : { upstream }) };
+	if (!result.aborted && result.code !== 0) {
+		if (isNotRepository(result.stderr)) {
+			return { isRepo: false, records: [], truncated: false };
+		}
+		throw new Error(result.stderr.trim() || `git status failed with exit code ${result.code}`);
+	}
+	return {
+		isRepo: true,
+		records: parser.records,
+		truncated: parser.isFull,
+		...(parser.branch === undefined ? {} : { branch: parser.branch }),
+		...(parser.upstream === undefined ? {} : { upstream: parser.upstream }),
+	};
 }
 
 /**
  * 读工作树相对 HEAD 的改动。
  *
- * 一次 `git status --porcelain=v2 -z` 拿状态，一次 `git diff --numstat -z HEAD` 拿增删行数；
- * 未跟踪文件不在 numstat 里，单独读文件数行。非 git 仓库返回 `isRepo: false`。
+ * 一条流式的 `git status --porcelain=v2 --branch -z -uall` 拿分支与改动，一条
+ * `git diff --numstat -z HEAD` 拿增删行数；未跟踪文件不在 numstat 里，单独读文件数行。
+ * 非 git 仓库返回 `isRepo: false`。
+ *
+ * 改动条数超过上限时就在那里停下：不再跑 numstat，也不逐个读未跟踪文件的行数，只把前一批
+ * 交给界面并标 `truncated`——那种仓库每次刷新都是纯浪费，界面会据此停掉自动刷新。
  */
-export async function gitStatus(cwd: string): Promise<GitStatus> {
-	if (!(await isGitRepository(cwd))) {
+export async function gitStatus(cwd: string, options: { limit?: number } = {}): Promise<GitStatus> {
+	const probe = await probeStatus(cwd, options.limit ?? STATUS_LIMIT);
+	if (!probe.isRepo) {
 		return { isRepo: false, files: [] };
 	}
-	// -z 模式下 git 不打 # 开头的分支头信息，分支与上游单独用一次非 -z 的 status 取
-	const [statusResult, numstatResult, branchResult] = await Promise.all([
-		runGit(["status", "--porcelain=v2", "-z", "--untracked-files=all"], { cwd }),
-		runGit(["diff", "--numstat", "-z", "HEAD", "--"], { cwd }),
-		runGit(["status", "--porcelain=v2", "-b"], { cwd }),
-	]);
-	const records = parseStatusRecords(statusResult.stdout);
-	const numstat = parseNumstat(numstatResult.code === 0 ? numstatResult.stdout : "");
+	const branch: Pick<GitStatus, "branch" | "upstream"> = {
+		...(probe.branch === undefined ? {} : { branch: probe.branch }),
+		...(probe.upstream === undefined ? {} : { upstream: probe.upstream }),
+	};
+	if (probe.truncated) {
+		return {
+			isRepo: true,
+			...branch,
+			files: probe.records.map((record) => ({
+				path: record.path,
+				status: record.status,
+				...(record.oldPath === undefined ? {} : { oldPath: record.oldPath }),
+				added: 0,
+				removed: 0,
+				binary: false,
+			})),
+			truncated: true,
+		};
+	}
+	const numstat = await runGit(["diff", "--numstat", "-z", "HEAD", "--"], { cwd });
+	const counts = parseNumstat(numstat.code === 0 ? numstat.stdout : "");
 	const files: GitFileChange[] = [];
-	for (const record of records) {
-		const counts =
+	for (const record of probe.records) {
+		const fileCounts =
 			record.status === "untracked"
 				? await countUntracked(cwd, record.path)
-				: (numstat.get(record.path) ?? { added: 0, removed: 0, binary: false });
+				: (counts.get(record.path) ?? { added: 0, removed: 0, binary: false });
 		files.push({
 			path: record.path,
 			status: record.status,
 			...(record.oldPath === undefined ? {} : { oldPath: record.oldPath }),
-			added: counts.added,
-			removed: counts.removed,
-			binary: counts.binary,
+			added: fileCounts.added,
+			removed: fileCounts.removed,
+			binary: fileCounts.binary,
 		});
 	}
 	files.sort((left, right) => left.path.localeCompare(right.path));
-	return { isRepo: true, ...parseBranch(branchResult.stdout), files };
+	return { isRepo: true, ...branch, files };
 }
 
 /**

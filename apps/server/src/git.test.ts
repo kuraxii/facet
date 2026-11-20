@@ -19,6 +19,7 @@ import {
 	parseNumstat,
 	parseStatusRecords,
 	remoteWebUrl,
+	StatusParser,
 } from "./git.ts";
 
 const roots: string[] = [];
@@ -90,6 +91,53 @@ describe("parseStatusRecords", () => {
 	});
 });
 
+describe("StatusParser", () => {
+	it("按块喂进来也能解析，跨块的一条不会被切断", () => {
+		const parser = new StatusParser(100);
+		const records = [
+			"# branch.oid 0123456\0",
+			"# branch.head main\0",
+			"# branch.upstream origin/main\0",
+			"# branch.ab +2 -3\0",
+			"1 .M N... 100644 100644 100644 aaa bbb src/a.ts\0",
+			"2 R. N... 100644 100644 100644 aaa bbb R100 src/新.ts\0",
+			"src/旧.ts\0",
+		];
+		// 每 5 个字符切一块，保证有记录横跨块边界
+		const text = records.join("");
+		for (let index = 0; index < text.length; index += 5) {
+			parser.push(text.slice(index, index + 5));
+		}
+		expect(parser.records).toEqual([
+			{ status: "modified", path: "src/a.ts" },
+			{ status: "renamed", path: "src/新.ts", oldPath: "src/旧.ts" },
+		]);
+		expect(parser.branch).toBe("main");
+		expect(parser.upstream).toEqual({ name: "origin/main", ahead: 2, behind: 3 });
+		expect(parser.isFull).toBe(false);
+	});
+
+	it("正好等于上限时不算超", () => {
+		const parser = new StatusParser(2);
+		parser.push(
+			["1 .M N... 100644 100644 100644 a b 一.ts\0", "1 .M N... 100644 100644 100644 a b 二.ts\0"].join(""),
+		);
+		expect(parser.records).toHaveLength(2);
+		expect(parser.isFull).toBe(false);
+	});
+
+	it("超过上限就报满，多出来的那一条不留", () => {
+		const parser = new StatusParser(2);
+		const text = [
+			"1 .M N... 100644 100644 100644 a b 一.ts\0",
+			"1 .M N... 100644 100644 100644 a b 二.ts\0",
+			"1 .M N... 100644 100644 100644 a b 三.ts\0",
+		].join("");
+		expect(parser.push(text)).toBe(true);
+		expect(parser.records.map((record) => record.path)).toEqual(["一.ts", "二.ts"]);
+	});
+});
+
 describe("parseNumstat", () => {
 	it("读出增删行数，重命名取新路径，二进制标出来", () => {
 		const output = ["3\t1\tsrc/a.ts", "5\t0\t\0src/旧.ts\0src/新.ts", "-\t-\timage.png", ""].join("\u0000");
@@ -104,6 +152,13 @@ describe("gitStatus", () => {
 	it("不是仓库时给 isRepo false", async () => {
 		const root = await mkdtemp(join(tmpdir(), "facet-norepo-"));
 		roots.push(root);
+		expect(await gitStatus(root)).toEqual({ isRepo: false, files: [] });
+	});
+
+	it("裸仓库和不是仓库一样按 isRepo false 处理", async () => {
+		const root = await mkdtemp(join(tmpdir(), "facet-bare-"));
+		roots.push(root);
+		git(root, "init", "--bare");
 		expect(await gitStatus(root)).toEqual({ isRepo: false, files: [] });
 	});
 
@@ -139,6 +194,51 @@ describe("gitStatus", () => {
 		expect(status.files).toEqual([
 			expect.objectContaining({ path: "renamed.txt", status: "renamed", oldPath: "tracked.txt" }),
 		]);
+	});
+});
+
+describe("gitStatus 的截断", () => {
+	it("超过上限时停在半路：给出前一批、标出截断，且不再跑 numstat", async () => {
+		const root = await createRepo();
+		// 三个文件都改动过，正常探测会带上增删行数
+		for (const name of ["a.txt", "b.txt", "c.txt"]) {
+			await writeFile(join(root, name), "改过的一行\n", "utf8");
+		}
+
+		const status = await gitStatus(root, { limit: 2 });
+		expect(status.truncated).toBe(true);
+		expect(status.branch).toBe("main");
+		expect(status.files).toHaveLength(2);
+		// 截断那一轮不跑 diff --numstat，所以统计都是缺省的 0
+		expect(status.files.every((file) => file.added === 0 && file.removed === 0)).toBe(true);
+	});
+
+	it("默认上限 5000：超过就停在那里，不逐文件读行数", async () => {
+		const root = await createRepo();
+		execFileSync("bash", ["-c", 'for i in $(seq 1 5001); do echo x > "u$i.txt"; done'], { cwd: root });
+
+		const started = Date.now();
+		const status = await gitStatus(root);
+		const elapsed = Date.now() - started;
+
+		expect(status.truncated).toBe(true);
+		expect(status.files).toHaveLength(5000);
+		// 未跟踪文件正常路径会去读文件数行数，截断这一轮不该读：统计全是缺省的 0
+		expect(status.files.every((file) => file.added === 0 && file.removed === 0)).toBe(true);
+		// 到上限就 kill，不必等 3s 的进程超时
+		expect(elapsed).toBeLessThan(3000);
+	});
+
+	it("条目回到上限以内时不再标截断", async () => {
+		const root = await createRepo();
+		await writeFile(join(root, "a.txt"), "一行\n", "utf8");
+		await writeFile(join(root, "b.txt"), "一行\n", "utf8");
+		const truncated = await gitStatus(root, { limit: 1 });
+		expect(truncated.truncated).toBe(true);
+
+		const recovered = await gitStatus(root, { limit: 10 });
+		expect(recovered.truncated).toBeUndefined();
+		expect(recovered.files).toHaveLength(2);
 	});
 });
 

@@ -8,6 +8,8 @@ import { PiAgentFactory, projectIdOf } from "@facet/agent";
 import { modelsChannelFor, sessionsChannelFor } from "@facet/protocol";
 import { loadServerConfig, type ServerConfig } from "./config.ts";
 import { type EndpointHandle, startEndpoint } from "./endpoint.ts";
+import { IGNORED_DIRECTORIES } from "./files.ts";
+import { GitRefreshService } from "./git-refresh.ts";
 import { type HostIdentity, loadOrCreateHostId } from "./host-identity.ts";
 import { debugLog, setDebugLog } from "./log.ts";
 import { ModelsChannel } from "./models-channel.ts";
@@ -25,6 +27,7 @@ import { SessionWatch } from "./session-watch.ts";
 import { SessionsChannel } from "./sessions-channel.ts";
 import { SettingsStore } from "./settings-store.ts";
 import { TerminalService } from "./terminals.ts";
+import { WorkspaceService } from "./workspaces.ts";
 
 /** 主机启动后的句柄。port 为实际监听端口，hostId 是本进程的主机标识。 */
 export interface ServerHandle extends EndpointHandle {
@@ -172,6 +175,10 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 		console.error("Failed to read the terminal registry", error);
 	});
 	debugLog("server", "Terminals ready", { unavailable: terminals.unavailable });
+	// 工作树监听按订阅者建在目录上：端订阅时会话里的项目目录，没人看了就停
+	const workspaces = new WorkspaceService({ ignored: IGNORED_DIRECTORIES });
+	// 同一个仓库的探测排队跑：磁盘上的信号一来一串，每来一个都拉一次 git 是白烧 CPU
+	const gitRefresh = new GitRefreshService();
 
 	const endpoint = await startEndpoint({
 		config,
@@ -184,6 +191,8 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 		sessions,
 		modelLog,
 		terminals,
+		workspaces,
+		gitRefresh,
 		onSessionsListed: fillSessionNames,
 	});
 	debugLog("server", "Host endpoint ready", {
@@ -209,6 +218,7 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 			sessionIndex?.stop();
 			sessionWatch.stop();
 			await endpoint.close();
+			workspaces.stopAll();
 			terminals.dispose();
 			hub.dispose();
 			factory.dispose();
@@ -232,6 +242,8 @@ export {
 } from "./discovery.ts";
 export type { EndpointHandle } from "./endpoint.ts";
 export { EventLog } from "./event-log.ts";
+export type { GitRefreshOptions } from "./git-refresh.ts";
+export { GitRefreshService } from "./git-refresh.ts";
 export type { HostIdentity, HostSource } from "./host-identity.ts";
 export { loadOrCreateHostId } from "./host-identity.ts";
 export { debugLog, errorLog, isDebugLogEnabled, setDebugLog } from "./log.ts";
@@ -245,6 +257,8 @@ export {
 	ProjectNotFoundError,
 	ProjectStore,
 } from "./project-store.ts";
+export type { ProjectChange, ProjectWatchOptions } from "./project-watch.ts";
+export { ProjectWatch } from "./project-watch.ts";
 export type { PtyBackend, PtyHandle, PtySink, PtySpawnOptions } from "./pty-server.ts";
 export { ChildPtyBackend, DisabledPtyBackend } from "./pty-server.ts";
 export type { ActionSink, HubAgent, Subscription } from "./session-hub.ts";
@@ -261,3 +275,5 @@ export { SessionWatch } from "./session-watch.ts";
 export { SessionsChannel } from "./sessions-channel.ts";
 export type { CreateTerminalOptions, TerminalSink, TerminalSnapshot } from "./terminals.ts";
 export { TerminalService } from "./terminals.ts";
+export type { WorkspaceServiceOptions, WorkspaceSink } from "./workspaces.ts";
+export { WorkspaceService } from "./workspaces.ts";

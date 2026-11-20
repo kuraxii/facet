@@ -8,6 +8,7 @@ import { InvalidProviderError, type PiAgentFactory, ProviderLoginBusyError } fro
 import type { Channel, ClientEntry, ClientRole, ErrorCode, OutboundFrame } from "@facet/protocol";
 import type { AuditLog } from "../audit.ts";
 import type { ServerConfig } from "../config.ts";
+import type { GitRefreshService } from "../git-refresh.ts";
 import type { HostSource } from "../host-identity.ts";
 import type { ModelsChannel } from "../models-channel.ts";
 import {
@@ -30,6 +31,7 @@ import {
 import type { SessionsChannel } from "../sessions-channel.ts";
 import type { SettingsStore } from "../settings-store.ts";
 import type { TerminalService } from "../terminals.ts";
+import type { WorkspaceService } from "../workspaces.ts";
 
 /**
  * 一条连接。
@@ -79,6 +81,10 @@ export interface RpcContext {
 	readonly modelLog: ModelsChannel;
 	/** 终端登记与终端通道 */
 	readonly terminals: TerminalService;
+	/** 工作树通道：按项目目录盯住工作树，变化推给订阅的端 */
+	readonly workspaces: WorkspaceService;
+	/** 按仓库排队的 git 状态探测 */
+	readonly gitRefresh: GitRefreshService;
 	/** 远程操作审计 */
 	readonly audit: AuditLog;
 	/** 一次清单请求处理完之后的回调，用来在背景里补齐还没定下来的数据 */

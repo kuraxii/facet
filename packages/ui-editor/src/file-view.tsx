@@ -232,7 +232,7 @@ export function FileView({ path, content, onSave, onReload }: FileViewProps) {
 			) : null}
 			{saveError === undefined ? null : <p className="chg-note is-error">{saveError}</p>}
 			{isText && isPreviewing ? (
-				<div className="file-preview">
+				<div className="file-preview scroll-both">
 					<Markdown text={draft} isStreaming={false} indexKey={path} />
 				</div>
 			) : isText ? (

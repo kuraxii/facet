@@ -634,17 +634,16 @@
 	font-size: 11.5px;
 }
 
-/* Markdown 的渲染预览：正文按可读宽度居中，长文档自己滚动 */
+/* Markdown 的渲染预览：正文按可读宽度居中，长文档与宽表格、长代码块自己滚 */
 .file-preview {
 	flex: 1;
-	min-height: 0;
-	padding: 0 var(--file-preview-gutter-x);
-	overflow: auto;
 }
 
+/* 横向留白交给正文行：滚动条要贴着容器右缘，右侧再扣掉沟槽，左右才对称 */
 .file-preview .md {
 	max-width: var(--file-preview-width);
 	margin: 0 auto;
+	padding: 0 calc(var(--file-preview-gutter-x) - var(--scrollbar-width)) 0 var(--file-preview-gutter-x);
 }
 
 .code-surface {

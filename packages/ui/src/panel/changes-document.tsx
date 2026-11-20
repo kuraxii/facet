@@ -225,7 +225,7 @@ function ChangesFileSection({
 		return (
 			<>
 				{diff.truncated ? <p className={styles.note}>{t("panel.truncatedDiff")}</p> : null}
-				<div className={styles.diffBody} data-wrap={wrapLines}>
+				<div className={`scroll-x ${styles.diffBody}`} data-wrap={wrapLines}>
 					{lines.map(({ key, line, number }) => (
 						<div key={key} className={`${styles.diffLine} ${lineClass(line)}`}>
 							<i>{number}</i>
@@ -417,7 +417,7 @@ export function ChangesDocument({
 	return (
 		<div className={styles.document}>
 			{header}
-			<div className={styles.docScroll}>
+			<div className={`scroll-y ${styles.docScroll}`}>
 				{files.map((file) => (
 					<ChangesFileSection
 						key={`${file.path}:${revision}`}

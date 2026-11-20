@@ -10,14 +10,9 @@
  *   挂载之前就存在的元素（`#root` 与 `body`）与首帧样式使用。
  *
  * 两个读者共用同一个 MediaQueryList 与同一个监听，所以不存在「CSS 认为是宽档、组件认为
- * 是窄档」的中间态。
+ * 是窄档」的中间态。阈值本身在 `resolve-layout.ts`，这里只用它建媒体查询。
  */
-
-/** 窄档阈值（CSS px）：严格小于它是窄档，大于等于它是中档或宽档。 */
-export const LAYOUT_BREAKPOINT_PX = 880;
-
-/** 中档阈值（CSS px）：大于等于它是宽档。档位语义见 `docs/layout.md` §2。 */
-export const LAYOUT_WIDE_BREAKPOINT_PX = 1100;
+import { LAYOUT_BREAKPOINT_PX } from "./resolve-layout.ts";
 
 /**
  * 窄档判定。

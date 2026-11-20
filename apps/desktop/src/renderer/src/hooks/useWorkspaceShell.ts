@@ -10,11 +10,15 @@ import {
 	clampSidebarWidth,
 	isDarkTheme,
 	normalizeUiScale,
+	PANEL_MAX_WIDTH,
+	PANEL_MIN_WIDTH,
 	type RightPanelState,
 	readPanelState,
 	readSidebarWidth,
 	resolveUiTheme,
 	type SettingsSection,
+	SIDEBAR_MAX_WIDTH,
+	SIDEBAR_MIN_WIDTH,
 	stepUiScale,
 	writePanelState,
 	writeSidebarWidth,
@@ -22,6 +26,18 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { bridge } from "../bridge.ts";
 import { readLayoutIsNarrow, subscribeLayout } from "../layout-mode.ts";
+import { clampDragMax, type LayoutPane, type LayoutResolution, resolveLayout } from "../resolve-layout.ts";
+
+/** 两份布局结果是否等价；等价时不触发重渲染。 */
+function sameLayout(left: LayoutResolution, right: LayoutResolution): boolean {
+	return (
+		left.tier === right.tier &&
+		left.viewportWidth === right.viewportWidth &&
+		left.sidebarVisible === right.sidebarVisible &&
+		left.panelVisible === right.panelVisible &&
+		left.foldedPane === right.foldedPane
+	);
+}
 
 /** 系统是否偏浅色。 */
 function prefersLight(): boolean {
@@ -61,19 +77,11 @@ export function applyAppearance(appearance: FacetSettings["appearance"]): void {
 	window.dispatchEvent(new Event("facet:appearance-changed"));
 }
 
-/** 外壳类名：抽屉展开时给 has-drawer，宽屏收起侧栏时给 is-sb-hidden。 */
-function shellClassName(
-	isSidebarOpen: boolean,
-	isDrawerOpen: boolean,
-	isSidebarCollapsed: boolean,
-	isNarrow: boolean,
-): string {
+/** 外壳类名：抽屉展开时给 has-drawer。栏位显隐在 `.app` 上，不在这里。 */
+function shellClassName(isSidebarOpen: boolean, isDrawerOpen: boolean, isNarrow: boolean): string {
 	const names = ["shell"];
 	if (isNarrow && isDrawerOpen) {
 		names.push("has-drawer");
-	}
-	if (!isNarrow && isSidebarCollapsed) {
-		names.push("is-sb-hidden");
 	}
 	if (isSidebarOpen) {
 		names.push("is-sb-open");
@@ -95,6 +103,16 @@ export interface WorkspaceShell {
 	isSidebarCollapsed: boolean;
 	/** 侧栏此刻是否可见 */
 	isSidebarOpen: boolean;
+	/** 左栏此刻是否占列（宽档/中档下要么是意图，要么是中档预算留下的那一栏） */
+	sidebarVisible: boolean;
+	/** 右栏此刻是否占列 */
+	panelVisible: boolean;
+	/** 右栏分隔条的实时上限（中档按空间预算钳制） */
+	panelMaxWidth: number;
+	/** 左栏分隔条的实时上限 */
+	sidebarMaxWidth: number;
+	/** 分隔条开始/结束拖动的提示，拖动期间锁住折叠 */
+	setPaneResizing: (dragging: boolean) => void;
 	/** 侧栏宽度 */
 	sidebarWidth: number;
 	/** 会话搜索框是否展开 */
@@ -148,6 +166,51 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 	/** 缩放浮层的定时器 */
 	const zoomBadgeTimer = useRef<number | undefined>(undefined);
 	const isNarrow = useSyncExternalStore(subscribeLayout, readLayoutIsNarrow);
+	/** 最近一次被用户主动打开或调宽的那一栏：中档预算不够时保留它 */
+	const [priorityPane, setPriorityPane] = useState<LayoutPane>("sidebar");
+	/** 分隔条是否正在拖：拖动期间锁住折叠结果 */
+	const [isResizing, setIsResizing] = useState(false);
+	/** 用户想不想开左栏；窄档下这一栏进抽屉，意图位照旧记着 */
+	const sidebarIntent = !isSidebarCollapsed;
+	/** 用户想不想开右栏 */
+	const panelIntent = panel.open;
+	const [layout, setLayout] = useState<LayoutResolution>(() =>
+		resolveLayout({
+			viewportWidth: window.innerWidth,
+			sidebarPref: sidebarWidth,
+			panelPref: panel.width,
+			sidebarIntent,
+			panelIntent,
+			priorityPane,
+		}),
+	);
+
+	/*
+	 * 重算档位的时机只有四个：意图位变化、偏好宽提交、视口 resize、优先级换边。
+	 *
+	 * 不用 ResizeObserver 观察内部容器：折起一栏会让容器变宽，看着容器来决定折展就是
+	 * 一个自己喂自己的循环。拖动期间整段跳过：分隔条正在拖的时候把一栏折起，会先卸载
+	 * 分隔条，`lostpointercapture` 那次收尾会拿一个没人在看的宽度去提交。
+	 */
+	useEffect(() => {
+		if (isResizing) {
+			return;
+		}
+		const apply = (): void => {
+			const next = resolveLayout({
+				viewportWidth: window.innerWidth,
+				sidebarPref: sidebarWidth,
+				panelPref: panel.width,
+				sidebarIntent,
+				panelIntent,
+				priorityPane,
+			});
+			setLayout((current) => (sameLayout(current, next) ? current : next));
+		};
+		apply();
+		window.addEventListener("resize", apply);
+		return () => window.removeEventListener("resize", apply);
+	}, [isResizing, sidebarWidth, panel.width, sidebarIntent, panelIntent, priorityPane]);
 
 	// 设置变化时应用外观
 	useEffect(() => {
@@ -168,6 +231,8 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 
 	const updateSidebarWidth = useCallback((next: number) => {
 		const width = clampSidebarWidth(next);
+		// 调宽也是一次主动交互：预算不够时折起的应该是另一栏
+		setPriorityPane("sidebar");
 		setSidebarWidth(width);
 		writeSidebarWidth(window.localStorage, width);
 	}, []);
@@ -227,14 +292,52 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 		return () => dispose?.();
 	}, []);
 
-	const isSidebarOpen = isNarrow ? isDrawerOpen : !isSidebarCollapsed;
+	/** 左栏此刻在不在：窄档看抽屉，宽档与中档看预算判定的结果 */
+	const isSidebarOpen = layout.sidebarVisible || (isNarrow && isDrawerOpen);
 	const toggleSidebar = useCallback(() => {
 		if (isNarrow) {
 			setIsDrawerOpen((open) => !open);
-		} else {
-			setIsSidebarCollapsed((collapsed) => !collapsed);
+			return;
 		}
-	}, [isNarrow]);
+		/*
+		 * 看的是「此刻看不看得见」，不是意图位：被中档预算折起时，点一下是要把它调出来，
+		 * 而不是把意图位关掉；调出来的同时把优先级换到它身上。
+		 */
+		if (!layout.sidebarVisible) {
+			setPriorityPane("sidebar");
+			setIsSidebarCollapsed(false);
+			return;
+		}
+		setIsSidebarCollapsed(true);
+	}, [isNarrow, layout.sidebarVisible]);
+
+	/**
+	 * 中档下拖动的实时上限：松手那一刻同样不超预算（约束 2）。
+	 *
+	 * 取 `max(当前宽, 预算上限)`：中档只开一栏时没有可折的对象，当前宽可能已经比预算宽，
+	 * 这时别让指针一抓住分隔条就把它跳下去；上限等于当前宽，只能缩不能长。
+	 */
+	const panelMaxWidth = Math.max(
+		panel.width,
+		clampDragMax({
+			tier: layout.tier,
+			viewportWidth: layout.viewportWidth,
+			otherWidth: layout.sidebarVisible ? sidebarWidth : 0,
+			min: PANEL_MIN_WIDTH,
+			max: PANEL_MAX_WIDTH,
+		}),
+	);
+	const sidebarMaxWidth = Math.max(
+		sidebarWidth,
+		clampDragMax({
+			tier: layout.tier,
+			viewportWidth: layout.viewportWidth,
+			otherWidth: layout.panelVisible ? panel.width : 0,
+			min: SIDEBAR_MIN_WIDTH,
+			max: SIDEBAR_MAX_WIDTH,
+		}),
+	);
+	const setPaneResizing = useCallback((dragging: boolean) => setIsResizing(dragging), []);
 
 	/**
 	 * 改右栏状态并写回本地存储。
@@ -245,6 +348,10 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 		(patch: Partial<RightPanelState>) => {
 			if (isNarrow && patch.width !== undefined) {
 				return;
+			}
+			// 手动打开或调宽都算主动交互：优先级换到右栏，预算不够时折起左栏
+			if (patch.open === true || patch.width !== undefined) {
+				setPriorityPane("panel");
 			}
 			setPanel((current) => {
 				const next = { ...current, ...patch };
@@ -274,6 +381,11 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 		isDrawerOpen,
 		isSidebarCollapsed,
 		isSidebarOpen,
+		sidebarVisible: layout.sidebarVisible,
+		panelVisible: layout.panelVisible,
+		panelMaxWidth,
+		sidebarMaxWidth,
+		setPaneResizing,
 		sidebarWidth,
 		isSearchOpen,
 		view,
@@ -281,7 +393,7 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 		panel,
 		uiScale,
 		zoomBadge,
-		className: shellClassName(isSidebarOpen, isDrawerOpen, isSidebarCollapsed, isNarrow),
+		className: shellClassName(isSidebarOpen, isDrawerOpen, isNarrow),
 		toggleSidebar,
 		updateSidebarWidth,
 		setSearchOpen,

@@ -226,25 +226,36 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 		);
 	/*
 	 * 右栏开关与分页放在哪一格，看右列此刻有没有宽度：有就占右栏那一格（与正文列对齐），
-	 * 没有（右栏收起、窄档整列不存在）就贴在中间那格右端，仍在窗口按钮左侧。
+	 * 没有（右栏收起、中档被预算折起、窄档整列不存在）就贴在中间那格右端，仍在窗口按钮左侧。
+	 *
+	 * 开关的展开态看的是「此刻看不看得见」，不是意图位：中档被预算折起时点一下就是要把它
+	 * 调出来，而不是把意图位关掉。
 	 */
 	const panelControls = (
 		<>
 			<PanelToggle
-				isOpen={shell.panel.open}
-				onToggle={() => shell.updatePanel({ open: !shell.panel.open })}
+				isOpen={shell.panelVisible}
+				onToggle={() => shell.updatePanel({ open: !shell.panelVisible })}
 			/>
 			{shell.panel.open ? (
-				<PanelTabs tab={shell.panel.tab} onTabChange={(tab) => shell.updatePanel({ tab })} />
+				<PanelTabs
+					tab={shell.panel.tab}
+					// 切分页也是一次主动交互：被预算折起时点分页就直接把它调出来
+					onTabChange={(tab) => shell.updatePanel({ tab, open: true })}
+				/>
 			) : null}
 		</>
 	);
-	const hasPanelColumn = shell.panel.open && !shell.isNarrow;
+	const hasPanelColumn = shell.panelVisible && !shell.isNarrow;
+	/* 抽屉态（窄档）由意图位决定，平铺态由预算判定的结果决定 */
+	const renderPanel = shell.isNarrow ? shell.panel.open : shell.panelVisible;
 	return (
 		<CodeThemeProvider value={shell.codeTheme}>
 			<AppFrame
-				sidebarWidth={shell.isSidebarOpen && !shell.isNarrow ? `${shell.sidebarWidth}px` : "0px"}
-				panelWidth={shell.panel.open ? `${shell.panel.width}px` : "0px"}
+				sidebarWidth={`${shell.sidebarWidth}px`}
+				panelWidth={`${shell.panel.width}px`}
+				sidebarVisible={shell.sidebarVisible}
+				panelVisible={shell.panelVisible}
 				chrome={
 					<>
 						<div
@@ -307,6 +318,8 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 						showHeader={shell.isNarrow}
 						width={shell.isNarrow ? undefined : shell.sidebarWidth}
 						onWidthChange={shell.isNarrow ? undefined : shell.updateSidebarWidth}
+						maxWidth={shell.sidebarMaxWidth}
+						onDraggingChange={shell.setPaneResizing}
 						onCollapse={shell.closeDrawer}
 						isProjectsStale={session.isProjectsStale}
 						onRefreshProjects={() => void session.refreshProjects()}
@@ -371,10 +384,12 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 						</div>
 					</main>
 
-					{shell.panel.open ? (
+					{renderPanel ? (
 						<RightPanel
 							width={shell.isNarrow ? undefined : shell.panel.width}
 							onWidthChange={shell.isNarrow ? undefined : (width) => shell.updatePanel({ width })}
+							maxWidth={shell.panelMaxWidth}
+							onDraggingChange={shell.setPaneResizing}
 						>
 							{shell.panel.tab === "changes" ? (
 								<ChangesPane

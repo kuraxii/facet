@@ -9,7 +9,6 @@ function render(status: GitStatus | undefined, error?: string): string {
 	return renderToStaticMarkup(
 		createElement(ChangesPane, {
 			status,
-			isLoading: false,
 			error,
 			onRefresh: () => {},
 			commits: { isRepo: true, commits: [] },
@@ -23,7 +22,8 @@ describe("变更页", () => {
 	it("不是 git 仓库时给出说明", () => {
 		const html = render({ isRepo: false, files: [] });
 		expect(html).toContain("不是 Git 仓库");
-		expect(html).toContain("刷新改动");
+		// 顶栏不再有刷新按钮：变化由主机推过来，重取只留给错误态的「重试」
+		expect(html).not.toContain("刷新改动");
 	});
 
 	it("工作树干净时给出说明", () => {

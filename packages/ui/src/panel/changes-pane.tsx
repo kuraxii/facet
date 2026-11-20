@@ -6,7 +6,7 @@
  */
 
 import type { GitCommit, GitCommits, GitFileChange, GitStatus } from "@facet/protocol";
-import { ChevronRight, FileText, RefreshCw } from "lucide-react";
+import { ChevronRight, FileText } from "lucide-react";
 import { type CSSProperties, type ReactNode, useCallback, useMemo, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { useHoverTip } from "../tip.tsx";
@@ -18,8 +18,6 @@ import { CommitHistory } from "./commit-history.tsx";
 export interface ChangesPaneProps {
 	/** 工作树状态；还没取到时为空 */
 	status: GitStatus | undefined;
-	/** 正在取状态 */
-	isLoading: boolean;
 	/** 取状态失败的原因 */
 	error: string | undefined;
 	/** 重新取状态 */
@@ -120,7 +118,6 @@ function FileRow({
 /** 变更页。 */
 export function ChangesPane({
 	status,
-	isLoading,
 	error,
 	onRefresh,
 	onOpenDiff,
@@ -167,15 +164,6 @@ export function ChangesPane({
 					<b className={styles.del}>−{totalRemoved}</b>
 				</span>
 			)}
-			<button
-				type="button"
-				className={styles.iconButton}
-				aria-label={t("panel.refreshChanges")}
-				onClick={onRefresh}
-				disabled={isLoading}
-			>
-				<RefreshCw size={14} strokeWidth={1.5} />
-			</button>
 		</div>
 	);
 

@@ -83,7 +83,6 @@ export function DocumentPane(props: DocumentPaneProps): ReactNode {
 										files: commitDetail.detail.files,
 									}
 						}
-						isLoading={commitDetail?.isLoading ?? true}
 						error={commitDetail?.error}
 						focusPath={undefined}
 						focusRequestId={undefined}
@@ -101,7 +100,6 @@ export function DocumentPane(props: DocumentPaneProps): ReactNode {
 					<ChangesDocument
 						key={changesTab.id}
 						status={tabs.changes.status}
-						isLoading={tabs.changes.isLoading}
 						error={tabs.changes.error}
 						focusPath={changesTab.focusPath}
 						focusRequestId={changesTab.focusRequestId}

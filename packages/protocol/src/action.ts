@@ -26,6 +26,16 @@ export type ModelsAction =
 	/** 主机侧：登录往前走了一步，端点按 loginId 归入那次登录 */
 	{ type: "models/loginEvent"; loginId: string; providerId: string; event: ProviderLoginEvent };
 
+/**
+ * 工作树动作。一个项目目录一条通道，主机盯着这个目录并推出变化。
+ *
+ * 只推“变了”这一件事，不带具体文件与状态：状态由端自己按需取，多个端因此拿到各自时刻
+ * 的快照，不用主机为每个端缓存一份。
+ */
+export type WorkspaceAction =
+	/** 工作树或提交历史有变化；`history` 为真表示 HEAD、索引或引用动过，提交历史也可能变了 */
+	{ type: "workspace/changed"; history: boolean };
+
 /** 会话动作。 */
 export type SessionAction =
 	| { type: "session/initialized"; initialization: SessionInitialization }
@@ -103,7 +113,13 @@ export type ChatAction =
 	| { type: "chat/branchMoved"; leafId: string | null };
 
 /** 动作联合。按 `type` 前缀决定归属通道。 */
-export type Action = SessionAction | ChatAction | SessionsAction | TerminalAction | ModelsAction;
+export type Action =
+	| SessionAction
+	| ChatAction
+	| SessionsAction
+	| TerminalAction
+	| ModelsAction
+	| WorkspaceAction;
 
 /** 动作来源。缺省表示主机侧产生。 */
 export interface ActionOrigin {
@@ -113,13 +129,21 @@ export interface ActionOrigin {
 	clientSeq: number;
 }
 
-/** 通道种类与动作前缀的对应关系。终端与清单动作只由主机产生，不参与端的派发。 */
-export function channelKindForAction(action: Action): "session" | "chat" | "terminal" | "sessions" {
+/** 通道种类与动作前缀的对应关系。终端、清单、模型与工作树动作只由主机产生，不参与端的派发。 */
+export function channelKindForAction(
+	action: Action,
+): "session" | "chat" | "terminal" | "sessions" | "models" | "workspace" {
 	if (action.type.startsWith("terminal/")) {
 		return "terminal";
 	}
 	if (action.type.startsWith("sessions/")) {
 		return "sessions";
+	}
+	if (action.type.startsWith("models/")) {
+		return "models";
+	}
+	if (action.type.startsWith("workspace/")) {
+		return "workspace";
 	}
 	return action.type.startsWith("session/") ? "session" : "chat";
 }

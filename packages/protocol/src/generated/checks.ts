@@ -312,7 +312,7 @@ const checkRequestWriteFile = buildRequestWriteFile();
  */
 function buildRequestGitStatus(): (value: unknown) => boolean {
 	// @ts-ignore
-	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && ("cwd" in value && typeof value.cwd === "string")));
+	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && ("cwd" in value && (typeof value.cwd === "string" && (value.force === undefined || (!("force" in value) || typeof value.force === "boolean"))))));
 	return (value: unknown): boolean => {
 		if (!check_0(value)) return false;
 		const source = value as Record<string, unknown>;
@@ -351,7 +351,7 @@ const checkRequestGitDiff = buildRequestGitDiff();
  */
 function buildRequestGitCommits(): (value: unknown) => boolean {
 	// @ts-ignore
-	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && ("cwd" in value && typeof value.cwd === "string")));
+	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && ("cwd" in value && (typeof value.cwd === "string" && (value.force === undefined || (!("force" in value) || typeof value.force === "boolean"))))));
 	return (value: unknown): boolean => {
 		if (!check_0(value)) return false;
 		const source = value as Record<string, unknown>;

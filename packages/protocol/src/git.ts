@@ -89,6 +89,13 @@ export interface GitStatus {
 	};
 	/** 改动清单，按路径排序 */
 	files: readonly GitFileChange[];
+	/**
+	 * 改动条数超过主机侧的上限，只给了前一批。
+	 *
+	 * 出现这个标记时增删行数与未跟踪文件的统计都是缺省的 0：那一轮探测在到上限时就停了，
+	 * 没有再去跑 `diff --numstat` 与逐文件读行数。缺省表示没有截断。
+	 */
+	truncated?: boolean;
 }
 
 /** 单个文件的补丁。 */

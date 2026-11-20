@@ -209,27 +209,16 @@
 }
 
 /*
- * 列表 + 预览：文件树与变更列表共用这一套。
+ * 预览 + 索引：文件与变更两个分页共用这一套。
  *
- * 它自己就是容器查询的容器：工作区窄于 `--workspace-list-min` 那一档时，左栏直接让位给
- * 预览，不靠 JS 量宽度——工作区的宽度本来就是样式算出来的。
+ * DOM 顺序就是视觉顺序（预览在前、索引在后），所以这里只排方向，不反转。索引那一栏的
+ * 分隔线画在它的左缘：外层左侧本来就有一条分隔条（`.panel-resizer`），窗口右缘是纯边界，
+ * 两条线各在一侧，不会叠成双线。
  */
 .workspace-split {
 	display: flex;
 	flex: 1;
 	min-height: 0;
-	container-type: inline-size;
-}
-
-.workspace-split-list {
-	display: flex;
-	flex: 0 0 var(--workspace-list-width);
-	flex-direction: column;
-	min-width: 0;
-	min-height: 0;
-	overflow-y: auto;
-	scrollbar-gutter: stable;
-	border-right: 1px solid var(--line);
 }
 
 .workspace-split-detail {
@@ -240,45 +229,52 @@
 	min-height: 0;
 }
 
+.workspace-split-list {
+	display: flex;
+	flex: 0 0 var(--workspace-list-width);
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+	overflow-y: auto;
+	scrollbar-gutter: stable;
+	border-inline-start: 1px solid var(--line);
+}
+
+/* 收起：索引整栏不占位，预览向右长满（左缘不动，它就是工作区边界） */
 .workspace-split.is-list-collapsed .workspace-split-list {
 	display: none;
 }
 
-/* 把列表叫回来的按钮：收起时出现在预览区左上角，占一行高度，不压在内容上 */
-.workspace-split-restore {
-	display: none;
+/* 预览区还没有内容时的卡片：只放一个动作，不写说明文字 */
+.workspace-split-empty {
+	display: grid;
+	flex: 1;
+	min-height: 0;
+	place-items: center;
+}
+
+/*
+ * 顶栏右端那个把索引叫回来的按钮。
+ *
+ * 它和顶栏自己的按钮同一档尺寸（`--icon-button-size`），放在最右端：收起之后预览区的
+ * 二级顶栏只剩它一个可点，位置固定，不会因为内容长短跳来跳去。
+ */
+.workspace-head-action {
+	display: grid;
 	flex: none;
-	align-self: flex-start;
 	place-items: center;
 	width: var(--icon-button-size);
 	height: var(--icon-button-size);
-	margin: var(--workspace-split-inset);
 	padding: 0;
 	border: 0;
 	border-radius: 6px;
 	background: transparent;
 	color: var(--t3);
-	-webkit-app-region: no-drag;
 }
 
-.workspace-split-restore:hover {
+.workspace-head-action:hover {
 	background: var(--surface2);
 	color: var(--t1);
-}
-
-.workspace-split.is-list-collapsed .workspace-split-restore {
-	display: grid;
-}
-
-/* 窄于这个宽度时左栏让位给预览，叫回按钮替代它 */
-@container (width < 480px) {
-	.workspace-split .workspace-split-list {
-		display: none;
-	}
-
-	.workspace-split .workspace-split-restore {
-		display: grid;
-	}
 }
 
 /*
@@ -526,11 +522,16 @@
 	font-family: var(--font-mono);
 }
 
-/* 文件页：树顶一行标题与刷新 */
+/*
+ * 文件页的树顶：[收起按钮] [标题] …… [刷新]。
+ *
+ * 收起按钮贴在这一栏的左缘，也就是紧挨着内部那条分隔线；最右端只留刷新。上面第一行的
+ * 右端是图钉、关闭与窗口按钮，两排图标因此错开，不会扎成一列。
+ */
 .tree-head {
 	display: flex;
+	gap: var(--workspace-head-gap);
 	align-items: center;
-	justify-content: space-between;
 	margin-bottom: 2px;
 	padding: 0 2px 2px;
 }
@@ -538,6 +539,13 @@
 .tree-root {
 	color: var(--t3);
 	font-size: 11px;
+}
+
+.tree-head-actions {
+	display: flex;
+	gap: var(--workspace-head-gap);
+	align-items: center;
+	margin-inline-start: auto;
 }
 
 /* 文件页：惰性目录树 */

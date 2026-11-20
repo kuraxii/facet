@@ -6,7 +6,7 @@
  */
 
 import type { GitCommit, GitCommits, GitFileChange, GitStatus } from "@facet/protocol";
-import { ChevronRight, FileText, PanelLeftClose } from "lucide-react";
+import { ChevronRight, FileText, PanelRightClose } from "lucide-react";
 import { type CSSProperties, type ReactNode, useCallback, useMemo, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { useHoverTip } from "../tip.tsx";
@@ -151,8 +151,21 @@ export function ChangesPane({
 	const totalAdded = status?.files.reduce((sum, file) => sum + file.added, 0) ?? 0;
 	const totalRemoved = status?.files.reduce((sum, file) => sum + file.removed, 0) ?? 0;
 
+	/*
+	 * 列表顶栏：收起按钮贴左缘（紧挨内部那条分隔线），分支与上下游随后，增删统计在最右端。
+	 */
 	const header = (
 		<div className={styles.head}>
+			{onCollapse === undefined ? null : (
+				<button
+					type="button"
+					className={styles.iconButton}
+					aria-label={t("panel.collapseChanges")}
+					onClick={onCollapse}
+				>
+					<PanelRightClose size={14} strokeWidth={1.5} />
+				</button>
+			)}
 			<span className={styles.branch}>
 				{status?.branch ?? "…"}
 				{status?.upstream === undefined ? null : (
@@ -166,16 +179,6 @@ export function ChangesPane({
 					<b className={styles.add}>+{totalAdded}</b>
 					<b className={styles.del}>−{totalRemoved}</b>
 				</span>
-			)}
-			{onCollapse === undefined ? null : (
-				<button
-					type="button"
-					className={styles.iconButton}
-					aria-label={t("panel.collapseChanges")}
-					onClick={onCollapse}
-				>
-					<PanelLeftClose size={14} strokeWidth={1.5} />
-				</button>
 			)}
 		</div>
 	);

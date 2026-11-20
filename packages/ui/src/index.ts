@@ -128,7 +128,7 @@ export type { RightPanelProps } from "./panel/right-panel.tsx";
 export { RightPanel } from "./panel/right-panel.tsx";
 export { PanelToggle, SidebarToggle } from "./panel/top-bar.tsx";
 export type { WorkspaceSplitProps } from "./panel/workspace-split.tsx";
-export { WorkspaceSplit } from "./panel/workspace-split.tsx";
+export { WORKSPACE_SPLIT_MIN_WIDTH_PX, WorkspaceSplit } from "./panel/workspace-split.tsx";
 export type {
 	WorkspaceTabBarProps,
 	WorkspaceTabId,

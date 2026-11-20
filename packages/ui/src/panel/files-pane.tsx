@@ -8,7 +8,7 @@
  */
 
 import type { FileEntry } from "@facet/protocol";
-import { File as FileGlyph, PanelLeftClose, RefreshCw } from "lucide-react";
+import { File as FileGlyph, PanelRightClose, RefreshCw } from "lucide-react";
 import {
 	type CSSProperties,
 	type KeyboardEvent as ReactKeyboardEvent,
@@ -131,15 +131,19 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath, onCollapse 
 
 	const root = directories[""];
 
+	/*
+	 * 树顶：收起按钮贴左缘（也就是紧挨着内部那条分隔线），标题随后，刷新在最右端。
+	 * 上面第一行的右端是图钉、关闭与窗口按钮，这样两排图标不会挤成一列。
+	 */
 	const header = (
 		<div className="tree-head">
+			{onCollapse === undefined ? null : (
+				<button type="button" className="ib" aria-label={t("panel.collapseTree")} onClick={onCollapse}>
+					<PanelRightClose size={13} strokeWidth={1.5} />
+				</button>
+			)}
 			<span className="tree-root">{t("panel.projectFiles")}</span>
 			<div className="tree-head-actions">
-				{onCollapse === undefined ? null : (
-					<button type="button" className="ib" aria-label={t("panel.collapseTree")} onClick={onCollapse}>
-						<PanelLeftClose size={13} strokeWidth={1.5} />
-					</button>
-				)}
 				<button
 					type="button"
 					className="ib"

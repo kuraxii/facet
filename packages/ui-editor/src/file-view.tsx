@@ -10,7 +10,7 @@ import { useI18n } from "@facet/ui/i18n";
 import { Markdown } from "@facet/ui/markdown";
 import { useHoverTip } from "@facet/ui/tip";
 import { Check, Code, Eye, Pencil, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { CodeSurface } from "./code-surface.tsx";
 import { isMarkdownPath } from "./markdown-file.ts";
 
@@ -31,6 +31,12 @@ export interface FileViewProps {
 	onSave: (text: string, expectedRevision: string) => Promise<FileSaveResult>;
 	/** 重新从磁盘读取 */
 	onReload: () => Promise<FileContent>;
+	/**
+	 * 挂在标题行最右端的额外动作。
+	 *
+	 * 工作区用它放「展开文件树」：树收起之后预览占满，这个入口跟着标题行走，位置固定。
+	 */
+	headerTrailing?: ReactNode;
 }
 
 /** 保存失败时用来判断是不是冲突。 */
@@ -43,7 +49,7 @@ function isConflict(error: unknown): boolean {
 /** Markdown 文件的两种呈现：渲染后的预览，与可编辑的源码。 */
 type MarkdownView = "preview" | "source";
 
-export function FileView({ path, content, onSave, onReload }: FileViewProps) {
+export function FileView({ path, content, onSave, onReload, headerTrailing }: FileViewProps) {
 	const { t } = useI18n();
 	// 路径被省略号截断时由提示补全
 	const tip = useHoverTip();
@@ -218,6 +224,7 @@ export function FileView({ path, content, onSave, onReload }: FileViewProps) {
 						</button>
 					</>
 				) : null}
+				{headerTrailing}
 			</div>
 			{hasConflict ? (
 				<p className="chg-note is-error">

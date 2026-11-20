@@ -42,7 +42,13 @@ import type {
 	UiResponse,
 	UpstreamModel,
 } from "@facet/protocol";
-import { makeChannel, modelsChannelFor, parseChannel, sessionsChannelFor } from "@facet/protocol";
+import {
+	makeChannel,
+	modelsChannelFor,
+	parseChannel,
+	sessionsChannelFor,
+	workspaceChannelFor,
+} from "@facet/protocol";
 import { debugLog, errorLog } from "./log.ts";
 import { isHistoryMessageId } from "./message-id.ts";
 import type { ChatView, SessionView } from "./state.ts";
@@ -223,6 +229,13 @@ export class SessionClient {
 	>();
 	/** 会话级操作排队执行,快速切换时按到达顺序收尾 */
 	private lifecycle: Promise<unknown> = Promise.resolve();
+	/**
+	 * 正在关注的项目目录。
+	 *
+	 * 只在界面说「这个目录的变化要跟着走」时才有,重连之后按它续订;断开主机时不清,
+	 * 换回来的主机还要接着看同一个目录。
+	 */
+	private readonly watchedCwds = new Set<string>();
 
 	constructor(options: SessionClientOptions) {
 		this.transport = options.transport;
@@ -440,6 +453,46 @@ export class SessionClient {
 	}
 
 	/**
+	 * 跟着一个项目目录的工作树走。
+	 *
+	 * 订阅即表示「替我盯着这个目录」：主机按订阅者建监听，最后一个走了就停。返回的函数用
+	 * 来放弃关注，界面切走项目时调用；重连之后会自动按已记下的目录续订，不必再调一次。
+	 */
+	watchWorkspace(cwd: string): () => void {
+		this.watchedCwds.add(cwd);
+		void this.followWorkspace(cwd).catch((error: unknown) => {
+			debugLog("client", "Failed to subscribe to the workspace", { cwd, error: String(error) });
+		});
+		return () => {
+			if (!this.watchedCwds.delete(cwd)) {
+				return;
+			}
+			// 退订失败不阻塞界面切走:连接断了的话主机侧会按无订阅者回收
+			void this.transport
+				.request("unsubscribe", { channel: workspaceChannelFor(cwd) })
+				.catch(() => undefined);
+		};
+	}
+
+	/**
+	 * 订阅工作树通道。
+	 *
+	 * 补不上缺口时按「整体变了」处理：缓冲里缺的动作已经不在了，界面手上那份可能停在任何
+	 * 一个中间状态，重取一次最省事。
+	 */
+	private async followWorkspace(cwd: string): Promise<void> {
+		const channel = workspaceChannelFor(cwd);
+		const result = await this.transport.request("subscribe", {
+			channel,
+			since: this.state.workspaceSeq(channel),
+		});
+		this.state.markWorkspaceSeq(channel, result.seq);
+		if (result.resync) {
+			this.state.bumpWorkspace(channel);
+		}
+	}
+
+	/**
 	 * 重取一份完整清单替换本地这份，重连与补齐缺口之后用。
 	 *
 	 * 替换用的是主机回的摘要与状态，不保留本地那份：断线期间本地可能停在运行中，
@@ -582,13 +635,19 @@ export class SessionClient {
 	 * 口径是 git：已暂存与未暂存合在一份，未跟踪文件单独标出来；不是 git 仓库时
 	 * 返回 isRepo 为假。
 	 */
-	async gitStatus(cwd: string): Promise<GitStatus> {
-		return await this.transport.request("gitStatus", { cwd });
+	async gitStatus(cwd: string, options: { force?: boolean } = {}): Promise<GitStatus> {
+		return await this.transport.request("gitStatus", {
+			cwd,
+			...(options.force === true ? { force: true } : {}),
+		});
 	}
 
 	/** 列出当前分支的全部提交，从新到旧。 */
-	async gitCommits(cwd: string): Promise<GitCommits> {
-		return await this.transport.request("gitCommits", { cwd });
+	async gitCommits(cwd: string, options: { force?: boolean } = {}): Promise<GitCommits> {
+		return await this.transport.request("gitCommits", {
+			cwd,
+			...(options.force === true ? { force: true } : {}),
+		});
 	}
 
 	/** 取一次提交相对第一父提交的改动清单。 */
@@ -984,6 +1043,14 @@ export class SessionClient {
 		await this.followModelLog().catch((error: unknown) => {
 			debugLog("client", "Failed to subscribe to the model log after reconnect", { error: String(error) });
 		});
+		for (const cwd of this.watchedCwds) {
+			await this.followWorkspace(cwd).catch((error: unknown) => {
+				debugLog("client", "Failed to subscribe to the workspace after reconnect", {
+					cwd,
+					error: String(error),
+				});
+			});
+		}
 		const runtime = this.active;
 		if (runtime === undefined) {
 			return;

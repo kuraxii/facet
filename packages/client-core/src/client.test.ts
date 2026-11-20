@@ -9,6 +9,7 @@ import type {
 	RequestResults,
 	SessionSnapshot,
 } from "@facet/protocol";
+import { workspaceChannelFor } from "@facet/protocol";
 import { describe, expect, it, vi } from "vitest";
 import { formatCommitLog, type HostHandshake, SessionClient, type SessionTransport } from "./client.ts";
 import type { EntryView } from "./state.ts";
@@ -1479,6 +1480,61 @@ describe("SessionClient", () => {
 		expect(last?.id).toBe("m1");
 		expect(last?.streaming[0]?.text).toBe("你好");
 		expect(last?.isStreaming).toBe(true);
+	});
+});
+
+describe("工作树通道订阅", () => {
+	const channel = workspaceChannelFor("/work/a");
+
+	/** 等一拍，让异步订阅落到假传输上。 */
+	async function settle(): Promise<void> {
+		await new Promise((resolve) => setTimeout(resolve, 10));
+	}
+
+	it("关注一个目录就订阅它的工作树通道，放弃关注时退订", async () => {
+		const { transport, client } = createClient(1);
+		const stop = client.watchWorkspace("/work/a");
+		await settle();
+		expect(
+			transport.calls.some(
+				(call) => call.method === "subscribe" && (call.params as { channel: Channel }).channel === channel,
+			),
+		).toBe(true);
+
+		stop();
+		await settle();
+		expect(
+			transport.calls.some(
+				(call) => call.method === "unsubscribe" && (call.params as { channel: Channel }).channel === channel,
+			),
+		).toBe(true);
+	});
+
+	it("变化推进版本号，历史变化单独记", async () => {
+		const { transport, client } = createClient(1);
+		const stop = client.watchWorkspace("/work/a");
+		await settle();
+		transport.emit(channel, { type: "workspace/changed", history: false });
+		transport.emit(channel, { type: "workspace/changed", history: true });
+		expect(client.store.workspaceRevision(channel)).toBe(2);
+		expect(client.store.workspaceHistoryRevision(channel)).toBe(1);
+		stop();
+	});
+
+	it("重连之后按记下的目录续订，并且带上已收到的序号", async () => {
+		const { transport, client } = createClient(1);
+		const stop = client.watchWorkspace("/work/a");
+		await settle();
+		transport.emit(channel, { type: "workspace/changed", history: false });
+		const before = transport.calls.length;
+		await client.resume();
+		const workspaceCalls = transport.calls
+			.slice(before)
+			.filter((call) => call.method === "subscribe")
+			.map((call) => call.params as { channel: Channel; since?: number })
+			.filter((call) => call.channel === channel);
+		expect(workspaceCalls.map((call) => call.since)).toEqual([1]);
+		stop();
 	});
 });
 

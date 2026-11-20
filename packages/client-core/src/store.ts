@@ -74,6 +74,16 @@ interface ChatSlot {
 	lastSeq: number;
 }
 
+/** 一个项目目录在客户端这边的记账。 */
+interface WorkspaceSlot {
+	/** 工作树变化的次数，界面按它决定要不要重取状态 */
+	revision: number;
+	/** 其中提交历史可能变了的次数 */
+	history: number;
+	/** 已应用到的通道序号 */
+	lastSeq: number;
+}
+
 /** 广播调度：把一次通知交给调用方安排，何时真正通知订阅者由它决定。 */
 export type NotifyScheduler = (flush: () => void) => void;
 
@@ -107,6 +117,8 @@ export class SessionStore {
 	private modelLogSeq = 0;
 	/** 清单通道已应用的序号 */
 	private sessionIndexSeq = 0;
+	/** 工作树通道：按目录记下变化次数与已应用到的序号 */
+	private readonly workspaces = new Map<Channel, WorkspaceSlot>();
 	private readonly listeners = new Set<(version: number) => void>();
 	private readonly gapListeners = new Set<(gap: ChannelGap) => void>();
 	/** 通知订阅者的调度方式 */
@@ -212,6 +224,49 @@ export class SessionStore {
 		this.modelLogSeq = seq;
 	}
 
+	/** 工作树通道已应用到的序号，重连时据此续订。 */
+	workspaceSeq(channel: Channel): number {
+		return this.workspaces.get(channel)?.lastSeq ?? 0;
+	}
+
+	/** 记录工作树通道订阅返回的序号。 */
+	markWorkspaceSeq(channel: Channel, seq: number): void {
+		const slot = this.ensureWorkspace(channel);
+		slot.lastSeq = Math.max(slot.lastSeq, seq);
+	}
+
+	/**
+	 * 补不上缺口时推一次变化。
+	 *
+	 * 缓冲里缺的动作已经不在了，界面手上那份可能停在任何一个中间状态，所以按「整体变了」
+	 * 处理：拉过的就重取一次，没拉过的反正也不会多看一次。
+	 */
+	bumpWorkspace(channel: Channel): void {
+		this.ensureWorkspace(channel).revision += 1;
+		this.markChanged();
+	}
+
+	/** 这个目录的工作树变化过多少次。 */
+	workspaceRevision(channel: Channel): number {
+		return this.workspaces.get(channel)?.revision ?? 0;
+	}
+
+	/** 其中提交历史可能变了的次数。 */
+	workspaceHistoryRevision(channel: Channel): number {
+		return this.workspaces.get(channel)?.history ?? 0;
+	}
+
+	/** 取这个目录的记账，没有就建一条。 */
+	private ensureWorkspace(channel: Channel): WorkspaceSlot {
+		const existing = this.workspaces.get(channel);
+		if (existing !== undefined) {
+			return existing;
+		}
+		const slot: WorkspaceSlot = { revision: 0, history: 0, lastSeq: 0 };
+		this.workspaces.set(channel, slot);
+		return slot;
+	}
+
 	/** 清单里某个会话此刻的状态，清单里没有时按空闲算。 */
 	sessionStatus(path: string): SessionStatus {
 		return this.sessionIndex.get(path)?.status ?? IDLE_SESSION_STATUS;
@@ -278,6 +333,21 @@ export class SessionStore {
 			}
 			this.applyProviderLogin(frame.action);
 			this.modelLogSeq = Math.max(this.modelLogSeq, frame.serverSeq);
+			return;
+		}
+		if (parsed.kind === "workspace") {
+			const slot = this.ensureWorkspace(frame.channel);
+			if (frame.serverSeq <= slot.lastSeq) {
+				return;
+			}
+			slot.lastSeq = Math.max(slot.lastSeq, frame.serverSeq);
+			if (frame.action.type === "workspace/changed") {
+				slot.revision += 1;
+				if (frame.action.history) {
+					slot.history += 1;
+				}
+				this.markChanged();
+			}
 			return;
 		}
 		if (parsed.kind === "session") {
@@ -560,6 +630,7 @@ export class SessionStore {
 		this.chats.clear();
 		this.sessionIndex.clear();
 		this.providerLogins.clear();
+		this.workspaces.clear();
 		this.sessionIndexSeq = 0;
 		this.modelLogSeq = 0;
 		if (had) {

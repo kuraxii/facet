@@ -39,6 +39,12 @@ export interface ChangesDocumentProps {
 	commitsError: string | undefined;
 	/** 点一条提交时打开它的改动 */
 	onCommitPress?: (commit: GitCommit) => void;
+	/**
+	 * 挂在顶栏最右端的额外动作。
+	 *
+	 * 工作区用它放「展开变更列表」：列表收起之后预览占满，这个入口跟着顶栏走。
+	 */
+	toolbarTrailing?: ReactNode;
 }
 
 /** 一个文件补丁的加载状态。 */
@@ -250,6 +256,7 @@ export function ChangesDocument({
 	commitsLoading,
 	commitsError,
 	onCommitPress,
+	toolbarTrailing,
 }: ChangesDocumentProps): ReactNode {
 	const { t } = useI18n();
 	const [collapsedPaths, setCollapsedPaths] = useState<ReadonlySet<string>>(new Set());
@@ -357,6 +364,7 @@ export function ChangesDocument({
 					</button>
 				</>
 			)}
+			{toolbarTrailing}
 		</div>
 	);
 

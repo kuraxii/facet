@@ -6,7 +6,7 @@
  * `createElement` 拼，这个模块因此不需要 JSX 运行时的配置。
  */
 import type { WorkspaceTabItem } from "@facet/ui";
-import { FileDiff, FileText, SquareTerminal } from "lucide-react";
+import { FileDiff, FolderTree, SquareTerminal } from "lucide-react";
 import { createElement } from "react";
 
 /** 决定计数与可用性的那些事实。 */
@@ -39,7 +39,7 @@ export function workspaceTabItems(facts: WorkspaceTabFacts, text: WorkspaceTabTe
 		{
 			id: "files",
 			label: text.files,
-			icon: createElement(FileText, { size: ICON_SIZE, strokeWidth: ICON_STROKE }),
+			icon: createElement(FolderTree, { size: ICON_SIZE, strokeWidth: ICON_STROKE }),
 		},
 		{
 			id: "changes",

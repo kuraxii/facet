@@ -1,7 +1,10 @@
 /**
  * 右栏的三类内容。
  *
- * 文件是「可折叠文件树 + 文件预览」，变更是「可折叠文件列表 + 补丁预览」，终端独占整宽。
+ * 文件与变更都是「左预览 + 右索引」：左边是文件内容或补丁，右边是可折叠的文件树或变更
+ * 列表。预览在前是阅读与 Tab 顺序的自然方向，索引栏收起来时预览向右长满、左缘不动。
+ * 终端独占整宽，两边都没有索引。
+ *
  * 三块都留在 DOM 里，只切换显隐：终端藏起来是不让它丢 PTY 会话与回滚，文件树与变更列表
  * 藏起来是为了保住展开状态与滚动位置。
  *
@@ -15,11 +18,14 @@ import {
 	ChangesPane,
 	FilesPane,
 	type RightPanelTab,
+	useHoverTip,
 	useI18n,
+	WORKSPACE_SPLIT_MIN_WIDTH_PX,
 	WorkspaceSplit,
 } from "@facet/ui";
 import { FileView } from "@facet/ui-editor";
 import { TerminalView, type TerminalViewHandle } from "@facet/ui-terminal";
+import { PanelRightOpen } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { TerminalPanel } from "../hooks/useTerminalPanel.ts";
 import { type WorkspaceDocs, workspaceCommitKey, workspaceFileKey } from "../hooks/useWorkspaceDocs.ts";
@@ -53,6 +59,33 @@ export function WorkspaceBody({
 	/** 文件树与变更列表是不是被手动收起了 */
 	const [isFileTreeCollapsed, setFileTreeCollapsed] = useState(false);
 	const [isChangesListCollapsed, setChangesListCollapsed] = useState(false);
+	/**
+	 * 工作区窄到摆不下两栏。
+	 *
+	 * 只在工作区自己被拖窄或整窗变窄时变，索引栏收起并不会改变这一层的宽度，所以不会
+	 * 出现「收起来→变宽→又展开」的来回。宽度判定与样式放在一起说（`WorkspaceSplit`）。
+	 */
+	const [isNarrowBody, setIsNarrowBody] = useState(false);
+	const bodyRef = useRef<HTMLDivElement | null>(null);
+
+	useEffect(() => {
+		const node = bodyRef.current;
+		if (node === null) {
+			return;
+		}
+		const read = (): void => setIsNarrowBody(node.clientWidth < WORKSPACE_SPLIT_MIN_WIDTH_PX);
+		read();
+		const observer = new ResizeObserver(read);
+		observer.observe(node);
+		return () => observer.disconnect();
+	}, []);
+
+	/** 索引栏此刻不显示：手动收起，或者窄到放不下 */
+	const isFileTreeHidden = isFileTreeCollapsed || isNarrowBody;
+	const isChangesListHidden = isChangesListCollapsed || isNarrowBody;
+	/** 叫回索引栏的入口只在「手动收起」时给：窄到放不下时给了也展不开 */
+	const canShowFileTree = isFileTreeCollapsed && !isNarrowBody;
+	const canShowChangesList = isChangesListCollapsed && !isNarrowBody;
 	/** 终端本身：切回终端分页时把键盘输入接过去 */
 	const terminalView = useRef<TerminalViewHandle | null>(null);
 
@@ -109,9 +142,35 @@ export function WorkspaceBody({
 					docs.setFileContent(workspaceFileKey(fileRef.cwd, fileRef.path), next);
 					return next;
 				}}
+				// 索引栏收起时，展开入口落在标题行最右端
+				headerTrailing={
+					canShowFileTree ? (
+						<RestoreListButton label={t("panel.showTree")} onShow={() => setFileTreeCollapsed(false)} />
+					) : null
+				}
 			/>
 		);
 	}
+
+	/*
+	 * 预览区的内容。
+	 *
+	 * 有文件时用 `FileView` 的标题行承载「展开文件树」；空着、或者只剩一条读取失败的原文时
+	 * 没有二级顶栏，入口改挂在卡片里，收起之后总归有一个地方能点回去。
+	 */
+	const fileDetail =
+		fileView !== null && docs.fileError === undefined ? (
+			fileView
+		) : (
+			<>
+				{fileView}
+				{canShowFileTree ? (
+					<div className="workspace-split-empty">
+						<RestoreListButton label={t("panel.showTree")} onShow={() => setFileTreeCollapsed(false)} />
+					</div>
+				) : null}
+			</>
+		);
 
 	/** 变更预览：停在提交上就看那一份补丁，否则看工作树，并定位到刚点的文件。 */
 	const changesView =
@@ -130,6 +189,11 @@ export function WorkspaceBody({
 				commits={undefined}
 				commitsLoading={false}
 				commitsError={undefined}
+				toolbarTrailing={
+					canShowChangesList ? (
+						<RestoreListButton label={t("panel.showChanges")} onShow={() => setChangesListCollapsed(false)} />
+					) : null
+				}
 			/>
 		) : (
 			<ChangesDocument
@@ -153,17 +217,21 @@ export function WorkspaceBody({
 				commits={undefined}
 				commitsLoading={false}
 				commitsError={undefined}
+				toolbarTrailing={
+					canShowChangesList ? (
+						<RestoreListButton label={t("panel.showChanges")} onShow={() => setChangesListCollapsed(false)} />
+					) : null
+				}
 			/>
 		);
 
 	return (
-		<div className="workspace-body">
+		<div className="workspace-body" ref={bodyRef}>
 			<div className={tab === "files" ? "workspace-view" : "workspace-view is-inactive"}>
 				<WorkspaceSplit
 					className="is-files"
-					isListCollapsed={isFileTreeCollapsed}
-					showListLabel={t("panel.showTree")}
-					onShowList={() => setFileTreeCollapsed(false)}
+					isListCollapsed={isFileTreeHidden}
+					detail={fileDetail}
 					list={
 						<FilesPane
 							loadDirectory={(path) =>
@@ -182,15 +250,13 @@ export function WorkspaceBody({
 							onCollapse={() => setFileTreeCollapsed(true)}
 						/>
 					}
-					detail={fileView}
 				/>
 			</div>
 			<div className={tab === "changes" ? "workspace-view" : "workspace-view is-inactive"}>
 				<WorkspaceSplit
 					className="is-changes"
-					isListCollapsed={isChangesListCollapsed}
-					showListLabel={t("panel.showChanges")}
-					onShowList={() => setChangesListCollapsed(false)}
+					isListCollapsed={isChangesListHidden}
+					detail={changesView}
 					list={
 						<ChangesPane
 							status={docs.changes.status}
@@ -208,7 +274,6 @@ export function WorkspaceBody({
 							onCollapse={() => setChangesListCollapsed(true)}
 						/>
 					}
-					detail={changesView}
 				/>
 			</div>
 			{/* 终端只切显隐：卸载会丢掉 PTY 会话与回滚，切回来还要重取一遍历史 */}
@@ -226,5 +291,29 @@ export function WorkspaceBody({
 				)}
 			</div>
 		</div>
+	);
+}
+
+/**
+ * 把索引栏叫回来的小按钮。
+ *
+ * 图标朝左：索引栏在右边，展开它就是让内容从右侧长出来。文案即无障碍名称，同时用作
+ * 悬浮提示（按钮本身只有图标）。
+ */
+function RestoreListButton({ label, onShow }: { label: string; onShow: () => void }): ReactNode {
+	const tip = useHoverTip();
+	return (
+		<>
+			<button
+				type="button"
+				className="workspace-head-action"
+				aria-label={label}
+				{...tip.handlers(label)}
+				onClick={onShow}
+			>
+				<PanelRightOpen size={14} strokeWidth={1.5} />
+			</button>
+			{tip.render()}
+		</>
 	);
 }

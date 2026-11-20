@@ -82,22 +82,41 @@ export function namedPipePath(dataDir: string): string {
 }
 
 /**
- * 按 XDG 规范取应用数据目录，与主机侧的规则保持一致。
+ * 应用数据目录的根，随平台取各自的规范位置。
  *
- * 桌面要靠这个目录找 endpoint.json，两边算法不一致就接不上已经跑着的主机。开发实例与发布
- * 实例分开：目录名带 -dev 后缀，两边的项目清单、设置与主机身份互不覆盖。
+ * 与主机侧 `apps/server/src/config.ts` 的 `dataRoot` 逐字一致：Linux 与 macOS 按 XDG 规范
+ * 用 `$XDG_DATA_HOME`（没有或不是绝对路径时用 `~/.local/share`），Windows 用
+ * `%LOCALAPPDATA%`（缺席时退回家目录下的 `AppData/Local`）。桌面要靠同一个目录找
+ * `endpoint.json`、算命名管道名，两边算法不一致就接不上已经跑着的主机。
+ */
+function dataRoot(
+	env: Record<string, string | undefined>,
+	platform: NodeJS.Platform = process.platform,
+): string {
+	if (platform === "win32") {
+		const local = env.LOCALAPPDATA?.trim();
+		return local !== undefined && local.length > 0 && isAbsolute(local)
+			? local
+			: join(homedir(), "AppData", "Local");
+	}
+	const xdg = env.XDG_DATA_HOME?.trim();
+	return xdg !== undefined && isAbsolute(xdg) ? xdg : join(homedir(), ".local", "share");
+}
+
+/**
+ * 应用数据目录：桌面与主机共用的那一份，开发实例与发布实例分开。
+ *
+ * 目录名带 -dev 后缀：两边的项目清单、设置与主机身份互不覆盖。
  */
 export function resolveDataDir(
 	env: Record<string, string | undefined>,
-	options: { isDev?: boolean } = {},
+	options: { isDev?: boolean; platform?: NodeJS.Platform } = {},
 ): string {
 	const explicit = env.FACET_DATA_DIR?.trim();
 	if (explicit !== undefined && explicit.length > 0) {
 		return explicit;
 	}
-	const xdg = env.XDG_DATA_HOME?.trim();
-	const base = xdg !== undefined && isAbsolute(xdg) ? xdg : join(homedir(), ".local", "share");
-	return join(base, options.isDev === true ? "facet-dev" : "facet");
+	return join(dataRoot(env, options.platform), options.isDev === true ? "facet-dev" : "facet");
 }
 
 /** 解析发现文件的内容，缺字段或读不懂时返回 undefined。 */

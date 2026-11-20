@@ -76,8 +76,10 @@ describe("resolveDataDir", () => {
 	});
 
 	it("开发实例的数据目录带 -dev 后缀，与发布实例分开", () => {
-		expect(resolveDataDir({ XDG_DATA_HOME: "/xdg" }, { isDev: true })).toBe(join("/xdg", "facet-dev"));
-		expect(resolveDataDir({ XDG_DATA_HOME: "/xdg" })).toBe(join("/xdg", "facet"));
+		expect(resolveDataDir({ XDG_DATA_HOME: "/xdg" }, { isDev: true, platform: "linux" })).toBe(
+			join("/xdg", "facet-dev"),
+		);
+		expect(resolveDataDir({ XDG_DATA_HOME: "/xdg" }, { platform: "linux" })).toBe(join("/xdg", "facet"));
 	});
 
 	it("socket 优先落在运行目录，没有时落在数据目录", () => {
@@ -96,8 +98,23 @@ describe("resolveDataDir", () => {
 	});
 
 	it("按 XDG_DATA_HOME 取，没有或不是绝对路径时用家目录", () => {
-		expect(resolveDataDir({ XDG_DATA_HOME: "/xdg" })).toBe(join("/xdg", "facet"));
-		expect(resolveDataDir({ XDG_DATA_HOME: "relative" })).toBe(join(homedir(), ".local", "share", "facet"));
+		expect(resolveDataDir({ XDG_DATA_HOME: "/xdg" }, { platform: "linux" })).toBe(join("/xdg", "facet"));
+		expect(resolveDataDir({ XDG_DATA_HOME: "relative" }, { platform: "linux" })).toBe(
+			join(homedir(), ".local", "share", "facet"),
+		);
+	});
+
+	it("Windows 上按 LOCALAPPDATA 取，缺席时退回家目录的 AppData/Local", () => {
+		// 与主机侧 apps/server/src/config.ts 一致：数据目录不同，命名管道名字也就不同
+		expect(resolveDataDir({ LOCALAPPDATA: "/appdata" }, { platform: "win32" })).toBe(
+			join("/appdata", "facet"),
+		);
+		expect(resolveDataDir({ LOCALAPPDATA: "/appdata" }, { isDev: true, platform: "win32" })).toBe(
+			join("/appdata", "facet-dev"),
+		);
+		expect(resolveDataDir({ LOCALAPPDATA: "relative" }, { platform: "win32" })).toBe(
+			join(homedir(), "AppData", "Local", "facet"),
+		);
 	});
 });
 

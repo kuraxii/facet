@@ -24,9 +24,25 @@ export function devDataDir(env) {
 	if (explicit !== undefined && explicit.length > 0) {
 		return explicit;
 	}
+	return join(dataRoot(env), "facet-dev");
+}
+
+/**
+ * 应用数据目录的根，与主机侧 `apps/server/src/config.ts` 和桌面的 `resolveDataDir` 同一套规则。
+ *
+ * Linux 与 macOS 按 XDG 规范取 `$XDG_DATA_HOME`，没设置或不是绝对路径时用 `~/.local/share`；
+ * Windows 取 `%LOCALAPPDATA%`，变量缺席时退回家目录下的 `AppData/Local`。两边算出来的目录
+ * 必须一样：它既决定发现文件的位置，也是命名管道名字的摘要来源。
+ */
+function dataRoot(env) {
+	if (process.platform === "win32") {
+		const local = env.LOCALAPPDATA?.trim();
+		return local !== undefined && local.length > 0 && isAbsolute(local)
+			? local
+			: join(homedir(), "AppData", "Local");
+	}
 	const xdg = env.XDG_DATA_HOME?.trim();
-	const base = xdg !== undefined && isAbsolute(xdg) ? xdg : join(homedir(), ".local", "share");
-	return join(base, "facet-dev");
+	return xdg !== undefined && isAbsolute(xdg) ? xdg : join(homedir(), ".local", "share");
 }
 
 /** 开发实例的 pi 数据目录，只认 dev 专用变量。 */

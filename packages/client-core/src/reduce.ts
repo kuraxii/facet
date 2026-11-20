@@ -137,7 +137,7 @@ export function reduceSession(view: SessionView, action: Action): SessionView {
 		case "chat/revertTo":
 		case "chat/branchMoved":
 		// 会话清单动作走 SessionStore 的清单表，模型通道动作走登录状态表，终端动作走终端客户端，
-		// 都不进单个会话的视图
+		// 工作树动作只推进工作树的版本号，都不进单个会话的视图
 		case "models/loginEvent":
 		case "sessions/changed":
 		case "sessions/status":
@@ -146,6 +146,7 @@ export function reduceSession(view: SessionView, action: Action): SessionView {
 		case "terminal/exit":
 		case "terminal/closed":
 		case "terminal/resized":
+		case "workspace/changed":
 			return view;
 		default:
 			return unhandled(action);
@@ -283,6 +284,7 @@ export function reduceChat(view: ChatView, action: Action): ChatView {
 		case "terminal/exit":
 		case "terminal/closed":
 		case "terminal/resized":
+		case "workspace/changed":
 			return view;
 		default:
 			return unhandled(action);

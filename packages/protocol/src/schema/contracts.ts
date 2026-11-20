@@ -194,7 +194,8 @@ export const REQUEST_SCHEMAS = {
 	},
 	gitStatus: {
 		auth: "public",
-		params: Type.Object({ cwd: Cwd }),
+		// force 跳过主机侧的冷却窗口：界面重新聚焦或用户明说要刷新时才用
+		params: Type.Object({ cwd: Cwd, force: Type.Optional(Type.Boolean()) }),
 		nonEmpty: ["cwd"],
 	},
 	gitDiff: {
@@ -204,7 +205,8 @@ export const REQUEST_SCHEMAS = {
 	},
 	gitCommits: {
 		auth: "public",
-		params: Type.Object({ cwd: Cwd }),
+		// force 与 gitStatus 一致：跳过主机侧的冷却窗口
+		params: Type.Object({ cwd: Cwd, force: Type.Optional(Type.Boolean()) }),
 		nonEmpty: ["cwd"],
 	},
 	gitCommit: { auth: "public", params: Type.Object({ cwd: Cwd, sha: Id }) },

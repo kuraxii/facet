@@ -6,12 +6,12 @@
  */
 
 /** 通道的种类。每种对应一类可独立定序、独立订阅的资源。 */
-export type ChannelKind = "session" | "chat" | "terminal" | "sessions" | "models";
+export type ChannelKind = "session" | "chat" | "terminal" | "sessions" | "models" | "workspace";
 
 /** 通道 URI,形如 `chat:/<sessionId>`。 */
 export type Channel = `${ChannelKind}:/${string}`;
 
-const CHANNEL_PATTERN = /^(session|chat|terminal|sessions|models):\/(.+)$/;
+const CHANNEL_PATTERN = /^(session|chat|terminal|sessions|models|workspace):\/(.+)$/;
 
 /** 拼出通道 URI。 */
 export function makeChannel(kind: ChannelKind, id: string): Channel {
@@ -31,6 +31,16 @@ export function sessionsChannelFor(hostId: string): Channel {
  */
 export function modelsChannelFor(hostId: string): Channel {
 	return makeChannel("models", hostId);
+}
+
+/**
+ * 工作树通道,一个项目目录一条,id 是目录的绝对路径。
+ *
+ * 变更页要跟着工作树自己更新,而工作树在主机上:订阅即表示「替我盯着这个目录」,
+ * 主机按订阅者把监听建起来,没人看了就停。一个目录只建一份监听,多端共用。
+ */
+export function workspaceChannelFor(cwd: string): Channel {
+	return makeChannel("workspace", cwd);
 }
 
 /** 解析通道 URI。格式不符时返回 undefined,调用方据此拒绝请求。 */

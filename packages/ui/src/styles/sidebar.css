@@ -5,9 +5,9 @@
 .sb {
 	position: relative;
 	display: flex;
-	flex: none;
+	/* 占外壳网格的左列；列轨道由实占宽 `--col-sidebar` 给 */
+	grid-column: 1;
 	flex-direction: column;
-	width: var(--sidebar-width);
 	height: 100%;
 	/* 横向内边距交给每一行（`.scroll-row`），滚动条才能贴着右缘；
 	   顶带里那行头部自己带 4px 下边距，这里再留 4px，头部控件到新建按钮正好 8px */
@@ -19,17 +19,15 @@
 }
 
 /*
- * 宽屏：把剪辑区放宽到分隔条命中区的宽度。
+ * 宽档与中档：把剪辑区放宽到分隔条命中区的宽度。
  *
  * 分隔条的热区有一大半落在接缝外侧的主区上，而 `.sb` 的 `overflow: hidden` 会把伸出去的那半
- * 裁掉、连点击一起裁掉。窄屏不这样做：那里 `.sb` 是贴左缘的抽屉，放宽剪辑会从屏幕左缘漏出
+ * 裁掉、连点击一起裁掉。窄档不这样做：那里 `.sb` 是贴左缘的抽屉，放宽剪辑会从屏幕左缘漏出
  * 一条内容。
  */
-@media (min-width: 881px) {
-	.sb {
-		overflow: clip;
-		overflow-clip-margin: var(--divider-hit-width);
-	}
+.app:not(.is-narrow) .sb {
+	overflow: clip;
+	overflow-clip-margin: var(--divider-hit-width);
 }
 
 /* 宽屏收起左栏 */
@@ -54,10 +52,9 @@
 	background: transparent;
 }
 
-.app:has(.sb-resizer:hover) .sb,
-.app:has(.sb-resizer:active) .sb,
-.app:has(.sb-resizer:hover) .chrome-slot.is-sidebar,
-.app:has(.sb-resizer:active) .chrome-slot.is-sidebar {
+/* 悬停或拖动时只染颜色，目标包在 `:where()` 里：不与档位规则比权重 */
+.app:has(.sb-resizer:hover) :where(.sb, .chrome-slot.is-sidebar),
+.app:has(.sb-resizer:active) :where(.sb, .chrome-slot.is-sidebar) {
 	border-right-color: var(--divider-highlight);
 }
 
@@ -756,39 +753,37 @@
 	gap: 6px;
 }
 
-/* 窄屏：侧栏收成抽屉 */
+/* 窄档：侧栏收成贴左缘的抽屉 */
 .sb-backdrop {
 	display: none;
 }
 
-@media (max-width: 880px) {
-	.sb {
-		position: absolute;
-		inset: 0 auto 0 0;
-		z-index: 40;
-		width: min(300px, 84vw);
-		padding-top: 10px;
-		transform: translateX(-100%);
-		transition: transform var(--dur-fast) var(--ease);
-	}
+.app.is-narrow .sb {
+	position: absolute;
+	inset: 0 auto 0 0;
+	z-index: 40;
+	width: min(300px, 84vw);
+	padding-top: 10px;
+	transform: translateX(-100%);
+	transition: transform var(--dur-fast) var(--ease);
+}
 
-	/* 抽屉里的头部在侧栏内，控件到新建按钮的 8px 由头部自己的下边距给 */
-	.sb .sb-head {
-		padding-bottom: 8px;
-	}
+/* 抽屉里的头部在侧栏内，控件到新建按钮的 8px 由头部自己的下边距给 */
+.app.is-narrow .sb .sb-head {
+	padding-bottom: 8px;
+}
 
-	.sb.is-open {
-		transform: none;
-		box-shadow: 0 0 40px rgb(0 0 0 / 45%);
-	}
+.app.is-narrow .sb.is-open {
+	transform: none;
+	box-shadow: 0 0 40px rgb(0 0 0 / 45%);
+}
 
-	.sb-backdrop {
-		position: absolute;
-		inset: 0;
-		z-index: 30;
-		display: block;
-		border: none;
-		background: rgb(0 0 0 / 45%);
-		cursor: pointer;
-	}
+.app.is-narrow .sb-backdrop {
+	position: absolute;
+	inset: 0;
+	z-index: 30;
+	display: block;
+	border: none;
+	background: rgb(0 0 0 / 45%);
+	cursor: pointer;
 }

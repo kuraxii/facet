@@ -473,13 +473,11 @@
 	font-size: 11.5px;
 }
 
-/* 窄屏：输入区收边 */
-@media (max-width: 880px) {
-	.footer-column {
-		width: min(100%, var(--chat-column-max-narrow));
-	}
+/* 窄档：输入区收边 */
+.app.is-narrow .footer-column {
+	width: min(100%, var(--chat-column-max-narrow));
+}
 
-	.footer {
-		padding: 0 var(--chat-gutter-x) 10px;
-	}
+.app.is-narrow .footer {
+	padding: 0 var(--chat-gutter-x) 10px;
 }

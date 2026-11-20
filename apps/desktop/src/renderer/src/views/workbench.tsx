@@ -43,7 +43,6 @@ import { applyAppearance } from "../hooks/useWorkspaceShell.ts";
 import { LOCAL_TARGET } from "../host-connection.ts";
 import { useHostClient } from "../host-context.tsx";
 import { toTabItems } from "../main-tabs.ts";
-import { WindowControls } from "../WindowControls.tsx";
 import { ChatArea } from "./chat-area.tsx";
 import { DocumentPane } from "./document-pane.tsx";
 
@@ -225,6 +224,22 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 				composerInput={composerInput}
 			/>
 		);
+	/*
+	 * 右栏开关与分页放在哪一格，看右列此刻有没有宽度：有就占右栏那一格（与正文列对齐），
+	 * 没有（右栏收起、窄档整列不存在）就贴在中间那格右端，仍在窗口按钮左侧。
+	 */
+	const panelControls = (
+		<>
+			<PanelToggle
+				isOpen={shell.panel.open}
+				onToggle={() => shell.updatePanel({ open: !shell.panel.open })}
+			/>
+			{shell.panel.open ? (
+				<PanelTabs tab={shell.panel.tab} onTabChange={(tab) => shell.updatePanel({ tab })} />
+			) : null}
+		</>
+	);
+	const hasPanelColumn = shell.panel.open && !shell.isNarrow;
 	return (
 		<CodeThemeProvider value={shell.codeTheme}>
 			<AppFrame
@@ -257,22 +272,14 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 							) : shell.isSidebarOpen ? null : (
 								<SidebarToggle isOpen={false} onToggle={shell.toggleSidebar} />
 							)}
+							{hasPanelColumn ? null : (
+								<>
+									<span className="chrome-spacer" />
+									{panelControls}
+								</>
+							)}
 						</div>
-						<div
-							className={
-								shell.panel.open ? "chrome-slot is-panel is-open" : "chrome-slot is-panel is-compact"
-							}
-						>
-							<PanelToggle
-								isOpen={shell.panel.open}
-								onToggle={() => shell.updatePanel({ open: !shell.panel.open })}
-							/>
-							{shell.panel.open ? (
-								<PanelTabs tab={shell.panel.tab} onTabChange={(tab) => shell.updatePanel({ tab })} />
-							) : null}
-							<span className="chrome-spacer" />
-							{shell.windowControls === undefined ? null : <WindowControls controls={shell.windowControls} />}
-						</div>
+						{hasPanelColumn ? <div className="chrome-slot is-panel is-open">{panelControls}</div> : null}
 					</>
 				}
 			>

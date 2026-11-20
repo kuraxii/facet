@@ -8,6 +8,8 @@
 	min-height: 0;
 	border-top: 1px solid var(--line);
 	background: transparent;
+	/* 按自身宽度响应，不认外壳的档位类名：停靠栏可能出现在任何宽的列里 */
+	container-type: inline-size;
 }
 
 /* 上缘的分隔条：贴在边上，命中区比视觉上的线宽一些 */
@@ -207,7 +209,8 @@
 	font-size: 12px;
 }
 
-@media (max-width: 880px) {
+/* 窄一点的停靠栏把内边距收回一档：xterm 自己的列宽里再扣两份留白就太窄了 */
+@container (width < 880px) {
 	.term-dock-head {
 		padding: 0 6px;
 	}

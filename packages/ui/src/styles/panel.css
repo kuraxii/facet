@@ -5,7 +5,8 @@
 .main {
 	position: relative;
 	display: flex;
-	flex: 1;
+	/* 占外壳网格的中列：宽度由列轨道给，列轨道又只由实占宽给 */
+	grid-column: 2;
 	flex-direction: column;
 	min-width: 0;
 	min-height: 0;
@@ -13,13 +14,12 @@
 	--chat-gutter-x: 24px;
 }
 
-/* 右栏：文件与变更。左缘一条分隔条，拖动改宽度 */
+/* 右栏：文件与变更。占右列，左缘一条分隔条拖动改偏好宽 */
 .panel {
 	position: relative;
 	display: flex;
-	flex: none;
+	grid-column: 3;
 	flex-direction: column;
-	width: var(--panel-width);
 	min-width: 0;
 	border-left: 1px solid var(--line);
 	background: var(--bg);
@@ -43,11 +43,10 @@
  * 悬停与拖动时把面板自己那条边染成强调色。
  *
  * 高亮就是分界线本身，不额外叠线：命中区始终透明，边框宽度也不变，内容不会跳。
+ * 目标用 `:where()` 包起来：这条规则只负责颜色，不应比档位规则权重更高。
  */
-.app:has(.panel-resizer:hover) .panel,
-.app:has(.panel-resizer:active) .panel,
-.app:has(.panel-resizer:hover) .chrome-slot.is-panel,
-.app:has(.panel-resizer:active) .chrome-slot.is-panel {
+.app:has(.panel-resizer:hover) :where(.panel, .chrome-slot.is-panel),
+.app:has(.panel-resizer:active) :where(.panel, .chrome-slot.is-panel) {
 	border-left-color: var(--divider-highlight);
 }
 
@@ -663,13 +662,11 @@
 	text-align: center;
 }
 
-/* 窄屏：右栏浮在主区上 */
-@media (max-width: 880px) {
-	.panel {
-		position: absolute;
-		inset: 0 0 0 auto;
-		z-index: 25;
-		width: min(360px, 92vw);
-		box-shadow: 0 0 40px rgb(0 0 0 / 45%);
-	}
+/* 窄档：右栏是浮在主区上的抽屉，实占宽归零，宽度由样式定 */
+.app.is-narrow .panel {
+	position: absolute;
+	inset: 0 0 0 auto;
+	z-index: 25;
+	width: min(360px, 92vw);
+	box-shadow: 0 0 40px rgb(0 0 0 / 45%);
 }

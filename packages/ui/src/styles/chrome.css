@@ -2,13 +2,28 @@
 
 /* 外壳 */
 
-/* 应用外壳：顶带是一行真正的布局行，下面是三栏正文；两处宽度共用变量 */
+/*
+ * 应用外壳：顶带与正文在同一张网格里，共享同一组列轨道。
+ *
+ * 三列宽度只由实占宽 `--col-*` 决定，`.app-chrome` 与 `.shell` 都用 `subgrid` 继承这组
+ * 轨道，顶带里不再有自己的宽度计算，顶带与下面的列不可能错位（口径见 `docs/layout.md`）。
+ */
 .app {
 	position: relative;
-	display: flex;
-	flex-direction: column;
+	display: grid;
+	grid-template-columns: var(--col-sidebar) minmax(0, 1fr) var(--col-panel);
+	grid-template-rows: var(--chrome-height) minmax(0, 1fr);
 	height: 100%;
 	overflow: hidden;
+	/* 实占宽由偏好宽派生：拖动只改偏好宽，这一层跟着算，不经过渲染 */
+	--col-sidebar: var(--sidebar-width);
+	--col-panel: var(--panel-width);
+}
+
+/* 窄档：两栏都是抽屉，实占宽归零，正文满宽 */
+.app.is-narrow {
+	--col-sidebar: 0px;
+	--col-panel: 0px;
 }
 
 /* 拖动区盖住整条顶带，格子里的控件自己标 no-drag */
@@ -22,26 +37,26 @@
 	-webkit-app-region: drag;
 }
 
+/* 顶带：第一行的整条，列轨道由 subgrid 从 `.app` 继承 */
 .app-chrome {
 	position: relative;
 	z-index: 2;
-	display: flex;
-	flex: none;
+	display: grid;
+	grid-area: 1 / 1 / 2 / -1;
+	grid-template-columns: subgrid;
 	align-items: center;
-	height: var(--chrome-height);
 }
 
 .chrome-slot {
 	display: flex;
-	flex: none;
 	align-items: center;
 	height: 100%;
 	min-width: 0;
 }
 
-/* 侧栏那一格：宽度与正文的侧栏一致，右边留出与侧栏一致的内边距 */
+/* 侧栏那一格：占左列，右边留出与侧栏一致的内边距 */
 .chrome-slot.is-sidebar {
-	width: var(--sidebar-width);
+	grid-column: 1;
 	padding-right: var(--sidebar-edge);
 	overflow: hidden;
 }
@@ -57,30 +72,30 @@
 	background: var(--sb);
 }
 
-/* 主区那一格：占满剩下的宽度，左栏开关贴在它的左边 */
+/* 主区那一格：占中列，左栏开关贴在它的左边；右栏收起时开关与分页也落在它的右端 */
 .chrome-slot.is-main {
-	flex: 1;
+	grid-column: 2;
+	gap: 4px;
 	padding-left: var(--sidebar-edge);
+	/*
+	 * 窗口按钮簇是右上角的固定簇：右栏收起（`--col-panel` 为 0）时它压在中间这一格上，
+	 * 这格得让出整簇的宽度；右栏展开且够宽时让 0，簇落在右栏那一格里。
+	 */
+	padding-inline-end: max(0px, calc(var(--window-controls-width) - var(--col-panel)));
 }
 
-/* 右栏那一格：展开时与右栏同宽，窗口按钮压在这一格最右边；收起时收到只剩开关与按钮 */
+/* 右栏那一格：占右列，自己扣掉窗口按钮那一段 */
 .chrome-slot.is-panel {
-	display: flex;
-	flex: none;
+	grid-column: 3;
 	gap: 4px;
-	width: var(--panel-width);
 	padding-left: 4px;
+	padding-inline-end: var(--window-controls-width);
 	overflow: hidden;
 	-webkit-app-region: no-drag;
 }
 
 .chrome-slot.is-panel.is-open {
 	border-left: 1px solid var(--line);
-}
-
-.chrome-slot.is-panel.is-compact {
-	width: auto;
-	padding-left: 0;
 }
 
 .chrome-spacer {
@@ -106,11 +121,19 @@
 	color: var(--t1);
 }
 
+/*
+ * 窗口按钮：右上角的固定簇，不占列轨道。
+ *
+ * 固定而不是挤在右栏那一格里：右栏收起或进抽屉时列轨道会收到 0，按钮因此不会失业。
+ */
 .window-controls {
+	position: fixed;
+	top: 0;
+	right: 0;
+	z-index: 1;
 	display: flex;
-	flex: 0 0 auto;
-	min-width: calc(var(--window-button-width) * 3);
-	margin-left: auto;
+	min-width: var(--window-controls-width);
+	height: var(--chrome-height);
 	-webkit-app-region: no-drag;
 }
 
@@ -138,10 +161,18 @@
 	color: var(--err);
 }
 
+/*
+ * 正文那一行：与顶带同一组列轨道，三栏各占一格。
+ *
+ * 三栏都显式给 `grid-column`：侧栏收起时 `.sb` 是 `display: none`，靠自动排布会把正文
+ * 挪到第一列去。
+ */
 .shell {
 	position: relative;
-	display: flex;
-	flex: 1;
+	display: grid;
+	grid-area: 2 / 1 / 3 / -1;
+	grid-template-columns: subgrid;
+	grid-template-rows: minmax(0, 1fr);
 	min-height: 0;
 	overflow: hidden;
 }
@@ -174,10 +205,10 @@
 	cursor: default;
 }
 
-/* 启动页 */
+/* 启动页：占正文那一行，横向铺满三列 */
 .boot {
+	grid-area: 2 / 1 / 3 / -1;
 	display: flex;
-	flex: 1;
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
@@ -228,15 +259,4 @@
 	font-family: var(--font-mono);
 	font-size: 12px;
 	pointer-events: none;
-}
-
-/* 窄屏：主区域占满 */
-@media (max-width: 880px) {
-	.shell {
-		position: relative;
-	}
-
-	.main {
-		width: 100%;
-	}
 }

@@ -15,6 +15,7 @@
 import type { CustomModelInfo, ModelInfo, ProviderLoginState } from "@facet/protocol";
 import { Plus, X } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { Select } from "../common/select.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { Modal } from "../modal.tsx";
 import { API_OPTIONS, apiOptionLabel } from "./provider-api.ts";
@@ -300,21 +301,19 @@ export function ProviderDialog({
 				) : null}
 
 				{isCustom ? (
-					<label className="set-field">
+					// 下拉自己带可访问名，这层只做排版；标签包住一个自定义组件不算关联，换 div
+					<div className="set-field">
 						<span className="set-label">{t("providerForm.api")}</span>
-						<select
-							className="set-input"
+						<Select
 							value={api}
-							onChange={(event) => setApi(event.target.value)}
-							aria-label={t("providerForm.api")}
-						>
-							{API_OPTIONS.map((option) => (
-								<option key={option.value} value={option.value}>
-									{apiOptionLabel(option, t)}
-								</option>
-							))}
-						</select>
-					</label>
+							options={API_OPTIONS.map((option) => ({
+								value: option.value,
+								label: apiOptionLabel(option, t),
+							}))}
+							onChange={setApi}
+							ariaLabel={t("providerForm.api")}
+						/>
+					</div>
 				) : null}
 
 				<section className="prov-section">

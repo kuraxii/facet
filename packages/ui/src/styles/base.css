@@ -230,6 +230,13 @@
 	--indent-rail-icon: 14px;
 	--indent-rail-gap: 8px;
 	--indent-rail-label: calc(var(--indent-rail-icon) + var(--indent-rail-gap));
+	/* 设置页里的下拉：文字到左缘的留白、右侧给箭头留出的宽度、箭头自身边长、它离右缘的
+	   距离，以及触发器最宽到这里为止（再长的值省略，不把整行撑开） */
+	--set-select-inset: 10px;
+	--set-select-icon-slot: 26px;
+	--set-select-icon: 14px;
+	--set-select-icon-inset: 9px;
+	--set-select-max-width: 220px;
 	/* 设置页模型一栏：标题行、默认设置卡片与两个分组之间的距离 */
 	--set-models-gap: 16px;
 	--set-models-group-gap: 8px;

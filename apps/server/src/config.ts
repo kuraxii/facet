@@ -39,7 +39,7 @@ export interface ServerConfig {
 	agentDir: string | undefined;
 	/** 会话文件目录，缺省按工作目录分组存放 */
 	sessionDir: string | undefined;
-	/** 应用数据目录，缺省按 XDG 规范取 `$XDG_DATA_HOME/facet` */
+	/** 应用数据目录，缺省按 XDG 规范取 `$XDG_DATA_HOME/facet`，Windows 上是 `%LOCALAPPDATA%\facet` */
 	dataDir: string;
 	/**
 	 * 远程连接的权限上限。
@@ -119,11 +119,27 @@ export function namedPipePath(dataDir: string): string {
 	return `\\\\.\\pipe\\facet-${digest}`;
 }
 
-/** 按 XDG 规范取应用数据目录，非绝对路径的 XDG_DATA_HOME 按未设置处理。 */
-function defaultDataDir(env: Record<string, string | undefined>): string {
+/**
+ * 应用数据目录，随平台取各自的规范位置。
+ *
+ * Linux 与 macOS 按 XDG 规范用 `$XDG_DATA_HOME`，没设置或不是绝对路径时用 `~/.local/share`；
+ * Windows 没有 XDG 变量，按约定用 `%LOCALAPPDATA%`，变量缺席时退回家目录下的
+ * `AppData/Local`。桌面的 `resolveDataDir` 与 `scripts/dev-dirs.mjs` 推的是同一个目录：它
+ * 既决定发现文件的位置，也是命名管道名字的摘要来源，两边算法不一致就接不上主机。
+ */
+function dataRoot(env: Record<string, string | undefined>, platform: NodeJS.Platform): string {
+	if (platform === "win32") {
+		const local = env.LOCALAPPDATA?.trim();
+		return local !== undefined && local.length > 0 && isAbsolute(local)
+			? local
+			: join(homedir(), "AppData", "Local");
+	}
 	const xdg = env.XDG_DATA_HOME?.trim();
-	const base = xdg !== undefined && isAbsolute(xdg) ? xdg : join(homedir(), ".local", "share");
-	return join(base, "facet");
+	return xdg !== undefined && isAbsolute(xdg) ? xdg : join(homedir(), ".local", "share");
+}
+
+function defaultDataDir(env: Record<string, string | undefined>, platform: NodeJS.Platform): string {
+	return join(dataRoot(env, platform), "facet");
 }
 
 function readInt(value: string | undefined, fallback: number): number {
@@ -140,7 +156,7 @@ export function loadServerConfig(
 	platform: NodeJS.Platform = process.platform,
 ): ServerConfig {
 	const hostName = env.FACET_HOST_NAME?.trim();
-	const dataDir = env.FACET_DATA_DIR?.trim() || defaultDataDir(env);
+	const dataDir = env.FACET_DATA_DIR?.trim() || defaultDataDir(env, platform);
 	// 显式给了监听地址或端口就按 TCP 走；其余情况本机只开本地 socket，不占任何端口
 	const wantsTcp = (env.FACET_HOST?.trim() ?? "") !== "" || (env.FACET_PORT?.trim() ?? "") !== "";
 	return {

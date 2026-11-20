@@ -50,7 +50,8 @@ apps/desktop/dist-server/
 
 本机的主机只开一个本地 socket：Linux 上是 `$XDG_RUNTIME_DIR/facet-dev.sock`，没有运行目录时是
 `~/.local/share/facet-dev/facet.sock`；Windows 上没有 unix socket，改用命名管道
-`\\.\pipe\facet-<数据目录摘要>`。桌面按同一套规则拼出地址直接连，两边都不用填端口：
+`\\.\pipe\facet-<数据目录摘要>`（开发态的数据目录是 `%LOCALAPPDATA%\facet-dev`）。桌面按同一套
+规则拼出地址直接连，两边都不用填端口：
 
 ```bash
 npm run dev            # 打产物 → 起 server → 起桌面；桌面退出时 server 一起收掉
@@ -149,7 +150,7 @@ FACET_WEB_ROOT=apps/desktop/out/renderer \
 
 主机是独立的进程，桌面只是它的一个端：
 
-- 主机就绪后把端点写进 `$FACET_DATA_DIR/endpoint.json`（Linux 缺省 `~/.local/share/facet`），日志写进同目录的 `host.log`。
+- 主机就绪后把端点写进 `$FACET_DATA_DIR/endpoint.json`（Linux 缺省 `~/.local/share/facet`，Windows 缺省 `%LOCALAPPDATA%\facet`），日志写进同目录的 `host.log`。
 - 桌面拉起主机时让它自成一组，应用退出后主机留在后台；下次启动读到发现文件并与主机握上手，就直接接上，会话与运行中的任务都还在。
 - 关掉窗口后主机一律留在后台：应用里没有「退出时结束主机」的开关，也没有结束主机的按钮。要停就按数据目录里的 `endpoint.json` 找进程号自行结束，开发时在起主机的终端里 Ctrl+C。
 
@@ -240,14 +241,14 @@ scripts/build-fonts.sh <字体目录>
 | 路径 | 内容 | 覆盖方式 |
 |---|---|---|
 | `~/.pi/agent`（开发态 `~/.pi/agent-dev`） | 凭证 `auth.json`、模型 `models.json`、设置、会话目录 | `FACET_AGENT_DIR`（开发态 `FACET_DEV_AGENT_DIR`） |
-| `$XDG_DATA_HOME/facet`（缺省 `~/.local/share/facet`） | 主机身份 `host.json`、项目清单 `projects.json`、界面设置 `settings.json`、终端登记 `terminals.json`、审计 `audit.log`；独立启动时还有发现文件 `endpoint.json` | `FACET_DATA_DIR` |
+| `$XDG_DATA_HOME/facet`（缺省 `~/.local/share/facet`，Windows 上是 `%LOCALAPPDATA%\facet`） | 主机身份 `host.json`、项目清单 `projects.json`、界面设置 `settings.json`、终端登记 `terminals.json`、审计 `audit.log`；独立启动时还有发现文件 `endpoint.json` | `FACET_DATA_DIR` |
 | `$XDG_CONFIG_HOME/facet`（缺省 `~/.config/facet`） | 桌面本地记录 `desktop.json`：窗口位置与尺寸 | — |
 
-开发实例的三处目录都带 `-dev` 后缀：数据目录是 `~/.local/share/facet-dev`，配置目录是 `~/.config/facet-dev`，pi 数据目录是 `~/.pi/agent-dev`。`npm run dev`（即 `dev:split`）与 `dev:host` 都用这一套，因此开发时跑的东西与装好的包互不影响，`projects.json`、主机身份与 pi 会话各有一份。
+开发实例的三处目录都带 `-dev` 后缀：数据目录是 `~/.local/share/facet-dev`（Windows 上是 `%LOCALAPPDATA%\facet-dev`），配置目录是 `~/.config/facet-dev`，pi 数据目录是 `~/.pi/agent-dev`。`npm run dev`（即 `dev:split`）与 `dev:host` 都用这一套，因此开发时跑的东西与装好的包互不影响，`projects.json`、主机身份与 pi 会话各有一份。
 
 开发态取 pi 数据目录时只认 `FACET_DEV_AGENT_DIR`，不认 `FACET_AGENT_DIR` 与 `PI_CODING_AGENT_DIR`：主机在自己进程里把 pi 数据目录写回环境并传给子进程，从 facet 自带的终端、或从 pi 拉起的 shell 里启动开发时，这两个变量已经指向真实目录，跟着走就会把开发期的会话与凭证写进 `~/.pi/agent`。启动日志会打出实际生效的两个目录。
 
-Windows 上没有 XDG 变量，按家目录推导：数据目录是 `%USERPROFILE%\.local\share\facet`（开发态 `facet-dev`），pi 数据目录是 `%USERPROFILE%\.pi\agent`，桌面本地记录落在 Electron 的 `%APPDATA%\facet\desktop.json`。
+Windows 上没有 XDG 变量，数据目录按约定落在 `%LOCALAPPDATA%`：`%LOCALAPPDATA%\facet`（开发态 `facet-dev`，缺席时用 `%USERPROFILE%\AppData\Local`）；pi 数据目录仍是 `%USERPROFILE%\.pi\agent`，桌面本地记录落在 Electron 的 `%APPDATA%\facet\desktop.json`。主机、桌面与开发脚本用的是同一套推导：数据目录既决定发现文件的位置，也是命名管道名字的摘要来源。
 
 发布版与 pi 命令行共用 `~/.pi/agent` 的凭证与模型配置；开发态用 `agent-dev`，避免开发期的会话混进真实目录。
 
@@ -313,7 +314,7 @@ Windows：
 - 不重编原生模块（`npmRebuild: false`）：真正加载 `node-pty` 的是 `resources/server` 里按 Node 构建的那份，
   为 Electron 的 ABI 再编一遍没有必要，Windows 上还会要求装了 Spectre 缓解库的 MSVC
 - 安装包未签名：别的机器上首次运行会触发 SmartScreen 提示，正式分发要配代码签名证书
-- 数据与配置目录仍按家目录推导：`%USERPROFILE%\.local\share\facet`（开发态 `facet-dev`）、`%USERPROFILE%\.pi\agent`
+- 数据与配置目录：数据目录是 `%LOCALAPPDATA%\facet`（开发态 `facet-dev`），pi 数据目录是 `%USERPROFILE%\.pi\agent`
 
 开发与打包都用同一份独立产物起主机：桌面拉起 `resources/server/bin/node resources/server/lib/server.mjs`（Windows 上是 `bin\node.exe`），开发态则是 `apps/desktop/dist-server/bin/node dist-server/lib/server.mjs`；`npm run dev`（即 `dev:split`）由脚本先起这份产物，桌面按固定 socket 连过去。原生模块只按 Node ABI 编一次，与桌面那份 Electron 运行时互不相干。
 

@@ -188,17 +188,11 @@ export function HostWorkspace({
 		[tabs, terminal],
 	);
 
-	/** 标签菜单里的复制动作；成功用复制到的内容回执，失败给出剪贴板自己的说法。 */
-	const copyText = useCallback(
-		(text: string): void => {
-			void navigator.clipboard.writeText(text).then(
-				() => toast.show({ level: "success", message: text }),
-				(error: unknown) =>
-					toast.show({ level: "error", message: error instanceof Error ? error.message : String(error) }),
-			);
-		},
-		[toast],
-	);
+	/** 各处复制都走这一份：只写剪贴板，成功与失败都不弹提示，反馈交给按钮自己的样子。 */
+	const copyText = useCallback((text: string): void => {
+		// 写失败也没有要说明的地方，接住 rejection 免得冒成未处理异常
+		navigator.clipboard.writeText(text).catch(() => undefined);
+	}, []);
 
 	/** 对话里选中的文字被引用之后把光标放回输入框末尾 */
 	const composerInput = useRef<HTMLTextAreaElement>(null);

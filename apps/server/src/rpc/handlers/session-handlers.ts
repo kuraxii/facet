@@ -128,6 +128,14 @@ export const sessionHandlers: Pick<RequestHandlerMap, SessionMethod> = {
 			}
 			return context.terminals.subscribe(channel, params.since, sink);
 		}
+		if (parsed?.kind === "workspace") {
+			// 工作树通道的标识就是目录，目录不在的按未知通道拒绝
+			const subscribed = await context.workspaces.subscribe(channel, params.since, sink);
+			if (subscribed === undefined) {
+				throw new RequestError("unknown_channel", `unsupported channel: ${channel}`);
+			}
+			return subscribed;
+		}
 		return await context.hub.subscribe(channel, params.since, sink);
 	},
 

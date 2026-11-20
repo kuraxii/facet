@@ -57,6 +57,8 @@ function makeContext(patch: Record<string, unknown> = {}): RpcContext {
 		sessions: {},
 		modelLog: {},
 		terminals: {},
+		workspaces: {},
+		gitRefresh: {},
 		audit: { record: () => {} },
 		...patch,
 		hub,
@@ -398,6 +400,22 @@ describe("契约表", () => {
 		await expect(
 			handleRequest(context, connection, "subscribe", { channel: "models:/host-1" }),
 		).resolves.toEqual({ seq: 3, resync: false });
+	});
+
+	it("工作树通道按目录订阅，目录不在的按未知通道拒绝", async () => {
+		const connection = makeConnection();
+		const missing = makeContext({ workspaces: { subscribe: async () => undefined, unsubscribe: () => {} } });
+		await expect(
+			handleRequest(missing, connection, "subscribe", { channel: "workspace:/work/a" }),
+		).rejects.toMatchObject({ code: "unknown_channel" });
+
+		// 目录在的时候交给工作树通道订阅，返回它的序号
+		const context = makeContext({
+			workspaces: { subscribe: async () => ({ seq: 2, resync: false }), unsubscribe: () => {} },
+		});
+		await expect(
+			handleRequest(context, connection, "subscribe", { channel: "workspace:/work/a" }),
+		).resolves.toEqual({ seq: 2, resync: false });
 	});
 
 	it("已移除的通道种类按未知通道拒绝", async () => {

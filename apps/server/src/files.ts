@@ -11,8 +11,8 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
 import { writeFileAtomic } from "@facet/agent";
 import type { FileContent, FileEntry, FileWriteResult } from "@facet/protocol";
 
-/** 列举时不出现的目录名：版本库、依赖与构建产物。 */
-const IGNORED_DIRECTORIES = new Set([
+/** 列举时不出现的目录名：版本库、依赖与构建产物。工作树监听也用它，两处的口径不能分家。 */
+export const IGNORED_DIRECTORIES: ReadonlySet<string> = new Set([
 	".git",
 	".hg",
 	".svn",

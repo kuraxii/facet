@@ -7,7 +7,7 @@ import { type CustomProviderEntry, fetchUpstreamModels } from "@facet/agent";
 import { type CustomProviderInfo, PROTOCOL_VERSION, type RequestResults } from "@facet/protocol";
 import { buildDiagnostics } from "../../diagnostics.ts";
 import { listDirectory, readTextFile, writeTextFile } from "../../files.ts";
-import { gitCommit, gitCommitDiff, gitCommits, gitDiff, gitStatus } from "../../git.ts";
+import { gitCommit, gitCommitDiff, gitDiff } from "../../git.ts";
 import { ProjectNotFoundError } from "../../project-store.ts";
 import { revealInFileManager } from "../../reveal.ts";
 import type { RequestHandlerMap } from "../gateway.ts";
@@ -92,16 +92,20 @@ export const systemHandlers: Pick<RequestHandlerMap, SystemMethod> = {
 		return await asFileError(writeTextFile(cwd, params.path, params.content, params.expectedRevision));
 	},
 
-	gitStatus: async (params): Promise<RequestResults["gitStatus"]> =>
-		await gitStatus(await resolveProjectDirectory(params.cwd)),
+	gitStatus: async (params, context): Promise<RequestResults["gitStatus"]> =>
+		await context.gitRefresh.status(await resolveProjectDirectory(params.cwd), {
+			force: params.force === true,
+		}),
 
 	gitDiff: async (params): Promise<RequestResults["gitDiff"]> => {
 		const cwd = await resolveProjectDirectory(params.cwd);
 		return await gitDiff(cwd, params.path, params.untracked === true);
 	},
 
-	gitCommits: async (params): Promise<RequestResults["gitCommits"]> =>
-		await gitCommits(await resolveProjectDirectory(params.cwd)),
+	gitCommits: async (params, context): Promise<RequestResults["gitCommits"]> =>
+		await context.gitRefresh.commits(await resolveProjectDirectory(params.cwd), {
+			force: params.force === true,
+		}),
 
 	gitCommit: async (params): Promise<RequestResults["gitCommit"]> => {
 		const cwd = await resolveProjectDirectory(params.cwd);

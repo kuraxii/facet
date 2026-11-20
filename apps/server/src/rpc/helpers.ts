@@ -79,9 +79,9 @@ export function requireActionChannel(channel: string): Channel {
 	return requireChannel(channel, ["session", "chat"]);
 }
 
-/** 订阅与退订另外接受会话清单通道、终端通道与模型通道。 */
+/** 订阅与退订另外接受会话清单通道、终端通道、模型通道与工作树通道。 */
 export function requireSubscribableChannel(channel: string): Channel {
-	return requireChannel(channel, ["session", "chat", "sessions", "terminal", "models"]);
+	return requireChannel(channel, ["session", "chat", "sessions", "terminal", "models", "workspace"]);
 }
 
 /** 退掉一个通道的订阅，会话、对话、清单、终端与模型通道各走各的表。 */
@@ -97,6 +97,10 @@ export function unsubscribeChannel(context: RpcContext, channel: Channel, sink: 
 	}
 	if (kind === "terminal") {
 		context.terminals.unsubscribe(channel, sink);
+		return;
+	}
+	if (kind === "workspace") {
+		context.workspaces.unsubscribe(channel, sink);
 		return;
 	}
 	context.hub.unsubscribe(channel, sink);

@@ -25,6 +25,8 @@ import {
 import { WebSocket, WebSocketServer } from "ws";
 import { AuditLog } from "./audit.ts";
 import type { ServerConfig } from "./config.ts";
+import { IGNORED_DIRECTORIES } from "./files.ts";
+import { GitRefreshService } from "./git-refresh.ts";
 import type { HostSource } from "./host-identity.ts";
 import { serveWebRequest } from "./http/static.ts";
 import type { ModelsChannel } from "./models-channel.ts";
@@ -37,6 +39,7 @@ import type { SessionHub } from "./session-hub.ts";
 import type { SessionsChannel } from "./sessions-channel.ts";
 import type { SettingsStore } from "./settings-store.ts";
 import { TerminalService } from "./terminals.ts";
+import { WorkspaceService } from "./workspaces.ts";
 
 /** Web 接入的 WebSocket 路径，与字节流那条共用同一套帧。 */
 const ENDPOINT_PATH = "/endpoint";
@@ -186,6 +189,10 @@ export async function startEndpoint(options: {
 	modelLog: ModelsChannel;
 	/** 终端登记与终端通道 */
 	terminals?: TerminalService;
+	/** 工作树通道：按项目目录盯住工作树 */
+	workspaces?: WorkspaceService;
+	/** 按仓库排队的 git 状态探测，缺省用 1500ms 冷却 */
+	gitRefresh?: GitRefreshService;
 	/** 远程操作审计，缺省写到数据目录的 audit.log */
 	audit?: AuditLog;
 	/** 清单请求之后的回调，主机用它补齐背景数据 */
@@ -205,6 +212,8 @@ export async function startEndpoint(options: {
 		terminals:
 			options.terminals ??
 			new TerminalService({ backend: new DisabledPtyBackend("This host has no terminal backend") }),
+		workspaces: options.workspaces ?? new WorkspaceService({ ignored: IGNORED_DIRECTORIES }),
+		gitRefresh: options.gitRefresh ?? new GitRefreshService(),
 		audit: options.audit ?? new AuditLog(join(options.config.dataDir, "audit.log")),
 		onSessionsListed: options.onSessionsListed,
 	};

@@ -58,6 +58,9 @@ npm run dev:host       # 只起 server，桌面起来后自己连上它
 npm run dev:split      # 与 dev 相同，保留这个更明确的名字
 ```
 
+Linux 与 Windows 上都是上面这三条命令：脚本按平台取 `npm.cmd`、产物里的 `node.exe`，收进程树
+走 `taskkill /T`，Windows 上没有的 unix 信号不用。
+
 `dev` 的编排在 `scripts/dev-split.mjs`：两边输出各加前缀，桌面退出（或 Ctrl+C）时把 server
 一起收掉。要分开看两边日志时用 `npm run dev:host` 加 `npm run dev -w @facet/desktop` 各起一个
 终端。不另设只起桌面的脚本：桌面在开发态找不到主机时会自己去拉一个，而它拉起来的主机按发布

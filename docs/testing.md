@@ -49,6 +49,7 @@
 - **`test` 里会建临时 git 仓库**：用例自己屏蔽全局与系统配置、钉死提交身份，本机没配
   `user.name` 也能跑；反过来，本机的 `commit.gpgsign` 之类也不会影响用例。
 - **`mock:check` 占端口**：冒烟会起假主机，端口被占时会直接失败，先看有没有残留进程。
+- **界面单测默认没有 DOM**：绝大多数用例用 `react-dom/server` 只验标记。要真的点击、按键的用例（例如 `workspace-tab-bar.test.tsx`）在文件头用 `// @vitest-environment jsdom` 切环境；`jsdom` 是 `packages/ui` 的 devDependency，浏览器 API（`ResizeObserver` 等）由用例自己补桩。
 - **CI 与本机的 glibc 不一样**：本机产物只能在本机这类新系统上跑，能给老系统的包从 CI 取
   （判据是 `node scripts/check-glibc.mjs --max 2.31`）。
 - **`npm run dev` 的界面点不动，先看根节点有没有套 StrictMode**：开发态双挂载之后这棵树的

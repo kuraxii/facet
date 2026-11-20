@@ -1,21 +1,21 @@
 /**
  * 主工作区。
  *
- * 三栏骨架、标签栏、右栏与各种弹窗的组装；状态都来自上层建好的几个域，这里只把
- * 它们摆到位并接上回调。
+ * 三栏骨架、顶带里的工作区控件、右栏与各种弹窗的组装；状态都来自上层建好的几个域，这里
+ * 只把它们摆到位并接上回调。
+ *
+ * 主区只有对话：消息流与输入区直接撑满中列，主区自己不再有标签栏。文件、变更与终端都在
+ * 右栏那三张分页里（口径见 `docs/layout.md` §2）。
  */
 
 import type { ChatView } from "@facet/client-core";
 import { chatActivity } from "@facet/client-core";
 import type { LanguageSetting } from "@facet/i18n";
 import {
-	ChangesPane,
 	CodeThemeProvider,
 	CreateProjectDialog,
-	FilesPane,
+	EmptyState,
 	HostSwitcher,
-	MainTabs,
-	PanelTabs,
 	PanelToggle,
 	parseCommand,
 	RightPanel,
@@ -27,24 +27,26 @@ import {
 	SidebarToggle,
 	TrustDialog,
 	useI18n,
+	type WorkspaceTabId,
 } from "@facet/ui";
 import { X } from "lucide-react";
-import { type ReactNode, type RefObject, useMemo } from "react";
+import { type ReactNode, type RefObject, useCallback, useMemo } from "react";
 import { AppFrame } from "../app-frame.tsx";
 import { bridge } from "../bridge.ts";
 import type { Composer } from "../hooks/useComposer.ts";
 import type { HostConnection } from "../hooks/useHostConnection.ts";
-import type { MainTabs as MainTabsState } from "../hooks/useMainTabs.ts";
 import type { SessionLifecycle } from "../hooks/useSessionLifecycle.ts";
 import type { TerminalPanel } from "../hooks/useTerminalPanel.ts";
 import type { Transcript } from "../hooks/useTranscript.ts";
+import type { WorkspaceDocs } from "../hooks/useWorkspaceDocs.ts";
 import type { WorkspaceShell } from "../hooks/useWorkspaceShell.ts";
 import { applyAppearance } from "../hooks/useWorkspaceShell.ts";
 import { LOCAL_TARGET } from "../host-connection.ts";
 import { useHostClient } from "../host-context.tsx";
-import { toTabItems } from "../main-tabs.ts";
+import { workspaceTabItems } from "../workspace-tabs.ts";
 import { ChatArea } from "./chat-area.tsx";
-import { DocumentPane } from "./document-pane.tsx";
+import { PanelHead, PanelRail, WorkspacePanelControls } from "./workspace-band.tsx";
+import { WorkspaceBody } from "./workspace-body.tsx";
 
 export interface WorkbenchProps {
 	/** 连接域 */
@@ -53,8 +55,8 @@ export interface WorkbenchProps {
 	session: SessionLifecycle;
 	/** 外壳呈现状态 */
 	shell: WorkspaceShell;
-	/** 标签域 */
-	tabs: MainTabsState;
+	/** 右栏的文档与改动 */
+	docs: WorkspaceDocs;
 	/** 终端域 */
 	terminal: TerminalPanel;
 	/** 输入区 */
@@ -66,15 +68,13 @@ export interface WorkbenchProps {
 	onLanguageChange: (setting: LanguageSetting) => void;
 	/** 当前会话标识 */
 	openedSessionId: string | undefined;
-	/** 关掉一个标签 */
-	closeTab: (id: string) => void;
-	/** 一次关掉多个标签 */
-	closeTabs: (ids: readonly string[]) => void;
+	/** 终端分页要显示的那个终端 */
+	terminalId: string | undefined;
 	/** 复制一段文本 */
 	copyText: (text: string) => void;
 	/** 输入框本身：引用之后要把光标放回它末尾 */
 	composerInput: RefObject<HTMLTextAreaElement | null>;
-	/** 开一个终端并摆好标签 */
+	/** 开一个终端 */
 	openTerminal: () => Promise<void>;
 }
 
@@ -84,15 +84,14 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 		host,
 		session,
 		shell,
-		tabs,
+		docs,
 		terminal,
 		composer,
 		transcript,
 		languageSetting,
 		onLanguageChange,
 		openedSessionId,
-		closeTab,
-		closeTabs,
+		terminalId,
 		copyText,
 		openTerminal,
 		composerInput,
@@ -104,22 +103,17 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 	const activity = chatActivity(sessionView);
 	const sessionCwd: string | undefined = sessionView?.state.cwd;
 	const canUseTerminal = host.host?.capabilities.includes("terminal") ?? false;
-	const providerAuth = host.catalog.auth;
 	const tabItems = useMemo(
 		() =>
-			toTabItems(
-				tabs.tabs,
-				terminal.terminals,
-				{ session: sessionView, openedSessionId, summaries: session.sessions },
+			workspaceTabItems(
 				{
-					untitled: t("sidebar.untitled"),
-					changes: t("mainTabs.changes"),
-					diff: t("mainTabs.diff"),
-					commit: (sha) => t("mainTabs.commit", { sha }),
-					newTerminal: t("terminal.newTerminal"),
+					changes: docs.changes.status?.files.length ?? 0,
+					terminals: terminal.terminals.length,
+					canUseTerminal,
 				},
+				{ files: t("panel.files"), changes: t("panel.changes"), terminal: t("panel.terminal") },
 			),
-		[openedSessionId, session.sessions, sessionView, t, tabs.tabs, terminal.terminals],
+		[canUseTerminal, docs.changes.status, t, terminal.terminals.length],
 	);
 	const settingsData = useMemo<SettingsDataSource>(
 		() => ({
@@ -165,6 +159,7 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 		}),
 		[client, host.refreshCatalog],
 	);
+	const providerAuth = host.catalog.auth;
 	const draftCommand = parseCommand(composer.draft.trim());
 	const isExtensionCommand =
 		draftCommand !== undefined &&
@@ -185,8 +180,6 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 		sessionView?.state.initialization.kind === "ready" &&
 		sessionView.state.extensionUi.prompts.length === 0;
 	const emptyCreateCwd = session.createCwd.length > 0 ? session.createCwd : session.projects[0]?.cwd;
-	const activeTab = tabs.tabs.find((item) => item.id === tabs.activeTabId);
-	const fileTab = activeTab?.kind === "file" ? activeTab : undefined;
 	const errorBar =
 		session.sessionError === undefined ? null : (
 			<div className="session-error">
@@ -204,8 +197,41 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 				</button>
 			</div>
 		);
-	const chatArea =
-		sessionView === undefined ? null : (
+
+	/**
+	 * 打开工作区的某一张分页。
+	 *
+	 * 终端还没有就地新建一个：分页本身是入口，用户点了它要的就是一个能用的终端，而不是
+	 * 一片空白；建成之后由上层把分页切过去。
+	 */
+	const selectWorkspaceTab = useCallback(
+		(id: WorkspaceTabId): void => {
+			if (id === "terminal" && terminalId === undefined) {
+				void openTerminal();
+				return;
+			}
+			shell.setPanelTab(id);
+		},
+		[openTerminal, shell, terminalId],
+	);
+
+	/** 主区的内容：有会话就是对话，没有会话就是空状态 */
+	const mainContent =
+		sessionView === undefined ? (
+			<div className="empty-wrap">
+				{errorBar}
+				<EmptyState
+					cwd={emptyCreateCwd}
+					canCreate={host.phase === "ready"}
+					onCreate={() => {
+						if (emptyCreateCwd !== undefined) {
+							session.createSession(emptyCreateCwd);
+						}
+					}}
+					onAddProject={session.openProjectDialog}
+				/>
+			</div>
+		) : (
 			<ChatArea
 				host={host}
 				session={session}
@@ -224,36 +250,14 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 				composerInput={composerInput}
 			/>
 		);
-	const panelTabs = <PanelTabs tab={shell.panel.tab} onTabChange={shell.setPanelTab} />;
-	/*
-	 * 右栏开关与分页放在哪一格，看右列此刻有没有宽度：有就占右栏那一格（与正文列对齐），
-	 * 没有（右栏收起、中档被预算折起、窄档整列不存在）就贴在中间那格右端，仍在窗口按钮左侧。
-	 *
-	 * 开关的展开态看的是「此刻看不看得见」，不是意图位：中档被预算折起时点一下就是要把它
-	 * 调出来，而不是把意图位关掉。
-	 */
-	const bandPanelControls = (
-		<>
-			{/* 窄档抽屉开着时这个开关留在原地（被盖住）：关掉之后焦点要还给它 */}
-			<PanelToggle
-				isOpen={shell.isNarrow ? shell.isPanelDrawerOpen : shell.panelVisible}
-				onToggle={shell.togglePanel}
-			/>
-			{shell.isNarrow || !shell.panel.open ? null : panelTabs}
-		</>
-	);
-	/* 窄档抽屉的顶头：分页与关闭按钮都在这一条 36px 里 */
-	const panelDrawerHead = (
-		<>
-			<PanelToggle isOpen onToggle={shell.closeDrawer} />
-			{panelTabs}
-		</>
-	);
+
+	/* 右栏占着列时，它的控件在顶带右格里；否则顶带中格右端只留一个入口 */
 	const hasPanelColumn = shell.panelVisible && !shell.isNarrow;
-	/* 窄档看抽屉，平铺看预算判定的结果 */
-	const renderPanel = shell.isNarrow ? shell.isPanelDrawerOpen : shell.panelVisible;
-	/* 窄档与右栏收起时，开关都留在中格（抽屉开着时它被遮罩盖住） */
-	const showBandPanelControls = !hasPanelColumn;
+	/* 右栏要渲染：要么占列，要么作为浮层展开着 */
+	const rendersPanel = hasPanelColumn || shell.isPanelDrawerOpen;
+	/* 收起态的非窄档给一条悬浮竖轨；窄档不给，入口统一留在顶带 */
+	const showsRail = !shell.isNarrow && !hasPanelColumn && !shell.isPanelDrawerOpen;
+
 	return (
 		<CodeThemeProvider value={shell.codeTheme}>
 			<AppFrame
@@ -285,19 +289,29 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 							 * 窄档抽屉开着时这个开关留在原地（被抽屉与遮罩盖住）：抽屉关掉之后
 							 * 焦点要还给它，元素不能在打开期间就被卸载掉。
 							 */}
-							{shell.isNarrow ? (
+							{shell.isNarrow || !shell.isSidebarOpen ? (
 								<SidebarToggle isOpen={false} onToggle={shell.toggleSidebar} />
-							) : shell.isSidebarOpen ? null : (
-								<SidebarToggle isOpen={false} onToggle={shell.toggleSidebar} />
-							)}
-							{showBandPanelControls ? (
+							) : null}
+							{hasPanelColumn ? null : (
 								<>
 									<span className="chrome-spacer" />
-									{bandPanelControls}
+									<PanelToggle isOpen={shell.isPanelOpen} onToggle={shell.togglePanel} />
 								</>
-							) : null}
+							)}
 						</div>
-						{hasPanelColumn ? <div className="chrome-slot is-panel is-open">{bandPanelControls}</div> : null}
+						{hasPanelColumn ? (
+							<div className="chrome-slot is-panel is-open">
+								<div className="chrome-slot-row">
+									<WorkspacePanelControls
+										shell={shell}
+										items={tabItems}
+										onSelectTab={selectWorkspaceTab}
+										showPin={!shell.isNarrow}
+										controlsId="workspace-panel"
+									/>
+								</div>
+							</div>
+						) : null}
 					</>
 				}
 			>
@@ -307,7 +321,8 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 							type="button"
 							className="drawer-scrim"
 							aria-label={t("app.closeDrawer")}
-							onClick={shell.closeDrawer}
+							// 右抽屉开着时关的是它；否则关的是窄档的侧栏抽屉
+							onClick={shell.isPanelDrawerOpen ? shell.closePanelDrawer : shell.closeDrawer}
 						/>
 					) : null}
 					<SessionSidebar
@@ -365,85 +380,35 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 						}
 					/>
 
-					<main className="main">
-						<MainTabs
-							tabs={tabItems}
-							activeId={tabs.activeTabId}
-							onSelect={tabs.selectTab}
-							onClose={closeTab}
-							onCloseTabs={closeTabs}
-							onCopyText={copyText}
-							onReorder={tabs.reorderTabs}
-							onCreateTerminal={() => void openTerminal()}
-							canCreateTerminal={canUseTerminal}
-						/>
-						<div className="main-tab-content" id="main-tab-content">
-							<DocumentPane
-								host={host}
-								session={session}
-								tabs={tabs}
-								terminal={terminal}
-								sessionView={sessionView}
-								emptyCreateCwd={emptyCreateCwd}
-								errorBar={errorBar}
-								chat={chatArea}
-							/>
-						</div>
-					</main>
+					{/* 主区只有对话：消息流与输入区直接撑满这一列，不再有标签栏 */}
+					<main className="main">{mainContent}</main>
 
-					{renderPanel ? (
+					{rendersPanel ? (
 						<RightPanel
-							width={shell.isNarrow ? undefined : shell.panel.width}
-							onWidthChange={shell.isNarrow ? undefined : (width) => shell.updatePanel({ width })}
+							// 占列时是分隔条可拖的那一栏，浮层时是一层盖住正文的全高抽屉
+							variant={hasPanelColumn ? "tiled" : "drawer"}
+							width={hasPanelColumn ? shell.panel.width : undefined}
+							onWidthChange={hasPanelColumn ? (width) => shell.updatePanel({ width }) : undefined}
 							maxWidth={shell.panelMaxWidth}
 							onDraggingChange={shell.setPaneResizing}
-							head={shell.isNarrow ? panelDrawerHead : undefined}
+							head={
+								hasPanelColumn ? undefined : (
+									<PanelHead shell={shell} items={tabItems} onSelectTab={selectWorkspaceTab} />
+								)
+							}
+							bodyClassName="is-workspace"
 						>
-							{shell.panel.tab === "changes" ? (
-								<ChangesPane
-									status={tabs.changes.status}
-									error={tabs.changes.error}
-									onRefresh={() => void tabs.refreshChanges({ force: true })}
-									onOpenDiff={(file) => {
-										if (sessionCwd !== undefined) {
-											tabs.openDiff(sessionCwd, file);
-										}
-									}}
-									commits={tabs.commits.data}
-									commitsLoading={tabs.commits.isLoading}
-									commitsError={tabs.commits.error}
-									onCommitPress={(commit) => {
-										if (sessionCwd !== undefined) {
-											tabs.openCommit(sessionCwd, commit);
-										}
-									}}
-								/>
-							) : tabs.fileError === undefined ? (
-								<FilesPane
-									loadDirectory={(path) =>
-										sessionCwd === undefined
-											? Promise.reject(new Error(t("app.noSession")))
-											: client.listDirectory(sessionCwd, path)
-									}
-									onOpenFile={(path) => {
-										if (sessionCwd !== undefined) {
-											void tabs.openFile(sessionCwd, path);
-										}
-									}}
-									selectedPath={
-										fileTab !== undefined && fileTab.cwd === sessionCwd ? fileTab.path : undefined
-									}
-								/>
-							) : (
-								<p className="chg-note is-error">
-									{tabs.fileError}
-									<button type="button" className="chg-retry" onClick={tabs.clearFileError}>
-										{t("editor.backToDirectory")}
-									</button>
-								</p>
-							)}
+							<WorkspaceBody
+								tab={shell.panel.tab}
+								docs={docs}
+								terminal={terminal}
+								sessionCwd={sessionCwd}
+								terminalId={terminalId}
+							/>
 						</RightPanel>
 					) : null}
+
+					{showsRail ? <PanelRail shell={shell} items={tabItems} onSelectTab={selectWorkspaceTab} /> : null}
 
 					<SessionSearch
 						isOpen={shell.isSearchOpen}

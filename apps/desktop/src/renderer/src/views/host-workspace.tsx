@@ -2,23 +2,23 @@
  * 一台主机的工作区。
  *
  * DOM 里同时只挂一份：切到别的主机时整棵子树卸载，回来时按端点重新挂上。这样两边的
- * 侧栏、标签与内容不可能串台，界面里也不会有看不见的另一台主机的节点。
+ * 侧栏、分页与内容不可能串台，界面里也不会有看不见的另一台主机的节点。
  *
  * 组件卸载不等于断开：连接、会话与终端都留在运行时里继续跑，这里只重建「看」的那部分，
  * 起来时从工作区快照与客户端的既有状态接着显示。
  */
 import { chatActivity } from "@facet/client-core";
 import type { LanguageSetting } from "@facet/i18n";
-import { appendQuote, sessionTabId, TextMenu, terminalTabId } from "@facet/ui";
-import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
+import { appendQuote, TextMenu } from "@facet/ui";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { bridge } from "../bridge.ts";
 import { useComposer } from "../hooks/useComposer.ts";
 import type { HostConnection } from "../hooks/useHostConnection.ts";
-import { useMainTabs } from "../hooks/useMainTabs.ts";
 import { useNoticeBridge } from "../hooks/useNoticeBridge.ts";
 import { useSessionLifecycle } from "../hooks/useSessionLifecycle.ts";
 import { useTerminalPanel } from "../hooks/useTerminalPanel.ts";
 import { useReadMarker, useTranscript } from "../hooks/useTranscript.ts";
+import { useWorkspaceDocs } from "../hooks/useWorkspaceDocs.ts";
 import { useWorkspaceShell } from "../hooks/useWorkspaceShell.ts";
 import { useHostRuntime } from "../host-context.tsx";
 import { placeCaretAtEnd, QUOTE_SOURCE_SELECTOR } from "../selection-quote.ts";
@@ -48,13 +48,8 @@ export function HostWorkspace({
 	);
 	void version;
 
-	/**
-	 * 打开会话、删除会话的收尾都落在标签与滚动位置上，那两处在这之后才建好，
-	 * 这里经 ref 转一层，会话域拿到的始终是同一个回调。
-	 */
-	const focusSessionTab = useRef<(file: string) => void>(() => undefined);
+	/** 删掉会话之后的收尾：滚动位置在那之后才建好，这里经 ref 转一层。 */
 	const forgetSession = useRef<(path: string) => void>(() => undefined);
-	const onSessionOpened = useCallback((file: string) => focusSessionTab.current(file), []);
 	const onSessionRemoved = useCallback((path: string) => forgetSession.current(path), []);
 
 	const session = useSessionLifecycle({
@@ -63,7 +58,6 @@ export function HostWorkspace({
 		// 启动目录是本机的概念：远端主机上没有这个目录，打包态也可能压根没配
 		projectDir: runtime.isLocal && bridge.projectDir.length > 0 ? bridge.projectDir : undefined,
 		snapshot: runtime.workspace,
-		onSessionOpened,
 		onSessionRemoved,
 	});
 
@@ -99,15 +93,20 @@ export function HostWorkspace({
 		showToast: toast.show,
 	});
 
-	const tabs = useMainTabs({
+	/** 终端分页此刻显示哪一个终端；为空时从清单里挑一个 */
+	const [activeTerminalId, setActiveTerminalId] = useState<string | undefined>(undefined);
+	const terminalId =
+		terminal.terminals.find((item) => item.id === activeTerminalId)?.id ??
+		terminal.terminals[terminal.terminals.length - 1]?.id;
+
+	/** 变更预览是否正在显示：右栏开着且停在变更分页 */
+	const isChangesVisible = shell.isPanelOpen && shell.panel.tab === "changes";
+
+	const docs = useWorkspaceDocs({
 		client,
 		session: sessionView,
-		openedSessionId,
-		terminals: terminal.terminals,
-		closedTerminalIds: terminal.closedTerminalIds,
 		snapshot: runtime.workspace,
-		isPanelOnChanges: shell.panel.open && shell.panel.tab === "changes",
-		onOpenSession: session.openSession,
+		isChangesVisible,
 	});
 
 	// 主机侧通知与插件的 ctx.ui.notify 都走轻提示：后台会话的提示也能被看见
@@ -120,34 +119,16 @@ export function HostWorkspace({
 		openedSessionId,
 	});
 
-	// 新会话摆到主区域；删掉会话时连标签与滚动位置一起收掉
-	focusSessionTab.current = (file: string) => {
-		const opened = client.current;
-		if (opened === undefined) {
-			return;
-		}
-		tabs.focusTab({
-			id: sessionTabId(file, opened.snapshot.id),
-			kind: "session",
-			file,
-			sessionId: opened.snapshot.id,
-		});
-	};
+	// 删掉会话时把它的滚动位置一起收掉
 	forgetSession.current = (path: string) => {
-		tabs.removeSessionTabs(path);
 		transcript.forgetScroll(path);
 	};
-
-	const activeTab = tabs.tabs.find((item) => item.id === tabs.activeTabId);
-	/** 变更是否正在显示：右栏停在变更分页，或主区打开着变更文档 */
-	const isChangesVisible =
-		(shell.panel.open && shell.panel.tab === "changes") || activeTab?.kind === "changes";
 
 	useReadMarker({
 		client,
 		activeFile: session.activeFile,
 		activity,
-		refreshChanges: tabs.refreshChanges,
+		refreshChanges: docs.refreshChanges,
 		isChangesVisible,
 	});
 
@@ -164,29 +145,14 @@ export function HostWorkspace({
 		refreshSessions: session.refreshSessions,
 	});
 
-	/** 开一个终端并把它的标签摆到主区域。 */
+	/** 开一个终端，把它摆到终端分页上。 */
 	const openTerminal = useCallback(async () => {
 		const info = await terminal.openTerminal();
 		if (info !== undefined) {
-			tabs.focusTab({ id: terminalTabId(info.id), kind: "terminal", terminalId: info.id });
+			setActiveTerminalId(info.id);
+			shell.setPanelTab("terminal");
 		}
-	}, [tabs, terminal]);
-
-	/** 关掉一个标签；终端标签还要一并结束进程。 */
-	const closeTab = useCallback(
-		(id: string) => {
-			const terminalId = tabs.closeTab(id);
-			if (terminalId !== undefined) {
-				void terminal.closeTerminal(terminalId);
-			}
-		},
-		[tabs, terminal],
-	);
-
-	const closeTabs = useCallback(
-		(ids: readonly string[]) => tabs.closeTabs(ids, (terminalId) => void terminal.closeTerminal(terminalId)),
-		[tabs, terminal],
-	);
+	}, [shell, terminal]);
 
 	/** 各处复制都走这一份：只写剪贴板，成功与失败都不弹提示，反馈交给按钮自己的样子。 */
 	const copyText = useCallback((text: string): void => {
@@ -205,25 +171,23 @@ export function HostWorkspace({
 		[composer],
 	);
 
-	// 快捷键 Ctrl + ` 回到终端标签；没有终端时在当前目录新建一个
-	const tabList = tabs.tabs;
-	const focusTab = tabs.focusTab;
+	// 快捷键 Ctrl + ` 回到终端分页；没有终端时在当前目录新建一个
+	const setPanelTab = shell.setPanelTab;
 	useEffect(() => {
 		const onKeyDown = (event: KeyboardEvent): void => {
 			if (event.key !== "`" || !(event.ctrlKey || event.metaKey)) {
 				return;
 			}
 			event.preventDefault();
-			const tab = tabList.find((item) => item.kind === "terminal");
-			if (tab !== undefined) {
-				focusTab(tab);
+			if (terminalId !== undefined) {
+				setPanelTab("terminal");
 				return;
 			}
 			void openTerminal();
 		};
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [focusTab, openTerminal, tabList]);
+	}, [openTerminal, setPanelTab, terminalId]);
 
 	return (
 		<>
@@ -231,15 +195,14 @@ export function HostWorkspace({
 				host={host}
 				session={session}
 				shell={shell}
-				tabs={tabs}
+				docs={docs}
 				terminal={terminal}
 				composer={composer}
 				transcript={transcript}
 				languageSetting={languageSetting}
 				onLanguageChange={onLanguageChange}
 				openedSessionId={openedSessionId}
-				closeTab={closeTab}
-				closeTabs={closeTabs}
+				terminalId={terminalId}
 				copyText={copyText}
 				openTerminal={openTerminal}
 				composerInput={composerInput}

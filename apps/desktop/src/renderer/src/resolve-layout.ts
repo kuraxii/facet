@@ -14,8 +14,13 @@
 /** 窄档阈值（CSS px）：小于它是窄档，两栏都进抽屉。 */
 export const LAYOUT_BREAKPOINT_PX = 880;
 
-/** 宽档阈值（CSS px）：大于等于它是宽档，两栏按意图平铺，不做预算判断。 */
-export const LAYOUT_WIDE_BREAKPOINT_PX = 1100;
+/**
+ * 宽档阈值（CSS px）：大于等于它是宽档，两栏按意图平铺，不做预算判断。
+ *
+ * 1240 是「两栏都拉到舒服的宽度还剩得下正文」的那条线：右栏缺省 520、左栏缺省 272、
+ * 正文最小可用宽 420，三者相加 1212，留一点余量。
+ */
+export const LAYOUT_WIDE_BREAKPOINT_PX = 1240;
 
 /**
  * 正文最小可用宽（CSS px）。
@@ -43,6 +48,13 @@ export interface LayoutInput {
 	readonly sidebarIntent: boolean;
 	/** 用户想不想开右栏 */
 	readonly panelIntent: boolean;
+	/**
+	 * 右栏是不是固定在三栏里（图钉）。
+	 *
+	 * 取消了固定时它不参与列预算：定档照旧看视口宽，但右栏在 Grid 里恒为 `false`，展开
+	 * 时走窄档那一层全高抽屉（口径见 `docs/layout.md` §2「图钉」）。
+	 */
+	readonly panelPinned: boolean;
 	/** 两栏都想开而预算不够时保留哪一栏：最近一次被用户主动打开或调过宽的那一栏 */
 	readonly priorityPane: LayoutPane;
 }
@@ -93,12 +105,17 @@ export function layoutTierOf(viewportWidth: number): LayoutTier {
 /**
  * 算出这一刻哪一栏占列。
  *
- * 判定顺序：窄档两栏都让给抽屉 → 宽档只看意图 → 中档先看意图，再在两栏都想开时核对预算
- * （`侧栏宽 + 正文最小宽 + 右栏宽 <= 视口宽`），超了就把优先级低的那一栏折起。
+ * 判定顺序：窄档两栏都让给抽屉 → 未固定时右栏不参与（它是一层浮层，不占列）→ 宽档只看
+ * 意图 → 中档先看意图，再在两栏都想开时核对预算（`侧栏宽 + 正文最小宽 + 右栏宽 <=
+ * 视口宽`），超了就把优先级低的那一栏折起。
+ *
+ * 图钉只在宽档与中档有意义：窄档本来就用抽屉，`pinned` 不改变结果。
  */
 export function resolveLayout(input: LayoutInput): LayoutResolution {
 	const viewportWidth = usableViewport(input.viewportWidth);
 	const tier = layoutTierOf(viewportWidth);
+	/** 右栏此刻参不参与平铺：先看不固定，再看意图 */
+	const panelIntent = input.panelIntent && input.panelPinned;
 
 	if (tier === "narrow") {
 		return { tier, viewportWidth, sidebarVisible: false, panelVisible: false, foldedPane: undefined };
@@ -109,18 +126,18 @@ export function resolveLayout(input: LayoutInput): LayoutResolution {
 			tier,
 			viewportWidth,
 			sidebarVisible: input.sidebarIntent,
-			panelVisible: input.panelIntent,
+			panelVisible: panelIntent,
 			foldedPane: undefined,
 		};
 	}
 
 	// 中档：只有一栏想开时没有预算之争，直接按意图摆
-	if (!input.sidebarIntent || !input.panelIntent) {
+	if (!input.sidebarIntent || !panelIntent) {
 		return {
 			tier,
 			viewportWidth,
 			sidebarVisible: input.sidebarIntent,
-			panelVisible: input.panelIntent,
+			panelVisible: panelIntent,
 			foldedPane: undefined,
 		};
 	}

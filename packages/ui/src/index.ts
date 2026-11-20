@@ -109,17 +109,6 @@ export type { DiffViewProps } from "./panel/diff-view.tsx";
 export { DiffView } from "./panel/diff-view.tsx";
 export type { FilesPaneProps } from "./panel/files-pane.tsx";
 export { FilesPane } from "./panel/files-pane.tsx";
-export type { MainTab } from "./panel/main-tab.ts";
-export {
-	changesTabId,
-	commitTabId,
-	diffTabId,
-	fileTabId,
-	sessionTabId,
-	terminalTabId,
-} from "./panel/main-tab.ts";
-export type { MainTabItem, MainTabsProps } from "./panel/main-tabs.tsx";
-export { MainTabs } from "./panel/main-tabs.tsx";
 export type { PaneResizerProps } from "./panel/pane-resizer.tsx";
 export { PaneResizer } from "./panel/pane-resizer.tsx";
 export type { PaneWidthBounds } from "./panel/pane-width.ts";
@@ -135,10 +124,17 @@ export {
 	readPanelState,
 	writePanelState,
 } from "./panel/panel-state.ts";
-export { PanelTabs } from "./panel/panel-tabs.tsx";
 export type { RightPanelProps } from "./panel/right-panel.tsx";
 export { RightPanel } from "./panel/right-panel.tsx";
 export { PanelToggle, SidebarToggle } from "./panel/top-bar.tsx";
+export type { WorkspaceSplitProps } from "./panel/workspace-split.tsx";
+export { WorkspaceSplit } from "./panel/workspace-split.tsx";
+export type {
+	WorkspaceTabBarProps,
+	WorkspaceTabId,
+	WorkspaceTabItem,
+} from "./panel/workspace-tab-bar.tsx";
+export { WorkspaceTabBar } from "./panel/workspace-tab-bar.tsx";
 export type { TextMenuProps } from "./text-menu.tsx";
 export { TextMenu } from "./text-menu.tsx";
 export type { CodeThemeOption, UiThemeOption } from "./theme.ts";

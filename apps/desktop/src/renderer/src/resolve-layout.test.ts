@@ -1,8 +1,8 @@
 /**
- * 档位判定与中档预算折叠。
+ * 档位判定、中档预算折叠与图钉。
  *
- * 纯函数：只吃视口宽、偏好宽与意图位，不读窗口、不碰 DOM。边界视口覆盖三档两界
- * （`879/880`、`1099/1100`）与「刚好放得下」的预算线（`1012`）。
+ * 纯函数：只吃视口宽、偏好宽、意图位、图钉与优先级，不读窗口、不碰 DOM。边界视口覆盖
+ * 三档两界（`879/880`、`1239/1240`）与「刚好放得下」的预算线（`1212`）。
  */
 import { describe, expect, it } from "vitest";
 import {
@@ -15,15 +15,16 @@ import {
 
 /** 缺省偏好宽：与 `panel-state.ts`、`sidebar-state.ts` 的缺省值一致。 */
 const SIDEBAR_PREF = 272;
-const PANEL_PREF = 320;
+const PANEL_PREF = 520;
 
 function input(patch: Partial<LayoutInput> = {}): LayoutInput {
 	return {
-		viewportWidth: 1280,
+		viewportWidth: 1400,
 		sidebarPref: SIDEBAR_PREF,
 		panelPref: PANEL_PREF,
 		sidebarIntent: true,
 		panelIntent: true,
+		panelPinned: true,
 		priorityPane: "sidebar",
 		...patch,
 	};
@@ -35,15 +36,15 @@ describe("档位判定", () => {
 		expect(layoutTierOf(879)).toBe("narrow");
 	});
 
-	it("880 到 1099 是中档", () => {
-		for (const width of [880, 881, 899, 900, 1012, 1099]) {
+	it("880 到 1239 是中档", () => {
+		for (const width of [880, 881, 899, 900, 1012, 1099, 1212, 1239]) {
 			expect(layoutTierOf(width), String(width)).toBe("mid");
 		}
 	});
 
-	it("1100 起是宽档", () => {
-		expect(layoutTierOf(1100)).toBe("wide");
-		expect(layoutTierOf(1280)).toBe("wide");
+	it("1240 起是宽档", () => {
+		expect(layoutTierOf(1240)).toBe("wide");
+		expect(layoutTierOf(1400)).toBe("wide");
 	});
 
 	it("读不懂的视口宽回落到宽档", () => {
@@ -55,7 +56,7 @@ describe("档位判定", () => {
 });
 
 describe("窄档", () => {
-	it("两栏都让给抽屉，不看意图", () => {
+	it("两栏都让给抽屉，不看意图与图钉", () => {
 		for (const width of [640, 879]) {
 			expect(resolveLayout(input({ viewportWidth: width })), String(width)).toEqual({
 				tier: "narrow",
@@ -64,25 +65,24 @@ describe("窄档", () => {
 				panelVisible: false,
 				foldedPane: undefined,
 			});
+			// 窄档忽略图钉：钉不钉都是抽屉
+			expect(resolveLayout(input({ viewportWidth: width, panelPinned: false })).panelVisible).toBe(false);
 		}
 	});
 });
 
 describe("宽档", () => {
 	it("按意图平铺，两栏同时开时不做预算判断", () => {
-		// 420 + 420 + 480 > 1100，宽档仍然两栏都摆：口径是平铺，不是折叠
-		expect(
-			resolveLayout(input({ viewportWidth: 1100, sidebarPref: 420, panelPref: 480 })).sidebarVisible,
-		).toBe(true);
-		expect(resolveLayout(input({ viewportWidth: 1100, sidebarPref: 420, panelPref: 480 })).panelVisible).toBe(
-			true,
-		);
-		expect(resolveLayout(input({ viewportWidth: 1280 })).foldedPane).toBeUndefined();
+		// 420 + 420 + 840 > 1240，宽档仍然两栏都摆：口径是平铺，不是折叠
+		const layout = resolveLayout(input({ viewportWidth: 1240, sidebarPref: 420, panelPref: 840 }));
+		expect(layout.sidebarVisible).toBe(true);
+		expect(layout.panelVisible).toBe(true);
+		expect(resolveLayout(input({ viewportWidth: 1400 })).foldedPane).toBeUndefined();
 	});
 
 	it("意图位照旧生效", () => {
-		expect(resolveLayout(input({ viewportWidth: 1280, panelIntent: false })).panelVisible).toBe(false);
-		expect(resolveLayout(input({ viewportWidth: 1280, sidebarIntent: false })).sidebarVisible).toBe(false);
+		expect(resolveLayout(input({ viewportWidth: 1400, panelIntent: false })).panelVisible).toBe(false);
+		expect(resolveLayout(input({ viewportWidth: 1400, sidebarIntent: false })).sidebarVisible).toBe(false);
 	});
 });
 
@@ -99,8 +99,8 @@ describe("中档", () => {
 	});
 
 	it("两栏都想开且刚好放得下时两栏都摆", () => {
-		// 272 + 420 + 320 = 1012，预算线恰好够
-		const layout = resolveLayout(input({ viewportWidth: 1012 }));
+		// 272 + 420 + 520 = 1212，预算线恰好够
+		const layout = resolveLayout(input({ viewportWidth: 1212 }));
 		expect(layout).toMatchObject({
 			tier: "mid",
 			sidebarVisible: true,
@@ -110,14 +110,14 @@ describe("中档", () => {
 	});
 
 	it("两栏都想开且放不下时按优先级折起另一栏", () => {
-		const keepSidebar = resolveLayout(input({ viewportWidth: 900, priorityPane: "sidebar" }));
+		const keepSidebar = resolveLayout(input({ viewportWidth: 1000, priorityPane: "sidebar" }));
 		expect(keepSidebar).toMatchObject({
 			sidebarVisible: true,
 			panelVisible: false,
 			foldedPane: "panel",
 		});
 
-		const keepPanel = resolveLayout(input({ viewportWidth: 900, priorityPane: "panel" }));
+		const keepPanel = resolveLayout(input({ viewportWidth: 1000, priorityPane: "panel" }));
 		expect(keepPanel).toMatchObject({
 			sidebarVisible: false,
 			panelVisible: true,
@@ -126,29 +126,55 @@ describe("中档", () => {
 	});
 
 	it("折起不改意图：视口回到宽档后按意图恢复两栏", () => {
-		const folded = resolveLayout(input({ viewportWidth: 900, priorityPane: "panel" }));
+		const folded = resolveLayout(input({ viewportWidth: 1000, priorityPane: "panel" }));
 		expect(folded.panelVisible).toBe(true);
 		expect(folded.sidebarVisible).toBe(false);
 
 		// 同一个意图在宽档原样恢复，没有任何「折叠结果被写回意图」的痕迹
-		const restored = resolveLayout(input({ viewportWidth: 1280, priorityPane: "panel" }));
+		const restored = resolveLayout(input({ viewportWidth: 1400, priorityPane: "panel" }));
 		expect(restored).toMatchObject({ sidebarVisible: true, panelVisible: true, foldedPane: undefined });
 	});
 
 	it("用户点了另一栏的开关：优先级换边，预算跟着让位", () => {
-		const before = resolveLayout(input({ viewportWidth: 900, priorityPane: "panel" }));
+		const before = resolveLayout(input({ viewportWidth: 1000, priorityPane: "panel" }));
 		expect(before.sidebarVisible).toBe(false);
 
 		// 用户点开左栏 → 意图已经是 true，优先级换成 sidebar
-		const after = resolveLayout(input({ viewportWidth: 900, priorityPane: "sidebar" }));
+		const after = resolveLayout(input({ viewportWidth: 1000, priorityPane: "sidebar" }));
 		expect(after).toMatchObject({ sidebarVisible: true, panelVisible: false, foldedPane: "panel" });
 	});
 
 	it("偏好宽超过预算时同样只保留优先级那一栏", () => {
 		const layout = resolveLayout(
-			input({ viewportWidth: 880, sidebarPref: 420, panelPref: 480, priorityPane: "panel" }),
+			input({ viewportWidth: 880, sidebarPref: 420, panelPref: 840, priorityPane: "panel" }),
 		);
 		expect(layout).toMatchObject({ sidebarVisible: false, panelVisible: true, foldedPane: "sidebar" });
+	});
+});
+
+describe("图钉", () => {
+	it("取消固定后右栏不占列，也不参与预算", () => {
+		const layout = resolveLayout(input({ viewportWidth: 1000, panelPinned: false }));
+		expect(layout).toMatchObject({ sidebarVisible: true, panelVisible: false, foldedPane: undefined });
+	});
+
+	it("取消固定不改意图：钉回去仍然按意图占列", () => {
+		// 中档 1000 放不下两栏，优先级给了右栏，所以钉回去它照样占列
+		const unpinned = resolveLayout(input({ viewportWidth: 1000, panelPinned: false, priorityPane: "panel" }));
+		const pinned = resolveLayout(input({ viewportWidth: 1000, panelPinned: true, priorityPane: "panel" }));
+		expect(unpinned.panelVisible).toBe(false);
+		expect(pinned.panelVisible).toBe(true);
+	});
+
+	it("取消固定时右栏的空闲宽度不给别人：正文仍是 1fr，折叠只看左栏自己的意图", () => {
+		const layout = resolveLayout(input({ viewportWidth: 900, panelPinned: false, sidebarIntent: true }));
+		// 没有右栏要折，也就没有「被折起的那一栏」
+		expect(layout.foldedPane).toBeUndefined();
+		expect(layout.sidebarVisible).toBe(true);
+	});
+
+	it("宽档取消固定同样不占列", () => {
+		expect(resolveLayout(input({ viewportWidth: 1400, panelPinned: false })).panelVisible).toBe(false);
 	});
 });
 
@@ -158,7 +184,7 @@ describe("非法输入回落", () => {
 			const layout = resolveLayout(input({ viewportWidth }));
 			expect(layout, String(viewportWidth)).toMatchObject({
 				tier: "wide",
-				viewportWidth: 1100,
+				viewportWidth: 1240,
 				sidebarVisible: true,
 				panelVisible: true,
 			});
@@ -178,14 +204,14 @@ describe("非法输入回落", () => {
 
 	it("小数偏好宽按整像素参与预算", () => {
 		const layout = resolveLayout(
-			input({ viewportWidth: 1012, sidebarPref: 272.4, panelPref: 319.6, priorityPane: "sidebar" }),
+			input({ viewportWidth: 1212, sidebarPref: 272.4, panelPref: 519.6, priorityPane: "sidebar" }),
 		);
 		expect(layout).toMatchObject({ sidebarVisible: true, panelVisible: true });
 	});
 });
 
 describe("中档拖动上限", () => {
-	const bounds = { min: 260, max: 480 };
+	const bounds = { min: 360, max: 840 };
 
 	it("另一栏收起时让出正文最小宽", () => {
 		expect(clampDragMax({ tier: "mid", viewportWidth: 900, otherWidth: 0, ...bounds })).toBe(
@@ -204,13 +230,13 @@ describe("中档拖动上限", () => {
 	});
 
 	it("宽档与窄档原样返回上限", () => {
-		expect(clampDragMax({ tier: "wide", viewportWidth: 1280, otherWidth: 272, ...bounds })).toBe(bounds.max);
+		expect(clampDragMax({ tier: "wide", viewportWidth: 1400, otherWidth: 272, ...bounds })).toBe(bounds.max);
 		expect(clampDragMax({ tier: "narrow", viewportWidth: 640, otherWidth: 0, ...bounds })).toBe(bounds.max);
 	});
 
 	it("钳制后的上限不会让松手时超预算", () => {
 		const other = 272;
-		const max = clampDragMax({ tier: "mid", viewportWidth: 1012, otherWidth: other, ...bounds });
-		expect(other + MAIN_MIN_WIDTH + max).toBeLessThanOrEqual(1012);
+		const max = clampDragMax({ tier: "mid", viewportWidth: 1212, otherWidth: other, ...bounds });
+		expect(other + MAIN_MIN_WIDTH + max).toBeLessThanOrEqual(1212);
 	});
 });

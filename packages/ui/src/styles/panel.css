@@ -50,32 +50,107 @@
 	border-left-color: var(--divider-highlight);
 }
 
-.panel-tabs {
+/*
+ * 工作区标签栏：三类内容共用同一条，横向贴在顶带右格与抽屉顶头上，纵向贴在收起态的竖轨里。
+ *
+ * 文字折不折由容器查询决定（见本节末尾的 `@container`），所以这几条规则里没有宽度判断。
+ */
+.workspace-tabs {
 	display: flex;
-	flex: 0 1 auto;
-	gap: 2px;
+	gap: var(--workspace-tab-gap);
+	align-items: center;
 	min-width: 0;
-	overflow: hidden;
+	/* 顶带整条都可以拖窗口，标签要自己标出来 */
 	-webkit-app-region: no-drag;
 }
 
-.panel-tab {
-	height: 26px;
-	padding: 0 10px;
+.workspace-tabs.is-vertical {
+	flex-direction: column;
+}
+
+.workspace-tab {
+	display: inline-flex;
+	flex: none;
+	gap: var(--workspace-tab-icon-gap);
+	align-items: center;
+	height: var(--workspace-tab-height);
+	padding: 0 var(--workspace-tab-padding-x);
 	border: 0;
 	border-radius: 6px;
 	background: transparent;
 	color: var(--t3);
 	font-size: 12.5px;
+	white-space: nowrap;
+	-webkit-app-region: no-drag;
 }
 
-.panel-tab:hover {
+.workspace-tab:hover:not(:disabled) {
+	background: color-mix(in srgb, var(--t1) 4%, transparent);
 	color: var(--t1);
 }
 
-.panel-tab.is-on {
+.workspace-tab[aria-selected="true"] {
 	background: var(--surface2);
 	color: var(--t1);
+}
+
+.workspace-tab:disabled {
+	color: var(--t3);
+	cursor: default;
+	opacity: 0.45;
+}
+
+.workspace-tab-icon {
+	display: grid;
+	flex: none;
+	place-items: center;
+}
+
+.workspace-tab-label {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.workspace-tab-badge {
+	flex: none;
+	padding: 0 4px;
+	border-radius: 999px;
+	background: var(--surface3);
+	color: var(--t2);
+	font-family: var(--font-mono);
+	font-size: 10.5px;
+	line-height: 14px;
+}
+
+/* 竖轨里只有图标：宽度固定，图标居中，文字与徽标都不出现 */
+.workspace-tabs.is-vertical .workspace-tab {
+	justify-content: center;
+	width: var(--workspace-tab-height);
+	padding: 0;
+}
+
+.workspace-tabs.is-vertical .workspace-tab-label,
+.workspace-tabs.is-vertical .workspace-tab-badge {
+	display: none;
+}
+
+/* `never` 口径：始终只留图标，文案由悬浮提示补上 */
+.workspace-tabs[data-label-mode="never"] .workspace-tab-label {
+	display: none;
+}
+
+/*
+ * 容器窄于 440px 时把文字折起来，只剩图标与计数。
+ *
+ * 查询容器是顶带右格与抽屉顶头（`chrome.css` 的 `.chrome-slot.is-panel`、本节的
+ * `.panel-head`），量到的是整列宽。440 这个数同时写在 `workspace-tab-bar.tsx` 的
+ * `WORKSPACE_TAB_LABEL_BREAKPOINT_PX` 里：容器查询里不能写变量，改一处要改两处。
+ */
+@container (width < 440px) {
+	.workspace-tabs[data-label-mode="auto"] .workspace-tab-label {
+		display: none;
+	}
 }
 
 .panel-body {
@@ -87,139 +162,155 @@
 	padding: 8px 0 8px 8px;
 }
 
-/* 主区域标签栏与标签内容 */
-.main-tabs {
+/*
+ * 双栏视图（文件、变更）自己分区滚：这一层不留内边距，也不再整块滚。
+ * 终端同理，它的内边距在 `.workspace-term` 上。
+ */
+.panel-body.is-workspace {
 	display: flex;
-	flex: none;
-	align-items: center;
-	gap: var(--main-tab-gap);
-	height: var(--main-tabs-height);
-	padding: 0 var(--main-tabs-edge);
-	border-top: 1px solid var(--line);
-	border-bottom: 1px solid var(--line);
+	flex-direction: column;
+	overflow: hidden;
+	padding: 0;
+	scrollbar-gutter: auto;
 }
 
-.main-tab-strip {
+/* 工作区正文：三类内容各自铺满这一块，双栏视图自己分区滚 */
+.workspace-body {
 	display: flex;
-	align-items: center;
-	gap: var(--main-tab-gap);
-	min-width: 0;
-	overflow-x: auto;
-	scrollbar-width: none;
+	flex: 1;
+	flex-direction: column;
+	height: 100%;
+	min-height: 0;
 }
 
-.main-tab-strip::-webkit-scrollbar {
+/* 分页容器：不显示的那一页仍然留在 DOM 里，只是不占位置 */
+.workspace-view {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-height: 0;
+}
+
+.workspace-view.is-inactive {
 	display: none;
 }
 
-.main-tab {
-	position: relative;
-	display: inline-flex;
+/*
+ * 终端独占整个工作区。
+ *
+ * 右侧不留内边距，滚动条才贴着工作区右缘，正文的右边距由 xterm 自己的列宽给——与其它
+ * 滚动容器的约定一致（横向留白交给内容，不留给容器）。
+ */
+.workspace-term {
+	display: flex;
+	flex: 1;
+	min-height: 0;
+	padding: var(--workspace-term-padding-y) 0 var(--workspace-term-padding-y) var(--workspace-term-padding-x);
+}
+
+/*
+ * 列表 + 预览：文件树与变更列表共用这一套。
+ *
+ * 它自己就是容器查询的容器：工作区窄于 `--workspace-list-min` 那一档时，左栏直接让位给
+ * 预览，不靠 JS 量宽度——工作区的宽度本来就是样式算出来的。
+ */
+.workspace-split {
+	display: flex;
+	flex: 1;
+	min-height: 0;
+	container-type: inline-size;
+}
+
+.workspace-split-list {
+	display: flex;
+	flex: 0 0 var(--workspace-list-width);
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+	overflow-y: auto;
+	scrollbar-gutter: stable;
+	border-right: 1px solid var(--line);
+}
+
+.workspace-split-detail {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+}
+
+.workspace-split.is-list-collapsed .workspace-split-list {
+	display: none;
+}
+
+/* 把列表叫回来的按钮：收起时出现在预览区左上角，占一行高度，不压在内容上 */
+.workspace-split-restore {
+	display: none;
 	flex: none;
-	align-items: center;
-	max-width: 220px;
-	height: var(--main-tab-height);
-	padding: 0 4px 0 0;
+	align-self: flex-start;
+	place-items: center;
+	width: var(--icon-button-size);
+	height: var(--icon-button-size);
+	margin: var(--workspace-split-inset);
+	padding: 0;
+	border: 0;
 	border-radius: 6px;
+	background: transparent;
 	color: var(--t3);
-	font-size: 12.5px;
+	-webkit-app-region: no-drag;
 }
 
-.main-tab.is-dragging {
-	opacity: 0.45;
+.workspace-split-restore:hover {
+	background: var(--surface2);
+	color: var(--t1);
 }
 
-/* 拖动落点：在目标标签左侧或右侧画一条强调色竖线，位置落在标签间距里 */
-.main-tab.is-drop-before::before,
-.main-tab.is-drop-after::after {
-	content: "";
+.workspace-split.is-list-collapsed .workspace-split-restore {
+	display: grid;
+}
+
+/* 窄于这个宽度时左栏让位给预览，叫回按钮替代它 */
+@container (width < 480px) {
+	.workspace-split .workspace-split-list {
+		display: none;
+	}
+
+	.workspace-split .workspace-split-restore {
+		display: grid;
+	}
+}
+
+/*
+ * 收起态右侧的悬浮竖轨。
+ *
+ * 只在非窄档且右栏不在列上时出现：三个图标签竖着排，底部一枚图钉。层级用
+ * `--z-content-local`——它贴在本层内容上，不能压过抽屉与弹层。
+ */
+.panel-rail {
 	position: absolute;
-	top: var(--main-tab-drop-inset);
-	bottom: var(--main-tab-drop-inset);
-	width: var(--main-tab-drop-width);
-	border-radius: 1px;
-	background: var(--acc);
-	pointer-events: none;
-}
-
-.main-tab.is-drop-before::before {
-	left: 0;
-}
-
-.main-tab.is-drop-after::after {
+	top: 50%;
 	right: 0;
-}
-
-.main-tab:hover {
-	background: color-mix(in srgb, var(--t1) 4%, transparent);
-	color: var(--t1);
-}
-
-.main-tab.is-on {
-	background: var(--surface2);
-	color: var(--t1);
-}
-
-.main-tab-main {
-	display: inline-flex;
+	z-index: var(--z-content-local);
+	display: flex;
+	flex-direction: column;
 	align-items: center;
-	gap: 6px;
-	min-width: 0;
-	height: 100%;
-	padding: 0 var(--main-tab-padding-x);
-	border: 0;
-	background: transparent;
-	color: inherit;
-	font: inherit;
-	cursor: grab;
+	gap: 2px;
+	padding: var(--panel-rail-padding) 2px;
+	border: 1px solid var(--line);
+	border-right: 0;
+	border-radius: 10px 0 0 10px;
+	background: var(--card);
+	box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
+	transform: translateY(-50%);
+	-webkit-app-region: no-drag;
 }
 
-.main-tab-main:active {
-	cursor: grabbing;
-}
-
-.main-tab-name {
-	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.main-tab-close {
+.panel-rail-pin {
 	display: grid;
 	place-items: center;
-	flex: none;
-	width: var(--main-tab-close-size);
-	height: var(--main-tab-close-size);
-	padding: 0;
-	border: 0;
-	border-radius: 4px;
-	background: transparent;
-	color: var(--t3);
-	opacity: 0;
-}
-
-.main-tab:hover .main-tab-close,
-.main-tab:focus-within .main-tab-close {
-	opacity: 1;
-}
-
-.main-tab-close:hover {
-	background: var(--surface3);
-	color: var(--t1);
-}
-
-.main-tab-add-wrap {
-	position: relative;
-	flex: none;
-	margin-left: var(--main-tab-add-gap);
-}
-
-.main-tab-add {
-	display: grid;
-	place-items: center;
-	width: var(--main-tab-add-size);
-	height: var(--main-tab-add-size);
+	width: var(--icon-button-size);
+	height: var(--icon-button-size);
 	padding: 0;
 	border: 0;
 	border-radius: 6px;
@@ -227,86 +318,13 @@
 	color: var(--t3);
 }
 
-.main-tab-add:hover {
+.panel-rail-pin:hover {
 	background: var(--surface2);
 	color: var(--t1);
 }
 
-.main-tab-menu {
-	position: absolute;
-	top: calc(100% + var(--main-tab-menu-gap));
-	left: 0;
-	z-index: var(--z-popup);
-	width: var(--main-tab-menu-width);
-	padding: 4px;
-	border: 1px solid var(--line2);
-	border-radius: 8px;
-	background: var(--card);
-	box-shadow: 0 8px 24px rgb(0 0 0 / 32%);
-}
-
-.main-tab-menu-item {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	width: 100%;
-	height: 28px;
-	padding: 0 8px;
-	border: 0;
-	border-radius: 5px;
-	background: transparent;
-	color: var(--t1);
-	font-size: 12px;
-	text-align: left;
-}
-
-.main-tab-menu-item:hover:not(:disabled) {
-	background: var(--surface2);
-}
-
-.main-tab-menu-item:disabled {
-	color: var(--t3);
-	cursor: default;
-}
-
-.main-tab-context-menu {
-	position: fixed;
-	z-index: var(--z-popup);
-	width: 180px;
-}
-
-.main-tab-menu-sep {
-	height: 1px;
-	margin: 4px 6px;
-	background: var(--line);
-}
-
-.main-tab-content {
-	display: flex;
-	flex: 1;
-	flex-direction: column;
-	min-height: 0;
-}
-
-.main-view {
-	display: flex;
-	flex: 1;
-	flex-direction: column;
-	min-height: 0;
-	overflow: hidden;
-	padding: var(--main-view-padding-y) var(--chat-gutter-x);
-}
-
-.main-view.is-file {
-	padding: var(--editor-view-padding-y) 0;
-}
-
-.main-view.is-changes {
-	padding: 0;
-}
-
-.main-view.is-terminal {
-	padding: var(--main-terminal-padding-y) 0 var(--main-terminal-padding-y) var(--main-terminal-padding-x);
+.panel-rail-pin[aria-pressed="true"] {
+	color: var(--acc);
 }
 
 .diff-scroll {
@@ -579,22 +597,17 @@
 	color: var(--err);
 }
 
-/* 文件页的查看与编辑 */
+/* 文件页的查看与编辑：标题行贴着预览区上缘，代码正文贴工作区边界 */
 .file-head {
 	display: flex;
-	align-items: center;
 	gap: 6px;
-	margin-bottom: 6px;
-	padding-bottom: 6px;
-}
-
-.main-view.is-file .file-head {
+	align-items: center;
 	height: var(--editor-head-height);
 	margin: 0;
 	padding: 0 var(--editor-gutter-x);
 }
 
-.main-view.is-file .file-head .ib {
+.file-head .ib {
 	width: auto;
 	min-width: var(--editor-head-height);
 	height: var(--editor-head-height);
@@ -663,28 +676,37 @@
 }
 
 /*
- * 窄档：右栏是停在窗口右缘的全高抽屉，实占宽归零，宽度由样式定。
+ * 抽屉态：窄档与「取消了固定」共用一层停在窗口右缘的全高浮层，实占宽归零，宽度由样式定。
  * 它与左抽屉互斥，遮罩由外壳统一渲染。
  */
-.app.is-narrow .panel {
+.panel.is-drawer {
 	position: fixed;
 	inset: 0 0 0 auto;
 	z-index: var(--z-drawer);
-	width: min(360px, 92vw);
+	width: min(var(--panel-width), 92vw);
 	box-shadow: 0 0 40px rgb(0 0 0 / 45%);
 }
 
 /*
- * 抽屉顶头：分页与关闭按钮都在这一条 `--chrome-height` 里，右侧让出窗口按钮簇。
- * 只在窄档渲染（平铺时分页在顶带那一格里）。
+ * 抽屉顶头：分页、图钉与关闭按钮都在这一条 `--chrome-height` 里，右侧让出窗口按钮簇。
+ * 只在抽屉态渲染（平铺时分页在顶带那一格里）。
+ *
+ * 它自己是容器查询的容器，量到的是整条抽屉宽，所以这里 MUST NOT 留横向内边距：让出按钮
+ * 簇的那 132px 落在里面那一行上，否则查询到的宽度会比抽屉窄一整簇。
  */
 .panel-head {
-	display: flex;
 	flex: none;
-	align-items: center;
-	gap: 4px;
 	height: var(--chrome-height);
-	padding: 0 var(--window-controls-width) 0 4px;
 	border-bottom: 1px solid var(--line);
+	container-type: inline-size;
 	-webkit-app-region: no-drag;
+}
+
+.panel-head-row {
+	display: flex;
+	gap: 4px;
+	align-items: center;
+	height: 100%;
+	padding-left: 4px;
+	padding-inline-end: var(--window-controls-width);
 }

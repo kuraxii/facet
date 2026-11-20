@@ -12,5 +12,5 @@ export {
 } from "./dock-state.ts";
 export type { TerminalDockProps } from "./terminal-dock.tsx";
 export { TerminalDock } from "./terminal-dock.tsx";
-export type { TerminalAppearance, TerminalViewProps } from "./terminal-view.tsx";
+export type { TerminalAppearance, TerminalViewHandle, TerminalViewProps } from "./terminal-view.tsx";
 export { TerminalView } from "./terminal-view.tsx";

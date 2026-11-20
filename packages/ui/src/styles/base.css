@@ -125,22 +125,19 @@
 	 * （口径见 `docs/layout.md` §2）。
 	 */
 	--main-min: 420px;
-	/* 主区域标签栏：整条高度、单个标签高度、相邻标签间距与标签内边距 */
-	--main-tabs-height: 38px;
-	--main-tabs-edge: 8px;
-	--main-tab-height: 28px;
-	--main-tab-gap: 2px;
-	--main-tab-padding-x: 10px;
-	--main-tab-close-size: 18px;
-	--main-tab-add-size: 26px;
-	--main-tab-add-gap: 8px;
-	--main-tab-drop-width: 2px;
-	--main-tab-drop-inset: 3px;
-	--main-tab-menu-gap: 4px;
-	--main-tab-menu-width: 168px;
-	/* 主区域里文件、变更文档与终端的外边距 */
-	--main-view-padding-y: 14px;
-	--editor-view-padding-y: 4px;
+	/*
+	 * 工作区标签栏：单个标签的高度、相邻两条之间的距离、标签内左右留白与图标到文字的间距。
+	 * 顶带（36px）与抽屉顶头用同一组数，纵向竖轨沿用高度当按钮宽度。
+	 */
+	--workspace-tab-height: 26px;
+	--workspace-tab-gap: 2px;
+	--workspace-tab-padding-x: 8px;
+	--workspace-tab-icon-gap: 6px;
+	/* 工作区里「列表 + 预览」两栏：左栏宽度、叫回按钮的边距、收起态竖轨的上下留白 */
+	--workspace-list-width: min(46%, 320px);
+	--workspace-split-inset: 4px;
+	--panel-rail-padding: 6px;
+	/* 文件预览标题行：左右留白与标题行高度 */
 	--editor-gutter-x: 4px;
 	--editor-head-height: 18px;
 	--editor-head-gap: 4px;
@@ -186,11 +183,11 @@
 	--commit-tip-subject-lines: 2;
 	--commit-tip-body-lines: 6;
 	/*
-	 * 终端视图的内边距：右侧留 0，滚动条才贴着面板右缘，正文的右边距由 xterm 自己的列宽给
-	 * ——与其它滚动容器的约定一致（横向留白交给内容，不留给容器）。
+	 * 工作区终端的内边距：右侧留 0，滚动条才贴着工作区右缘，正文的右边距由 xterm 自己的
+	 * 列宽给——与其它滚动容器的约定一致（横向留白交给内容，不留给容器）。
 	 */
-	--main-terminal-padding-y: 6px;
-	--main-terminal-padding-x: 8px;
+	--workspace-term-padding-y: 6px;
+	--workspace-term-padding-x: 8px;
 	/*
 	 * 三栏宽度分两层。`--sidebar-width` / `--panel-width` 是偏好宽：用户拖动决定、跟本地存储走，
 	 * 由界面按当前状态写在 `.app` 上；`--col-sidebar` / `--col-panel` 是实占宽：当前布局里这一列真正

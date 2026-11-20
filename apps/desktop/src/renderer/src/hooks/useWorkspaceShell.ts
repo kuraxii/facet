@@ -1,8 +1,12 @@
 /**
  * 界面外壳。
  *
- * 侧栏的抽屉与收起、右栏的分页与宽度、设置视图、界面缩放与全局快捷键——都是与主机
- * 无关的呈现状态，谁都不依赖，只依赖设置与窗口。
+ * 侧栏的抽屉与收起、右栏的分页、图钉与宽度、设置视图、界面缩放与全局快捷键——都是与
+ * 主机无关的呈现状态，谁都不依赖，只依赖设置与窗口。
+ *
+ * 右栏有两种落脚方式，由图钉决定：固定时占 Grid 第 3 列（中档超预算时与左栏互斥折叠），
+ * 取消固定时 `--col-panel` 为 `0`，展开态是一层盖住正文的全高抽屉。窄档忽略图钉，一律
+ * 走抽屉（口径见 `docs/layout.md` §2）。
  */
 import type { FacetSettings } from "@facet/protocol";
 import {
@@ -106,8 +110,10 @@ export interface WorkspaceShell {
 	isSidebarCollapsed: boolean;
 	/** 侧栏此刻是否可见 */
 	isSidebarOpen: boolean;
-	/** 右抽屉是否开着（窄档） */
+	/** 右抽屉是否开着：窄档的临时抽屉，或取消固定后的浮层展开态 */
 	isPanelDrawerOpen: boolean;
+	/** 右栏此刻看不看得见：抽屉开没开，或者固定时占没占列 */
+	isPanelOpen: boolean;
 	/** 左栏此刻是否占列（宽档/中档下要么是意图，要么是中档预算留下的那一栏） */
 	sidebarVisible: boolean;
 	/** 右栏此刻是否占列 */
@@ -150,10 +156,14 @@ export interface WorkspaceShell {
 	setSettingsSection: (section: SettingsSection) => void;
 	/** 改右栏状态并写回本地 */
 	updatePanel: (patch: Partial<RightPanelState>) => void;
-	/** 开关右栏：窄档切抽屉，宽档与中档改意图位 */
+	/** 开关右栏：窄档切抽屉，未固定时展开或收起浮层，固定时改意图位 */
 	togglePanel: () => void;
 	/** 切右栏分页；窄档把抽屉调出来，中档被折起时把预算让给它 */
 	setPanelTab: (tab: RightPanelTab) => void;
+	/** 打开或收起右抽屉：窄档的临时抽屉与未固定时的浮层都走它 */
+	closePanelDrawer: () => void;
+	/** 设置图钉：固定回三栏，或改成盖住正文的浮层 */
+	setPanelPinned: (pinned: boolean) => void;
 	/** 应用本机界面缩放 */
 	changeUiScale: (next: number) => void;
 	/** 代码块主题，浅色与深色各取一份 */
@@ -180,8 +190,15 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 	const isNarrow = useSyncExternalStore(subscribeLayout, readLayoutIsNarrow);
 	/** 左抽屉是否开着 */
 	const isDrawerOpen = narrowDrawer === "sidebar";
-	/** 右抽屉是否开着 */
-	const isPanelDrawerOpen = narrowDrawer === "panel";
+	/** 右栏取消了固定：平铺时不占列，展开时是浮层 */
+	const isPanelFloating = !isNarrow && !panel.pinned;
+	/**
+	 * 右抽屉是否开着。
+	 *
+	 * 窄档看临时抽屉；宽档与中档下这也是「未固定且展开了」的唯一表达——那时右栏不占列，
+	 * `panel.open` 就是抽屉的开关。
+	 */
+	const isPanelDrawerOpen = isNarrow ? narrowDrawer === "panel" : isPanelFloating && panel.open;
 	/** 最近一次被用户主动打开或调宽的那一栏：中档预算不够时保留它 */
 	const [priorityPane, setPriorityPane] = useState<LayoutPane>("sidebar");
 	/** 分隔条是否正在拖：拖动期间锁住折叠结果 */
@@ -197,6 +214,7 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 			panelPref: panel.width,
 			sidebarIntent,
 			panelIntent,
+			panelPinned: panel.pinned,
 			priorityPane,
 		}),
 	);
@@ -219,6 +237,7 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 				panelPref: panel.width,
 				sidebarIntent,
 				panelIntent,
+				panelPinned: panel.pinned,
 				priorityPane,
 			});
 			setLayout((current) => (sameLayout(current, next) ? current : next));
@@ -226,7 +245,7 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 		apply();
 		window.addEventListener("resize", apply);
 		return () => window.removeEventListener("resize", apply);
-	}, [isResizing, sidebarWidth, panel.width, sidebarIntent, panelIntent, priorityPane]);
+	}, [isResizing, sidebarWidth, panel.width, panel.pinned, sidebarIntent, panelIntent, priorityPane]);
 
 	// 离开窄档就把抽屉收掉：抽屉是窄档的临时视图，拉宽后由意图位接管
 	useEffect(() => {
@@ -388,14 +407,45 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 	const setSearchOpen = useCallback((open: boolean) => setIsSearchOpen(open), []);
 	const closeDrawer = useCallback(() => setNarrowDrawer(undefined), []);
 
-	/** 开关右栏：窄档切抽屉（不动宽档的意图位），平铺时改意图位 */
+	/**
+	 * 开关右栏。
+	 *
+	 * 窄档切临时抽屉（不动宽档的意图位）；未固定时切浮层的展开态；固定时改意图位——看得见
+	 * 就收起，被预算折起时点一下是把它调出来（所以看的是列上有没占位，不是意图位）。
+	 */
 	const togglePanel = useCallback(() => {
 		if (isNarrow) {
 			setNarrowDrawer((current) => toggleNarrowDrawer(current, "panel"));
 			return;
 		}
+		if (isPanelFloating) {
+			updatePanel({ open: !panel.open });
+			return;
+		}
 		updatePanel({ open: !layout.panelVisible });
-	}, [isNarrow, layout.panelVisible, updatePanel]);
+	}, [isNarrow, isPanelFloating, layout.panelVisible, panel.open, updatePanel]);
+
+	/** 关掉右抽屉：窄档的临时抽屉与未固定时的浮层各自收尾 */
+	const closePanelDrawer = useCallback(() => {
+		if (isNarrow) {
+			setNarrowDrawer(undefined);
+			return;
+		}
+		updatePanel({ open: false });
+	}, [isNarrow, updatePanel]);
+
+	/**
+	 * 换图钉。
+	 *
+	 * 展开状态不动：固定时占列、取消固定时变成浮层，两种落脚方式下右栏都还看得见；被预算
+	 * 折起的那一栏换成固定之后按意图重新参与平铺。
+	 */
+	const setPanelPinned = useCallback(
+		(pinned: boolean) => {
+			updatePanel({ pinned });
+		},
+		[updatePanel],
+	);
 
 	/** 切分页：窄档把抽屉调出来，宽档与中档顺手把右栏打开（被折起时预算换边） */
 	const setPanelTab = useCallback(
@@ -412,7 +462,7 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 
 	// 两个抽屉各挂一份 Escape 与焦点归还；同一时刻只有一个开着，所以两份互不打扰
 	useDrawerBehavior({ isOpen: isNarrow && isDrawerOpen, onClose: closeDrawer });
-	useDrawerBehavior({ isOpen: isNarrow && isPanelDrawerOpen, onClose: closeDrawer });
+	useDrawerBehavior({ isOpen: isPanelDrawerOpen, onClose: closePanelDrawer });
 	const openSettings = useCallback(() => setView("settings"), []);
 	const closeSettings = useCallback(() => setView("chat"), []);
 
@@ -425,10 +475,14 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 		[settings.appearance.codeTheme, settings.appearance.theme],
 	);
 
+	/** 右栏此刻看不看得见：抽屉开着，或者固定着占列 */
+	const isPanelOpen = isNarrow || isPanelFloating ? isPanelDrawerOpen : layout.panelVisible;
+
 	return {
 		isNarrow,
 		isDrawerOpen,
 		isPanelDrawerOpen,
+		isPanelOpen,
 		isSidebarCollapsed,
 		isSidebarOpen,
 		sidebarVisible: layout.sidebarVisible,
@@ -454,6 +508,8 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 		updatePanel,
 		togglePanel,
 		setPanelTab,
+		closePanelDrawer,
+		setPanelPinned,
 		changeUiScale,
 		codeTheme,
 	};

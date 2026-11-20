@@ -6,7 +6,7 @@
  */
 
 import type { GitCommit, GitCommits, GitFileChange, GitStatus } from "@facet/protocol";
-import { ChevronRight, FileText } from "lucide-react";
+import { ChevronRight, FileText, PanelLeftClose } from "lucide-react";
 import { type CSSProperties, type ReactNode, useCallback, useMemo, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { useHoverTip } from "../tip.tsx";
@@ -32,6 +32,8 @@ export interface ChangesPaneProps {
 	commitsError: string | undefined;
 	/** 点一条提交时打开它的改动 */
 	onCommitPress?: (commit: GitCommit) => void;
+	/** 收起这一栏；不给时不显示收起按钮（整列独占时没地方可收） */
+	onCollapse?: (() => void) | undefined;
 }
 
 /** 行首缩进。 */
@@ -125,6 +127,7 @@ export function ChangesPane({
 	commitsLoading,
 	commitsError,
 	onCommitPress,
+	onCollapse,
 }: ChangesPaneProps): ReactNode {
 	const { t } = useI18n();
 	const [collapsedFolders, setCollapsedFolders] = useState<ReadonlySet<string>>(new Set());
@@ -163,6 +166,16 @@ export function ChangesPane({
 					<b className={styles.add}>+{totalAdded}</b>
 					<b className={styles.del}>−{totalRemoved}</b>
 				</span>
+			)}
+			{onCollapse === undefined ? null : (
+				<button
+					type="button"
+					className={styles.iconButton}
+					aria-label={t("panel.collapseChanges")}
+					onClick={onCollapse}
+				>
+					<PanelLeftClose size={14} strokeWidth={1.5} />
+				</button>
 			)}
 		</div>
 	);

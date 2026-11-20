@@ -100,14 +100,30 @@
 	padding-inline-end: max(0px, calc(var(--window-controls-width) - var(--col-panel)));
 }
 
-/* 右栏那一格：占右列，自己扣掉窗口按钮那一段 */
+/*
+ * 右栏那一格：占右列，内容行自己让出窗口按钮簇的那一段。
+ *
+ * 它自己是容器查询的容器，量到的宽度就是右栏整列宽（`panel.css` 里的 440px 断点用它），
+ * 所以这里 MUST NOT 留横向内边距：让出大小是 `--window-controls-width`，落在
+ * `.chrome-slot-row` 上。给这一格加内边距，查询量到的就会比列窄一整簇。
+ */
 .chrome-slot.is-panel {
 	grid-column: 3;
-	gap: 4px;
-	padding-left: 4px;
-	padding-inline-end: var(--window-controls-width);
+	container-type: inline-size;
 	overflow: hidden;
 	-webkit-app-region: no-drag;
+}
+
+/* 右格里的内容行：分页、图钉与关闭按钮排在一条线上，右端留出窗口按钮簇 */
+.chrome-slot-row {
+	display: flex;
+	flex: 1;
+	gap: 4px;
+	align-items: center;
+	min-width: 0;
+	height: 100%;
+	padding-left: 4px;
+	padding-inline-end: var(--window-controls-width);
 }
 
 .chrome-slot.is-panel.is-open {
@@ -135,6 +151,11 @@
 .chrome-toggle:hover {
 	background: var(--surface2);
 	color: var(--t1);
+}
+
+/* 双态开关按住时只换颜色：图钉是否生效由它自己看得出来 */
+.chrome-toggle[aria-pressed="true"] {
+	color: var(--acc);
 }
 
 /*

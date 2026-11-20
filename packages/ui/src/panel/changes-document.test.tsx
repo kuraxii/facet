@@ -19,7 +19,6 @@ function render(focusPath: string | undefined): string {
 	return renderToStaticMarkup(
 		createElement(ChangesDocument, {
 			status,
-			isLoading: false,
 			error: undefined,
 			focusPath,
 			focusRequestId: 1,

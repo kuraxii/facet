@@ -372,7 +372,6 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 							{shell.panel.tab === "changes" ? (
 								<ChangesPane
 									status={tabs.changes.status}
-									isLoading={tabs.changes.isLoading}
 									error={tabs.changes.error}
 									onRefresh={() => void tabs.refreshChanges()}
 									onOpenDiff={(file) => {

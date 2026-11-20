@@ -6,7 +6,7 @@
  */
 
 import type { GitCommit, GitCommits, GitDiff, GitFileChange, GitStatus } from "@facet/protocol";
-import { ChevronRight, ChevronsDownUp, ChevronsUpDown, RefreshCw, TextWrap } from "lucide-react";
+import { ChevronRight, ChevronsDownUp, ChevronsUpDown, TextWrap } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { lineClass, patchBodyLines } from "../transcript/diff-lines.ts";
@@ -17,8 +17,6 @@ import { CommitHistory } from "./commit-history.tsx";
 export interface ChangesDocumentProps {
 	/** 工作树状态 */
 	status: GitStatus | undefined;
-	/** 正在取状态 */
-	isLoading: boolean;
 	/** 取状态失败的原因 */
 	error: string | undefined;
 	/** 顶栏标题；不给时用分支名 */
@@ -241,7 +239,6 @@ function ChangesFileSection({
 /** 主区域的变更文档。 */
 export function ChangesDocument({
 	status,
-	isLoading,
 	error,
 	title,
 	emptyMessage,
@@ -360,15 +357,6 @@ export function ChangesDocument({
 					</button>
 				</>
 			)}
-			<button
-				type="button"
-				className={styles.iconButton}
-				aria-label={t("panel.refreshChanges")}
-				onClick={refresh}
-				disabled={isLoading}
-			>
-				<RefreshCw size={14} strokeWidth={1.5} />
-			</button>
 		</div>
 	);
 

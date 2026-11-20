@@ -1,0 +1,33 @@
+# 换行以 LF 为准，检出也用 LF。
+#
+# 不写这一条时，Windows 上 `core.autocrlf` 会把工作区 checkout 成 CRLF：biome 只认 LF，
+# 于是同一份代码在本地 `npm run lint` 报错、在 CI（Linux）上通过。存库与检出都钉成 LF 之后，
+# 两边看到的是同一份字节。
+* text=auto eol=lf
+
+# Windows 自己读的脚本保留 CRLF：cmd.exe 与 PowerShell 对 LF 的批处理/脚本处理不稳
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+*.nsh text eol=crlf
+
+# 二进制文件不参与换行转换与文本 diff
+*.png binary
+*.ico binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.wasm binary
+*.node binary
+*.woff2 binary
+*.woff binary
+*.ttf binary
+*.otf binary
+*.zip binary
+*.gz binary
+*.xz binary
+*.tar binary
+*.7z binary
+*.pdf binary
+*.icns binary

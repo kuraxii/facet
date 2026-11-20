@@ -12,10 +12,8 @@ import type { MainTab } from "@facet/ui";
 
 /** 变更页的数据、加载状态与失败原因。 */
 export interface ChangesState {
-	/** 工作树状态 */
+	/** 工作树状态；还没取到时为空 */
 	readonly status?: GitStatus;
-	/** 是否正在取 */
-	readonly isLoading: boolean;
 	/** 失败原因 */
 	readonly error?: string;
 }

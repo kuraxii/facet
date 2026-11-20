@@ -83,6 +83,14 @@ flowchart BT
 - **生命周期分开**：主机级单例通道（`sessions-channel`、`models-channel`）在端点断开时只清订阅者、
   保留 `lastSeq`；会话通道（`session-hub`）按引用计数（`holders`）空闲回收；终端通道（`terminals`）
   独立维护水印背压（`ack`），并在 PTY 销毁时释放。它们不合并成带钩子的通用容器。
+- **按目录盯工作树**：`workspace:/<cwd>` 一个项目目录一条，订阅即由 `workspaces` 建一份
+  `ProjectWatch`（逐目录 `fs.watch`，跳过被忽略的目录，500ms 合并），最后一个订阅者走了就停；
+  动作只有 `workspace/changed`，`history` 标出 HEAD 或引用是否动过，状态仍由端按需来取。
+- **按仓库排队探测**：状态探测按规范化后的仓库根目录单飞，跑完冷却 1500ms，运行期与冷却期
+  的请求并成最多一次尾随执行并共享结果，`force` 跳过冷却；提交历史另有一条车道（冷却
+  5000ms），两条互不阻塞。`git status --porcelain=v2
+  --branch -z -uall` 流式消费，分支信息与文件条目一次读完；累计到 5000 条立刻 kill，跳过
+  `diff --numstat` 与逐文件读行数，结果标 `truncated`，界面据此暂停自动刷新。
 
 ### 4.4 客户端投影与重连（`packages/client-core` 与 `apps/desktop`）
 

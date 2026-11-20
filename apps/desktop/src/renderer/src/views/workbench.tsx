@@ -373,7 +373,7 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 								<ChangesPane
 									status={tabs.changes.status}
 									error={tabs.changes.error}
-									onRefresh={() => void tabs.refreshChanges()}
+									onRefresh={() => void tabs.refreshChanges({ force: true })}
 									onOpenDiff={(file) => {
 										if (sessionCwd !== undefined) {
 											tabs.openDiff(sessionCwd, file);

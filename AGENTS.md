@@ -31,7 +31,7 @@
 - **拆分不改契约**：拆既有模块时导出路径与对外签名 MUST 保持不变，用薄门面或 `index.ts` 转发。
 - **布局暗契约**：断点、拖拽折叠临界值、尺寸常量与 `data-*` 属性名只在 `packages/ui/src/layout/layout-contract.ts` 定义，别处不得手写字面量；`@container` / `@media` 与属性选择器里必须写字面量的位置 MUST 纳入 `layout-contract.test.ts` 的静态断言。运行期样式值走 `:root` 变量（见下文「样式与尺寸规范」），全仓禁止裸 `z-index`，只认 `var(--z-*)`（刻度见 `docs/layout.md` §4）。
 - **文案与类名零残留**：删改组件或交互路径时，同一个提交里清掉 `packages/i18n/src/resources.ts` 中不再被引用的键、不再使用的 CSS 类名与死导出；不留「以后可能用到」的孤儿文案。
-- **底层副作用单出口**：服务端调用 `git` 等外部进程 MUST 经统一的执行适配层（`git-exec.ts`）按只读 / 写入通道分流，业务代码里不得散落 `child_process`。
+- **底层副作用单出口**：服务端调用 `git` 等外部进程 MUST 经 `apps/server/src/git-exec.ts` 这一层按只读 / 写入通道分流，业务代码里不得散落 `child_process`。
 
 # 开发与提交规范
 

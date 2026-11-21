@@ -11,12 +11,12 @@ import type { ContextUsage, ModelInfo, SlashCommand, ThinkingLevel } from "@face
 import { Brain, FileUp, ImagePlus, Plus, X } from "lucide-react";
 import { type Ref, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
-import { isComposingKey } from "../keys.ts";
 import { useHoverTip } from "../tip.tsx";
 import { ChevronIcon } from "../transcript/chevron.tsx";
 import { SendIcon, StopIcon } from "../transcript/icons.tsx";
 import { ContextRing, usageDetailText, usageLabel, usagePercentText } from "./ContextRing.tsx";
 import { commandQuery, filterCommands, isFacetCommand, SOURCE_LABEL_KEYS } from "./command-palette.ts";
+import { ComposerEditor } from "./rich-editor/ComposerEditor.tsx";
 
 /** 输入区里一张待发的图片。 */
 export interface ComposerAttachment {
@@ -91,8 +91,9 @@ export interface ComposerProps {
 	onRunCommand?: (command: SlashCommand, args: string) => void;
 	/**
 	 * 输入框本身。引用之类的动作要从外面把光标放回末尾，所以把它交给调用方。
+	 * 富文本化之后它是可编辑的 `div`，引用方只关心「那一个元素」，不关心标签。
 	 */
-	ref?: Ref<HTMLTextAreaElement>;
+	ref?: Ref<HTMLElement>;
 }
 
 /** 模型芯片的显示文本。 */
@@ -300,9 +301,7 @@ export function Composer({
 				</div>
 			)}
 			{attachmentNotice === undefined ? null : <p className="composer-note">{attachmentNotice}</p>}
-			<textarea
-				// 高度由 CSS 的 field-sizing 跟内容长，两行只是没有该属性时的退路
-				rows={2}
+			<ComposerEditor
 				ref={ref}
 				value={value}
 				placeholder={
@@ -312,49 +311,24 @@ export function Composer({
 							? t("composer.sendPlaceholder")
 							: t("composer.shiftEnterPlaceholder")
 				}
-				onChange={(event) => {
-					onChange(event.target.value);
+				onChange={(next) => {
+					onChange(next);
 					setCommandClosed(false);
 					setCommandIndex(0);
 				}}
-				onKeyDown={(event) => {
-					// 组词期间的回车与 Tab 是选词，不是发送与补全
-					if (isComposingKey(event)) {
-						return;
-					}
-					if (isPaletteOpen) {
-						if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-							event.preventDefault();
-							const step = event.key === "ArrowDown" ? 1 : -1;
-							setCommandIndex((current) => (current + step + matches.length) % matches.length);
-							return;
-						}
-						if (
-							(event.key === "Enter" || event.key === "Tab") &&
-							highlighted !== undefined &&
-							!event.shiftKey
-						) {
-							event.preventDefault();
+				routes={{
+					isPaletteOpen,
+					onPaletteMove: (step) =>
+						setCommandIndex((current) => (current + step + matches.length) % matches.length),
+					onPalettePick: () => {
+						if (highlighted !== undefined) {
 							pickCommand(highlighted);
-							return;
 						}
-						if (event.key === "Escape") {
-							event.preventDefault();
-							setCommandClosed(true);
-							return;
-						}
-					}
-					if (event.key !== "Enter") {
-						return;
-					}
-					const isSendCombo = sendsOnEnter ? !event.shiftKey : event.shiftKey;
-					if (!isSendCombo) {
-						return;
-					}
-					event.preventDefault();
-					if (canSend) {
-						onSend();
-					}
+					},
+					onPaletteClose: () => setCommandClosed(true),
+					canSend,
+					shiftEnterToSend,
+					onSend,
 				}}
 			/>
 			{isPaletteOpen ? (

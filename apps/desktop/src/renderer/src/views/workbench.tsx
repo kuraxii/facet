@@ -75,7 +75,7 @@ export interface WorkbenchProps {
 	/** 复制一段文本 */
 	copyText: (text: string) => void;
 	/** 输入框本身：引用之后要把光标放回它末尾 */
-	composerInput: RefObject<HTMLTextAreaElement | null>;
+	composerInput: RefObject<HTMLElement | null>;
 	/** 开一个终端 */
 	openTerminal: () => Promise<void>;
 }

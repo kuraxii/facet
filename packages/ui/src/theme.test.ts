@@ -1,3 +1,5 @@
+// @vitest-environment node
+// 这份用例直接读仓库里的 CSS 文件，要有真实的文件系统与 `file:` URL。
 /**
  * 配色层的测试。
  *

@@ -52,7 +52,7 @@ export interface ChatAreaProps {
 	/** 标签菜单与文本的复制动作 */
 	copyText: (text: string) => void;
 	/** 输入框本身：引用之后要把光标放回它末尾 */
-	composerInput: RefObject<HTMLTextAreaElement | null>;
+	composerInput: RefObject<HTMLElement | null>;
 }
 
 /** 对话区：内容、提示与输入。 */

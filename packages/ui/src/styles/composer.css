@@ -39,41 +39,107 @@
 
 .composer {
 	position: relative;
-	padding: 12px 12px 10px 16px;
+	padding: var(--composer-padding-top) var(--composer-padding-right) var(--composer-padding-bottom)
+		var(--composer-padding-left);
 	border: 1px solid var(--line2);
 	border-radius: 16px;
 	background: var(--card);
 }
 
-.composer textarea {
+/* 聚焦态：边框转强调色，外面再罩一层光晕。输入区里任何一个控件拿到焦点都算 */
+.composer:focus-within {
+	border-color: var(--acc);
+	box-shadow: var(--focus-ring);
+}
+
+/*
+ * 富文本输入域。
+ *
+ * 高度：两行起步，长到十四行为止，再多就在框内滚动。块级 contenteditable 跟着内容长高，
+ * 这里只需卡住上下限；滚动条沟槽常驻，内容变多时文字不跟着跳。
+ * 留白全交给 `.composer` 的内边距：输入域自带内边距的话，上下会各扣掉一截，于是十四行
+ * 的高度就算不准。
+ */
+.composer-editor {
 	width: 100%;
-	/* 高度由内容定：两行起步，向上长到十四行为止，再多就在框内滚动 */
 	min-height: calc(var(--composer-rows-min) * 1lh);
 	max-height: calc(var(--composer-rows-max) * 1lh);
-	/*
-	 * 留白全交给 `.composer` 的外内边距：输入框自带内边距的话，上下会各扣掉一截，
-	 * 十四行的高度就算不准。
-	 */
+	overflow-y: auto;
+	scrollbar-gutter: stable;
 	padding: 0;
 	border: 0;
 	outline: 0;
-	resize: none;
 	background: transparent;
 	color: var(--t1);
 	font: inherit;
-	font-size: 14px;
-	line-height: 1.6;
-	/*
-	 * 跟着内容长高，到上限之后自己出滚动条。引擎不支持时退回 `rows` 给的固定两行，
-	 * 多出的内容同样在框内滚动，不依赖脚本补高度。
-	 */
-	field-sizing: content;
-	/* 内容超过一屏时滚动条出现也不让文字跟着跳 */
-	scrollbar-gutter: stable;
+	font-size: var(--composer-font-size);
+	line-height: var(--composer-line-height);
+	/* 换行与超长中英串都不许撑破容器 */
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
 }
 
-.composer textarea::placeholder {
+/* 聚焦提示由 `.composer:focus-within` 那条边框与光晕承担，这里不再叠一层描边 */
+.composer-editor:focus-visible {
+	outline: 0;
+}
+
+/* 占位符贴在输入域首行的同一处，绝对定位免得它参与高度计算 */
+.composer-placeholder {
+	position: absolute;
+	top: var(--composer-padding-top);
+	right: var(--composer-padding-right);
+	left: var(--composer-padding-left);
+	overflow: hidden;
 	color: var(--t3);
+	font-size: var(--composer-font-size);
+	line-height: var(--composer-line-height);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	user-select: none;
+	pointer-events: none;
+}
+
+/* 富文本结构：段落、引用块、列表与代码都不带外边距，行距全由输入域给 */
+.composer-paragraph,
+.composer-quote,
+.composer-code-block,
+.composer-list {
+	margin: 0;
+}
+
+/* 引用块：左侧一条竖线，文字压淡一档，与消息流里的引用同一个观感 */
+.composer-quote {
+	padding-left: var(--composer-quote-inset);
+	border-left: var(--composer-quote-rule) solid var(--line2);
+	color: var(--t2);
+}
+
+.composer-list {
+	padding-left: var(--composer-list-indent);
+}
+
+/* 代码块与行内代码只求可读：等宽字体，行内代码压一档底色 */
+.composer-code-block {
+	display: block;
+	font-family: var(--font-mono);
+	font-size: calc(var(--composer-font-size) - 1px);
+	color: var(--t2);
+	tab-size: 2;
+}
+
+.composer-inline-code {
+	padding: 0 var(--composer-inline-code-padding-x);
+	border-radius: 4px;
+	background: var(--card2);
+	color: var(--t2);
+	font-family: var(--font-mono);
+	font-size: calc(var(--composer-font-size) - 1.5px);
+}
+
+.composer-link {
+	color: var(--acc);
+	text-decoration: underline;
 }
 
 /* 有文件悬在输入区上方时整块亮起来，说明可以放进来 */

@@ -1,5 +1,8 @@
+// @vitest-environment node
 /**
  * 轻提示区的渲染：等级靠类名与图标表达，文字只放事实，整块不抢焦点。
+ *
+ * 跑在 Node 环境：这份断言看的是服务端渲染出来的那一份，没有 `document` 才走静态分支。
  */
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";

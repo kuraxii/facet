@@ -1,3 +1,5 @@
+// @vitest-environment node
+// 高亮器是 WASM 引擎，只有 Node 环境给得出那套加载路径。
 import { describe, expect, it } from "vitest";
 import { CODE_DARK_THEME, getHighlighter, highlightLines } from "./highlighter.ts";
 

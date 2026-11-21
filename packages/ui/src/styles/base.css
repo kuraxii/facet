@@ -40,6 +40,23 @@
 	 */
 	--composer-rows-min: 2;
 	--composer-rows-max: 14;
+	/*
+	 * 输入区的内边距与字号：占位符要贴到输入域首行的同一处，所以四个方向各一个名字；
+	 * 字与行高也共用一组，免得两处各写一份、慢慢对不上。
+	 */
+	--composer-padding-top: 12px;
+	--composer-padding-right: 12px;
+	--composer-padding-bottom: 10px;
+	--composer-padding-left: 16px;
+	--composer-font-size: 14px;
+	--composer-line-height: 1.6;
+	/* 输入区富文本的缩进：引用块竖线到正文、列表标记到条目文字，以及行内代码的左右留白 */
+	--composer-quote-inset: 10px;
+	--composer-quote-rule: 2px;
+	--composer-list-indent: 20px;
+	--composer-inline-code-padding-x: 3px;
+	/* 聚焦时外面那圈光晕：与 `:focus-visible` 的描边同一种强调色 */
+	--focus-ring: 0 0 0 3px color-mix(in srgb, var(--acc) 22%, transparent);
 	/* 工具结果里的图片：收起时的最大高度，与多张之间的间距 */
 	--tool-image-height: 320px;
 	--tool-image-gap: 8px;
@@ -408,7 +425,7 @@
 	.cmd-pop,
 	.chip-pop,
 	.pop-tip,
-	.composer textarea,
+	.composer-editor,
 	.tr-out pre,
 	.tr-think,
 	.code-card-body,
@@ -447,7 +464,7 @@
 	.cmd-pop,
 	.chip-pop,
 	.pop-tip,
-	.composer textarea,
+	.composer-editor,
 	.tr-out pre,
 	.tr-think,
 	.code-card-body,
@@ -486,7 +503,7 @@
 	.cmd-pop,
 	.chip-pop,
 	.pop-tip,
-	.composer textarea,
+	.composer-editor,
 	.tr-out pre,
 	.tr-think,
 	.code-card-body,
@@ -520,7 +537,7 @@
 	.cmd-pop,
 	.chip-pop,
 	.pop-tip,
-	.composer textarea,
+	.composer-editor,
 	.tr-out pre,
 	.tr-think,
 	.code-card-body,
@@ -557,7 +574,7 @@
 	.cmd-pop,
 	.chip-pop,
 	.pop-tip,
-	.composer textarea,
+	.composer-editor,
 	.tr-out pre,
 	.tr-think,
 	.code-card-body,
@@ -597,7 +614,7 @@
 	.cmd-pop,
 	.chip-pop,
 	.pop-tip,
-	.composer textarea,
+	.composer-editor,
 	.tr-out pre,
 	.tr-think,
 	.code-card-body,
@@ -637,7 +654,7 @@
 		.cmd-pop,
 		.chip-pop,
 		.pop-tip,
-		.composer textarea,
+		.composer-editor,
 		.tr-out pre,
 		.tr-think,
 		.code-card-body,
@@ -770,6 +787,7 @@ svg.fl {
 .file-path,
 .source-path,
 .host-addr,
+.composer-editor,
 input,
 textarea,
 .cm-editor,

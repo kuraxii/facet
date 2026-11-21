@@ -147,6 +147,53 @@
 	text-decoration: underline;
 }
 
+/*
+ * `@文件` 胶囊：一个原子 token，整块选中、整块删除。
+ * 底色压一档、文字用强调色，悬停由 `title` 给完整路径；里面不许断行。
+ */
+.composer-mention {
+	padding: 0 var(--composer-inline-code-padding-x);
+	border-radius: 4px;
+	background: var(--card2);
+	color: var(--acc);
+	font-size: calc(var(--composer-font-size) - 1px);
+	white-space: nowrap;
+	cursor: default;
+}
+
+/* 代码块高亮：颜色全部取现有语义色，跟着主题走 */
+.composer-token {
+	color: var(--t2);
+}
+
+.composer-token-keyword {
+	color: var(--acc);
+}
+
+.composer-token-string {
+	color: var(--add);
+}
+
+.composer-token-comment {
+	color: var(--t3);
+}
+
+.composer-token-function {
+	color: var(--warn);
+}
+
+.composer-token-type {
+	color: var(--ok);
+}
+
+.composer-token-added {
+	color: var(--add);
+}
+
+.composer-token-deleted {
+	color: var(--del);
+}
+
 /* 有文件悬在输入区上方时整块亮起来，说明可以放进来 */
 .composer.is-drop {
 	border-color: var(--acc);
@@ -265,6 +312,19 @@
 	color: var(--t2);
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+/* `@` 文件候选：右侧那一列是目录路径，贴右对齐 */
+.composer-mention-pop .cmd-desc {
+	text-align: right;
+}
+
+/*
+ * `@` 文件候选沿用 `.cmd-pop` 的整套定位与外观，只把高度收紧一档：十条候选一屏看得全。
+ * 它是 `.composer` 的直接子节点（不在编辑器里），所以不受 `.composer-editor` 的滚动裁切。
+ */
+.composer-mention-pop {
+	max-height: 240px;
 }
 
 .cmd-source {

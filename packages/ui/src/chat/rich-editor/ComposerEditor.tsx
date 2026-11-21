@@ -10,6 +10,8 @@
  * 回退、重试、扩展写入）才会重新导入内容并把光标放到末尾。
  */
 
+import { $isCodeNode } from "@lexical/code";
+import { PrismTokenizer, registerCodeHighlighting } from "@lexical/code-prism";
 import { $isListItemNode } from "@lexical/list";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
@@ -21,10 +23,12 @@ import { ListPlugin } from "@lexical/react/LexicalListPlugin";
 import { MarkdownShortcutPlugin } from "@lexical/react/LexicalMarkdownShortcutPlugin";
 import { OnChangePlugin } from "@lexical/react/LexicalOnChangePlugin";
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
-import { $isQuoteNode, type QuoteNode } from "@lexical/rich-text";
+import { $createQuoteNode, $isQuoteNode, type QuoteNode } from "@lexical/rich-text";
 import {
+	$createLineBreakNode,
 	$createParagraphNode,
 	$createTextNode,
+	$getRoot,
 	$getSelection,
 	$insertNodes,
 	$isLineBreakNode,
@@ -33,7 +37,6 @@ import {
 	COMMAND_PRIORITY_HIGH,
 	COMMAND_PRIORITY_LOW,
 	COMMAND_PRIORITY_NORMAL,
-	type EditorThemeClasses,
 	INSERT_PARAGRAPH_COMMAND,
 	KEY_ARROW_DOWN_COMMAND,
 	KEY_ARROW_UP_COMMAND,
@@ -54,39 +57,22 @@ import {
 	type RefObject,
 	useCallback,
 	useEffect,
+	useImperativeHandle,
 	useLayoutEffect,
+	useMemo,
 	useRef,
 	useState,
 } from "react";
 import { isComposingKey } from "../../keys.ts";
+import { FileMentionPlugin } from "./FileMentionPlugin.tsx";
 import {
 	$importComposerMarkdown,
 	CHAT_TRANSFORMERS,
 	COMPOSER_NODES,
+	COMPOSER_THEME,
 	exportComposerMarkdown,
 	importComposerMarkdown,
 } from "./markdown-config.ts";
-
-/**
- * 编辑器的样式类名。
- *
- * 只给结构性节点取类名：粗体与斜体由浏览器原生的 `strong` / `em` 表现，免得同一段文字
- * 在不同主题下有两套观感。
- */
-const COMPOSER_THEME: EditorThemeClasses = {
-	paragraph: "composer-paragraph",
-	quote: "composer-quote",
-	code: "composer-code-block",
-	list: {
-		ul: "composer-list",
-		ol: "composer-list",
-		listitem: "composer-list-item",
-	},
-	text: {
-		code: "composer-inline-code",
-	},
-	link: "composer-link",
-};
 
 /** 命令面板与会话状态的按键落点：这些状态都在 `Composer` 里，编辑器只负责把按键送过去。 */
 export interface ComposerKeyRoutes {
@@ -106,6 +92,21 @@ export interface ComposerKeyRoutes {
 	onSend: () => void;
 }
 
+/**
+ * 输入区对外的命令式句柄。
+ *
+ * 引用正文这类动作要往编辑器里插结构（引用块 + 后面的新段落），字符串拼接再整份重载
+ * 会把光标位置和撤销历史一起丢掉，所以这里直接把动作交给编辑器。
+ */
+export interface ComposerHandle {
+	/** 聚焦输入区 */
+	focus: () => void;
+	/** 把一段文字做成引用块接到末尾，光标落到引用下方的新段落里 */
+	appendQuote: (text: string) => void;
+	/** 把光标放到内容末尾 */
+	placeCaretAtEnd: () => void;
+}
+
 /** 富文本输入域的参数。 */
 export interface ComposerEditorProps {
 	/** 当前内容的 Markdown 写法 */
@@ -116,10 +117,14 @@ export interface ComposerEditorProps {
 	placeholder: string;
 	/** 命令面板与发送的按键落点 */
 	routes: ComposerKeyRoutes;
-	/** 输入域本身。引用之类的动作要把光标放回末尾，所以把它交给调用方。 */
-	ref?: Ref<HTMLElement>;
+	/** 可 `@` 引用的文件：项目根下的相对路径。空列表时 `@` 不弹菜单 */
+	mentionFiles?: readonly string[];
+	/** `@` 菜单挂载的容器：输入区外框，菜单要和 `/` 命令面板贴在同一处 */
+	menuContainerRef?: RefObject<HTMLElement | null>;
+	/** 命令式句柄：引用正文之类的动作从外面调它 */
+	handleRef?: Ref<ComposerHandle>;
 	/**
-	 * 编辑器句柄。要往输入区里程序化地写内容、或在编辑器上派发命令时用它；用例也靠它在
+	 * 编辑器实例。要往输入区里程序化地写内容、或在编辑器上派发命令时用它；用例也靠它在
 	 * jsdom 里模拟输入（jsdom 没有原生编辑，写不进字符）。
 	 */
 	editorRef?: RefObject<LexicalEditor | null>;
@@ -242,15 +247,24 @@ function $newlineInBlock(editor: LexicalEditor): boolean {
  * 用布局效应而不是普通效应：切换会话时编辑器里还留着上一个会话的草稿，晚一帧就会让人看见
  * 一瞬旧内容。
  */
-function ValueSyncPlugin({ value, lastEmitted }: { value: string; lastEmitted: RefObject<string> }): null {
+function ValueSyncPlugin({
+	value,
+	files,
+	lastEmitted,
+}: {
+	value: string;
+	/** 已知文件：铺内容时把命中它们的 `@路径` 还原成胶囊 */
+	files: ReadonlySet<string>;
+	lastEmitted: RefObject<string>;
+}): null {
 	const [editor] = useLexicalComposerContext();
 	useLayoutEffect(() => {
 		if (value === lastEmitted.current) {
 			return;
 		}
 		lastEmitted.current = value;
-		importComposerMarkdown(editor, value);
-	}, [editor, lastEmitted, value]);
+		importComposerMarkdown(editor, value, files);
+	}, [editor, files, lastEmitted, value]);
 	return null;
 }
 
@@ -270,7 +284,14 @@ function movePalette(routes: RefObject<ComposerKeyRoutes>, event: KeyboardEvent,
  * 命令都注册在 `COMMAND_PRIORITY_HIGH`：回车与方向键在富文本里自带默认行为（新建段落、
  * 列表内上下换条目、被编辑器吃掉），面板开着的时候必须先由这里接住，接不住再放行。
  */
-function KeyboardPlugin({ routes }: { routes: ComposerKeyRoutes }): null {
+function KeyboardPlugin({
+	routes,
+	isMentionOpen,
+}: {
+	routes: ComposerKeyRoutes;
+	/** `@` 文件菜单开着：回车、方向键、Tab 与 Esc 都归它 */
+	isMentionOpen: boolean;
+}): null {
 	const [editor] = useLexicalComposerContext();
 	/** 按键回调里读最新的一份路由，避免父级每次重渲染都重注册一遍命令 */
 	const routesRef = useRef(routes);
@@ -286,6 +307,10 @@ function KeyboardPlugin({ routes }: { routes: ComposerKeyRoutes }): null {
 					const current = routesRef.current;
 					// 组词期间的回车是选词，不是发送，也不是选中命令
 					if (event !== null && isComposingKey(event)) {
+						return false;
+					}
+					// `@` 文件菜单开着：回车是选中候选，放行给菜单自己处理
+					if (isMentionOpen) {
 						return false;
 					}
 					if (current.isPaletteOpen) {
@@ -346,12 +371,12 @@ function KeyboardPlugin({ routes }: { routes: ComposerKeyRoutes }): null {
 			),
 			editor.registerCommand<KeyboardEvent>(
 				KEY_ARROW_UP_COMMAND,
-				(event) => movePalette(routesRef, event, -1),
+				(event) => (isMentionOpen ? false : movePalette(routesRef, event, -1)),
 				COMMAND_PRIORITY_HIGH,
 			),
 			editor.registerCommand<KeyboardEvent>(
 				KEY_ARROW_DOWN_COMMAND,
-				(event) => movePalette(routesRef, event, 1),
+				(event) => (isMentionOpen ? false : movePalette(routesRef, event, 1)),
 				COMMAND_PRIORITY_HIGH,
 			),
 			editor.registerCommand<KeyboardEvent>(
@@ -360,20 +385,32 @@ function KeyboardPlugin({ routes }: { routes: ComposerKeyRoutes }): null {
 					if (isComposingKey(event)) {
 						return false;
 					}
-					const current = routesRef.current;
-					// Shift+Tab 是反向遍历焦点，任何时候都交给浏览器
-					if (!current.isPaletteOpen || event.shiftKey) {
+					// `@` 菜单开着时 Tab 也是「选中当前候选」
+					if (isMentionOpen) {
 						return false;
 					}
-					event.preventDefault();
-					current.onPalettePick();
-					return true;
+					const current = routesRef.current;
+					if (current.isPaletteOpen && !event.shiftKey) {
+						event.preventDefault();
+						current.onPalettePick();
+						return true;
+					}
+					// 代码块里 Tab 是缩进；其它地方放行，保住键盘的焦点链
+					if ($indentInCode(event)) {
+						event.preventDefault();
+						return true;
+					}
+					return false;
 				},
 				COMMAND_PRIORITY_HIGH,
 			),
 			editor.registerCommand<KeyboardEvent>(
 				KEY_ESCAPE_COMMAND,
 				(event) => {
+					// `@` 菜单自己吃掉 Esc 并 preventDefault，外层抽屉就不会跟着关
+					if (isMentionOpen) {
+						return false;
+					}
 					const current = routesRef.current;
 					if (!current.isPaletteOpen) {
 						return false;
@@ -385,9 +422,64 @@ function KeyboardPlugin({ routes }: { routes: ComposerKeyRoutes }): null {
 				COMMAND_PRIORITY_HIGH,
 			),
 		);
-	}, [editor]);
+	}, [editor, isMentionOpen]);
 
 	return null;
+}
+
+/** 代码块里按一次 Tab 缩进多少格。 */
+const CODE_INDENT = "  ";
+
+/**
+ * 代码块里 Tab 缩进、Shift+Tab 反缩进。
+ *
+ * 只在「光标落在代码块里、且没有选中多行」时接：选中多行的那种整段缩进是代码缩进自己的
+ * 一套，交给它；代码块之外一律放行，键盘的焦点链不能被输入区吃掉。
+ */
+function $indentInCode(event: KeyboardEvent): boolean {
+	const selection = $getSelection();
+	if (!$isRangeSelection(selection) || !selection.isCollapsed()) {
+		return false;
+	}
+	const caret = selection.anchor.getNode();
+	if ($nearestAncestor(caret, $isCodeNode) === null) {
+		return false;
+	}
+	if (!event.shiftKey) {
+		selection.insertText(CODE_INDENT);
+		return true;
+	}
+	$outdentCodeLine(caret, selection);
+	return true;
+}
+
+/** 撤掉当前代码行行首最多两格空格；光标跟着往前挪。 */
+function $outdentCodeLine(caret: LexicalNode, selection: RangeSelection): void {
+	if (!$isTextNode(caret)) {
+		return;
+	}
+	// 一行是若干个文本节点：往前走，直到撞上换行或行首
+	let first: LexicalNode = caret;
+	while (true) {
+		const previous = first.getPreviousSibling();
+		if (previous === null || $isLineBreakNode(previous)) {
+			break;
+		}
+		first = previous;
+	}
+	if (!$isTextNode(first)) {
+		return;
+	}
+	const text = first.getTextContent();
+	const strip = text.startsWith(CODE_INDENT) ? CODE_INDENT.length : text.startsWith(" ") ? 1 : 0;
+	if (strip === 0) {
+		return;
+	}
+	const offset = first.is(caret) ? Math.max(0, selection.anchor.offset - strip) : 0;
+	first.setTextContent(text.slice(strip));
+	if (first.is(caret)) {
+		first.select(offset, offset);
+	}
 }
 
 /** 读出粘贴事件里的剪贴板；不是剪贴板事件时为空。 */
@@ -453,11 +545,17 @@ export function ComposerEditor({
 	onChange,
 	placeholder,
 	routes,
-	ref,
+	mentionFiles = [],
+	menuContainerRef,
+	handleRef,
 	editorRef,
 }: ComposerEditorProps): ReactNode {
 	/** 最近一次与外界对齐过的 Markdown；初值取挂载时的内容，首屏不必再导入一次 */
 	const lastEmitted = useRef(value);
+	/** `@` 文件菜单开着没有：开着的时候键盘归它 */
+	const [isMentionOpen, setMentionOpen] = useState(false);
+	/** 已知文件，铺内容时把命中它们的 `@路径` 还原成胶囊 */
+	const files = useMemo(() => new Set(mentionFiles), [mentionFiles]);
 
 	/**
 	 * 初始内容同步铺进来：等一次效应落下去会让人看见一瞬空编辑框。
@@ -472,7 +570,7 @@ export function ComposerEditor({
 			console.error(error);
 		},
 		editorState: () => {
-			$importComposerMarkdown(value);
+			$importComposerMarkdown(value, files);
 		},
 	}));
 
@@ -492,7 +590,6 @@ export function ComposerEditor({
 			<RichTextPlugin
 				contentEditable={
 					<ContentEditable
-						ref={ref as Ref<HTMLDivElement>}
 						className="composer-editor"
 						aria-label={placeholder}
 						aria-multiline="true"
@@ -510,15 +607,96 @@ export function ComposerEditor({
 			<HistoryPlugin />
 			{/* 列表的拆分、序号递增与空项退出都由它接：少了它，回车只会往条目里插空行 */}
 			<ListPlugin />
+			<CodeHighlightPlugin />
 			<MarkdownShortcutPlugin transformers={CHAT_TRANSFORMERS} />
 			<OnChangePlugin
 				ignoreSelectionChange
 				onChange={(state) => handleChange(exportComposerMarkdown(state))}
 			/>
-			<ValueSyncPlugin value={value} lastEmitted={lastEmitted} />
-			<KeyboardPlugin routes={routes} />
+			<ValueSyncPlugin value={value} files={files} lastEmitted={lastEmitted} />
+			<KeyboardPlugin routes={routes} isMentionOpen={isMentionOpen} />
 			<PlainPastePlugin />
+			{mentionFiles.length === 0 ? null : (
+				<FileMentionPlugin
+					files={mentionFiles}
+					onOpenChange={setMentionOpen}
+					menuContainerRef={menuContainerRef}
+				/>
+			)}
+			{handleRef === undefined ? null : <HandlePlugin handleRef={handleRef} />}
 			{editorRef === undefined ? null : <EditorRefPlugin editorRef={editorRef} />}
 		</LexicalComposer>
 	);
+}
+
+/**
+ * 命令式句柄。
+ *
+ * 句柄要在 `LexicalComposer` 里面才拿得到编辑器，所以单开一层插件。`appendQuote` 走
+ * `discrete` 更新：写进节点之后立刻是一次完整提交，`OnChangePlugin` 随之同步外部草稿，
+ * 不需要再等一帧去挪光标——这也是它替代「字符串拼接 + `requestAnimationFrame`」的原因。
+ */
+function HandlePlugin({ handleRef }: { handleRef: Ref<ComposerHandle> }): null {
+	const [editor] = useLexicalComposerContext();
+	useImperativeHandle(
+		handleRef,
+		() => ({
+			focus: () => {
+				editor.focus();
+			},
+			placeCaretAtEnd: () => {
+				// 先聚焦再选末尾：`focus()` 会先恢复上一次的选区，反过来的话光标会被拽回去
+				editor.focus();
+				editor.update(() => $getRoot().selectEnd(), { discrete: true });
+			},
+			appendQuote: (text: string) => {
+				editor.focus();
+				editor.update(() => $appendQuoteBlock(text), { discrete: true });
+			},
+		}),
+		[editor],
+	);
+	return null;
+}
+
+/**
+ * 一段文字做成引用块接到文档末尾。
+ *
+ * 逐行文本、行间是换行节点；后面跟一个空段落并选中它，光标直接落在引用下方，用户接着
+ * 写自己的问题。文档里只有一个空段落时先清掉，引用块自成一篇。
+ */
+function $appendQuoteBlock(text: string): void {
+	const root = $getRoot();
+	const onlyEmpty =
+		root.getChildrenSize() === 1 && (root.getFirstChild()?.getTextContent().trim().length ?? 0) === 0;
+	if (onlyEmpty) {
+		root.clear();
+	}
+	const quote = $createQuoteNode();
+	const lines = text.replace(/\r\n?/g, "\n").replace(/\s+$/, "").split("\n");
+	lines.forEach((line, index) => {
+		if (index > 0) {
+			quote.append($createLineBreakNode());
+		}
+		if (line.length > 0) {
+			quote.append($createTextNode(line));
+		}
+	});
+	root.append(quote);
+	const paragraph = $createParagraphNode();
+	root.append(paragraph);
+	paragraph.select();
+}
+
+/**
+ * 代码块的词法高亮：Prism 分词，颜色由主题里 `codeHighlight` 那些类给出。
+ *
+ * `defaultLanguage` 置空是必须的：默认会把它补成 `javascript` 并写进节点的 language，
+ * 草稿是 Markdown 真值，一个没有语言的 ``` 围栏被补上语言就等于改写了用户的原文。
+ * 想上色就在围栏上写语言（```ts），那条语言本来就属于草稿。
+ */
+function CodeHighlightPlugin(): null {
+	const [editor] = useLexicalComposerContext();
+	useEffect(() => registerCodeHighlighting(editor, { ...PrismTokenizer, defaultLanguage: null }), [editor]);
+	return null;
 }

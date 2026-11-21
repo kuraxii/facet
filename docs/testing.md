@@ -49,7 +49,7 @@
 - **`test` 里会建临时 git 仓库**：用例自己屏蔽全局与系统配置、钉死提交身份，本机没配
   `user.name` 也能跑；反过来，本机的 `commit.gpgsign` 之类也不会影响用例。
 - **`mock:check` 占端口**：冒烟会起假主机，端口被占时会直接失败，先看有没有残留进程。
-- **界面单测跑在 jsdom 里**：`packages/ui/vitest.config.ts` 把默认环境定成 `jsdom`，`vitest.setup.ts` 给 `Range` 补上矩形查询（jsdom 不做布局，而编辑器恢复选区时会去量光标位置）。需要在 Node 环境跑的用例（读仓库文件、WASM 高亮器、只看服务端静态标记的用例）在文件头用 `// @vitest-environment node` 单独切回去；其它包（如 `apps/desktop`）仍默认 Node，要 DOM 的单个用例反过来在文件头写 `// @vitest-environment jsdom`。
+- **界面单测跑在 jsdom 里**：`packages/ui/vitest.config.ts` 把默认环境定成 `jsdom`，`vitest.setup.ts` 给 `Range` 补上矩形查询、给 `ResizeObserver` 补一个空实现（jsdom 不做布局，而编辑器恢复选区、补全菜单跟光标时都会去量尺寸）。需要在 Node 环境跑的用例（读仓库文件、WASM 高亮器、只看服务端静态标记的用例）在文件头用 `// @vitest-environment node` 单独切回去；其它包（如 `apps/desktop`）仍默认 Node，要 DOM 的单个用例反过来在文件头写 `// @vitest-environment jsdom`。
 - **CI 与本机的 glibc 不一样**：本机产物只能在本机这类新系统上跑，能给老系统的包从 CI 取
   （判据是 `node scripts/check-glibc.mjs --max 2.31`）。
 - **`npm run dev` 的界面点不动，先看根节点有没有套 StrictMode**：开发态双挂载之后这棵树的

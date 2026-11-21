@@ -39,6 +39,7 @@ export { ProviderDialog } from "./chat/ProviderDialog.tsx";
 export type { QueueStripProps } from "./chat/QueueStrip.tsx";
 export { QueueStrip } from "./chat/QueueStrip.tsx";
 export { appendQuote, quoteBlock } from "./chat/quote.ts";
+export type { ComposerHandle } from "./chat/rich-editor/ComposerEditor.tsx";
 export type { SessionSearchProps } from "./chat/SessionSearch.tsx";
 export { SessionSearch } from "./chat/SessionSearch.tsx";
 export type { SessionSidebarProps } from "./chat/SessionSidebar.tsx";

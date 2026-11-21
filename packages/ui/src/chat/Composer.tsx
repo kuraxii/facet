@@ -16,7 +16,8 @@ import { ChevronIcon } from "../transcript/chevron.tsx";
 import { SendIcon, StopIcon } from "../transcript/icons.tsx";
 import { ContextRing, usageDetailText, usageLabel, usagePercentText } from "./ContextRing.tsx";
 import { commandQuery, filterCommands, isFacetCommand, SOURCE_LABEL_KEYS } from "./command-palette.ts";
-import { ComposerEditor } from "./rich-editor/ComposerEditor.tsx";
+import { OptionList } from "./OptionList.tsx";
+import { ComposerEditor, type ComposerHandle } from "./rich-editor/ComposerEditor.tsx";
 
 /** 输入区里一张待发的图片。 */
 export interface ComposerAttachment {
@@ -90,10 +91,12 @@ export interface ComposerProps {
 	/** 选中一条界面自己处理的命令 */
 	onRunCommand?: (command: SlashCommand, args: string) => void;
 	/**
-	 * 输入框本身。引用之类的动作要从外面把光标放回末尾，所以把它交给调用方。
-	 * 富文本化之后它是可编辑的 `div`，引用方只关心「那一个元素」，不关心标签。
+	 * 输入区的命令式句柄。引用正文这类动作从外面把结构直接插进编辑器，光标随之落好，
+	 * 不必把草稿拼成字符串再整份重载。
 	 */
-	ref?: Ref<HTMLElement>;
+	ref?: Ref<ComposerHandle>;
+	/** 可 `@` 引用的文件：项目根下的相对路径。空列表时 `@` 不弹菜单 */
+	mentionFiles?: readonly string[];
 }
 
 /** 模型芯片的显示文本。 */
@@ -170,6 +173,7 @@ export function Composer({
 	commands,
 	onRunCommand,
 	ref,
+	mentionFiles,
 }: ComposerProps) {
 	const { t } = useI18n();
 	// 一排按钮共用一份悬浮提示：谁被悬停就贴谁
@@ -187,6 +191,8 @@ export function Composer({
 	const [openMenu, setOpenMenu] = useState<"model" | "level" | "attach" | "context" | undefined>(undefined);
 	/** 有文件悬在输入区上方，界面据此给出可投放的样子 */
 	const [isDropping, setIsDropping] = useState(false);
+	/** 输入区外框：`@` 补全菜单挂在它下面，和 `/` 命令面板贴在同一处 */
+	const boxRef = useRef<HTMLDivElement>(null);
 	const modelRef = useDismiss(openMenu === "model", () => setOpenMenu(undefined));
 	const attachRef = useDismiss(openMenu === "attach", () => setOpenMenu(undefined));
 	const levelRef = useDismiss(openMenu === "level", () => setOpenMenu(undefined));
@@ -246,6 +252,7 @@ export function Composer({
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: 拖拽与粘贴是浏览器原生行为，这块只做事件委托，不承担键盘操作
 		<div
+			ref={boxRef}
 			className={isDropping ? "composer is-drop" : "composer"}
 			onDragOver={(event) => {
 				if (onAddImages === undefined || !canAddImages || !event.dataTransfer.types.includes("Files")) {
@@ -302,7 +309,9 @@ export function Composer({
 			)}
 			{attachmentNotice === undefined ? null : <p className="composer-note">{attachmentNotice}</p>}
 			<ComposerEditor
-				ref={ref}
+				handleRef={ref}
+				mentionFiles={mentionFiles}
+				menuContainerRef={boxRef}
 				value={value}
 				placeholder={
 					isQueuing
@@ -332,27 +341,26 @@ export function Composer({
 				}}
 			/>
 			{isPaletteOpen ? (
-				<div className="cmd-pop" role="listbox" aria-label={t("composer.commandList")}>
-					{matches.map((command, index) => (
-						<button
-							key={`${command.source}:${command.name}`}
-							type="button"
-							role="option"
-							aria-selected={index === Math.min(commandIndex, matches.length - 1)}
-							className={index === Math.min(commandIndex, matches.length - 1) ? "cmd-row is-on" : "cmd-row"}
-							{...tip.handlers(command.origin)}
-							onMouseEnter={() => setCommandIndex(index)}
-							onClick={() => pickCommand(command)}
-						>
+				<OptionList
+					items={matches}
+					keyOf={(command) => `${command.source}:${command.name}`}
+					activeIndex={Math.min(commandIndex, matches.length - 1)}
+					label={t("composer.commandList")}
+					onHighlight={setCommandIndex}
+					onPick={(command) => pickCommand(command)}
+					// 行上先挂悬浮提示（命令来源），列表自己的指针与点击处理在它之后覆盖
+					rowProps={(command) => tip.handlers(command.origin)}
+					renderRow={(command) => (
+						<>
 							<span className="cmd-name">/{command.name}</span>
 							{command.argumentHint === undefined ? null : (
 								<span className="cmd-hint">{command.argumentHint}</span>
 							)}
 							<span className="cmd-desc">{command.description ?? ""}</span>
 							<span className="cmd-source">{t(SOURCE_LABEL_KEYS[command.source])}</span>
-						</button>
-					))}
-				</div>
+						</>
+					)}
+				/>
 			) : null}
 			<div className="composer-row">
 				<div className="chip-wrap" ref={attachRef}>

@@ -11,6 +11,7 @@ import {
 	ChatOutline,
 	ChatTranscript,
 	Composer,
+	type ComposerHandle,
 	ExtensionPromptCard,
 	QueueStrip,
 	useI18n,
@@ -47,12 +48,14 @@ export interface ChatAreaProps {
 	isBlocked: boolean;
 	/** 排队内容 */
 	queued: QueuedInput;
+	/** 可 `@` 引用的文件：项目根下的相对路径 */
+	mentionFiles: readonly string[];
 	/** 会话错误条 */
 	errorBar: ReactNode;
 	/** 标签菜单与文本的复制动作 */
 	copyText: (text: string) => void;
-	/** 输入框本身：引用之后要把光标放回它末尾 */
-	composerInput: RefObject<HTMLElement | null>;
+	/** 输入区的命令式句柄：引用之后把结构插进去、光标放回末尾 */
+	composerInput: RefObject<ComposerHandle | null>;
 }
 
 /** 对话区：内容、提示与输入。 */
@@ -73,6 +76,7 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 		errorBar,
 		copyText,
 		composerInput,
+		mentionFiles,
 	} = props;
 	const { t } = useI18n();
 	const client = useHostClient();
@@ -166,6 +170,7 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 						isCompacting={activity === "compacting"}
 						canCompact={activity === "idle"}
 						onCompact={() => client.compact()}
+						mentionFiles={mentionFiles}
 						commands={[...composer.commands]}
 						onRunCommand={(command, args) => {
 							composer.runFacetCommand(command.name, args);

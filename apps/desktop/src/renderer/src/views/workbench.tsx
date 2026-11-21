@@ -236,6 +236,23 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 	);
 
 	/**
+	 * 点输入区里的 `@文件` 胶囊：打开右栏的文件页并把它打开。
+	 *
+	 * 只是看文件，不碰草稿——用户多半是照着引用核对一眼，回来还要接着写。右栏收起或没开
+	 * 文件页时 `setPanelTab` 会顺手把它们打开。
+	 */
+	const openMentionFile = useCallback(
+		(filePath: string): void => {
+			if (sessionCwd === undefined) {
+				return;
+			}
+			selectWorkspaceTab("files");
+			void docs.openFile(sessionCwd, filePath);
+		},
+		[docs, selectWorkspaceTab, sessionCwd],
+	);
+
+	/**
 	 * 关掉右栏的一个标签。
 	 *
 	 * 关终端标签时顺手把它的 PTY 关掉：标签没了还留一个进程在主机上，下次打开在同一列里
@@ -285,6 +302,7 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 				copyText={copyText}
 				composerInput={composerInput}
 				mentionFiles={mentionFiles}
+				onOpenMentionFile={openMentionFile}
 			/>
 		);
 

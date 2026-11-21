@@ -1,8 +1,9 @@
 import type { ModelInfo, SlashCommand } from "@facet/protocol";
-import { $getRoot, $getSelection, $isRangeSelection, type LexicalEditor } from "lexical";
+import { $getRoot, $getSelection, $isRangeSelection, type LexicalEditor, UNDO_COMMAND } from "lexical";
 import { act, createElement, type ReactElement, type RefObject, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { FACET_FILE_DRAG_MIME } from "../common/file-drag.ts";
 import { Composer, type ComposerProps } from "./Composer.tsx";
 import { QueueStrip } from "./QueueStrip.tsx";
 import {
@@ -624,6 +625,8 @@ function EditorHost(props: {
 	handleRef: RefObject<ComposerHandle | null>;
 	mentionFiles?: readonly string[];
 	commands?: readonly SlashCommand[];
+	sentHistory?: readonly string[];
+	onOpenMentionFile?: ((filePath: string) => void) | undefined;
 	onDraft: (draft: string) => void;
 }): ReactElement {
 	const [draft, setDraft] = useState(props.initial);
@@ -640,6 +643,8 @@ function EditorHost(props: {
 				routes={editorRoutes(props.shiftEnterToSend)}
 				commands={props.commands}
 				mentionFiles={props.mentionFiles}
+				sentHistory={props.sentHistory}
+				onOpenMentionFile={props.onOpenMentionFile}
 				menuContainerRef={boxRef}
 				handleRef={props.handleRef}
 				editorRef={props.editorRef}
@@ -664,7 +669,12 @@ interface EditorRendered extends Rendered {
 async function renderEditor(
 	initial: string,
 	shiftEnterToSend: boolean,
-	options: { mentionFiles?: readonly string[]; commands?: readonly SlashCommand[] } = {},
+	options: {
+		mentionFiles?: readonly string[];
+		commands?: readonly SlashCommand[];
+		sentHistory?: readonly string[];
+		onOpenMentionFile?: ((filePath: string) => void) | undefined;
+	} = {},
 ): Promise<EditorRendered> {
 	const editorRef: RefObject<LexicalEditor | null> = { current: null };
 	const handleRef: RefObject<ComposerHandle | null> = { current: null };
@@ -677,6 +687,8 @@ async function renderEditor(
 			handleRef,
 			mentionFiles: options.mentionFiles,
 			commands: options.commands,
+			sentHistory: options.sentHistory,
+			onOpenMentionFile: options.onOpenMentionFile,
 			onDraft: (next: string) => {
 				latest = next;
 			},
@@ -1101,5 +1113,289 @@ describe("探针", () => {
 			container.querySelector(".composer-command")?.outerHTML,
 		);
 		unmount();
+	});
+});
+
+/**
+ * 受控外壳：`onChange` 回传的草稿立刻成为下一次渲染的 `value`。
+ *
+ * 真的输入区就是这么接的；用例若只挂一个 `vi.fn()` 而不回填 `value`，任何一次重渲染都会
+ * 让编辑器以为外面改了值、整份重铺一遍。
+ */
+function ControlledComposer(props: ComposerProps): ReactElement {
+	const [draft, setDraft] = useState(props.value);
+	return createElement(Composer, {
+		...props,
+		value: draft,
+		onChange: (next: string) => {
+			setDraft(next);
+			props.onChange(next);
+		},
+	});
+}
+
+/** 渲染一个真受控的输入区，返回容器与输入域本身。 */
+async function renderControlled(
+	overrides: Partial<ComposerProps> = {},
+): Promise<Rendered & { editor: HTMLElement }> {
+	const rendered = await render(createElement(ControlledComposer, composerProps(overrides)));
+	const editor = rendered.container.querySelector<HTMLElement>(".composer-editor");
+	if (editor === null) {
+		throw new Error("输入域没有渲染出来");
+	}
+	return { ...rendered, editor };
+}
+
+/** 造一次带 `dataTransfer` 的拖拽事件：jsdom 没有 `DragEvent`，这一格得自己补。 */
+function dragEvent(
+	type: "dragstart" | "dragover" | "drop",
+	types: readonly string[],
+	getData: (format: string) => string,
+	files: readonly File[] = [],
+): Event {
+	const event = new Event(type, { bubbles: true, cancelable: true });
+	Object.defineProperty(event, "dataTransfer", {
+		value: {
+			types,
+			getData,
+			files,
+			effectAllowed: "unmodified",
+			dropEffect: "none",
+			setData: () => {},
+		},
+	});
+	return event;
+}
+
+/**
+ * 模拟 `useComposer` 的草稿表：草稿按会话键分开存，切会话就是换一个键。
+ *
+ * 撤销栈是否真的按会话分开，只有走这条「换键 + 换草稿」的路才看得出来。
+ */
+function SessionHost(props: {
+	activeKey: string;
+	editorRef: RefObject<LexicalEditor | null>;
+	onDrafts: (key: string, draft: string) => void;
+}): ReactElement {
+	const [drafts, setDrafts] = useState<Readonly<Record<string, string>>>({});
+	const boxRef = useRef<HTMLDivElement>(null);
+	const key = props.activeKey;
+	return (
+		<div className="composer" ref={boxRef}>
+			<ComposerEditor
+				value={drafts[key] ?? ""}
+				onChange={(next) => {
+					setDrafts((current) => ({ ...current, [key]: next }));
+					props.onDrafts(key, next);
+				}}
+				placeholder="输入消息"
+				routes={editorRoutes(false)}
+				draftKey={key}
+				menuContainerRef={boxRef}
+				editorRef={props.editorRef}
+			/>
+		</div>
+	);
+}
+
+describe("按会话隔离的撤销栈", () => {
+	it("切走再切回来,各自只撤自己那一份", async () => {
+		const editorRef: RefObject<LexicalEditor | null> = { current: null };
+		const seen: string[] = [];
+		const host = (activeKey: string): ReactElement =>
+			createElement(SessionHost, {
+				activeKey,
+				editorRef,
+				onDrafts: (key, draft) => seen.push(`${key}:${draft}`),
+			});
+		const rendered = await render(host("a"));
+		const editorElement = rendered.container.querySelector<HTMLElement>(".composer-editor");
+		const editor = editorRef.current;
+		if (editorElement === null || editor === null) {
+			throw new Error("编辑器没有渲染出来");
+		}
+		const undo = async (): Promise<void> => {
+			await act(async () => {
+				editor.dispatchCommand(UNDO_COMMAND, undefined);
+			});
+		};
+
+		// 会话 a 写一段
+		await focusEditor(editorElement);
+		await typeText(editor, "会话甲的内容");
+		expect(seen.at(-1)).toBe("a:会话甲的内容");
+
+		// 切到会话 b，写另一段
+		rendered.rerender(host("b"));
+		await act(async () => {});
+		expect(editorElement.textContent).toBe("");
+		await focusEditor(editorElement);
+		await typeText(editor, "会话乙的内容");
+		expect(seen.at(-1)).toBe("b:会话乙的内容");
+
+		// 在 b 里撤销：只撤掉 b 的那一段，草稿不会被 b 恢复时铺进来的内容顶掉，
+		// 更不会冒出 a 的内容
+		await undo();
+		expect(editorElement.textContent).toBe("");
+		expect(editorElement.textContent).not.toContain("会话甲");
+
+		// 再写一点留痕，然后切回 a：a 的草稿还在，撤销栈也还在原处
+		await typeText(editor, "会话乙的内容");
+		rendered.rerender(host("a"));
+		await act(async () => {});
+		expect(editorElement.textContent).toBe("会话甲的内容");
+		await undo();
+		expect(editorElement.textContent).toBe("");
+		rendered.unmount();
+	});
+});
+
+describe("@文件胶囊的双向联动", () => {
+	const FILES = ["src/a.ts", "src/chat/Composer.tsx"] as const;
+
+	it("点胶囊把完整路径交给宿主", async () => {
+		const onOpenMentionFile = vi.fn();
+		const rendered = await renderEditor("看 @src/a.ts 这个", false, {
+			mentionFiles: FILES,
+			onOpenMentionFile,
+		});
+		await focusEditor(rendered.editorElement);
+
+		const capsule = rendered.container.querySelector<HTMLElement>(".composer-mention");
+		expect(capsule).not.toBeNull();
+		// 可点时编辑器上多一个类，指针与悬停样式都由它给
+		expect(rendered.container.querySelector(".composer-editor")?.className).toContain("is-mention-clickable");
+
+		await act(async () => {
+			capsule?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+		});
+		expect(onOpenMentionFile).toHaveBeenCalledWith("src/a.ts");
+		rendered.unmount();
+	});
+
+	it("没接打开动作时胶囊不带可点的样子", async () => {
+		const rendered = await renderEditor("看 @src/a.ts 这个", false, { mentionFiles: FILES });
+		expect(rendered.container.querySelector(".composer-editor")?.className).not.toContain(
+			"is-mention-clickable",
+		);
+		rendered.unmount();
+	});
+
+	it("从文件树拖进来的路径落成胶囊,不受能不能收图限制", async () => {
+		const onChange = vi.fn();
+		const onAddImages = vi.fn();
+		const { container, editor, unmount } = await renderControlled({
+			value: "",
+			onChange,
+			onAddImages,
+			canAddImages: false,
+		});
+		await focusEditor(editor);
+		const box = container.querySelector<HTMLElement>(".composer");
+		if (box === null) {
+			throw new Error("输入区外框没有渲染出来");
+		}
+
+		await act(async () => {
+			box.dispatchEvent(dragEvent("dragover", [FACET_FILE_DRAG_MIME], () => ""));
+		});
+		// 拖到输入区上方就点亮可投放的样子
+		expect(box.className).toContain("is-drop");
+
+		await act(async () => {
+			box.dispatchEvent(dragEvent("drop", [FACET_FILE_DRAG_MIME], () => "src/chat/Composer.tsx"));
+		});
+		const capsule = container.querySelector(".composer-mention");
+		expect(capsule?.getAttribute("data-file-path")).toBe("src/chat/Composer.tsx");
+		// 落下来是一段草稿：胶囊加一个空格
+		expect(onChange).toHaveBeenLastCalledWith("@src/chat/Composer.tsx ");
+		expect(box.className).not.toContain("is-drop");
+		// 文件引用不走进图片那条路
+		expect(onAddImages).not.toHaveBeenCalled();
+		unmount();
+	});
+
+	it("系统拖来的图片还是走图片那条路", async () => {
+		const onAddImages = vi.fn();
+		const { container, editor, unmount } = await renderComposer({ value: "", onAddImages });
+		await focusEditor(editor);
+		const box = container.querySelector<HTMLElement>(".composer");
+		if (box === null) {
+			throw new Error("输入区外框没有渲染出来");
+		}
+		const file = new File(["x"], "shot.png", { type: "image/png" });
+
+		await act(async () => {
+			box.dispatchEvent(dragEvent("dragover", ["Files"], () => "", [file]));
+		});
+		expect(box.className).toContain("is-drop");
+		await act(async () => {
+			box.dispatchEvent(dragEvent("drop", ["Files"], () => "", [file]));
+		});
+		expect(onAddImages).toHaveBeenCalledWith([file]);
+		expect(container.querySelector(".composer-mention")).toBeNull();
+		unmount();
+	});
+});
+
+describe("已发消息的历史回溯", () => {
+	const HISTORY = ["第一条", "第二条"];
+
+	it("空输入框里 ArrowUp 依次回填,ArrowDown 走回来", async () => {
+		const rendered = await renderEditor("", false, { sentHistory: HISTORY });
+		await focusEditor(rendered.editorElement);
+
+		await pressKey(rendered.editorElement, "ArrowUp");
+		expect(rendered.draft()).toBe("第二条");
+		await pressKey(rendered.editorElement, "ArrowUp");
+		expect(rendered.draft()).toBe("第一条");
+		// 到最旧的一条就停住，不会绕回最新
+		await pressKey(rendered.editorElement, "ArrowUp");
+		expect(rendered.draft()).toBe("第一条");
+
+		await pressKey(rendered.editorElement, "ArrowDown");
+		expect(rendered.draft()).toBe("第二条");
+		// 越过最新的一条：回到进浏览态之前的空草稿
+		await pressKey(rendered.editorElement, "ArrowDown");
+		expect(rendered.draft()).toBe("");
+		rendered.unmount();
+	});
+
+	it("浏览态里动手改字之后,ArrowDown 不再拿历史盖掉他", async () => {
+		const rendered = await renderEditor("", false, { sentHistory: HISTORY });
+		await focusEditor(rendered.editorElement);
+		await pressKey(rendered.editorElement, "ArrowUp");
+		expect(rendered.draft()).toBe("第二条");
+
+		await typeText(rendered.editor, "补一句");
+		await pressKey(rendered.editorElement, "ArrowDown");
+		expect(rendered.draft()).toBe("第二条补一句");
+		rendered.unmount();
+	});
+
+	it("有草稿时 ArrowUp 还是光标上移", async () => {
+		const rendered = await renderEditor("自己写的内容", false, { sentHistory: HISTORY });
+		await focusEditor(rendered.editorElement);
+		const event = await pressKey(rendered.editorElement, "ArrowUp");
+		expect(event.defaultPrevented).toBe(false);
+		expect(rendered.draft()).toBe("自己写的内容");
+		rendered.unmount();
+	});
+
+	it("候选浮层开着时方向键归浮层,不翻历史", async () => {
+		const commands: SlashCommand[] = [
+			{ name: "compact", description: "压缩上下文", source: "builtin", handler: "facet" },
+			{ name: "review", description: "审查改动", source: "skill", handler: "pi" },
+		] as SlashCommand[];
+		const rendered = await renderEditor("", false, { commands, sentHistory: HISTORY });
+		await focusEditor(rendered.editorElement);
+		await typeText(rendered.editor, "/");
+		const before = rendered.container.querySelector(".cmd-row.is-on")?.textContent;
+
+		await pressKey(rendered.editorElement, "ArrowUp");
+		// 高亮动了，历史没被翻出来
+		expect(rendered.draft()).toBe("/");
+		expect(rendered.container.querySelector(".cmd-row.is-on")?.textContent).not.toBe(before);
+		rendered.unmount();
 	});
 });

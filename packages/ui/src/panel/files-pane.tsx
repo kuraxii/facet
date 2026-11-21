@@ -5,6 +5,7 @@
  * 名称按目录自己的排序来（主机已排好）。点目录展开或收起，点文件交给宿主打开。
  *
  * 键盘走的是树形导航：上下移动、右键展开或进入、左键收起或回到上一层、回车打开。
+ * 文件行还可以拖进输入区：拖过去的是它的相对路径，落地是一枚 `@文件` 胶囊。
  */
 
 import type { FileEntry } from "@facet/protocol";
@@ -18,6 +19,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { FACET_FILE_DRAG_MIME } from "../common/file-drag.ts";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { useHoverTip } from "../tip.tsx";
 import { TreeChevron } from "../transcript/chevron.tsx";
@@ -290,6 +292,15 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath, onCollapse 
 								aria-level={depth + 1}
 								aria-expanded={isDirectory ? isOpen : undefined}
 								aria-selected={isSelected}
+								// 文件行可以拖进输入区：拖的是它的相对路径，落地是一枚 `@文件` 胶囊
+								draggable={!isDirectory}
+								onDragStart={(event) => {
+									if (isDirectory) {
+										return;
+									}
+									event.dataTransfer.setData(FACET_FILE_DRAG_MIME, entry.path);
+									event.dataTransfer.effectAllowed = "copy";
+								}}
 								tabIndex={isActive || (activePath === undefined && index === 0) ? 0 : -1}
 								onFocus={() => setActivePath(entry.path)}
 								onKeyDown={(event) => onRowKeyDown(event, row, index)}

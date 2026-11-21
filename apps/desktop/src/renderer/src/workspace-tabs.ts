@@ -1,12 +1,12 @@
 /**
  * 工作区工具的呈现映射。
  *
- * 把三类内容与它们的计数合成标签、`+` 菜单与启动清单要的条目；图标、文案与快捷键都在这里
+ * 把四类内容与它们的计数合成标签、`+` 菜单与启动清单要的条目；图标、文案与快捷键都在这里
  * 定，三处组件本身只认 `WorkspaceTabItem`。纯函数（图标是元素，不是行为），便于单独验证；
  * 图标用 `createElement` 拼，这个模块因此不需要 JSX 运行时的配置。
  */
 import type { WorkspaceTabItem } from "@facet/ui";
-import { FileDiff, FolderTree, SquareTerminal } from "lucide-react";
+import { FileDiff, FolderTree, GitGraph, SquareTerminal } from "lucide-react";
 import { createElement } from "react";
 import { workspaceShortcutLabel } from "./workspace-shortcuts.ts";
 
@@ -20,12 +20,14 @@ export interface WorkspaceTabFacts {
 	canUseTerminal: boolean;
 }
 
-/** 三者的名字，来自界面语言。 */
+/** 四者的名字，来自界面语言。 */
 export interface WorkspaceTabText {
 	/** 文件 */
 	files: string;
 	/** 变更 */
 	changes: string;
+	/** 提交图谱 */
+	gitGraph: string;
 	/** 终端 */
 	terminal: string;
 }
@@ -35,10 +37,12 @@ const ICON_SIZE = 13;
 const ICON_STROKE = 1.5;
 
 /**
- * 三件工具的条目。
+ * 四件工具的条目。
  *
  * 快捷键提示按平台写：mac 上是 `⌘⇧E`，其它平台是 `Ctrl+Shift+E`。提示与真实绑定同源
  * （`workspace-shortcuts.ts`），不会出现「写着却按不出来」。
+ *
+ * 顺序即启动清单与 `+` 菜单里的顺序：文件、变更、提交图谱、终端。
  */
 export function workspaceTabItems(
 	facts: WorkspaceTabFacts,
@@ -58,6 +62,12 @@ export function workspaceTabItems(
 			icon: createElement(FileDiff, { size: ICON_SIZE, strokeWidth: ICON_STROKE }),
 			badge: facts.changes > 0 ? facts.changes : undefined,
 			shortcut: workspaceShortcutLabel("changes", isMac),
+		},
+		{
+			id: "git-graph",
+			label: text.gitGraph,
+			icon: createElement(GitGraph, { size: ICON_SIZE, strokeWidth: ICON_STROKE }),
+			shortcut: workspaceShortcutLabel("git-graph", isMac),
 		},
 		{
 			id: "terminal",

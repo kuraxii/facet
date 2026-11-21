@@ -11,13 +11,23 @@ import { describe, expect, it } from "vitest";
 import { WORKSPACE_SPLIT_WIDE_WIDTH_PX, WorkspaceSplit } from "./workspace-split.tsx";
 
 /** 挂一份两栏，预览与索引各给一个能定位的标记。 */
-function render(patch: { view?: "list" | "detail"; isListCollapsed?: boolean } = {}): string {
+function render(
+	patch: {
+		view?: "list" | "detail";
+		isListCollapsed?: boolean;
+		listWidth?: number;
+		onListWidthChange?: (width: number) => void;
+	} = {},
+): string {
 	return renderToStaticMarkup(
 		createElement(WorkspaceSplit, {
 			detail: createElement("span", { id: "preview" }, "PREVIEW"),
 			list: createElement("span", { id: "index" }, "INDEX"),
 			view: patch.view ?? "detail",
 			isListCollapsed: patch.isListCollapsed ?? false,
+			// 不给宽度时这一层不该凭空长出一条分隔条
+			...(patch.listWidth === undefined ? {} : { listWidth: patch.listWidth }),
+			...(patch.onListWidthChange === undefined ? {} : { onListWidthChange: patch.onListWidthChange }),
 		}),
 	);
 }
@@ -42,5 +52,14 @@ describe("工作区两栏", () => {
 
 	it("解锁两栏的宽度是个正数，与样式里的 680 同源", () => {
 		expect(WORKSPACE_SPLIT_WIDE_WIDTH_PX).toBe(680);
+	});
+
+	it("给了宽度与提交回调才在两栏之间放分隔条", () => {
+		expect(render()).not.toContain("workspace-list-resizer");
+		const html = render({ listWidth: 320, onListWidthChange: () => undefined });
+		expect(html).toContain('class="workspace-list-resizer"');
+		// 分隔条在预览之后、索引之前，与它在屏幕上的位置一致
+		expect(html.indexOf("PREVIEW")).toBeLessThan(html.indexOf("workspace-list-resizer"));
+		expect(html.indexOf("workspace-list-resizer")).toBeLessThan(html.indexOf("INDEX"));
 	});
 });

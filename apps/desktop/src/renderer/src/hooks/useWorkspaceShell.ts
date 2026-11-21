@@ -13,6 +13,7 @@ import {
 	openPanelTab as addPanelTab,
 	type CodeThemeValue,
 	clampSidebarWidth,
+	clampWorkspaceListWidth,
 	isDarkTheme,
 	normalizePanelState,
 	normalizeUiScale,
@@ -21,6 +22,7 @@ import {
 	type RightPanelTab,
 	readPanelState,
 	readSidebarWidth,
+	readWorkspaceListWidth,
 	closePanelTab as removePanelTab,
 	resolveUiTheme,
 	type SettingsSection,
@@ -29,8 +31,17 @@ import {
 	stepUiScale,
 	writePanelState,
 	writeSidebarWidth,
+	writeWorkspaceListWidth,
 } from "@facet/ui";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+	useSyncExternalStore,
+} from "react";
 import { bridge } from "../bridge.ts";
 import { type NarrowDrawer, toggleNarrowDrawer } from "../drawer-state.ts";
 import { readLayoutIsNarrow, subscribeLayout } from "../layout-mode.ts";
@@ -148,6 +159,8 @@ export interface WorkspaceShell {
 	settingsSection: SettingsSection;
 	/** 右栏的状态：展开、开着哪些标签、宽度 */
 	panel: RightPanelState;
+	/** 变更页两栏里索引的偏好宽（落盘 `facet.workspace.listWidth`） */
+	workspaceListWidth: number;
 	/** 本机界面缩放百分比 */
 	uiScale: number;
 	/** 缩放变化后短暂显示的百分比浮层 */
@@ -181,6 +194,8 @@ export interface WorkspaceShell {
 	setPanelTab: (tab: RightPanelTab) => void;
 	/** 关掉一个工具标签；最后一个关掉后右栏停在启动清单上，不跟着收起 */
 	closePanelTab: (tab: RightPanelTab) => void;
+	/** 改索引栏宽度并写回本地：拖动松手时提交一次 */
+	updateWorkspaceListWidth: (next: number) => void;
 	/** 打开或收起右抽屉（窄档的临时抽屉） */
 	closePanelDrawer: () => void;
 	/** `⤢` 与 `⤡`：进出宽展开 */
@@ -201,6 +216,9 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 	const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 	const [isSearchOpen, setIsSearchOpen] = useState(false);
 	const [sidebarWidth, setSidebarWidth] = useState(() => readSidebarWidth(window.localStorage));
+	const [workspaceListWidth, setWorkspaceListWidth] = useState(() =>
+		readWorkspaceListWidth(window.localStorage),
+	);
 	const [view, setView] = useState<"chat" | "settings">("chat");
 	const [settingsSection, setSettingsSection] = useState<SettingsSection>("models");
 	const [panel, setPanel] = useState<RightPanelState>(() => readPanelState(localStorage));
@@ -302,6 +320,22 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 		};
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
+	}, []);
+
+	/*
+	 * 索引栏的偏好宽写在根节点上。
+	 *
+	 * 拖动期间分隔条把同一个变量写在 `.app` 上——更近的祖先赢，拖动即时、不经过渲染；松手
+	 * 提交之后这里把根节点对齐到同一个值，两者不会打架。
+	 */
+	useLayoutEffect(() => {
+		document.documentElement.style.setProperty("--workspace-list-width", `${workspaceListWidth}px`);
+	}, [workspaceListWidth]);
+
+	const updateWorkspaceListWidth = useCallback((next: number) => {
+		const width = clampWorkspaceListWidth(next);
+		setWorkspaceListWidth(width);
+		writeWorkspaceListWidth(window.localStorage, width);
 	}, []);
 
 	const updateSidebarWidth = useCallback((next: number) => {
@@ -530,6 +564,7 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 		view,
 		settingsSection,
 		panel,
+		workspaceListWidth,
 		uiScale,
 		zoomBadge,
 		className: shellClassName(isSidebarOpen, isDrawerOpen, isNarrow),
@@ -543,6 +578,7 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 		updatePanel,
 		togglePanel,
 		setPanelTab,
+		updateWorkspaceListWidth,
 		closePanelTab,
 		closePanelDrawer,
 		togglePanelExpanded,

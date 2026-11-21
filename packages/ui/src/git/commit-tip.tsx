@@ -1,9 +1,9 @@
 /**
  * 提交悬浮卡。
  *
- * 指针停在提交历史的一行上时给出这条提交的完整信息，分三段：作者与时间加说明、改动规模、
- * 短哈希与远端链接，段与段之间一条发丝线。列表行只放得下短哈希与说明第一行，这里补上
- * 其余部分。
+ * 指针停在提交图谱的一行上时给出这条提交的完整信息，分三段：作者与时间加说明、改动规模、
+ * 短哈希与远端链接，段与段之间一条发丝线。列表行只放得下泳道、说明第一行与短哈希，这里
+ * 补上其余部分。
  */
 
 import type { GitCommit } from "@facet/protocol";
@@ -11,7 +11,7 @@ import { Clock, Copy, ExternalLink, GitCommitVertical } from "lucide-react";
 import type { ReactNode } from "react";
 import { shortTime } from "../chat/sidebar-model.ts";
 import { useI18n } from "../i18n/I18nProvider.tsx";
-import styles from "./changes.module.css";
+import styles from "./git.module.css";
 
 export interface CommitTipProps {
 	/** 悬浮到的那条提交 */

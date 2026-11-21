@@ -115,7 +115,12 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 					terminals: terminal.terminals.length,
 					canUseTerminal,
 				},
-				{ files: t("panel.files"), changes: t("panel.changes"), terminal: t("panel.terminal") },
+				{
+					files: t("panel.files"),
+					changes: t("panel.changes"),
+					gitGraph: t("panel.gitGraph"),
+					terminal: t("panel.terminal"),
+				},
 				isMac,
 			),
 		[canUseTerminal, docs.changes.status, isMac, t, terminal.terminals.length],
@@ -465,6 +470,8 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 								terminal={terminal}
 								sessionCwd={sessionCwd}
 								terminalId={terminalId}
+								listWidth={shell.workspaceListWidth}
+								onListWidthChange={shell.updateWorkspaceListWidth}
 							/>
 						</RightPanel>
 					) : null}

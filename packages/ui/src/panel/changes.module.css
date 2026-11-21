@@ -28,6 +28,12 @@
 	white-space: nowrap;
 }
 
+/* 没有分支名时替 `.branch` 撑住中段，右侧那组动作因此仍然贴右 */
+.toolbarSpacer {
+	flex: 1;
+	min-width: 0;
+}
+
 .upstream {
 	margin-left: 6px;
 	color: var(--t3);
@@ -300,333 +306,28 @@
 	}
 }
 
-/* 横向溢出由全局的 `scroll-x` 接：这里只管等宽字体与行高，行自己不换行 */
-.diffBody {
-	font-family: var(--font-mono);
-	font-size: 11.5px;
-	line-height: var(--changes-line-height);
-}
-
-.diffLine {
-	display: flex;
-	width: max-content;
-	min-width: 100%;
-	padding: 0 10px;
-	box-sizing: border-box;
-}
-
-.diffLine i {
-	flex: none;
-	width: var(--changes-line-number-width);
-	padding-right: 10px;
-	color: var(--t3);
-	font-style: normal;
-	text-align: right;
-}
-
-.diffLine span {
-	white-space: pre;
-}
-
-.diffLine:global(.is-add) {
-	background: color-mix(in srgb, var(--add) 15%, transparent);
-	color: var(--add);
-}
-
-.diffLine:global(.is-del) {
-	background: color-mix(in srgb, var(--del) 10%, transparent);
-	color: var(--del);
-}
-
-.diffLine:global(.is-meta) {
-	color: var(--t3);
-}
-
-.diffBody[data-wrap="true"] .diffLine {
-	width: auto;
-	min-width: 0;
-}
-
-.diffBody[data-wrap="true"] .diffLine span {
-	white-space: pre-wrap;
-	overflow-wrap: anywhere;
-}
-
-/* 提交历史：可折叠区，列表最多占一段固定高度，不把变更树或补丁挤出视口 */
-.commitSection {
-	display: flex;
-	flex: none;
-	flex-direction: column;
-	min-height: 0;
-	margin-top: auto;
-	border-top: 1px solid var(--line);
-}
-
-.commitSection[data-open="true"] {
-	flex: 0 1 auto;
-	max-height: var(--commit-section-max-height);
-}
-
-.commitHeader {
-	display: flex;
-	align-items: center;
-	gap: var(--changes-icon-gap);
-	width: 100%;
-	height: var(--changes-header-height);
-	padding: 0 var(--changes-trailing);
-	border: 0;
-	background: transparent;
-	color: var(--t2);
-	text-align: left;
-}
-
-.commitHeader:hover {
-	background: var(--sb-row-hover);
-	color: var(--t1);
-}
-
-.commitTitle {
-	font-size: 13px;
-}
-
-.commitCount {
-	margin-left: auto;
-	color: var(--t3);
-	font-family: var(--font-mono);
-	font-size: 11px;
-}
-
-/* 滚动行为与沟槽由全局的 `scroll-y` 给：展开后列表自己滚动，行宽不跟着变 */
-.commitList {
-	flex: 1;
-}
-
-.commitSkeleton {
-	height: var(--commit-row-height);
-	margin: 2px var(--changes-trailing);
-	border-radius: 5px;
-	background: var(--surface2);
-	animation: changes-loading 1.2s var(--ease) infinite alternate;
-}
-
-.commitRow {
-	display: flex;
-	align-items: center;
-	gap: var(--changes-icon-gap);
-	width: 100%;
-	height: var(--commit-row-height);
-	padding: 0 var(--changes-trailing);
-	border: 0;
-	background: transparent;
-	color: var(--t2);
-	font-size: 12px;
-	text-align: left;
-}
-
-.commitRow:hover {
-	background: var(--sb-row-hover);
-	color: var(--t1);
-}
-
-.commitGraph {
-	position: relative;
-	display: grid;
-	flex: none;
-	place-items: center;
-	width: var(--commit-graph-width);
-	align-self: stretch;
-}
-
-.commitGraph::before {
-	position: absolute;
-	top: 0;
-	bottom: 0;
-	width: 2px;
-	background: var(--line);
-	content: "";
-}
-
-.commitGraph[data-first="true"]::before {
-	top: 50%;
-}
-
-.commitGraph[data-last="true"]::before {
-	bottom: 50%;
-}
-
-.commitDot {
-	position: relative;
-	z-index: var(--z-content-local);
-	width: var(--commit-graph-width);
-	height: var(--commit-graph-width);
-	border: 2px solid var(--acc);
-	border-radius: 50%;
-	background: var(--bg);
-}
-
-.commitSha {
-	flex: none;
-	width: var(--commit-sha-width);
-	overflow: hidden;
-	color: var(--t3);
-	font-family: var(--font-mono);
-	font-size: 11px;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.commitSubject {
-	flex: 1;
-	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.commitTime {
-	flex: none;
-	color: var(--t3);
-	font-size: 11px;
-}
-
 /*
  * 提交悬浮卡：三段——作者与时间加说明、改动规模、短哈希与远端链接，段与段之间一条发丝线。
  * 浮层本身不留内边距（提示用 `card` 外观），留白全在这里给。
  */
-.commitTip {
-	display: flex;
-	flex-direction: column;
-	width: var(--commit-tip-width);
-	max-width: 100%;
-	color: var(--t2);
-}
 
 /* 第一段：作者与时间、说明第一行、正文 */
-.commitTipMain {
-	display: flex;
-	flex-direction: column;
-	gap: var(--commit-tip-lead-gap);
-	padding: var(--commit-tip-padding-y) var(--commit-tip-padding-x);
-}
-
-.commitTipHead {
-	display: flex;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: var(--commit-tip-row-gap);
-	margin: 0;
-	color: var(--t2);
-	font-size: 13px;
-	line-height: 1.4;
-}
-
-.commitTipAuthor {
-	color: var(--t1);
-	font-weight: 500;
-}
-
-.commitTipIcon {
-	flex: none;
-	color: var(--t3);
-}
 
 /*
  * 说明第一行与正文同一套字体：同色同字号，只靠位置分开，各自按行数折起来收省略号——
  * 卡片高度才不会顶到提示的上限。
  */
-.commitTipSubject {
-	display: -webkit-box;
-	-webkit-box-orient: vertical;
-	-webkit-line-clamp: var(--commit-tip-subject-lines);
-	margin: 0;
-	overflow: hidden;
-	color: var(--t1);
-	font-size: var(--commit-tip-text-size);
-	line-height: var(--commit-tip-line-height);
-}
-
-.commitTipBody {
-	display: -webkit-box;
-	-webkit-box-orient: vertical;
-	-webkit-line-clamp: var(--commit-tip-body-lines);
-	margin: 0;
-	overflow: hidden;
-	color: var(--t1);
-	font-size: var(--commit-tip-text-size);
-	line-height: var(--commit-tip-line-height);
-	white-space: pre-wrap;
-	overflow-wrap: anywhere;
-}
 
 /* 第二段与第三段：上下留白比第一段小，上面一条发丝线与上一段分开 */
-.commitTipBand {
-	display: flex;
-	align-items: center;
-	gap: var(--commit-tip-row-gap);
-	padding: var(--commit-tip-band-padding-y) var(--commit-tip-padding-x);
-	border-top: 1px solid var(--line);
-	font-size: 13px;
-	line-height: 1.4;
-}
 
 /* 改动规模是一句话：文件数、增删行数各是一段，段与段之间的逗号也是一段 */
-.commitTipStats {
-	display: flex;
-	flex-wrap: wrap;
-	margin: 0;
-	color: var(--t2);
-	font-variant-numeric: tabular-nums;
-}
-
-.commitTipStatSep {
-	/* 英文的逗号后面带一个空格，flex 子项会把行尾空白吃掉，这里按原样保留 */
-	white-space: pre;
-}
-
-.commitTipAdded {
-	color: var(--add);
-}
-
-.commitTipRemoved {
-	color: var(--del);
-}
 
 /* 第三段：提交图标、短哈希、复制、分隔线与远端链接 */
-.commitTipAccent {
-	flex: none;
-	color: var(--acc);
-}
 
 /* 短哈希与复制是一颗按钮：点哈希或者点后面的图标都复制完整哈希 */
-.commitTipHash {
-	display: inline-flex;
-	align-items: center;
-	gap: var(--changes-stat-gap);
-	padding: 0;
-	border: 0;
-	background: transparent;
-	color: var(--acc);
-}
 
 .commitTipHash:hover {
 	color: var(--t1);
-}
-
-.commitTipSha {
-	font-family: var(--font-mono);
-	letter-spacing: 0.01em;
-}
-
-.commitTipDivider {
-	color: var(--line2);
-}
-
-.commitTipLink {
-	display: inline-flex;
-	align-items: center;
-	gap: var(--commit-tip-row-gap);
-	color: var(--acc);
-	text-decoration: none;
 }
 
 .commitTipLink:hover {

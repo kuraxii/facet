@@ -34,12 +34,35 @@ export interface GitCommitStats {
 	deletions: number;
 }
 
+/** 一个装饰引用挂在提交上的样子。 */
+export type GitRefKind = "head" | "branch" | "remote" | "tag";
+
+/**
+ * 一个指向提交的引用（`git log --decorate` 拆出来的那一层）。
+ *
+ * 图谱只负责把它们画成胶囊，不关心背后的 ref 命名空间。
+ */
+export interface GitRef {
+	/** 短名字：`main`、`origin/main`、`v0.2.2`、`HEAD` */
+	name: string;
+	/** 引用种类，决定胶囊的颜色与图标 */
+	kind: GitRefKind;
+}
+
 /** 最近的一条提交。 */
 export interface GitCommit {
 	/** 完整提交哈希 */
 	sha: string;
 	/** 短哈希，列表里显示 */
 	shortSha: string;
+	/**
+	 * 父提交的完整哈希，合并提交有多个。
+	 *
+	 * 图谱靠它画分叉与合并；主机侧从 `git log --format=%P` 读，缺省时按没有父提交处理。
+	 */
+	parents?: readonly string[];
+	/** 挂在这条提交上的引用（HEAD / 分支 / 远端分支 / Tag） */
+	refs?: readonly GitRef[];
 	/** 提交说明的第一行 */
 	subject: string;
 	/** 说明里第一行之后的内容，段落之间保留空行；没有正文时为空串 */
@@ -62,6 +85,8 @@ export interface GitCommits {
 	commits: readonly GitCommit[];
 	/** 远端仓库在浏览器里的地址（`https://host/owner/repo`，不带 `.git`），用来打开提交页；没有远端时为空 */
 	webUrl?: string;
+	/** 后面还有更旧的提交：分页请求给的条数被截断时为真，缺省表示已经到底 */
+	hasMore?: boolean;
 }
 
 /** 某一次提交相对第一父提交的改动。 */

@@ -24,9 +24,6 @@ function render(focusPath: string | undefined): string {
 			focusRequestId: 1,
 			loadDiff: () => Promise.resolve({ patch: "", truncated: false, binary: false }),
 			onRefresh: () => {},
-			commits: { isRepo: true, commits: [] },
-			commitsLoading: false,
-			commitsError: undefined,
 		}),
 	);
 }

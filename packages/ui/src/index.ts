@@ -92,6 +92,22 @@ export type { ScrollAreaProps } from "./common/scroll-area.tsx";
 export { ScrollArea, ScrollRow } from "./common/scroll-area.tsx";
 export type { SelectOption, SelectProps } from "./common/select.tsx";
 export { Select } from "./common/select.tsx";
+export { GitGraphLanes, GRAPH_ROW_HEIGHT, LANE_GAP } from "./git/git-graph-lanes.tsx";
+export type {
+	GitGraphCommit,
+	GitGraphLayout,
+	GitGraphLink,
+	GitGraphRow,
+} from "./git/git-graph-layout.ts";
+export { layoutGitGraph } from "./git/git-graph-layout.ts";
+export type { GitGraphListProps } from "./git/git-graph-list.tsx";
+export { GitGraphList } from "./git/git-graph-list.tsx";
+export type { GitPatchProps } from "./git/git-patch.tsx";
+export { GitPatch } from "./git/git-patch.tsx";
+export type { GitRefsProps } from "./git/git-refs.tsx";
+export { GitRefs } from "./git/git-refs.tsx";
+export type { ChangeMarkProps, ChangeStatusLabelKey } from "./git/git-status-mark.tsx";
+export { ChangeMark, changeStatusLabelKey } from "./git/git-status-mark.tsx";
 export type { I18nProviderProps, I18nValue } from "./i18n/I18nProvider.tsx";
 export { I18nProvider, useI18n } from "./i18n/I18nProvider.tsx";
 export type { CodeBlockShape } from "./markdown/code-block-state.ts";
@@ -105,8 +121,6 @@ export type { ChangesDocumentProps } from "./panel/changes-document.tsx";
 export { ChangesDocument } from "./panel/changes-document.tsx";
 export type { ChangesPaneProps } from "./panel/changes-pane.tsx";
 export { ChangesPane } from "./panel/changes-pane.tsx";
-export type { DiffViewProps } from "./panel/diff-view.tsx";
-export { DiffView } from "./panel/diff-view.tsx";
 export type { FileTreeStorage } from "./panel/file-tree-state.ts";
 export {
 	clampFileTreeWidth,
@@ -134,6 +148,7 @@ export {
 	openPanelTab,
 	PANEL_DEFAULT_WIDTH,
 	PANEL_MIN_WIDTH,
+	PANEL_TABS,
 	PANEL_WIDTH_BOUNDS,
 	readPanelState,
 	writePanelState,
@@ -145,6 +160,18 @@ export { formatShortcut } from "./panel/shortcuts.ts";
 export { PanelToggle, SidebarToggle } from "./panel/top-bar.tsx";
 export type { WorkspaceLauncherProps } from "./panel/workspace-launcher.tsx";
 export { WorkspaceLauncher } from "./panel/workspace-launcher.tsx";
+export type { WorkspaceListStorage } from "./panel/workspace-list-state.ts";
+export {
+	clampWorkspaceListWidth,
+	readWorkspaceListWidth,
+	WORKSPACE_DETAIL_KEEP_WIDTH,
+	WORKSPACE_LIST_DEFAULT_WIDTH,
+	WORKSPACE_LIST_MAX_WIDTH,
+	WORKSPACE_LIST_MIN_WIDTH,
+	WORKSPACE_LIST_WIDTH_BOUNDS,
+	workspaceListMaxWidth,
+	writeWorkspaceListWidth,
+} from "./panel/workspace-list-state.ts";
 export type { WorkspaceSplitProps, WorkspaceSplitView } from "./panel/workspace-split.tsx";
 export { WORKSPACE_SPLIT_WIDE_WIDTH_PX, WorkspaceSplit } from "./panel/workspace-split.tsx";
 export type {

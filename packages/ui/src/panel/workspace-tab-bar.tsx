@@ -1,14 +1,16 @@
 /**
  * 工作区标签栏。
  *
- * 右栏里三类内容（文件、变更、终端）的切换器。它是一个纯展示组件：条目、当前项与选中
- * 回调都由调用方给，组件不知道每一条对应哪个业务，也不在这里发请求。
+ * 右栏里已打开的工具标签（文件、变更、终端）的切换器。它是纯展示组件：条目、当前项与回调
+ * 都由调用方给，组件不知道每一条对应哪个业务，也不在这里发请求；`+` 菜单是独立的一枚
+ * 按钮（`WorkspaceTabMenu`），不混进标签栏的键盘序列。
  *
- * 同一个组件用在三处：展开态顶带右格、抽屉顶头（都是 `horizontal`）与收起态右侧的悬浮
- * 竖轨（`vertical`）。三处的宽度差别很大，所以文字标签由容器查询决定折不折：容器窄于
- * `WORKSPACE_TAB_LABEL_BREAKPOINT_PX` 时只剩图标，说明改由悬浮提示承担。
+ * 同一个组件用在两处：展开态顶带右格与抽屉顶头，两处都是横向一条。宽度差别很大，所以文字
+ * 标签由容器查询决定折不折：容器窄于 `WORKSPACE_TAB_LABEL_BREAKPOINT_PX` 时只剩图标，说明
+ * 改由悬浮提示承担。
  */
 
+import { X } from "lucide-react";
 import {
 	type KeyboardEvent as ReactKeyboardEvent,
 	type ReactNode,
@@ -21,7 +23,7 @@ import {
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { useHoverTip } from "../tip.tsx";
 
-/** 工作区的三类内容。 */
+/** 工作区的三类工具。 */
 export type WorkspaceTabId = "files" | "changes" | "terminal";
 
 /** 标签栏上的一条标签。 */
@@ -36,25 +38,20 @@ export interface WorkspaceTabItem {
 	badge?: number | string;
 	/** 不可用：点击无效，方向键也跳过它 */
 	disabled?: boolean;
+	/** 快捷键提示（已按平台写好）；启动清单与 `+` 菜单用它，标签栏本身不显示 */
+	shortcut?: string;
 }
 
 /** 标签栏参数。 */
 export interface WorkspaceTabBarProps {
-	/** 条目，顺序即显示顺序 */
+	/** 已打开的标签，顺序即显示顺序；为空时不渲染这一层 */
 	items: readonly WorkspaceTabItem[];
-	/** 当前项；为空时第一条可用项占住焦点位，但不高亮 */
+	/** 当前项；不在条目里时第一条可用项占住焦点位，但不高亮 */
 	activeId: WorkspaceTabId | null;
 	/** 选中一条；禁用项不会触发 */
 	onSelect: (id: WorkspaceTabId) => void;
-	/** 排布方向：横向用于顶带与抽屉顶头，纵向用于收起态的悬浮竖轨 */
-	orientation?: "horizontal" | "vertical";
-	/**
-	 * 文字的显示口径。
-	 *
-	 * `auto` 跟着容器宽度走（窄于断点时只留图标并挂悬浮提示）；`always` 始终给文字；
-	 * `never` 始终只留图标，悬浮提示常开。
-	 */
-	labelMode?: "auto" | "always" | "never";
+	/** 关掉一条；不给时不显示关闭按钮 */
+	onClose?: ((id: WorkspaceTabId) => void) | undefined;
 	/** 组件自己的类名 */
 	className?: string;
 	/** 标签栏的无障碍名称；不给时用界面里那句默认的 */
@@ -66,10 +63,13 @@ export interface WorkspaceTabBarProps {
 /**
  * 文字标签折起的容器宽度（CSS px）。
  *
- * 与 `panel.css` 里 `@container (width < 440px)` 是同一个数：CSS 负责真的把文字藏起来，
+ * 与 `panel.css` 里 `@container (width < 360px)` 是同一个数：CSS 负责真的把文字藏起来，
  * 这里只用来决定要不要挂悬浮提示。两处改一处要改两处（容器查询里不能写变量）。
+ *
+ * 360 贴着右栏的下限（300）上方一点：缺省 420 的右栏放得下「文件」「变更」这样的两字
+ * 标签，拖到最窄只剩图标时整条仍然一眼认得出。
  */
-export const WORKSPACE_TAB_LABEL_BREAKPOINT_PX = 440;
+export const WORKSPACE_TAB_LABEL_BREAKPOINT_PX = 360;
 
 /**
  * 最近的查询容器。
@@ -117,8 +117,7 @@ export function WorkspaceTabBar({
 	items,
 	activeId,
 	onSelect,
-	orientation = "horizontal",
-	labelMode = "auto",
+	onClose,
 	className,
 	ariaLabel,
 	controlsId,
@@ -128,12 +127,10 @@ export function WorkspaceTabBar({
 	const tip = useHoverTip();
 	const barRef = useRef<HTMLDivElement | null>(null);
 	const buttonRefs = useRef(new Map<WorkspaceTabId, HTMLButtonElement>());
-	const isNarrowContainer = useNarrowContainer(barRef);
-	const showsLabel = labelMode === "always" || (labelMode === "auto" && !isNarrowContainer);
+	const showsLabel = !useNarrowContainer(barRef);
 	const wantsTip = !showsLabel;
 
 	const enabled = items.filter((item) => item.disabled !== true);
-	const isActive = (id: WorkspaceTabId): boolean => activeId === id;
 	/** 焦点位：当前项可用就落在它身上，否则落在第一条可用项上 */
 	const rovingId = enabled.some((item) => item.id === activeId) ? activeId : enabled[0]?.id;
 
@@ -169,14 +166,12 @@ export function WorkspaceTabBar({
 
 	const onKeyDown = useCallback(
 		(event: ReactKeyboardEvent<HTMLButtonElement>, id: WorkspaceTabId): void => {
-			const forward = orientation === "vertical" ? "ArrowDown" : "ArrowRight";
-			const backward = orientation === "vertical" ? "ArrowUp" : "ArrowLeft";
-			if (event.key === forward) {
+			if (event.key === "ArrowRight") {
 				event.preventDefault();
 				move(id, 1);
 				return;
 			}
-			if (event.key === backward) {
+			if (event.key === "ArrowLeft") {
 				event.preventDefault();
 				move(id, -1);
 				return;
@@ -189,12 +184,22 @@ export function WorkspaceTabBar({
 			if (event.key === "End") {
 				event.preventDefault();
 				jump("last");
+				return;
+			}
+			// Delete / Backspace 关标签：与编辑器一致，且不用把焦点移到关闭按钮上
+			if ((event.key === "Delete" || event.key === "Backspace") && onClose !== undefined) {
+				event.preventDefault();
+				onClose(id);
 			}
 		},
-		[jump, move, orientation],
+		[jump, move, onClose],
 	);
 
-	const classes = ["workspace-tabs", orientation === "vertical" ? "is-vertical" : "is-horizontal", className]
+	if (items.length === 0) {
+		return null;
+	}
+
+	const classes = ["workspace-tabs", className]
 		.filter((name): name is string => name !== undefined && name.length > 0)
 		.join(" ");
 
@@ -202,45 +207,73 @@ export function WorkspaceTabBar({
 		<div
 			ref={barRef}
 			className={classes}
-			data-label-mode={labelMode}
 			role="tablist"
-			aria-orientation={orientation}
+			aria-orientation="horizontal"
 			aria-label={ariaLabel ?? t("panel.tabs")}
 		>
 			{items.map((item) => {
-				const selected = isActive(item.id);
+				const selected = activeId === item.id;
+				const closeLabel = t("panel.closeTab", { name: item.label });
 				return (
-					<button
+					/*
+					 * 关闭按钮不能套在 tab 按钮里面（按钮不能嵌套），所以一条标签是「外壳 + 两个
+					 * 兄弟按钮」。外壳标 presentation，让 tab 仍然是 tablist 的语义子节点。
+					 */
+					<div
 						key={item.id}
-						type="button"
-						role="tab"
-						className="workspace-tab"
-						aria-selected={selected}
-						aria-controls={controlsId}
-						aria-label={showsLabel ? undefined : item.label}
-						disabled={item.disabled === true}
-						tabIndex={item.id === rovingId ? 0 : -1}
-						{...(wantsTip ? tip.handlers(item.label) : {})}
-						ref={(node) => {
-							if (node === null) {
-								buttonRefs.current.delete(item.id);
-							} else {
-								buttonRefs.current.set(item.id, node);
-							}
-						}}
-						onKeyDown={(event) => onKeyDown(event, item.id)}
-						onClick={() => {
-							if (item.disabled !== true) {
-								onSelect(item.id);
+						className="workspace-tab-shell"
+						role="presentation"
+						data-selected={selected ? "true" : undefined}
+						onAuxClick={(event) => {
+							// 中键关闭：与浏览器标签一致
+							if (event.button === 1 && onClose !== undefined) {
+								event.preventDefault();
+								onClose(item.id);
 							}
 						}}
 					>
-						<span className="workspace-tab-icon">{item.icon}</span>
-						<span className="workspace-tab-label">{item.label}</span>
-						{item.badge === undefined || item.badge === 0 || item.badge === "" ? null : (
-							<span className="workspace-tab-badge">{item.badge}</span>
+						<button
+							type="button"
+							role="tab"
+							className="workspace-tab"
+							aria-selected={selected}
+							aria-controls={controlsId}
+							aria-label={showsLabel ? undefined : item.label}
+							disabled={item.disabled === true}
+							tabIndex={item.id === rovingId ? 0 : -1}
+							{...(wantsTip ? tip.handlers(item.label) : {})}
+							ref={(node) => {
+								if (node === null) {
+									buttonRefs.current.delete(item.id);
+								} else {
+									buttonRefs.current.set(item.id, node);
+								}
+							}}
+							onKeyDown={(event) => onKeyDown(event, item.id)}
+							onClick={() => {
+								if (item.disabled !== true) {
+									onSelect(item.id);
+								}
+							}}
+						>
+							<span className="workspace-tab-icon">{item.icon}</span>
+							<span className="workspace-tab-label">{item.label}</span>
+							{item.badge === undefined || item.badge === 0 || item.badge === "" ? null : (
+								<span className="workspace-tab-badge">{item.badge}</span>
+							)}
+						</button>
+						{onClose === undefined ? null : (
+							<button
+								type="button"
+								className="workspace-tab-close"
+								aria-label={closeLabel}
+								tabIndex={-1}
+								onClick={() => onClose(item.id)}
+							>
+								<X size={11} strokeWidth={2} />
+							</button>
 						)}
-					</button>
+					</div>
 				);
 			})}
 			{tip.render()}

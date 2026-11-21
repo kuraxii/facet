@@ -23,6 +23,7 @@ import { useWorkspaceShell } from "../hooks/useWorkspaceShell.ts";
 import { useHostRuntime } from "../host-context.tsx";
 import { placeCaretAtEnd, QUOTE_SOURCE_SELECTOR } from "../selection-quote.ts";
 import { useToast } from "../toast-provider.tsx";
+import { workspaceShortcutOf } from "../workspace-shortcuts.ts";
 import { Workbench } from "./workbench.tsx";
 
 export interface HostWorkspaceProps {
@@ -99,8 +100,8 @@ export function HostWorkspace({
 		terminal.terminals.find((item) => item.id === activeTerminalId)?.id ??
 		terminal.terminals[terminal.terminals.length - 1]?.id;
 
-	/** 变更预览是否正在显示：右栏开着且停在变更分页 */
-	const isChangesVisible = shell.isPanelOpen && shell.panel.tab === "changes";
+	/** 变更预览是否正在显示：右栏开着且停在变更标签上 */
+	const isChangesVisible = shell.isPanelOpen && shell.panel.activeTab === "changes";
 
 	const docs = useWorkspaceDocs({
 		client,
@@ -171,19 +172,23 @@ export function HostWorkspace({
 		[composer],
 	);
 
-	// 快捷键 Ctrl + ` 回到终端分页；没有终端时在当前目录新建一个
+	/*
+	 * 工作区三件工具的快捷键：文件与变更直接打开对应标签，终端还没有实例时先在当前目录
+	 * 新建一个。键位定义在 `workspace-shortcuts.ts`，启动清单与 `+` 菜单上的提示同源。
+	 */
 	const setPanelTab = shell.setPanelTab;
 	useEffect(() => {
 		const onKeyDown = (event: KeyboardEvent): void => {
-			if (event.key !== "`" || !(event.ctrlKey || event.metaKey)) {
+			const tab = workspaceShortcutOf(event);
+			if (tab === undefined) {
 				return;
 			}
 			event.preventDefault();
-			if (terminalId !== undefined) {
-				setPanelTab("terminal");
+			if (tab === "terminal" && terminalId === undefined) {
+				void openTerminal();
 				return;
 			}
-			void openTerminal();
+			setPanelTab(tab);
 		};
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);

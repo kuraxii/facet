@@ -1,14 +1,20 @@
 /**
  * 右栏状态的测试。
  *
- * 只测读写与收敛：读不懂的取值回落到缺省，宽度收在上下限之间，旧存储里没有图钉时按固定。
+ * 只测读写、收敛与两个纯变换：读不懂的取值回落到缺省，宽度收在上下限之间，激活项永远落在
+ * 已打开的标签里，旧版单标签存储能迁移过来。
  */
 import { describe, expect, it } from "vitest";
 import {
 	clampPanelWidth,
+	closePanelTab,
 	DEFAULT_PANEL_STATE,
+	normalizePanelState,
+	openPanelTab,
+	PANEL_DEFAULT_WIDTH,
 	PANEL_MIN_WIDTH,
 	type PanelStorage,
+	type RightPanelState,
 	readPanelState,
 	writePanelState,
 } from "./panel-state.ts";
@@ -27,37 +33,71 @@ function createStorage(
 	};
 }
 
+/** 一份展开着的状态，便于逐个字段改。 */
+function state(patch: Partial<RightPanelState> = {}): RightPanelState {
+	return { ...DEFAULT_PANEL_STATE, open: true, ...patch };
+}
+
 describe("readPanelState", () => {
 	it("没有记录时用缺省值", () => {
 		expect(readPanelState(createStorage())).toEqual(DEFAULT_PANEL_STATE);
 	});
 
-	it("缺省是固定在三栏里、收起、停在变更页、520 宽", () => {
-		expect(DEFAULT_PANEL_STATE).toEqual({ open: false, tab: "changes", pinned: true, width: 520 });
+	it("缺省是收起、没有标签、420 宽", () => {
+		expect(DEFAULT_PANEL_STATE).toEqual({ open: false, openTabs: [], activeTab: null, width: 420 });
+		expect(PANEL_DEFAULT_WIDTH).toBe(420);
 	});
 
-	it("读回展开、分页、图钉与宽度", () => {
+	it("读回展开、已打开的标签、激活项与宽度", () => {
 		const storage = createStorage({
 			"facet.panel.open": "1",
-			"facet.panel.tab": "files",
+			"facet.panel.tabs": '["files","terminal"]',
+			"facet.panel.active": "terminal",
 			"facet.panel.width": "640",
-			"facet.panel.pinned": "0",
 		});
-		expect(readPanelState(storage)).toEqual({ open: true, tab: "files", pinned: false, width: 640 });
+		expect(readPanelState(storage)).toEqual(
+			state({ openTabs: ["files", "terminal"], activeTab: "terminal", width: 640 }),
+		);
 	});
 
-	it("三类分页都认，终端也在其中", () => {
-		expect(readPanelState(createStorage({ "facet.panel.tab": "terminal" })).tab).toBe("terminal");
+	it("三类工具都认，顺序与去重都按标签串来", () => {
+		const storage = createStorage({ "facet.panel.tabs": '["terminal","files","terminal","changes"]' });
+		const panel = readPanelState(storage);
+		expect(panel.openTabs).toEqual(["terminal", "files", "changes"]);
+		// 没有激活项记录时落到第一条
+		expect(panel.activeTab).toBe("terminal");
 	});
 
-	it("分页写坏了回到缺省分页", () => {
-		expect(readPanelState(createStorage({ "facet.panel.tab": "设置" })).tab).toBe(DEFAULT_PANEL_STATE.tab);
-		expect(readPanelState(createStorage({ "facet.panel.tab": "diff" })).tab).toBe(DEFAULT_PANEL_STATE.tab);
+	it("标签串写坏了回到空列表", () => {
+		expect(readPanelState(createStorage({ "facet.panel.tabs": "设置" })).openTabs).toEqual([]);
+		expect(readPanelState(createStorage({ "facet.panel.tabs": '{"files":true}' })).openTabs).toEqual([]);
+		expect(readPanelState(createStorage({ "facet.panel.tabs": '["设置","diff"]' })).openTabs).toEqual([]);
 	});
 
-	it("旧存储里没有图钉这一项时按固定处理", () => {
+	it("激活项不在已打开的标签里时落到第一条", () => {
+		const storage = createStorage({
+			"facet.panel.tabs": '["changes"]',
+			"facet.panel.active": "terminal",
+		});
+		expect(readPanelState(storage).activeTab).toBe("changes");
+	});
+
+	it("旧版单标签键迁移成一个已打开的标签", () => {
 		const legacy = createStorage({ "facet.panel.open": "1", "facet.panel.tab": "files" });
-		expect(readPanelState(legacy).pinned).toBe(true);
+		expect(readPanelState(legacy)).toEqual(state({ openTabs: ["files"], activeTab: "files" }));
+	});
+
+	it("有新版标签串时不再看旧键", () => {
+		const storage = createStorage({
+			"facet.panel.tabs": "[]",
+			"facet.panel.tab": "files",
+		});
+		expect(readPanelState(storage).openTabs).toEqual([]);
+		expect(readPanelState(storage).activeTab).toBeNull();
+	});
+
+	it("旧键读不懂时当作没有标签", () => {
+		expect(readPanelState(createStorage({ "facet.panel.tab": "图钉" })).openTabs).toEqual([]);
 	});
 
 	it("宽度没有上限，只收下限", () => {
@@ -73,16 +113,81 @@ describe("readPanelState", () => {
 describe("writePanelState", () => {
 	it("写进去能读回来", () => {
 		const storage = createStorage();
-		writePanelState(storage, { open: true, tab: "files", pinned: false, width: 600 });
-		expect(readPanelState(storage)).toEqual({ open: true, tab: "files", pinned: false, width: 600 });
+		const written = state({ openTabs: ["files", "changes"], activeTab: "changes", width: 600 });
+		writePanelState(storage, written);
+		expect(readPanelState(storage)).toEqual(written);
 	});
 
-	it("取消固定的值写成 0，缺省值不会被当作取消", () => {
+	it("标签列表按 JSON 落盘，空列表也是一个明确的值", () => {
 		const storage = createStorage();
-		writePanelState(storage, { ...DEFAULT_PANEL_STATE, pinned: false });
-		expect(storage.data["facet.panel.pinned"]).toBe("0");
-		writePanelState(storage, DEFAULT_PANEL_STATE);
-		expect(storage.data["facet.panel.pinned"]).toBe("1");
+		writePanelState(storage, state({ openTabs: [], activeTab: null }));
+		expect(storage.data["facet.panel.tabs"]).toBe("[]");
+		expect(storage.data["facet.panel.active"]).toBe("");
+	});
+
+	it("旧键留着也不会被复活：新版标签串已经写下来了", () => {
+		const storage = createStorage({ "facet.panel.tab": "files" });
+		writePanelState(storage, state({ openTabs: [], activeTab: null }));
+		expect(readPanelState(storage).openTabs).toEqual([]);
+	});
+});
+
+describe("normalizePanelState", () => {
+	it("激活项不在已打开的标签里时落到第一条", () => {
+		expect(normalizePanelState(state({ openTabs: ["files"], activeTab: "terminal" })).activeTab).toBe(
+			"files",
+		);
+	});
+
+	it("没有标签时激活项为 null", () => {
+		expect(normalizePanelState(state({ openTabs: [], activeTab: "files" })).activeTab).toBeNull();
+	});
+});
+
+describe("openPanelTab", () => {
+	it("没开过的标签追加到末尾并切过去", () => {
+		const next = openPanelTab(state({ openTabs: ["files"], activeTab: "files" }), "terminal");
+		expect(next.openTabs).toEqual(["files", "terminal"]);
+		expect(next.activeTab).toBe("terminal");
+	});
+
+	it("已经开着就只切过去，不重复追加", () => {
+		const next = openPanelTab(state({ openTabs: ["files", "changes"], activeTab: "changes" }), "files");
+		expect(next.openTabs).toEqual(["files", "changes"]);
+		expect(next.activeTab).toBe("files");
+	});
+});
+
+describe("closePanelTab", () => {
+	it("关掉当前项后交给右邻", () => {
+		const next = closePanelTab(
+			state({ openTabs: ["files", "changes", "terminal"], activeTab: "changes" }),
+			"changes",
+		);
+		expect(next.openTabs).toEqual(["files", "terminal"]);
+		expect(next.activeTab).toBe("terminal");
+	});
+
+	it("没有右邻时交给左邻", () => {
+		const next = closePanelTab(state({ openTabs: ["files", "changes"], activeTab: "changes" }), "changes");
+		expect(next.activeTab).toBe("files");
+	});
+
+	it("关的不是当前项时激活位不动", () => {
+		const next = closePanelTab(state({ openTabs: ["files", "changes"], activeTab: "files" }), "changes");
+		expect(next.activeTab).toBe("files");
+	});
+
+	it("关光之后回到空列表，右栏仍开着", () => {
+		const next = closePanelTab(state({ openTabs: ["files"], activeTab: "files" }), "files");
+		expect(next.openTabs).toEqual([]);
+		expect(next.activeTab).toBeNull();
+		expect(next.open).toBe(true);
+	});
+
+	it("关一个没开着的标签是空操作", () => {
+		const before = state({ openTabs: ["files"], activeTab: "files" });
+		expect(closePanelTab(before, "terminal")).toEqual(before);
 	});
 });
 

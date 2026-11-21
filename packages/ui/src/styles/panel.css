@@ -51,32 +51,51 @@
 }
 
 /*
- * 工作区标签栏：三类内容共用同一条，横向贴在顶带右格与抽屉顶头上，纵向贴在收起态的竖轨里。
+ * 工作区标签栏：只放已打开的那几件工具，横向贴在顶带右格与抽屉顶头上。
  *
- * 文字折不折由容器查询决定（见本节末尾的 `@container`），所以这几条规则里没有宽度判断。
+ * 一条标签是「外壳 + tab 按钮 + 关闭按钮」：按钮不能嵌套，所以两枚按钮是兄弟节点，底色与
+ * 圆角挂在外壳上。文字折不折由容器查询决定（见本节末尾的 `@container`），这几条规则里没有
+ * 宽度判断。
  */
 .workspace-tabs {
 	display: flex;
+	flex: 0 1 auto;
 	gap: var(--workspace-tab-gap);
 	align-items: center;
 	min-width: 0;
+	/* 标签多到放不下时先缩标签，不把右端的 `+` 与两枚动作挤出格子 */
+	overflow: hidden;
 	/* 顶带整条都可以拖窗口，标签要自己标出来 */
 	-webkit-app-region: no-drag;
 }
 
-.workspace-tabs.is-vertical {
-	flex-direction: column;
+.workspace-tab-shell {
+	display: inline-flex;
+	flex: 0 1 auto;
+	align-items: center;
+	min-width: 0;
+	height: var(--workspace-tab-height);
+	border-radius: 6px;
+	background: transparent;
+}
+
+.workspace-tab-shell:hover {
+	background: color-mix(in srgb, var(--t1) 4%, transparent);
+}
+
+.workspace-tab-shell[data-selected="true"] {
+	background: var(--surface2);
 }
 
 .workspace-tab {
 	display: inline-flex;
-	flex: none;
+	flex: 0 1 auto;
 	gap: var(--workspace-tab-icon-gap);
 	align-items: center;
-	height: var(--workspace-tab-height);
-	padding: 0 var(--workspace-tab-padding-x);
+	height: 100%;
+	padding: 0 2px 0 var(--workspace-tab-padding-x);
 	border: 0;
-	border-radius: 6px;
+	border-radius: 6px 0 0 6px;
 	background: transparent;
 	color: var(--t3);
 	font-size: 12.5px;
@@ -84,13 +103,8 @@
 	-webkit-app-region: no-drag;
 }
 
-.workspace-tab:hover:not(:disabled) {
-	background: color-mix(in srgb, var(--t1) 4%, transparent);
-	color: var(--t1);
-}
-
-.workspace-tab[aria-selected="true"] {
-	background: var(--surface2);
+.workspace-tab-shell:hover .workspace-tab,
+.workspace-tab-shell[data-selected="true"] .workspace-tab {
 	color: var(--t1);
 }
 
@@ -98,6 +112,33 @@
 	color: var(--t3);
 	cursor: default;
 	opacity: 0.45;
+}
+
+/* 关闭按钮：常态压暗，指针进到这一条标签上才提亮，免得一排叉比名字还抢眼 */
+.workspace-tab-close {
+	display: grid;
+	flex: none;
+	place-items: center;
+	width: var(--workspace-tab-close-size);
+	height: var(--workspace-tab-close-size);
+	margin-inline-end: 3px;
+	padding: 0;
+	border: 0;
+	border-radius: 4px;
+	background: transparent;
+	color: var(--t3);
+	opacity: 0.5;
+	-webkit-app-region: no-drag;
+}
+
+.workspace-tab-shell:hover .workspace-tab-close,
+.workspace-tab-shell[data-selected="true"] .workspace-tab-close {
+	opacity: 1;
+}
+
+.workspace-tab-close:hover {
+	background: var(--surface3);
+	color: var(--t1);
 }
 
 .workspace-tab-icon {
@@ -123,34 +164,178 @@
 	line-height: 14px;
 }
 
-/* 竖轨里只有图标：宽度固定，图标居中，文字与徽标都不出现 */
-.workspace-tabs.is-vertical .workspace-tab {
-	justify-content: center;
-	width: var(--workspace-tab-height);
-	padding: 0;
-}
-
-.workspace-tabs.is-vertical .workspace-tab-label,
-.workspace-tabs.is-vertical .workspace-tab-badge {
-	display: none;
-}
-
-/* `never` 口径：始终只留图标，文案由悬浮提示补上 */
-.workspace-tabs[data-label-mode="never"] .workspace-tab-label {
-	display: none;
-}
-
 /*
- * 容器窄于 440px 时把文字折起来，只剩图标与计数。
+ * 容器窄于 440px 时把文字折起来，只剩图标、计数与关闭按钮。
  *
  * 查询容器是顶带右格与抽屉顶头（`chrome.css` 的 `.chrome-slot.is-panel`、本节的
  * `.panel-head`），量到的是整列宽。440 这个数同时写在 `workspace-tab-bar.tsx` 的
  * `WORKSPACE_TAB_LABEL_BREAKPOINT_PX` 里：容器查询里不能写变量，改一处要改两处。
  */
-@container (width < 440px) {
-	.workspace-tabs[data-label-mode="auto"] .workspace-tab-label {
+@container (width < 360px) {
+	.workspace-tab-label {
 		display: none;
 	}
+}
+
+/*
+ * `+` 菜单：右栏标签是动态的，全部工具都在这一份菜单里。
+ *
+ * 它是 `document.body` 上的固定浮层（顶带自成一层次，留在里面压不过抽屉与遮罩），所以
+ * 定位与层级都按浮层来：`--z-popup`，位置由脚本按 `+` 的 rect 算好再收进窗口。
+ */
+.workspace-menu {
+	position: fixed;
+	z-index: var(--z-popup);
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: var(--workspace-menu-min-width);
+	padding: 4px;
+	border: 1px solid var(--line2);
+	border-radius: 8px;
+	background: var(--card);
+	box-shadow: 0 10px 30px rgb(0 0 0 / 40%);
+}
+
+.workspace-menu-item {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	height: var(--workspace-menu-row-height);
+	padding: 0 8px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--t2);
+	font-size: 12.5px;
+	text-align: left;
+}
+
+.workspace-menu-item:hover:not(:disabled) {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+.workspace-menu-item:disabled {
+	color: var(--t3);
+	cursor: default;
+	opacity: 0.5;
+}
+
+.workspace-menu-icon {
+	display: grid;
+	flex: none;
+	place-items: center;
+	color: var(--t3);
+}
+
+/* 已经开着的那几项：图标染成强调色，一眼看出点下去只会切过去 */
+.workspace-menu-item[data-open="true"] .workspace-menu-icon {
+	color: var(--acc);
+}
+
+.workspace-menu-label {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.workspace-menu-badge {
+	flex: none;
+	padding: 0 4px;
+	border-radius: 999px;
+	background: var(--surface3);
+	color: var(--t2);
+	font-family: var(--font-mono);
+	font-size: 10.5px;
+	line-height: 14px;
+}
+
+.workspace-menu-key {
+	flex: none;
+	color: var(--t3);
+	font-family: var(--font-mono);
+	font-size: 10.5px;
+}
+
+/* 空态启动清单：右栏开着但一个标签都没开时，正文区居中给这三行 */
+.workspace-launcher {
+	display: grid;
+	flex: 1;
+	place-content: center;
+	min-height: 0;
+	padding: 16px;
+}
+
+.workspace-launcher-list {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	width: var(--workspace-launcher-width);
+}
+
+.workspace-launcher-item {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	height: var(--workspace-menu-row-height);
+	padding: 0 10px;
+	border: 0;
+	border-radius: 7px;
+	background: transparent;
+	color: var(--t2);
+	font-size: 12.5px;
+	text-align: left;
+}
+
+.workspace-launcher-item:hover:not(:disabled) {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+.workspace-launcher-item:disabled {
+	color: var(--t3);
+	cursor: default;
+	opacity: 0.5;
+}
+
+.workspace-launcher-icon {
+	display: grid;
+	flex: none;
+	place-items: center;
+	color: var(--t3);
+}
+
+.workspace-launcher-item:hover .workspace-launcher-icon {
+	color: var(--t1);
+}
+
+.workspace-launcher-label {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.workspace-launcher-badge {
+	flex: none;
+	padding: 0 4px;
+	border-radius: 999px;
+	background: var(--surface3);
+	color: var(--t2);
+	font-family: var(--font-mono);
+	font-size: 10.5px;
+	line-height: 14px;
+}
+
+.workspace-launcher-key {
+	flex: none;
+	color: var(--t3);
+	font-family: var(--font-mono);
+	font-size: 10.5px;
 }
 
 .panel-body {
@@ -172,6 +357,11 @@
 	overflow: hidden;
 	padding: 0;
 	scrollbar-gutter: auto;
+	/*
+	 * 这一层是容器查询的容器：单栏钻取与两栏并排按它的宽度切换（`@container` 见本节末尾）。
+	 * 量它而不是量 `.panel`：抽屉态与平铺态下 `.panel` 的宽度来源不同，这一层两种都跟着走。
+	 */
+	container-type: inline-size;
 }
 
 /* 工作区正文：三类内容各自铺满这一块，双栏视图自己分区滚 */
@@ -209,11 +399,13 @@
 }
 
 /*
- * 预览 + 索引：文件与变更两个分页共用这一套。
+ * 预览 + 索引：文件与变更两件工具共用这一套。
  *
- * DOM 顺序就是视觉顺序（预览在前、索引在后），所以这里只排方向，不反转。索引那一栏的
- * 分隔线画在它的左缘：外层左侧本来就有一条分隔条（`.panel-resizer`），窗口右缘是纯边界，
- * 两条线各在一侧，不会叠成双线。
+ * 两栏态（右栏宽到 `>= 680px`）：左边预览、右边索引。DOM 顺序就是视觉顺序，所以这里只排
+ * 方向，不反转。索引那一栏的分隔线画在它的左缘：外层左侧本来就有一条分隔条
+ * （`.panel-resizer`），窗口右缘是纯边界，两条线各在一侧，不会叠成双线。
+ *
+ * 单栏态（更窄）：一次只显示一层，另一层整层不占位（规则在同一节末尾的 `@container` 里）。
  */
 .workspace-split {
 	display: flex;
@@ -254,6 +446,68 @@
 }
 
 /*
+ * 单栏钻取的两个入口。
+ *
+ * 「返回列表」只在单栏态出现：那时索引整层不在屏幕上，预览顶栏左端这枚左箭头是唯一的退路。
+ * 「收起索引」「展开索引」反过来只在两栏态有，单栏态藏起来——那里没有「收起」这回事。
+ */
+.workspace-back {
+	display: none;
+	flex: none;
+	place-items: center;
+	width: var(--icon-button-size);
+	height: var(--icon-button-size);
+	padding: 0;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--t2);
+}
+
+.workspace-back:hover {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+/*
+ * 容器窄于 680px：两栏放不下（预览只剩一条窄缝、索引也只有一百来像素），改成单栏钻取。
+ *
+ * 680 这个数同时写在 `workspace-split.tsx` 的 `WORKSPACE_SPLIT_WIDE_WIDTH_PX` 里：容器查询
+ * 里不能写变量，改一处要改两处。
+ */
+@container (width < 680px) {
+	.workspace-split-detail,
+	.workspace-split-list {
+		display: flex;
+		flex: 1;
+		height: 100%;
+		border-inline-start: 0;
+	}
+
+	.workspace-split[data-view="detail"] .workspace-split-list {
+		display: none;
+	}
+
+	.workspace-split[data-view="list"] .workspace-split-detail {
+		display: none;
+	}
+
+	/* 单栏态没有「收起索引」这回事：钻取的那一层已经占满整宽 */
+	.workspace-split.is-list-collapsed .workspace-split-list {
+		display: flex;
+	}
+
+	.workspace-collapse-list,
+	.workspace-restore-list {
+		display: none;
+	}
+
+	.workspace-back {
+		display: grid;
+	}
+}
+
+/*
  * 顶栏右端那个把索引叫回来的按钮。
  *
  * 它和顶栏自己的按钮同一档尺寸（`--icon-button-size`），放在最右端：收起之后预览区的
@@ -275,52 +529,6 @@
 .workspace-head-action:hover {
 	background: var(--surface2);
 	color: var(--t1);
-}
-
-/*
- * 收起态右侧的悬浮竖轨。
- *
- * 只在非窄档且右栏不在列上时出现：三个图标签竖着排，底部一枚图钉。层级用
- * `--z-content-local`——它贴在本层内容上，不能压过抽屉与弹层。
- */
-.panel-rail {
-	position: absolute;
-	top: 50%;
-	right: 0;
-	z-index: var(--z-content-local);
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: 2px;
-	padding: var(--panel-rail-padding) 2px;
-	border: 1px solid var(--line);
-	border-right: 0;
-	border-radius: 10px 0 0 10px;
-	background: var(--card);
-	box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
-	transform: translateY(-50%);
-	-webkit-app-region: no-drag;
-}
-
-.panel-rail-pin {
-	display: grid;
-	place-items: center;
-	width: var(--icon-button-size);
-	height: var(--icon-button-size);
-	padding: 0;
-	border: 0;
-	border-radius: 6px;
-	background: transparent;
-	color: var(--t3);
-}
-
-.panel-rail-pin:hover {
-	background: var(--surface2);
-	color: var(--t1);
-}
-
-.panel-rail-pin[aria-pressed="true"] {
-	color: var(--acc);
 }
 
 .diff-scroll {
@@ -684,7 +892,7 @@
 }
 
 /*
- * 抽屉态：窄档与「取消了固定」共用一层停在窗口右缘的全高浮层，实占宽归零，宽度由样式定。
+ * 抽屉态：窄档下右栏是一层停在窗口右缘的全高浮层，实占宽归零，宽度由样式定。
  * 它与左抽屉互斥，遮罩由外壳统一渲染。
  */
 .panel.is-drawer {
@@ -696,8 +904,8 @@
 }
 
 /*
- * 抽屉顶头：分页、图钉与关闭按钮都在这一条 `--chrome-height` 里，右侧让出窗口按钮簇。
- * 只在抽屉态渲染（平铺时分页在顶带那一格里）。
+ * 抽屉顶头：标签、`+` 与关闭按钮都在这一条 `--chrome-height` 里，右侧让出窗口按钮簇。
+ * 只在抽屉态渲染（平铺时这些控件在顶带那一格）。宽展开在抽屉里没有意义，那一格不给它。
  *
  * 它自己是容器查询的容器，量到的是整条抽屉宽，所以这里 MUST NOT 留横向内边距：让出按钮
  * 簇的那 132px 落在里面那一行上，否则查询到的宽度会比抽屉窄一整簇。

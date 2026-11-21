@@ -24,13 +24,22 @@ import { readWindowControls, WindowControls } from "./WindowControls.tsx";
  * 显隐是同一条路的终点：手动收起、窄档抽屉、中档预算折起，最后都表现为这两个类名，
  * 样式里也只靠它们把列轨道归零（见 `chrome.css`）。
  */
-function appClassName(isNarrow: boolean, sidebarVisible: boolean, panelVisible: boolean): string {
+function appClassName(
+	isNarrow: boolean,
+	sidebarVisible: boolean,
+	panelVisible: boolean,
+	panelExpanded: boolean,
+): string {
 	const names = ["app", layoutClassName(isNarrow)];
 	if (!sidebarVisible) {
 		names.push("is-sidebar-hidden");
 	}
 	if (!panelVisible) {
 		names.push("is-panel-hidden");
+	}
+	// 宽展开：列宽公式在样式里（`chrome.css` 的 `.is-panel-expanded`），这里只挂类名
+	if (panelExpanded) {
+		names.push("is-panel-expanded");
 	}
 	return names.join(" ");
 }
@@ -42,6 +51,7 @@ export function AppFrame({
 	panelWidth = "0px",
 	sidebarVisible = true,
 	panelVisible = true,
+	panelExpanded = false,
 }: {
 	children: ReactNode;
 	/** 顶带里的内容；不给时这条带只放窗口按钮 */
@@ -54,6 +64,8 @@ export function AppFrame({
 	sidebarVisible?: boolean;
 	/** 右栏此刻是否占列；不给时按占列处理 */
 	panelVisible?: boolean;
+	/** 右栏是不是在 `⤢` 宽展开里：左栏临时让位、右栏整行 */
+	panelExpanded?: boolean;
 }): ReactNode {
 	const controls = readWindowControls(bridge);
 	const appRef = useRef<HTMLDivElement>(null);
@@ -72,7 +84,7 @@ export function AppFrame({
 	}, [sidebarWidth, panelWidth]);
 
 	return (
-		<div className={appClassName(isNarrow, sidebarVisible, panelVisible)} ref={appRef}>
+		<div className={appClassName(isNarrow, sidebarVisible, panelVisible, panelExpanded)} ref={appRef}>
 			{controls === undefined ? null : <div className="app-drag" />}
 			<div className="app-chrome">{chrome ?? <div className="chrome-slot is-main" />}</div>
 			{/*

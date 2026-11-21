@@ -1,8 +1,9 @@
 /**
  * 布局档位与中档预算折叠。
  *
- * 这里是三档语义的唯一实现（口径见 `docs/layout.md` §2）：纯函数，不碰 DOM、不读窗口，
- * 输入是「视口宽 + 两个偏好宽 + 两个意图位 + 优先级」，输出是「哪一栏此刻该占列」。
+ * 这里是三档语义与宽展开的唯一实现（口径见 `docs/layout.md` §2）：纯函数，不碰 DOM、不读
+ * 窗口，输入是「视口宽 + 两个偏好宽 + 两个意图位 + 宽展开位 + 优先级」，输出是「哪一栏此刻
+ * 该占列、是不是按宽展开排的」。
  *
  * 意图与结果分开：意图位记录用户想不想开，折叠只改结果，不回写意图。窗口拉宽之后按意图
  * 自动恢复，靠的就是这一点。
@@ -15,12 +16,13 @@
 export const LAYOUT_BREAKPOINT_PX = 880;
 
 /**
- * 宽档阈值（CSS px）：大于等于它是宽档，两栏按意图平铺，不做预算判断。
+ * 宽档阈值（CSS px）：大于等于它是宽档，三栏按意图平铺，不做预算判断。
  *
- * 1240 是「两栏都拉到舒服的宽度还剩得下正文」的那条线：右栏缺省 520、左栏缺省 272、
- * 正文最小可用宽 420，三者相加 1212，留一点余量。
+ * 1112 是三栏缺省值刚好放得下的那条线：左栏缺省 272、正文最小可用宽 420、右栏缺省 420，
+ * 取整到 1120 留一点余量。宽档即使被两栏一起拉满也挤不坏正文——右栏的实占宽另有
+ * `paneMaxWidth()` 收着（见约束 2）。
  */
-export const LAYOUT_WIDE_BREAKPOINT_PX = 1240;
+export const LAYOUT_WIDE_BREAKPOINT_PX = 1120;
 
 /**
  * 正文最小可用宽（CSS px）。
@@ -49,12 +51,12 @@ export interface LayoutInput {
 	/** 用户想不想开右栏 */
 	readonly panelIntent: boolean;
 	/**
-	 * 右栏是不是固定在三栏里（图钉）。
+	 * 右栏是不是正处在 `⤢` 宽展开里。
 	 *
-	 * 取消了固定时它不参与列预算：定档照旧看视口宽，但右栏在 Grid 里恒为 `false`，展开
-	 * 时走窄档那一层全高抽屉（口径见 `docs/layout.md` §2「图钉」）。
+	 * 它是临时视图状态，不落盘：命中时右栏**吃掉正文那一列**（最大化就是盖住主栏），左栏
+	 * 照旧按意图摆——这个位不动两侧的意图位与偏好宽（口径见 `docs/layout.md` §2「宽展开」）。
 	 */
-	readonly panelPinned: boolean;
+	readonly isPanelExpanded: boolean;
 	/** 两栏都想开而预算不够时保留哪一栏：最近一次被用户主动打开或调过宽的那一栏 */
 	readonly priorityPane: LayoutPane;
 }
@@ -71,6 +73,8 @@ export interface LayoutResolution {
 	readonly panelVisible: boolean;
 	/** 被预算折起的那一栏；没有折叠时为 `undefined` */
 	readonly foldedPane: LayoutPane | undefined;
+	/** 这一帧是不是按宽展开排的（窄档与右栏收起时恒为 `false`） */
+	readonly expanded: boolean;
 }
 
 /**
@@ -105,20 +109,44 @@ export function layoutTierOf(viewportWidth: number): LayoutTier {
 /**
  * 算出这一刻哪一栏占列。
  *
- * 判定顺序：窄档两栏都让给抽屉 → 未固定时右栏不参与（它是一层浮层，不占列）→ 宽档只看
- * 意图 → 中档先看意图，再在两栏都想开时核对预算（`侧栏宽 + 正文最小宽 + 右栏宽 <=
- * 视口宽`），超了就把优先级低的那一栏折起。
+ * 判定顺序：窄档两栏都让给抽屉 → 宽展开（右栏盖住正文那一列，左栏照旧）→ 宽档只看意图 →
+ * 中档先看意图，再在两栏都想开时核对预算（`侧栏宽 + 正文最小宽 + 右栏宽 <= 视口宽`），超了
+ * 就把优先级低的那一栏折起。
  *
- * 图钉只在宽档与中档有意义：窄档本来就用抽屉，`pinned` 不改变结果。
+ * 宽展开只在右栏想开时生效：右栏都收起了，也就没有「展开它」这回事，那一帧照常按意图平铺。
+ * 窄档忽略它——那里本来就是近满宽的抽屉。
  */
 export function resolveLayout(input: LayoutInput): LayoutResolution {
 	const viewportWidth = usableViewport(input.viewportWidth);
 	const tier = layoutTierOf(viewportWidth);
-	/** 右栏此刻参不参与平铺：先看不固定，再看意图 */
-	const panelIntent = input.panelIntent && input.panelPinned;
+	const panelIntent = input.panelIntent;
 
 	if (tier === "narrow") {
-		return { tier, viewportWidth, sidebarVisible: false, panelVisible: false, foldedPane: undefined };
+		return {
+			tier,
+			viewportWidth,
+			sidebarVisible: false,
+			panelVisible: false,
+			foldedPane: undefined,
+			expanded: false,
+		};
+	}
+
+	/*
+	 * 宽展开：右栏最大化——盖住正文那一列，预算不做判断。
+	 *
+	 * 左栏照旧按意图摆（它不在被盖住的那一列里），意图位一个字都不改：退出展开时按原来的
+	 * 偏好宽与意图原样恢复。
+	 */
+	if (input.isPanelExpanded && panelIntent) {
+		return {
+			tier,
+			viewportWidth,
+			sidebarVisible: input.sidebarIntent,
+			panelVisible: true,
+			foldedPane: undefined,
+			expanded: true,
+		};
 	}
 
 	if (tier === "wide") {
@@ -128,6 +156,7 @@ export function resolveLayout(input: LayoutInput): LayoutResolution {
 			sidebarVisible: input.sidebarIntent,
 			panelVisible: panelIntent,
 			foldedPane: undefined,
+			expanded: false,
 		};
 	}
 
@@ -139,12 +168,20 @@ export function resolveLayout(input: LayoutInput): LayoutResolution {
 			sidebarVisible: input.sidebarIntent,
 			panelVisible: panelIntent,
 			foldedPane: undefined,
+			expanded: false,
 		};
 	}
 
 	const budget = usableWidth(input.sidebarPref) + MAIN_MIN_WIDTH + usableWidth(input.panelPref);
 	if (budget <= viewportWidth) {
-		return { tier, viewportWidth, sidebarVisible: true, panelVisible: true, foldedPane: undefined };
+		return {
+			tier,
+			viewportWidth,
+			sidebarVisible: true,
+			panelVisible: true,
+			foldedPane: undefined,
+			expanded: false,
+		};
 	}
 
 	const keepSidebar = input.priorityPane === "sidebar";
@@ -154,6 +191,7 @@ export function resolveLayout(input: LayoutInput): LayoutResolution {
 		sidebarVisible: keepSidebar,
 		panelVisible: !keepSidebar,
 		foldedPane: keepSidebar ? "panel" : "sidebar",
+		expanded: false,
 	};
 }
 

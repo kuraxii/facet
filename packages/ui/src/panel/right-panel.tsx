@@ -1,9 +1,9 @@
 /**
  * 右侧工作区。
  *
- * 只有正文与左缘那条可以拖动的分隔条，宽度拖一次记一次。平铺时分页与图钉在窗口顶部那条
- * 带里，由外壳排布；抽屉态（窄档，或取消了固定）是一层盖住正文的全高浮层，顶头由外壳当
- * `head` 传进来（分页、图钉与关闭按钮），宽度也由样式定，此时不给宽度，这里不渲染分隔条。
+ * 只有正文与左缘那条可以拖动的分隔条，宽度拖一次记一次。占列时标签与动作在窗口顶部那条
+ * 带里，由外壳排布；抽屉态（窄档）是一层盖住正文的全高浮层，顶头由外壳当 `head` 传进来
+ * （标签、`+` 与收起按钮），宽度也由样式定，此时不给宽度，这里不渲染分隔条。
  */
 import type { ReactNode } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
@@ -30,10 +30,10 @@ export interface RightPanelProps {
 	/**
 	 * 落脚方式。
 	 *
-	 * `tiled` 占 Grid 第 3 列；`drawer` 是 `position: fixed` 的全高浮动层，窄档与取消固定时用它。
+	 * `tiled` 占 Grid 第 3 列；`drawer` 是 `position: fixed` 的全高浮动层，窄档用它。
 	 */
 	variant?: RightPanelVariant;
-	/** 抽屉顶头：分页、图钉与关闭按钮；平铺时不传 */
+	/** 抽屉顶头：标签、`+` 与收起按钮；占列时不传 */
 	head?: ReactNode;
 	/**
 	 * 正文区的额外类名。
@@ -41,7 +41,7 @@ export interface RightPanelProps {
 	 * 双栏视图（文件树 + 预览）自己分区滚，不需要正文那一圈内边距与整块滚动，靠它换掉。
 	 */
 	bodyClassName?: string | undefined;
-	/** 分页内容 */
+	/** 标签内容 */
 	children: ReactNode;
 }
 

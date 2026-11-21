@@ -45,6 +45,13 @@ export interface ChangesDocumentProps {
 	 * 工作区用它放「展开变更列表」：列表收起之后预览占满，这个入口跟着顶栏走。
 	 */
 	toolbarTrailing?: ReactNode;
+	/**
+	 * 挂在顶栏最左端的额外动作。
+	 *
+	 * 工作区用它放「返回列表」：右栏窄到只能单栏钻取时，顶栏左端一枚向左的箭头就是唯一
+	 * 的退路。
+	 */
+	toolbarLeading?: ReactNode;
 }
 
 /** 一个文件补丁的加载状态。 */
@@ -256,6 +263,7 @@ export function ChangesDocument({
 	commitsLoading,
 	commitsError,
 	onCommitPress,
+	toolbarLeading,
 	toolbarTrailing,
 }: ChangesDocumentProps): ReactNode {
 	const { t } = useI18n();
@@ -325,6 +333,7 @@ export function ChangesDocument({
 
 	const header = (
 		<div className={styles.docToolbar}>
+			{toolbarLeading}
 			<span className={styles.branch}>
 				{title ?? status?.branch ?? "…"}
 				{status?.upstream === undefined ? null : (

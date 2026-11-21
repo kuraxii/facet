@@ -34,6 +34,18 @@ export const LAYOUT_WIDE_BREAKPOINT_PX = LAYOUT_PX.breakpoint.wide;
  */
 export const MAIN_MIN_WIDTH = LAYOUT_PX.mainMinWidth;
 
+/** 两份布局结果是否等价；等价时调用方可以跳过重渲染。 */
+export function sameLayout(left: LayoutResolution, right: LayoutResolution): boolean {
+	return (
+		left.tier === right.tier &&
+		left.viewportWidth === right.viewportWidth &&
+		left.sidebarVisible === right.sidebarVisible &&
+		left.panelVisible === right.panelVisible &&
+		left.foldedPane === right.foldedPane &&
+		left.expanded === right.expanded
+	);
+}
+
 /** 档位。 */
 export type LayoutTier = "narrow" | "mid" | "wide";
 

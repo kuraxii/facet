@@ -4,7 +4,12 @@
  * 抽屉状态是一对互斥的枚举值，不是两个布尔量；Escape 的归属由纯函数判定，这里只测判定。
  */
 import { describe, expect, it } from "vitest";
-import { type NarrowDrawer, shouldCloseDrawerOnEscape, toggleNarrowDrawer } from "./drawer-state.ts";
+import {
+	type NarrowDrawer,
+	shellClassName,
+	shouldCloseDrawerOnEscape,
+	toggleNarrowDrawer,
+} from "./drawer-state.ts";
 
 describe("窄档抽屉互斥", () => {
 	it("从关着打开任一侧", () => {
@@ -46,5 +51,26 @@ describe("抽屉的 Escape 归属", () => {
 
 	it("两种内层同时存在时同样不动", () => {
 		expect(shouldCloseDrawerOnEscape({ defaultPrevented: true, hasOpenDialog: true })).toBe(false);
+	});
+});
+
+describe("外壳类名", () => {
+	it("窄档开着抽屉时给 has-drawer", () => {
+		expect(shellClassName({ isSidebarOpen: false, isDrawerOpen: true, isNarrow: true })).toBe(
+			"shell has-drawer",
+		);
+	});
+
+	it("宽档不认抽屉", () => {
+		expect(shellClassName({ isSidebarOpen: true, isDrawerOpen: true, isNarrow: false })).toBe(
+			"shell is-sb-open",
+		);
+	});
+
+	it("侧栏可见时给 is-sb-open", () => {
+		expect(shellClassName({ isSidebarOpen: true, isDrawerOpen: false, isNarrow: true })).toBe(
+			"shell is-sb-open",
+		);
+		expect(shellClassName({ isSidebarOpen: false, isDrawerOpen: false, isNarrow: false })).toBe("shell");
 	});
 });

@@ -13,6 +13,7 @@ import {
 	MAIN_MIN_WIDTH,
 	paneMaxWidth,
 	resolveLayout,
+	sameLayout,
 } from "./resolve-layout.ts";
 
 /** 缺省偏好宽：与 `panel-state.ts`、`sidebar-state.ts` 的缺省值一致。 */
@@ -329,5 +330,28 @@ describe("右栏实占宽", () => {
 
 	it("预算不足时回落到下限", () => {
 		expect(paneMaxWidth({ viewportWidth: 700, otherWidth: 420, min: 300 })).toBe(300);
+	});
+});
+
+describe("两份布局结果是否等价", () => {
+	const layout = resolveLayout({
+		viewportWidth: 1400,
+		sidebarPref: 272,
+		panelPref: 420,
+		sidebarIntent: true,
+		panelIntent: true,
+		isPanelExpanded: false,
+		priorityPane: "sidebar",
+	});
+
+	it("同一份输入算出来的结果等价", () => {
+		expect(sameLayout(layout, { ...layout })).toBe(true);
+	});
+
+	it("任一字段变了就不等价", () => {
+		expect(sameLayout(layout, { ...layout, tier: layout.tier === "wide" ? "mid" : "wide" })).toBe(false);
+		expect(sameLayout(layout, { ...layout, viewportWidth: layout.viewportWidth + 1 })).toBe(false);
+		expect(sameLayout(layout, { ...layout, panelVisible: !layout.panelVisible })).toBe(false);
+		expect(sameLayout(layout, { ...layout, expanded: !layout.expanded })).toBe(false);
 	});
 });

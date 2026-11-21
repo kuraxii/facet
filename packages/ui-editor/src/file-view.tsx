@@ -1,15 +1,17 @@
 /**
  * 文件查看与编辑。
  *
- * 只读与编辑两态：进入编辑后才允许改动，`Mod-s` 或保存按钮写回磁盘，写之前带上下载时拿到
- * 的 revision。磁盘上的内容在别处被改过时主机回冲突，这里给出「重新加载」与「覆盖」两个
- * 选择，改动先留在编辑器里。
+ * 文本文件**直接可编辑**：没有「先点铅笔进编辑态」那一步，`Mod-s` 或保存按钮写回磁盘，
+ * 写之前带上载入时拿到的 revision。磁盘上的内容在别处被改过时主机回冲突，这里给出
+ * 「重新加载」与「覆盖」两个选择，改动先留在编辑器里。
+ *
+ * Markdown 多一个「渲染 / 源码」的看��切换——那是呈现方式，不是权限：切到源码就能改。
  */
 import type { FileContent } from "@facet/protocol";
 import { useI18n } from "@facet/ui/i18n";
 import { Markdown } from "@facet/ui/markdown";
 import { useHoverTip } from "@facet/ui/tip";
-import { Check, Code, Eye, Pencil, X } from "lucide-react";
+import { Check, Code, Eye, Save } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { CodeSurface } from "./code-surface.tsx";
 import { isMarkdownPath } from "./markdown-file.ts";
@@ -32,13 +34,6 @@ export interface FileViewProps {
 	/** 重新从磁盘读取 */
 	onReload: () => Promise<FileContent>;
 	/**
-	 * 挂在标题行最左端、路径之前的额外动作。
-	 *
-	 * 工作区用它放「返回列表」：右栏窄到只能单栏钻取时，路径前面一枚向左的箭头就是唯一的
-	 * 退路。
-	 */
-	headerLeading?: ReactNode;
-	/**
 	 * 挂在标题行最右端的额外动作。
 	 *
 	 * 工作区用它放「展开文件树」：树收起之后预览占满，这个入口跟着标题行走，位置固定。
@@ -56,7 +51,7 @@ function isConflict(error: unknown): boolean {
 /** Markdown 文件的两种呈现：渲染后的预览，与可编辑的源码。 */
 type MarkdownView = "preview" | "source";
 
-export function FileView({ path, content, onSave, onReload, headerLeading, headerTrailing }: FileViewProps) {
+export function FileView({ path, content, onSave, onReload, headerTrailing }: FileViewProps) {
 	const { t } = useI18n();
 	// 路径被省略号截断时由提示补全
 	const tip = useHoverTip();
@@ -64,8 +59,6 @@ export function FileView({ path, content, onSave, onReload, headerLeading, heade
 	const [draft, setDraft] = useState(content.kind === "text" ? content.content : "");
 	/** 磁盘上那份内容，用来判断有没有改动 */
 	const [baseline, setBaseline] = useState(content.kind === "text" ? content.content : "");
-	/** 是否处于编辑态 */
-	const [isEditing, setIsEditing] = useState(false);
 	/** 最近一次从磁盘拿到的内容摘要，写回时带上 */
 	const [revision, setRevision] = useState(content.kind === "text" ? content.revision : "");
 	/** 正在写盘 */
@@ -87,7 +80,6 @@ export function FileView({ path, content, onSave, onReload, headerLeading, heade
 		setDraft(content.kind === "text" ? content.content : "");
 		setBaseline(content.kind === "text" ? content.content : "");
 		setRevision(content.kind === "text" ? content.revision : "");
-		setIsEditing(false);
 		setSaveError(undefined);
 		setHasConflict(false);
 	}, [content]);
@@ -168,7 +160,6 @@ export function FileView({ path, content, onSave, onReload, headerLeading, heade
 	return (
 		<div className="file-view">
 			<div className="file-head">
-				{headerLeading}
 				<span className="file-path" {...tip.handlers(path)}>
 					{path}
 				</span>
@@ -188,49 +179,18 @@ export function FileView({ path, content, onSave, onReload, headerLeading, heade
 						{isPreviewing ? <Code size={14} strokeWidth={1.5} /> : <Eye size={14} strokeWidth={1.5} />}
 					</button>
 				) : null}
-				{isText && !isEditing ? (
+				{isText ? (
+					// 没有改动时按钮是灰的：能不能点由控件自己说，不另写一句话
 					<button
 						type="button"
 						className="ib"
-						aria-label={t("editor.edit")}
-						onClick={() => {
-							// 预览里点铅笔直接落到源码的编辑态，不用先切一次模式
-							setMarkdownView("source");
-							setIsEditing(true);
-						}}
+						aria-label={t("editor.saveShortcut")}
+						disabled={!isDirty || isSaving}
+						{...tip.handlers(t("editor.saveShortcut"))}
+						onClick={() => void save()}
 					>
-						<Pencil size={14} strokeWidth={1.5} />
+						{isSaved ? <Check size={14} strokeWidth={1.5} /> : <Save size={14} strokeWidth={1.5} />}
 					</button>
-				) : null}
-				{isEditing ? (
-					<>
-						<button
-							type="button"
-							className="ib"
-							aria-label={t("editor.save")}
-							disabled={!isDirty || isSaving}
-							onClick={() => void save()}
-						>
-							{isSaved ? (
-								<Check size={14} strokeWidth={1.5} />
-							) : (
-								<span className="file-save">{t("editor.saved")}</span>
-							)}
-						</button>
-						<button
-							type="button"
-							className="ib"
-							aria-label={t("editor.exitEdit")}
-							onClick={() => {
-								setDraft(baseline);
-								setIsEditing(false);
-								setHasConflict(false);
-								setSaveError(undefined);
-							}}
-						>
-							<X size={14} strokeWidth={1.5} />
-						</button>
-					</>
 				) : null}
 				{headerTrailing}
 			</div>
@@ -254,7 +214,7 @@ export function FileView({ path, content, onSave, onReload, headerLeading, heade
 				<CodeSurface
 					text={draft}
 					path={path}
-					readOnly={!isEditing}
+					readOnly={false}
 					onChange={setDraft}
 					onSaveShortcut={() => void save()}
 				/>

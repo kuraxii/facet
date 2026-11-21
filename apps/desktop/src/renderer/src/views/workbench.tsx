@@ -382,6 +382,8 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 						onWidthChange={shell.isNarrow ? undefined : shell.updateSidebarWidth}
 						maxWidth={shell.sidebarMaxWidth}
 						onDraggingChange={shell.setPaneResizing}
+						// 缩到最小宽一半以内松手就收起侧栏，与点收起按钮同一条路
+						onDragCollapse={shell.toggleSidebar}
 						onCollapse={shell.closeDrawer}
 						isProjectsStale={session.isProjectsStale}
 						onRefreshProjects={() => void session.refreshProjects()}
@@ -437,6 +439,8 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 							}
 							maxWidth={shell.panelMaxWidth}
 							onDraggingChange={shell.setPaneResizing}
+							// 缩到最小宽一半以内松手就收起右栏，已打开的标签不动
+							onDragCollapse={shell.togglePanel}
 							head={
 								hasPanelColumn ? undefined : (
 									<WorkspacePanelControls

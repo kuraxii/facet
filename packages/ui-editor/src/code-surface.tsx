@@ -2,6 +2,7 @@
  * 代码面。
  *
  * 用 CodeMirror 6 画只读或可编辑的文件内容：行号、语法高亮、括号匹配、搜索面板与折叠。
+ * 不折行：长行由 `.cm-scroller` 横向滚动——编辑器被文件树挤窄之后仍然读得全。
  * 语言按文件名推断，语言包按需加载，加载期间先按纯文本显示；语言与只读都放在 compartment
  * 里，切文件或切换编辑态时只重配这两样，不重建整个编辑器。
  *
@@ -170,7 +171,6 @@ export function CodeSurface({
 						EditorView.editable.of(!initialReadOnly.current),
 					]),
 					languageSlot.current.of([]),
-					EditorView.lineWrapping,
 					keymap.of([
 						{
 							key: "Mod-s",

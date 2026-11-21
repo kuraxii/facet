@@ -52,13 +52,21 @@
 
 - **主区（`.main`，中列）只放对话**：消息流 `.scroll` 与输入区 `.footer` 直接撑满这一列，主区里不再有标签栏，也不再有任何「在主区打开一份文档」的路径。
 - **右栏（`.panel`，右列或抽屉）是一整个工作区**：顶端一条动态标签栏（`WorkspaceTabBar` + `WorkspaceTabMenu`），下面是标签内容。工具当前是三类，数据结构按「一条 = 标识 + 名字 + 图标 + 可选计数 + 是否可用 + 快捷键提示」描述，加一类只要往表里加一条：
-  - `files`：文件预览 + 可折叠文件树；
+  - `files`：编辑器与文件树在**同一层并排**占位（见 §2「文件视图的文件树」）；
   - `changes`：补丁预览 + 可折叠变更列表（含提交历史）；
   - `terminal`：终端独占整宽，两边都没有索引，**切走只藏起来不卸载**（保住 PTY 会话与回滚）。
 
   整屏因此是 `会话栏 | 对话 | 预览 | 索引`：宽到放得下两栏时**预览在左、索引在右**，与左边那三栏的阅读方向连着；窄到放不下时退成单栏钻取，见下一条。
 - **标签是运行时的集合**：状态是 `openTabs: RightPanelTab[]` + `activeTab: RightPanelTab | null`（`panel-state.ts`），标签栏只渲染已打开的那些，每条带关闭按钮（`×`、中键、`Delete`）；末尾固定跟一枚 `+`，弹出全部三件工具的菜单（没开的追加并激活，已开的只切过去）。`openTabs` 为空时右栏**不收起**，正文区换成居中启动清单（`WorkspaceLauncher`：图标 + 名字 + 右对齐的快捷键提示），关掉最后一个标签就回到那里。
-- **单栏钻取 / 宽阈双子栏（`WorkspaceSplit`）**：右栏正文这一层是容器查询的容器，`@container (width >= WORKSPACE_SPLIT_WIDE_WIDTH_PX /* 680px */)` 才解锁两栏。
+- **文件视图的文件树（只在 `files` 视图）**：编辑器与文件树是**同一个 flex 行里的两栏**——编辑器 `flex: 1 1 0; min-width: 0`，文件树 `flex: 0 0 auto`，互不覆盖。底色与文件内容相同（`--bg`）、无投影，只有左缘一条 `1px` 线。
+  - 每层都写 `min-width: 0`（`.panel-body` → `.workspace-files` → 编辑器外壳 → `.code-surface`）：不给 0 时 flex 子项的自动最小宽度会被长代码行顶成内容宽，一路把容器撑破。
+  - 宽度三层：样式 `clamp(180px, var(--file-tree-width, 240px), min(420px, calc(100% - 120px)))` 兜底；界面按本地存储写的偏好宽（`facet.files.treeWidth`，`file-tree-state.ts`）；拖动时的实时上限 `fileTreeMaxWidth()`（`min(420, max(180, 容器宽 − 120))`，`120` 是 `EDITOR_KEEP_WIDTH`）。右栏拖到下限 `300` 时树让到 `180`、编辑器还剩 `120`。
+  - 偏好宽写在根节点的 `--file-tree-width` 上；拖动期间分隔条把同一个变量写在 `.app` 上（更近的祖先赢），松手才落盘，拖动不经过 React 渲染。
+  - 左缘一条透明命中区（`.file-tree-resizer`）加宽 / 收窄；收起时整栏 `display: none`（`is-hidden`），编辑器吃满整行，树的展开状态与滚动位置都留着。
+  - 树的滚动容器带 `.scroll-y`（与变更索引栏、正文滚动区同一套细滚动条与沟槽口径），不另写一套 `overflow` 规则。
+  - 开关在编辑器二级顶栏的最右端；没有全屏 `Esc` 监听——正常流的分栏按 `Esc` 留给编辑器自己的交互。
+  - 编辑器**不折行**（不挂 `EditorView.lineWrapping`）：被文件树挤窄之后，长行由 `.cm-scroller` 横向滚动，滚动条画在编辑器底边（与全仓同一套细滚动条样式）。
+- **单栏钻取 / 宽阈双子栏（`WorkspaceSplit`，变更视图用）**：右栏正文这一层是容器查询的容器，`@container (width >= WORKSPACE_SPLIT_WIDE_WIDTH_PX /* 680px */)` 才解锁两栏。
   - 两栏态：预览在左、索引在右，DOM 顺序就是视觉顺序（不用 `row-reverse` 翻转，否则键盘 Tab 与读屏顺序会和眼睛看到的对不上）。索引栏宽 `--workspace-list-width`，分隔线画在它的**左缘**（`border-inline-start`）：外层左侧那条是 `.panel-resizer` 的分隔条，窗口右缘是纯边界，三条线各在一处，不会叠成双线。两栏之间没有拖拽条。
   - 单栏态：一次只显示一层（`data-view="list" | "detail"`），满宽。点文件 / 改动 / 提交进预览，预览二级顶栏**左上角**那枚 `←` 退回列表（面包屑就是「箭头 + 路径」，路径由预览视图自己给）。
   - 「收起索引」只在两栏态有：收起之后预览占满、左缘不动，展开入口在预览顶栏最右端（`PanelRightOpen`）；单栏态两个按钮都由样式藏起来——那里没有「收起」这回事，`←` 才是退路。
@@ -125,7 +133,8 @@
 | `--panel-width` 范围 | `≥ 300px`（缺省 `420`，**没有固定上限**） | 界面写下来的宽度：占列时是偏好宽与正文预算取小之后的实占宽（见约束 2）；窄档下就是偏好宽本身，抽屉自己按 `min(宽度, 92vw)` 收 |
 | `--workspace-list-width` | `min(46%, 320px)` | 两栏态里**索引栏**（右侧树 / 列表）的宽度 |
 | 标签文字的折点 | `360px`（容器查询，`WORKSPACE_TAB_LABEL_BREAKPOINT_PX`） | 顶带右格与抽屉顶头的**整列宽**小于它时，标签只剩图标 |
-| 单栏 / 两栏的折点 | `680px`（容器查询，`WORKSPACE_SPLIT_WIDE_WIDTH_PX`） | 右栏正文窄于它时单栏钻取，宽于等于它时解锁两栏 |
+| 单栏 / 两栏的折点 | `680px`（容器查询，`WORKSPACE_SPLIT_WIDE_WIDTH_PX`） | **变更视图**窄于它时单栏钻取，宽于等于它时解锁两栏 |
+| `--file-tree-width` | `180–420px`（缺省 `240`） | 文件树的宽度，落盘；容器放不下时被 `clamp()` 与 `fileTreeMaxWidth()` 收住，右侧永远留 `120px`（`EDITOR_KEEP_WIDTH`）给编辑器 |
 | 宽展开的宽度 | `calc(100% − var(--col-sidebar))` | 右栏最大化：盖住正文那一列，见 §2「宽展开」 |
 | 档位断点 | `LAYOUT_BREAKPOINT_PX = 880`、`LAYOUT_WIDE_BREAKPOINT_PX = 1120` | 只在 `resolve-layout.ts` 写一次；容器查询里的数字不受这两个约束 |
 
@@ -170,6 +179,26 @@ const sidebarMax = Math.min(SIDEBAR_MAX_WIDTH, max); // 左栏还有自己的 42
 - 分隔条与列轨道都用实占宽（拖动起点与屏幕上看到的一致，不会一抓手就跳），只钳上限、不触发折叠；松手提交的宽度一定是折完还能放下的宽度。
 - 钳制命中时不写盘，分隔条保持不动并给出「已到底」的指针反馈，避免 §5 里的拖拽假死。
 
+### 约束 2.1：拖收关闭（左右侧栏）
+
+平铺可拖拽态下，把一栏缩到「最小宽再往里一半」就进待关闭态：**拖动中当场收起这一栏**，松手就真的关掉它。
+
+```ts
+// 判定看的是**未钳制**的目标宽；缩到哪里停下则由 [min, max] 决定
+const raw = startWidth + (side === "start" ? -delta : delta);
+const next = clampPaneWidth(raw, { min, max, defaultWidth: startWidth });
+const pending = collapseThreshold !== undefined && raw <= collapseThreshold; // 左 220/2、右 300/2
+```
+
+- 阈值与两侧下限绑在一起：左栏 `SIDEBAR_MIN_WIDTH / 2 = 110`、右栏 `PANEL_MIN_WIDTH / 2 = 150`。
+- 越过阈值时在 `.app` 上挂 `data-sidebar-drag-collapsed` / `data-panel-drag-collapsed`（`collapsePreviewAttr`），样式据此把 `--col-sidebar` / `--col-panel` 摁到 `0px`——正文、顶带与窗口按钮簇按既有列轨道一起重排。属性直接写在元素上、不经过 React 状态，拖动期间一次渲染都不发生。
+- 拖回阈值之上立刻摘掉属性，宽度从 `min` 起重新跟手；进入 `[min, max]` 之后 1:1 跟随指针。
+- 预览期间**不卸载 DOM、不收指针捕获、也不给那一栏 `display: none`**：本体只收 `padding` / `border` / `overflow: visible`，非分隔条子元素用 `visibility: hidden` 收起来（会话列表的滚动位置与终端的 DOM 都不能在拖动中被重建）。分隔条留在原地整条染强调色，并贴到窗口内侧边缘（左栏 `left: 0`、右栏 `right: 0`），提示线不被 `.app` 的 `overflow: hidden` 裁掉。
+- 左栏那条线**顶到窗口上缘**：分隔条在第 2 行里，`.shell` 的 `overflow: hidden` 会把它裁在接缝上，所以顶带那 `--chrome-height`（36px）由 `.chrome-slot.is-sidebar` 自己画同色的一条（`--divider-hit-width` 宽），两段接成一条。右栏不跟着上去——窗口按钮簇钉在右上角，线会从 ✕ 底下穿过。
+- 松手时若仍在待关闭态：**不提交宽度、不写盘**，把 `.app` 上的宽度变量还原成这次拖动的起点，`flushSync` 让 `is-*-hidden` 先落到 DOM 上，再摘预览属性（反过来的话会闪回一帧原宽度），最后调用 `onCollapse()`——下次打开还是原来那份偏好宽。
+- `pointercancel` 与「拖到一半被卸载」只还原变量与属性，不关闭也不提交。
+- 只在平铺态有分隔条；窄档抽屉与 `⤢` 宽展开不渲染分隔条，因此没有这条路径。
+
 ### 约束 3：跨 Portal 的 Esc 协调
 
 提示、右键菜单、toast 等浮层 Portal 到 `document.body`，在抽屉的 DOM 子树之外。因此**不靠 `stopPropagation()`** 区分内外层，统一用默认动作：
@@ -186,7 +215,7 @@ const sidebarMax = Math.min(SIDEBAR_MAX_WIDTH, max); // 左栏还有自己的 42
 | 变量 | 值 | 成员 |
 | :--- | ---: | :--- |
 | `--z-content` | `0` | 正文内容、顶带拖拽区 |
-| `--z-content-local` | `3` | 正文内的局部贴靠：分隔条命中区、对话导航竖轨、吸顶行、终端拖动条、侧栏头部 |
+| `--z-content-local` | `3` | 正文内的局部贴靠：分隔条命中区、文件树的拖拽条、对话导航竖轨、吸顶行、终端拖动条、侧栏头部 |
 | `--z-chrome` | `10` | 顶带基础层：`.app-chrome` 与常规顶带控件 |
 | `--z-drawer-scrim` | `20` | 抽屉遮罩：盖住正文与顶带，点顶带空白也能关抽屉 |
 | `--z-drawer` | `30` | 左右全高抽屉：从 `y = 0` 连续到底边，顶部不被顶带截断 |
@@ -240,7 +269,10 @@ CSS `clamp(min, val, max)` 在 `max < min` 时返回 `min`，实测（正文最�
 | PR5 | `refactor(ui): 右栏去掉固定上限，改由正文最小宽约束` | 删 `PANEL_MAX_WIDTH`、`clampDragMax()` 去掉档位判断（三档都按正文预算钳制）、新增 `paneMaxWidth()` 与实占宽 `panelEffectiveWidth`；窗口缩小时只压窄实占宽，偏好宽不动 | 1400 视口里右栏最多拖到 `708`（正文仍是 `420`）；把偏好宽写成 `1600` 再在 1400 视口打开，右栏显示 `708`、窗口拉到 2560 后按 `1600` 长回去 |
 | PR6 | `refactor(ui): 右栏改动态标签，顶带做减法` | 右栏状态改 `openTabs` / `activeTab`（旧单标签键迁移）、`WorkspaceTabBar` 精简为动态标签 + 关闭、新增 `WorkspaceTabMenu`（`+`）与 `WorkspaceLauncher`（空态）、单栏钻取 / 宽阈双子栏、`⤢` 宽展开（`isPanelExpanded`）、宽度改 `300–无上限`（缺省 `420`）、宽档阈值 `1120`、删图钉与收起态竖轨、顶带中格加会话标题与开关角标 | 1280 空态右栏给居中启动清单；开文件出标签与 `+`，关掉退回清单；`420` 单栏钻取、`⤢` 后左栏让位、右栏 `832`（两栏解锁）且正文仍 `448`；终端切走切回同一实例、`⤢` 后重算列宽；`640` 抽屉里没有 `⤢`，`+` 菜单一次 `Esc` 只关菜单 |
 
-状态：PR1 到 PR6 均已落地。
+| PR7 | `feat(ui): 侧栏拖收关闭与文件树分栏` | `PaneResizer` 加拖收阈值（`collapseThreshold` / `onCollapse` / 待关闭态反馈）、`file-tree-state.ts`（`180–420`，`facet.files.treeWidth`）、文件视图改成「编辑器 + 文件树」并排可拖拽分栏、编辑器不折行改横向滚动 | 左栏 272 拖到 105 进待关闭、拉回 140 取消、再拖到 100 松手关闭且重开仍是 272；文件树与编辑器不重叠（`editor.right <= tree.left`）、收起后编辑器吃满；文件树拖到最大锁在 420，右栏 300 时树 180、编辑器 120；长行在挤窄后出现可拖的横向滚动条 |
+| PR8 | `fix(ui): 拖收关闭改成拖动中实时收起` | 待关闭态从「只染色」换成实时折叠预览：`PaneResizer` 增 `collapsePreviewAttr`，越过阈值直接把 `data-*-drag-collapsed` 挂到 `.app`（零渲染、不断指针捕获）、拖回即摘；样式把对应列轨道摁到 `0` 并在窗口内侧边缘留一条强调色提示线；松手先 `flushSync` 收起再摘属性 | 左栏按住拖到 105：列宽实时 `0`、正文扩宽、提示线整条落在 `x=0..6`；不松手拉回 240：属性消失、侧栏重新展开并跟手；再拖到 100 松手：直接关闭、无闪回，重开仍是 272 |
+
+状态：PR1 到 PR8 均已落地。
 
 配套：`resolveLayout({ viewportWidth, sidebarPref, panelPref, sidebarIntent, panelIntent, isPanelExpanded, priorityPane })` 返回档位、两栏显隐与宽展开位，`paneMaxWidth()` / `clampDragMax()` 给出实占宽与拖动上限；单测在 `apps/desktop/src/renderer/src/resolve-layout.test.ts`，覆盖 `640 / 879 / 880 / 881 / 899 / 900 / 1012 / 1099 / 1112 / 1119 / 1120 / 1400`、宽展开三段（宽 / 中 / 窄档）、意图位保护、非法输入与优先级换边。样式里的 `--col-*` 只是它的渲染兜底。
 

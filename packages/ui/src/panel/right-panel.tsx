@@ -27,6 +27,8 @@ export interface RightPanelProps {
 	maxWidth: number;
 	/** 拖动开始与结束的提示，外壳用它在拖动期间锁住折叠 */
 	onDraggingChange?: ((dragging: boolean) => void) | undefined;
+	/** 缩到最小宽一半以内松手：收起右栏。与点顶带的收起按钮同一条路，不动已打开的标签 */
+	onDragCollapse?: (() => void) | undefined;
 	/**
 	 * 落脚方式。
 	 *
@@ -50,6 +52,7 @@ export function RightPanel({
 	onWidthChange,
 	maxWidth,
 	onDraggingChange,
+	onDragCollapse,
 	variant = "tiled",
 	head,
 	bodyClassName,
@@ -71,6 +74,10 @@ export function RightPanel({
 					side="start"
 					onWidthChange={onWidthChange}
 					onDraggingChange={onDraggingChange}
+					// 缩到最小宽一半以内松手就收起右栏，落盘里仍留着原来的偏好宽
+					collapseThreshold={PANEL_MIN_WIDTH / 2}
+					{...(onDragCollapse === undefined ? {} : { onCollapse: onDragCollapse })}
+					collapsePreviewAttr="data-panel-drag-collapsed"
 				/>
 			)}
 			{head === undefined ? null : (

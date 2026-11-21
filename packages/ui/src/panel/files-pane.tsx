@@ -263,7 +263,8 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath, onCollapse 
 	return (
 		<>
 			{header}
-			<div className="tree" role="tree" aria-label={t("panel.projectFiles")}>
+			{/* `scroll-y` 是全仓滚动容器的那一套：细拇指、始终预留沟槽（见 `base.css`） */}
+			<div className="tree scroll-y" role="tree" aria-label={t("panel.projectFiles")}>
 				{rows.map((row, index): ReactNode => {
 					const { entry, depth } = row;
 					const isDirectory = entry.kind === "directory";

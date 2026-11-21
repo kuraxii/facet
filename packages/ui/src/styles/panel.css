@@ -370,6 +370,7 @@
 	flex: 1;
 	flex-direction: column;
 	height: 100%;
+	min-width: 0;
 	min-height: 0;
 }
 
@@ -378,6 +379,7 @@
 	display: flex;
 	flex: 1;
 	flex-direction: column;
+	min-width: 0;
 	min-height: 0;
 }
 
@@ -399,7 +401,70 @@
 }
 
 /*
- * 预览 + 索引：文件与变更两件工具共用这一套。
+ * 文件视图：编辑器与文件树在同一层并排，编辑器占剩下的宽度，文件树收起时不占地方。
+ *
+ * 每一层都写 `min-width: 0`：长代码行会把 flex 子项的自动最小宽度顶成内容宽，一路撑破
+ * 容器；给了 0 之后宽度只由分栏决定，长行改为在编辑器里横向滚动（见 `.code-surface`）。
+ */
+.workspace-files {
+	display: flex;
+	flex: 1;
+	min-width: 0;
+	min-height: 0;
+}
+
+.workspace-files-detail {
+	display: flex;
+	flex: 1 1 0;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+}
+
+/*
+ * 文件树：编辑器右边的常驻一栏，在同一个 flex 行里按宽度占位（不覆盖编辑器）。
+ *
+ * 底色与文件内容相同、不投影：它与编辑器是同一块工作区的两半，不是压上去的一层。
+ * 宽度三层保护：这条 `clamp()` 兜底（容器窄于 `100% - 120px` 时收住，编辑器至少剩
+ * `EDITOR_KEEP_WIDTH`），界面按本地存储写的 `--file-tree-width`，以及拖动时按容器宽现算的
+ * 上限（`fileTreeMaxWidth()`）。`position: relative` 只为让左缘那条拖拽条压在自己的边界上。
+ */
+.file-tree {
+	position: relative;
+	display: flex;
+	flex: 0 0 auto;
+	flex-direction: column;
+	min-height: 0;
+	width: clamp(180px, var(--file-tree-width, 240px), min(420px, calc(100% - 120px)));
+	border-inline-start: 1px solid var(--line);
+	background: var(--bg);
+}
+
+/* 关掉只藏起来：树的展开状态与滚动位置都留着，再打开还是原来那一棵 */
+.file-tree.is-hidden {
+	display: none;
+}
+
+/*
+ * 文件树左缘的拖拽条。
+ *
+ * 与右栏那条分隔条同一个路子：透明命中区、跨半个命中宽压在自己的边线上；往左拖变宽。
+ * 它在文件树里面，所以不会和外层 `.panel-resizer` 抢命中——两者隔着几十像素。
+ */
+.file-tree-resizer {
+	position: absolute;
+	inset-block: 0;
+	inset-inline-start: calc(-1 * var(--divider-hit-width) / 2);
+	z-index: var(--z-content-local);
+	width: var(--divider-hit-width);
+	margin: 0;
+	border: 0;
+	cursor: col-resize;
+	background: transparent;
+}
+
+/*
+ * 预览 + 索引：变更视图用这一套（文件视图是上面的「编辑器 + 文件树」并排）。
  *
  * 两栏态（右栏宽到 `>= 680px`）：左边预览、右边索引。DOM 顺序就是视觉顺序，所以这里只排
  * 方向，不反转。索引那一栏的分隔线画在它的左缘：外层左侧本来就有一条分隔条
@@ -427,8 +492,7 @@
 	flex-direction: column;
 	min-width: 0;
 	min-height: 0;
-	overflow-y: auto;
-	scrollbar-gutter: stable;
+	/* 滚动交给 `scroll-y`（类在组件里）：细滚动条 + 始终预留沟槽 */
 	border-inline-start: 1px solid var(--line);
 }
 
@@ -529,6 +593,80 @@
 .workspace-head-action:hover {
 	background: var(--surface2);
 	color: var(--t1);
+}
+
+/* 开关按住时只换颜色：文件树开没开由它自己看得出来 */
+.workspace-head-action[aria-pressed="true"] {
+	color: var(--acc);
+}
+
+/*
+ * 拖到「松手就关」的位置：拖动预览。
+ *
+ * 列轨道已经被 `.app[data-*-drag-collapsed]` 摁到 `0`（见 `chrome.css`）。这里只做两件事：
+ * 把这一栏的表面收干净，以及在窗口内侧边缘留一条强调色粗线当作提示。
+ *
+ * 本体 MUST NOT 设 `display: none`，也不收 `overflow`：分隔条要一直拿着指针捕获，会话列表的
+ * 滚动位置与终端的 DOM 也不能在拖动中被重建。内容用 `visibility` 收起来——既看不到残影，
+ * 又不会撑出横向滚动条，滚动位置也不丢。
+ */
+.app[data-sidebar-drag-collapsed="true"] .sb,
+.app[data-panel-drag-collapsed="true"] .panel {
+	min-width: 0;
+	padding: 0;
+	border-width: 0;
+	overflow: visible;
+	background: transparent;
+}
+
+.app[data-sidebar-drag-collapsed="true"] .sb > :not(.sb-resizer),
+.app[data-panel-drag-collapsed="true"] .panel > :not(.panel-resizer) {
+	visibility: hidden;
+	pointer-events: none;
+	max-width: 0;
+	overflow: hidden;
+}
+
+/* 顶带那两格可以整块裁掉：里面没有要留活口的分隔条 */
+.app[data-sidebar-drag-collapsed="true"] .chrome-slot.is-sidebar,
+.app[data-panel-drag-collapsed="true"] .chrome-slot.is-panel {
+	min-width: 0;
+	padding-inline: 0;
+	border-width: 0;
+	overflow: hidden;
+	background: transparent;
+}
+
+/* 待关闭的提示就是这一条线：整条命中区染强调色，与悬停、拖动时的分界线同一个色号 */
+.panel-resizer[data-collapse-pending="true"],
+.sb-resizer[data-collapse-pending="true"] {
+	background: color-mix(in srgb, var(--acc) 26%, transparent);
+}
+
+/*
+ * 提示线要一直顶到窗口上缘：这一列已经归零，它就是窗口的左边界，不该从顶带下面才开始一段。
+ *
+ * 分隔条自己伸不上去——它在第 2 行里，`.shell` 的 `overflow: hidden` 会把它裁在接缝上。
+ * 所以顶带那 36px 由左格自己画：同样是 `--divider-hit-width` 的强调色竖条，颜色与分隔条
+ * 一致，两段在接缝处接成一条线。右栏不跟着上去——窗口按钮簇钉在右上角，线会从 ✕ 底下穿过。
+ */
+.app[data-sidebar-drag-collapsed="true"] .chrome-slot.is-sidebar {
+	inline-size: var(--divider-hit-width);
+	background: color-mix(in srgb, var(--acc) 26%, transparent);
+}
+
+/*
+ * 待关闭的分隔条贴齐窗口内侧边缘：整条粗线完整落在视口里，不被 `.app` 的 `overflow: hidden`
+ * 裁掉一半。两栏的命中区本来就分别压在各自接缝上，这里只把外推的那一侧收回来。
+ */
+.app[data-sidebar-drag-collapsed="true"] .sb-resizer[data-collapse-pending="true"] {
+	right: auto;
+	left: 0;
+}
+
+.app[data-panel-drag-collapsed="true"] .panel-resizer[data-collapse-pending="true"] {
+	left: auto;
+	right: 0;
 }
 
 .diff-scroll {
@@ -763,6 +901,12 @@
 	list-style: none;
 }
 
+/* 文件树自己滚：树顶固定，行在下面滚（滚动条样式来自 `.scroll-y`，与全仓同一套） */
+.file-tree > .tree {
+	flex: 1;
+	padding-bottom: 8px;
+}
+
 .tree-row {
 	display: flex;
 	align-items: center;
@@ -818,6 +962,7 @@
 	display: flex;
 	gap: 6px;
 	align-items: center;
+	min-width: 0;
 	height: var(--editor-head-height);
 	margin: 0;
 	padding: 0 var(--editor-gutter-x);
@@ -844,7 +989,9 @@
 .file-view {
 	display: flex;
 	flex-direction: column;
+	width: 100%;
 	height: 100%;
+	min-width: 0;
 	min-height: 0;
 }
 
@@ -855,11 +1002,6 @@
 	height: 6px;
 	border-radius: 50%;
 	background: var(--acc);
-}
-
-.file-save {
-	color: var(--t1);
-	font-size: 11.5px;
 }
 
 /* Markdown 的渲染预览：正文按可读宽度居中，长文档与宽表格、长代码块自己滚 */
@@ -874,9 +1016,15 @@
 	padding: 0 calc(var(--file-preview-gutter-x) - var(--scrollbar-width)) 0 var(--file-preview-gutter-x);
 }
 
+/*
+ * 编辑器本体。横向不折行（见 `code-surface.tsx`）：编辑器被文件树挤窄之后，长行由
+ * CodeMirror 自己的 `.cm-scroller` 横向滚动，滚动条画在它的底边。
+ */
 .code-surface {
 	flex: 1;
+	width: 100%;
 	height: auto;
+	min-width: 0;
 	min-height: 0;
 	overflow: hidden;
 }

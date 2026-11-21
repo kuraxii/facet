@@ -5,14 +5,13 @@
  * 进入视口附近才取。这里只显示工作树相对 HEAD 的差异。
  */
 
-import type { GitCommit, GitCommits, GitDiff, GitFileChange, GitStatus } from "@facet/protocol";
+import type { GitDiff, GitFileChange, GitStatus } from "@facet/protocol";
 import { ChevronRight, ChevronsDownUp, ChevronsUpDown, TextWrap } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { GitPatch } from "../git/git-patch.tsx";
+import { ChangeMark, changeStatusLabelKey } from "../git/git-status-mark.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
-import { lineClass, patchBodyLines } from "../transcript/diff-lines.ts";
 import styles from "./changes.module.css";
-import { ChangeMark, changeStatusLabelKey } from "./changes-mark.tsx";
-import { CommitHistory } from "./commit-history.tsx";
 
 export interface ChangesDocumentProps {
 	/** 工作树状态 */
@@ -31,14 +30,6 @@ export interface ChangesDocumentProps {
 	loadDiff: (file: GitFileChange) => Promise<GitDiff>;
 	/** 重新取工作树状态 */
 	onRefresh: () => void;
-	/** 当前项目的提交历史 */
-	commits: GitCommits | undefined;
-	/** 正在取提交历史 */
-	commitsLoading: boolean;
-	/** 取提交历史失败的原因 */
-	commitsError: string | undefined;
-	/** 点一条提交时打开它的改动 */
-	onCommitPress?: (commit: GitCommit) => void;
 	/**
 	 * 挂在顶栏最右端的额外动作。
 	 *
@@ -167,17 +158,40 @@ function ChangesFileSection({
 		);
 	}, [file, isCollapsed, isVisible, state.kind]);
 
-	// 聚焦文件时把它的文件头滚到文档顶部；如果原先折叠，外层已先展开它。
+	/*
+	 * 聚焦文件时把它的文件头滚到文档顶部；如果原先折叠，外层已先展开它。
+	 *
+	 * 一次 `scrollIntoView` 不够：上面的文件补丁是懒加载的，段高会在随后几帧里一截截胀开，
+	 * 把已经对准的文件头顶下去（单栏刚切过来时尤其明显——那些段还没量过高）。所以在滚动区
+	 * 的内容高度稳定下来之前逐帧补滚，高度不再变就停；另给一个帧上限，滚不动的地方（比如
+	 * 最后几个文件）不会一直空转。
+	 */
 	useEffect(() => {
 		void focusRequestId;
 		void isCollapsed;
 		if (!isFocused) {
 			return;
 		}
-		const frame = window.requestAnimationFrame(() => {
-			sectionRef.current?.scrollIntoView({ block: "start" });
-		});
-		return () => window.cancelAnimationFrame(frame);
+		let frame = 0;
+		let lastHeight = -1;
+		let handle = 0;
+		const align = (): void => {
+			const node = sectionRef.current;
+			const scroller = node?.parentElement ?? null;
+			if (node === null || scroller === null) {
+				return;
+			}
+			const height = scroller.scrollHeight;
+			node.scrollIntoView({ block: "start" });
+			frame += 1;
+			if (height === lastHeight || frame >= 60) {
+				return;
+			}
+			lastHeight = height;
+			handle = window.requestAnimationFrame(align);
+		};
+		handle = window.requestAnimationFrame(align);
+		return () => window.cancelAnimationFrame(handle);
 	}, [focusRequestId, isCollapsed, isFocused]);
 
 	const toggle = useCallback(() => onToggle(file.path), [file.path, onToggle]);
@@ -228,24 +242,8 @@ function ChangesFileSection({
 				</p>
 			);
 		}
-		const { diff } = state;
-		const lines = patchBodyLines(diff.patch);
-		if (lines.length === 0) {
-			return <p className={styles.note}>{t("panel.noDiff")}</p>;
-		}
-		return (
-			<>
-				{diff.truncated ? <p className={styles.note}>{t("panel.truncatedDiff")}</p> : null}
-				<div className={`scroll-x ${styles.diffBody}`} data-wrap={wrapLines}>
-					{lines.map(({ key, line, number }) => (
-						<div key={key} className={`${styles.diffLine} ${lineClass(line)}`}>
-							<i>{number}</i>
-							<span>{line}</span>
-						</div>
-					))}
-				</div>
-			</>
-		);
+		// 补丁正文与提交详情、单文件补丁视图共用 `GitPatch`，行号与配色只有一份实现
+		return <GitPatch diff={state.diff} wrapLines={wrapLines} />;
 	}
 }
 
@@ -259,10 +257,6 @@ export function ChangesDocument({
 	focusRequestId,
 	loadDiff,
 	onRefresh,
-	commits,
-	commitsLoading,
-	commitsError,
-	onCommitPress,
 	toolbarLeading,
 	toolbarTrailing,
 }: ChangesDocumentProps): ReactNode {
@@ -272,15 +266,6 @@ export function ChangesDocument({
 	const [revision, setRevision] = useState(0);
 	const signature = useMemo(() => statusSignature(status), [status]);
 	const lastSignature = useRef(signature);
-
-	const history = (
-		<CommitHistory
-			commits={commits}
-			isLoading={commitsLoading}
-			error={commitsError}
-			onCommitPress={onCommitPress}
-		/>
-	);
 	const files = status?.files ?? [];
 	const totalAdded = files.reduce((sum, file) => sum + file.added, 0);
 	const totalRemoved = files.reduce((sum, file) => sum + file.removed, 0);
@@ -331,17 +316,27 @@ export function ChangesDocument({
 		setCollapsedPaths(allCollapsed ? new Set() : new Set(files.map((file) => file.path)));
 	}, [allCollapsed, files]);
 
+	/*
+	 * 工具栏左侧那行字：调用方给的标题、状态里的分支。两者都没有（比如提交详情的改动，那条
+	 * 提交没有分支名）就留一条空位撑住右侧那组动作，只有还没拿到状态时才补一个省略号占位。
+	 */
+	const label = title ?? status?.branch ?? (status === undefined ? "…" : undefined);
+
 	const header = (
 		<div className={styles.docToolbar}>
 			{toolbarLeading}
-			<span className={styles.branch}>
-				{title ?? status?.branch ?? "…"}
-				{status?.upstream === undefined ? null : (
-					<span className={styles.upstream}>
-						↑{status.upstream.ahead} ↓{status.upstream.behind}
-					</span>
-				)}
-			</span>
+			{label === undefined ? (
+				<span className={styles.toolbarSpacer} />
+			) : (
+				<span className={styles.branch}>
+					{label}
+					{status?.upstream === undefined ? null : (
+						<span className={styles.upstream}>
+							↑{status.upstream.ahead} ↓{status.upstream.behind}
+						</span>
+					)}
+				</span>
+			)}
 			{status === undefined ? null : (
 				<span className={styles.total}>
 					<b className={styles.add}>+{totalAdded}</b>
@@ -387,7 +382,6 @@ export function ChangesDocument({
 						{t("common.retry")}
 					</button>
 				</p>
-				{history}
 			</div>
 		);
 	}
@@ -396,7 +390,6 @@ export function ChangesDocument({
 			<div className={styles.document}>
 				{header}
 				<p className={styles.note}>{t("panel.loadingChanges")}</p>
-				{history}
 			</div>
 		);
 	}
@@ -405,7 +398,6 @@ export function ChangesDocument({
 			<div className={styles.document}>
 				{header}
 				<p className={styles.note}>{t("panel.notRepo")}</p>
-				{history}
 			</div>
 		);
 	}
@@ -414,7 +406,6 @@ export function ChangesDocument({
 			<div className={styles.document}>
 				{header}
 				<p className={styles.note}>{emptyMessage ?? t("panel.clean")}</p>
-				{history}
 			</div>
 		);
 	}
@@ -436,7 +427,6 @@ export function ChangesDocument({
 					/>
 				))}
 			</div>
-			{history}
 		</div>
 	);
 }

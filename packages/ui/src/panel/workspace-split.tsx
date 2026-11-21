@@ -12,9 +12,17 @@
  * 断点用容器查询而不是 JS 量宽：`panel.css` 里那条 `@container (width >= 680px)` 与这里的
  * 常量是同一个数，样式负责真的换排布，这一层不参与判定。宽栏拖动与 `⤢` 宽展开都会改变
  * 容器宽度，两栏因此自动解锁、缩回去又自动回到单栏。
+ *
+ * **索引栏的宽度可拖**：给了 `listWidth` 与 `onListWidthChange` 就在两栏交界处放一条分隔条
+ * （与文件树那条同一个 `PaneResizer`）。拖动期间它把 `--workspace-list-width` 直接写在
+ * `.app` 上，不经过渲染；松手才提交一次给宿主落盘。上限按这一层自己量到的容器宽现算——
+ * `⤢` 宽展开与窄档抽屉都会改变容器宽，偏好宽只负责下限。
  */
 
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import { useI18n } from "../i18n/I18nProvider.tsx";
+import { PaneResizer } from "./pane-resizer.tsx";
+import { WORKSPACE_LIST_MIN_WIDTH, workspaceListMaxWidth } from "./workspace-list-state.ts";
 
 /** 单栏钻取停在哪一层。 */
 export type WorkspaceSplitView = "list" | "detail";
@@ -31,6 +39,10 @@ export interface WorkspaceSplitProps {
 	isListCollapsed?: boolean;
 	/** 组件自己的类名，用来区分文件树与变更列表 */
 	className?: string;
+	/** 两栏态下索引栏的宽度（px）；不给时不渲染分隔条 */
+	listWidth?: number | undefined;
+	/** 松手时提交索引栏宽度 */
+	onListWidthChange?: ((width: number) => void) | undefined;
 }
 
 /**
@@ -47,13 +59,44 @@ export function WorkspaceSplit({
 	view,
 	isListCollapsed = false,
 	className,
+	listWidth,
+	onListWidthChange,
 }: WorkspaceSplitProps): ReactNode {
+	const { t } = useI18n();
+	const rootRef = useRef<HTMLDivElement | null>(null);
+	/** 这一层的实际宽度：拖拽上限按它现算，不猜外面是列宽、抽屉还是 `⤢` */
+	const [containerWidth, setContainerWidth] = useState(0);
+
+	useEffect(() => {
+		const node = rootRef.current;
+		if (node === null) {
+			return;
+		}
+		const read = (): void => setContainerWidth(node.clientWidth);
+		read();
+		const observer = new ResizeObserver(read);
+		observer.observe(node);
+		return () => observer.disconnect();
+	}, []);
+
 	const classes = ["workspace-split", isListCollapsed ? "is-list-collapsed" : undefined, className]
 		.filter((name): name is string => name !== undefined && name.length > 0)
 		.join(" ");
 	return (
-		<div className={classes} data-view={view}>
+		<div className={classes} data-view={view} ref={rootRef}>
 			<div className="workspace-split-detail">{detail}</div>
+			{listWidth === undefined || onListWidthChange === undefined ? null : (
+				<PaneResizer
+					className="workspace-list-resizer"
+					label={t("panel.resizeList")}
+					width={listWidth}
+					min={WORKSPACE_LIST_MIN_WIDTH}
+					max={workspaceListMaxWidth(containerWidth)}
+					cssVar="--workspace-list-width"
+					side="start"
+					onWidthChange={onListWidthChange}
+				/>
+			)}
 			{/* 索引栏自己纵向滚；`scroll-y` 保证滚动条是全仓那一套细条 */}
 			<div className="workspace-split-list scroll-y">{list}</div>
 		</div>

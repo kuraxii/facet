@@ -1,0 +1,542 @@
+/* 工作区的 Git 原语：补丁正文、文件行、引用胶囊、提交图谱与提交元信息。 */
+
+/* 说明与错误：与变更页同一套写法，两处都不带「出错」这类标签以外的判断 */
+.note {
+	margin: 0;
+	padding: 10px 12px;
+	color: var(--t2);
+	font-size: 12px;
+	line-height: 1.6;
+}
+
+.noteError {
+	color: var(--err);
+}
+
+.retry {
+	margin-left: 8px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--acc);
+	font-size: 12px;
+}
+
+.add {
+	color: var(--add);
+	font-weight: 400;
+}
+
+.del {
+	color: var(--del);
+	font-weight: 400;
+}
+
+/* ---------- 补丁正文 ---------- */
+
+.diffBody {
+	font-family: var(--font-mono);
+	font-size: 11.5px;
+	line-height: var(--changes-line-height);
+	/* 补丁是要被拷走的东西：全局在 body 上关了选择，这里放开（行号在下面单独关回去） */
+	user-select: text;
+	cursor: text;
+}
+
+.diffBody[data-wrap="true"] {
+	overflow-x: hidden;
+}
+
+.diffLine {
+	display: flex;
+	width: max-content;
+	min-width: 100%;
+	padding: 0 10px;
+	box-sizing: border-box;
+}
+
+.diffBody[data-wrap="true"] .diffLine {
+	width: auto;
+}
+
+.diffLine i {
+	flex: none;
+	width: var(--changes-line-number-width);
+	padding-right: 10px;
+	color: var(--t3);
+	font-style: normal;
+	text-align: right;
+	user-select: none;
+}
+
+.diffLine span {
+	flex: 1;
+	min-width: 0;
+	white-space: pre;
+}
+
+/*
+ * 行的性质由 `lineClass()` 给的全局类决定：增行铺一层淡绿底、删行淡红底，hunk 头与文件头
+ * 用弱色。这一份必须留在这里——三处补丁都走 `GitPatch`，缺了它补丁就只剩一行行文字。
+ */
+.diffLine:global(.is-add) {
+	background: color-mix(in srgb, var(--add) 15%, transparent);
+	color: var(--add);
+}
+
+.diffLine:global(.is-del) {
+	background: color-mix(in srgb, var(--del) 10%, transparent);
+	color: var(--del);
+}
+
+.diffLine:global(.is-meta) {
+	color: var(--t3);
+}
+
+.diffBody[data-wrap="true"] .diffLine {
+	width: auto;
+	min-width: 0;
+}
+
+.diffBody[data-wrap="true"] .diffLine span {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+/* ---------- 文件行 ---------- */
+
+.fileRow {
+	display: flex;
+	align-items: center;
+	gap: var(--changes-icon-gap);
+	width: 100%;
+	height: var(--changes-row-height);
+	padding: 0 var(--changes-trailing) 0 var(--changes-row-padding-x);
+	border: 0;
+	background: transparent;
+	color: var(--t2);
+	font-size: 12.5px;
+	text-align: left;
+}
+
+.fileRow:hover {
+	background: var(--sb-row-hover);
+	color: var(--t1);
+}
+
+.fileRow[data-selected="true"] {
+	background: var(--sb-row-selected);
+	color: var(--t1);
+}
+
+.fileIcon {
+	flex: none;
+	width: var(--changes-icon-size);
+	height: var(--changes-icon-size);
+	color: var(--t3);
+}
+
+.fileName {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	opacity: 0.82;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.fileDir {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	color: var(--t3);
+	font-size: 11.5px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.fileBinary {
+	flex: none;
+	color: var(--t3);
+	font-size: 11px;
+}
+
+.fileStats {
+	display: flex;
+	flex: none;
+	gap: var(--changes-stat-gap);
+	font-family: var(--font-mono);
+	font-size: 11px;
+}
+
+.fileMark {
+	display: grid;
+	flex: none;
+	place-items: center;
+	width: var(--changes-icon-size);
+	height: var(--changes-icon-size);
+}
+
+/* 状态配色与变更页同一份：新增绿、删除红、改名与修改用 warn、冲突用 err */
+.fileMark[data-status="added"],
+.fileMark[data-status="untracked"] {
+	color: var(--ok);
+}
+
+.fileMark[data-status="deleted"],
+.fileMark[data-status="conflicted"] {
+	color: var(--err);
+}
+
+.fileMark[data-status="modified"],
+.fileMark[data-status="renamed"] {
+	color: var(--warn);
+}
+
+/* ---------- 引用胶囊 ---------- */
+
+.refs {
+	display: flex;
+	flex: none;
+	gap: 4px;
+	align-items: center;
+	/* 贴右端：说明占满中间，引用胶囊与它之间至少留 8px */
+	margin-inline-start: auto;
+	min-width: 0;
+	max-width: 55%;
+	overflow: hidden;
+}
+
+.ref {
+	flex: none;
+	max-width: 120px;
+	overflow: hidden;
+	padding: 0 5px;
+	border-radius: 4px;
+	background: var(--surface2);
+	color: var(--t2);
+	font-family: var(--font-mono);
+	font-size: 10.5px;
+	line-height: 15px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.ref[data-kind="head"] {
+	background: color-mix(in srgb, var(--acc) 22%, transparent);
+	color: var(--acc);
+}
+
+.ref[data-kind="tag"] {
+	color: var(--warn);
+}
+
+.refMore {
+	flex: none;
+	color: var(--t3);
+	font-size: 10.5px;
+}
+
+/* ---------- 提交图谱 ---------- */
+
+.graph {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+}
+
+.graphBar {
+	display: flex;
+	flex: none;
+	gap: var(--changes-icon-gap);
+	align-items: center;
+	height: var(--changes-header-height);
+	padding: 0 var(--changes-trailing) 0 var(--changes-row-padding-x);
+	border-bottom: 1px solid var(--line);
+}
+
+.graphBranch {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	color: var(--t2);
+	font-size: 12px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.graphCount {
+	flex: none;
+	color: var(--t3);
+	font-family: var(--font-mono);
+	font-size: 11px;
+}
+
+.graphRefresh {
+	display: grid;
+	flex: none;
+	place-items: center;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	border: 0;
+	border-radius: 5px;
+	background: transparent;
+	color: var(--t3);
+}
+
+.graphRefresh:hover {
+	background: var(--surface2);
+	color: var(--t1);
+}
+
+.graphRefresh svg[data-spinning="true"] {
+	animation: graph-spin 900ms linear infinite;
+}
+
+@keyframes graph-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+.graphScroll {
+	flex: 1;
+	min-height: 0;
+}
+
+.graphList {
+	margin: 0;
+	padding: 2px 0 8px;
+	list-style: none;
+}
+
+.graphItem {
+	margin: 0;
+	padding: 0;
+}
+
+.graphRow {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	width: 100%;
+	padding: 0 var(--changes-trailing) 0 0;
+	border: 0;
+	background: transparent;
+	color: var(--t1);
+	text-align: left;
+}
+
+.graphRow:hover {
+	background: var(--sb-row-hover);
+}
+
+.graphRow[data-selected="true"] {
+	background: var(--sb-row-selected);
+}
+
+.lanes {
+	flex: none;
+}
+
+.graphSubject {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	font-size: 12.5px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* 触底自动加载的哨兵：零高度，只为让观察者有个落点 */
+.graphSentinel {
+	height: 1px;
+}
+
+/* ---------- 提交元信息 ---------- */
+
+.meta {
+	padding: 8px var(--changes-row-padding-x) 12px;
+	border-bottom: 1px solid var(--line);
+}
+
+.metaSubject {
+	margin: 0 0 6px;
+	color: var(--t1);
+	font-size: 13px;
+	line-height: 1.5;
+	word-break: break-word;
+}
+
+.metaList {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 2px 8px;
+	margin: 0;
+	color: var(--t2);
+	font-size: 11.5px;
+}
+
+.metaList dt {
+	color: var(--t3);
+}
+
+.metaList dd {
+	margin: 0;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.metaMuted {
+	color: var(--t3);
+}
+
+.metaParents {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.metaParents code {
+	font-family: var(--font-mono);
+	font-size: 11px;
+	color: var(--t2);
+}
+
+.metaBody {
+	margin: 8px 0 0;
+	color: var(--t2);
+	font-family: inherit;
+	font-size: 11.5px;
+	line-height: 1.6;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+/* ---------- 提交悬浮卡 ---------- */
+
+.commitTip {
+	display: flex;
+	flex-direction: column;
+	width: var(--commit-tip-width);
+	max-width: 100%;
+	color: var(--t2);
+}
+
+.commitTipAccent {
+	flex: none;
+	color: var(--acc);
+}
+
+.commitTipAdded {
+	color: var(--add);
+}
+
+.commitTipAuthor {
+	color: var(--t1);
+	font-weight: 500;
+}
+
+.commitTipBand {
+	display: flex;
+	align-items: center;
+	gap: var(--commit-tip-row-gap);
+	padding: var(--commit-tip-band-padding-y) var(--commit-tip-padding-x);
+	border-top: 1px solid var(--line);
+	font-size: 13px;
+	line-height: 1.4;
+}
+
+.commitTipBody {
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: var(--commit-tip-body-lines);
+	margin: 0;
+	overflow: hidden;
+	color: var(--t1);
+	font-size: var(--commit-tip-text-size);
+	line-height: var(--commit-tip-line-height);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.commitTipDivider {
+	color: var(--line2);
+}
+
+.commitTipHash {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--changes-stat-gap);
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--acc);
+}
+
+.commitTipHead {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--commit-tip-row-gap);
+	margin: 0;
+	color: var(--t2);
+	font-size: 13px;
+	line-height: 1.4;
+}
+
+.commitTipIcon {
+	flex: none;
+	color: var(--t3);
+}
+
+.commitTipLink {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--commit-tip-row-gap);
+	color: var(--acc);
+	text-decoration: none;
+}
+
+.commitTipMain {
+	display: flex;
+	flex-direction: column;
+	gap: var(--commit-tip-lead-gap);
+	padding: var(--commit-tip-padding-y) var(--commit-tip-padding-x);
+}
+
+.commitTipRemoved {
+	color: var(--del);
+}
+
+.commitTipSha {
+	font-family: var(--font-mono);
+	letter-spacing: 0.01em;
+}
+
+.commitTipStatSep {
+	/* 英文的逗号后面带一个空格，flex 子项会把行尾空白吃掉，这里按原样保留 */
+	white-space: pre;
+}
+
+.commitTipStats {
+	display: flex;
+	flex-wrap: wrap;
+	margin: 0;
+	color: var(--t2);
+	font-variant-numeric: tabular-nums;
+}
+
+.commitTipSubject {
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: var(--commit-tip-subject-lines);
+	margin: 0;
+	overflow: hidden;
+	color: var(--t1);
+	font-size: var(--commit-tip-text-size);
+	line-height: var(--commit-tip-line-height);
+}

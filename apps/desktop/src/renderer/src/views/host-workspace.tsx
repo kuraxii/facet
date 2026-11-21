@@ -102,12 +102,15 @@ export function HostWorkspace({
 
 	/** 变更预览是否正在显示：右栏开着且停在变更标签上 */
 	const isChangesVisible = shell.isPanelOpen && shell.panel.activeTab === "changes";
+	/** 图谱看得见才取提交历史：它是低频的历史态，没人在看就不发请求 */
+	const isHistoryVisible = shell.isPanelOpen && shell.panel.activeTab === "git-graph";
 
 	const docs = useWorkspaceDocs({
 		client,
 		session: sessionView,
 		snapshot: runtime.workspace,
 		isChangesVisible,
+		isHistoryVisible,
 	});
 
 	// 主机侧通知与插件的 ctx.ui.notify 都走轻提示：后台会话的提示也能被看见

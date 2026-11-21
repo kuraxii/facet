@@ -22,9 +22,14 @@ import {
 } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { useHoverTip } from "../tip.tsx";
+import type { RightPanelTab } from "./panel-state.ts";
 
-/** 工作区的三类工具。 */
-export type WorkspaceTabId = "files" | "changes" | "terminal";
+/**
+ * 工作区的工具标识。
+ *
+ * 就是右栏状态里的那一份：标签栏、`+` 菜单与启动清单都认它，不各自再写一遍枚举。
+ */
+export type WorkspaceTabId = RightPanelTab;
 
 /** 标签栏上的一条标签。 */
 export interface WorkspaceTabItem {
@@ -63,13 +68,14 @@ export interface WorkspaceTabBarProps {
 /**
  * 文字标签折起的容器宽度（CSS px）。
  *
- * 与 `panel.css` 里 `@container (width < 360px)` 是同一个数：CSS 负责真的把文字藏起来，
+ * 与 `panel.css` 里 `@container (width < 660px)` 是同一个数：CSS 负责真的把文字藏起来，
  * 这里只用来决定要不要挂悬浮提示。两处改一处要改两处（容器查询里不能写变量）。
  *
- * 360 贴着右栏的下限（300）上方一点：缺省 420 的右栏放得下「文件」「变更」这样的两字
- * 标签，拖到最窄只剩图标时整条仍然一眼认得出。
+ * 640 是按「四个图文标签 + `+` + 两枚动作 + 132px 窗口按钮簇」实测量出来的：四枚标签
+ * 中文 343、英文 403，加上固定项后分别是 579 与 639 的容器宽；取英文那一侧再留一点余量，
+ * 进撞车之前就已经退化成纯图标。缺省 420 的右栏因此只显示图标，`⤢` 展开之后才出文字。
  */
-export const WORKSPACE_TAB_LABEL_BREAKPOINT_PX = 360;
+export const WORKSPACE_TAB_LABEL_BREAKPOINT_PX = 640;
 
 /**
  * 最近的查询容器。

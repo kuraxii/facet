@@ -1,0 +1,71 @@
+/*
+ * 提交图谱。
+ *
+ * 图与列表的样式在 `packages/ui/src/git/git.module.css` 里；这里只有两件事：泳道配色
+ * （全局变量，模块里按名字取）与图谱页自己的容器声明——列表里的可见性折点由容器查询决定，
+ * 查询容器必须是一个有 `container-type` 的祖先。
+ */
+
+:root {
+	/* 泳道配色：六个够用，多出来的循环取用；暗色下也保持可分辨 */
+	--graph-lane-1: var(--acc);
+	--graph-lane-2: #b480e8;
+	--graph-lane-3: #56b6a8;
+	--graph-lane-4: #d9a441;
+	--graph-lane-5: #e06c9f;
+	--graph-lane-6: #7e9cd8;
+}
+
+/* 图谱列表与提交详情都挂在这一层里：它的宽度就是「工作区正文宽」，窄了列表自己藏次要信息 */
+.git-graph-view {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+	container-type: inline-size;
+}
+
+/*
+ * 详情的二级顶栏：左上角返回图谱，后面跟短哈希与标题。
+ *
+ * 「返回图谱」在两栏态也要留着：变更页那枚 `.workspace-back` 只在单栏钻取里出现（两栏态
+ * 索引就在旁边），而图谱的详情页无论多宽都只有「退回图谱」这一条退路，所以这里强制显示。
+ */
+.git-graph-head .workspace-back {
+	display: grid;
+}
+
+.git-graph-head {
+	display: flex;
+	flex: none;
+	gap: var(--workspace-head-gap);
+	align-items: center;
+	height: var(--workspace-tab-height);
+	padding-inline: 4px 8px;
+	border-bottom: 1px solid var(--line);
+}
+
+.git-graph-title {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	color: var(--t2);
+	font-size: 12px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* 提交详情里的文件列表：与变更索引栏同一套行高，只是不分目录树 */
+.git-graph-files {
+	flex: 1;
+	min-height: 0;
+	margin: 0;
+	padding: 4px 0 12px;
+	list-style: none;
+}
+
+.git-graph-files li {
+	margin: 0;
+	padding: 0;
+}

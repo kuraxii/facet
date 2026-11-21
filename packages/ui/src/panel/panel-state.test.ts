@@ -60,12 +60,26 @@ describe("readPanelState", () => {
 		);
 	});
 
-	it("三类工具都认，顺序与去重都按标签串来", () => {
-		const storage = createStorage({ "facet.panel.tabs": '["terminal","files","terminal","changes"]' });
+	it("四类工具都认，顺序与去重都按标签串来", () => {
+		const storage = createStorage({
+			"facet.panel.tabs": '["terminal","files","terminal","git-graph","changes"]',
+		});
 		const panel = readPanelState(storage);
-		expect(panel.openTabs).toEqual(["terminal", "files", "changes"]);
+		expect(panel.openTabs).toEqual(["terminal", "files", "git-graph", "changes"]);
 		// 没有激活项记录时落到第一条
 		expect(panel.activeTab).toBe("terminal");
+	});
+
+	it("旧版存下来的三标签串照原样读回，不因为新增工具而丢项", () => {
+		const storage = createStorage({ "facet.panel.tabs": '["files","changes","terminal"]' });
+		expect(readPanelState(storage).openTabs).toEqual(["files", "changes", "terminal"]);
+	});
+
+	it("图谱标签能读能写", () => {
+		const storage = createStorage();
+		writePanelState(storage, state({ openTabs: ["git-graph"], activeTab: "git-graph" }));
+		expect(storage.data["facet.panel.tabs"]).toBe('["git-graph"]');
+		expect(readPanelState(storage).activeTab).toBe("git-graph");
 	});
 
 	it("标签串写坏了回到空列表", () => {
@@ -165,6 +179,15 @@ describe("closePanelTab", () => {
 			"changes",
 		);
 		expect(next.openTabs).toEqual(["files", "terminal"]);
+		expect(next.activeTab).toBe("terminal");
+	});
+
+	it("关掉图谱标签后交给右邻，跨过新增的那一类", () => {
+		const next = closePanelTab(
+			state({ openTabs: ["changes", "git-graph", "terminal"], activeTab: "git-graph" }),
+			"git-graph",
+		);
+		expect(next.openTabs).toEqual(["changes", "terminal"]);
 		expect(next.activeTab).toBe("terminal");
 	});
 

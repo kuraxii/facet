@@ -11,10 +11,10 @@ import { clampPaneWidth, type PaneWidthBounds } from "./pane-width.ts";
 /**
  * 右栏的工具。
  *
- * 三者是工作区里并排的三类内容：文件、变更与终端。取值同时是本地存储里的字面量，改名要
- * 照顾旧存储，读盘时读不懂的值一律丢掉。
+ * 四者是工作区里的四类内容：文件、变更、提交图谱与终端。取值同时是本地存储里的字面量，改名
+ * 要照顾旧存储，读盘时读不懂的值一律丢掉。
  */
-export type RightPanelTab = "files" | "changes" | "terminal";
+export type RightPanelTab = "files" | "changes" | "git-graph" | "terminal";
 
 /** 右栏的状态。 */
 export interface RightPanelState {
@@ -60,8 +60,8 @@ export const DEFAULT_PANEL_STATE: RightPanelState = {
 	width: PANEL_DEFAULT_WIDTH,
 };
 
-/** 合法的工具取值，读盘时用它判定。 */
-const TABS: readonly RightPanelTab[] = ["files", "changes", "terminal"];
+/** 合法的工具取值，读盘时用它判定；顺序即启动清单与 `+` 菜单的顺序。 */
+export const PANEL_TABS: readonly RightPanelTab[] = ["files", "changes", "git-graph", "terminal"];
 
 /** 本地存储用的键。 */
 const OPEN_KEY = "facet.panel.open";
@@ -89,7 +89,7 @@ export function clampPanelWidth(width: unknown): number {
 
 /** 这个值是不是一个合法的工具。 */
 function isTab(value: unknown): value is RightPanelTab {
-	return TABS.some((tab) => tab === value);
+	return PANEL_TABS.some((tab) => tab === value);
 }
 
 /**

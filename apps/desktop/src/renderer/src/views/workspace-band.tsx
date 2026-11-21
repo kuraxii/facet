@@ -57,12 +57,18 @@ export function WorkspacePanelControls({
 				onClose={onCloseTab}
 				controlsId={controlsId}
 			/>
-			<WorkspaceTabMenu
-				items={items}
-				openTabs={openTabs}
-				activeId={shell.panel.activeTab}
-				onPick={onSelectTab}
-			/>
+			{/*
+			 * 所有工具都开着时不再给 `+`：它没有可打开的东西，留着只会占掉顶带里最紧的那几十像素。
+			 * 关掉一个标签它就会回来。
+			 */}
+			{openTabs.length >= items.length ? null : (
+				<WorkspaceTabMenu
+					items={items}
+					openTabs={openTabs}
+					activeId={shell.panel.activeTab}
+					onPick={onSelectTab}
+				/>
+			)}
 			<span className="chrome-spacer" />
 			{showExpand ? (
 				<button

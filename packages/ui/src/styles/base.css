@@ -138,7 +138,6 @@
 	 * 工作区里「预览 + 索引」两栏：索引栏宽度与两栏顶栏里图标与文字之间的间距。索引栏在
 	 * 右边，分隔线画在它的左缘；容器窄于 680px 时换单栏钻取（见 `panel.css`）。
 	 */
-	--workspace-list-width: min(46%, 320px);
 	--workspace-head-gap: 4px;
 	/*
 	 * 悬浮文件树的宽度：缺省值在这里，实际值由界面按本地存储写在根节点上（见
@@ -359,12 +358,15 @@
  *
  * 内容按真实宽度铺开（补丁行、长代码行），滚动条落在容器下缘；纵向由外层容器或内容自身
  * 撑开，这里不参与。沟槽只影响纵向，横向没有可预留的量。
+ *
+ * `overscroll-behavior` 只关横向那一轴：短写会把纵向也一起关掉，而纵向这个容器根本不滚
+ * （`overflow-y: hidden` 在规范里仍算滚动容器），滚轮落在补丁上就再也滚不到外面那个列表。
  */
 .scroll-x {
 	min-width: 0;
 	overflow-x: auto;
 	overflow-y: hidden;
-	overscroll-behavior: contain;
+	overscroll-behavior-x: contain;
 }
 
 /**
@@ -412,8 +414,6 @@
 	.code-card-body,
 	.mermaid-source,
 	.math-block,
-	.diff-scroll,
-	.diff-body,
 	dialog.dialog,
 	.cm-scroller,
 	/* markstream 渲染器内部的滚动容器：类名在依赖里，改不了 DOM，只能按选择器列 */
@@ -453,8 +453,6 @@
 	.code-card-body,
 	.mermaid-source,
 	.math-block,
-	.diff-scroll,
-	.diff-body,
 	dialog.dialog,
 	.cm-scroller,
 	/* markstream 渲染器内部的滚动容器：类名在依赖里，改不了 DOM，只能按选择器列 */
@@ -494,8 +492,6 @@
 	.code-card-body,
 	.mermaid-source,
 	.math-block,
-	.diff-scroll,
-	.diff-body,
 	dialog.dialog,
 	.cm-scroller,
 	/* markstream 渲染器内部的滚动容器：类名在依赖里，改不了 DOM，只能按选择器列 */
@@ -530,8 +526,6 @@
 	.code-card-body,
 	.mermaid-source,
 	.math-block,
-	.diff-scroll,
-	.diff-body,
 	dialog.dialog,
 	.cm-scroller,
 	/* markstream 渲染器内部的滚动容器：类名在依赖里，改不了 DOM，只能按选择器列 */
@@ -569,8 +563,6 @@
 	.code-card-body,
 	.mermaid-source,
 	.math-block,
-	.diff-scroll,
-	.diff-body,
 	dialog.dialog,
 	.cm-scroller,
 	/* markstream 渲染器内部的滚动容器：类名在依赖里，改不了 DOM，只能按选择器列 */
@@ -611,8 +603,6 @@
 	.code-card-body,
 	.mermaid-source,
 	.math-block,
-	.diff-scroll,
-	.diff-body,
 	dialog.dialog,
 	.cm-scroller,
 	/* markstream 渲染器内部的滚动容器：类名在依赖里，改不了 DOM，只能按选择器列 */
@@ -653,8 +643,6 @@
 		.code-card-body,
 		.mermaid-source,
 		.math-block,
-		.diff-scroll,
-		.diff-body,
 		dialog.dialog,
 		.cm-scroller,
 		/* markstream 渲染器内部的滚动容器：类名在依赖里，改不了 DOM，只能按选择器列 */
@@ -777,7 +765,6 @@ svg.fl {
 .tr-think,
 .code-card-body,
 .mermaid-source,
-.diff-body,
 .error-text,
 .session-error-text,
 .file-path,

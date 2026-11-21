@@ -7,6 +7,7 @@
  */
 import type { ReactNode } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { SHELL_DATA_ATTRS } from "../layout/layout-contract.ts";
 import { PaneResizer } from "./pane-resizer.tsx";
 import { PANEL_MIN_WIDTH } from "./panel-state.ts";
 
@@ -77,7 +78,7 @@ export function RightPanel({
 					// 缩到最小宽一半以内松手就收起右栏，落盘里仍留着原来的偏好宽
 					collapseThreshold={PANEL_MIN_WIDTH / 2}
 					{...(onDragCollapse === undefined ? {} : { onCollapse: onDragCollapse })}
-					collapsePreviewAttr="data-panel-drag-collapsed"
+					collapsePreviewAttr={SHELL_DATA_ATTRS.panelDragCollapsed}
 				/>
 			)}
 			{head === undefined ? null : (

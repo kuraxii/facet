@@ -10,12 +10,13 @@
  * 还有一层 `clamp()` 兜底，右栏被拖窄时预览不会被压成一条缝。
  */
 
+import { LAYOUT_PX } from "../layout/layout-contract.ts";
 import { clampPaneWidth, type PaneWidthBounds } from "./pane-width.ts";
 
 /** 索引栏的下限、上限与缺省宽度（px）。 */
-export const WORKSPACE_LIST_MIN_WIDTH = 200;
-export const WORKSPACE_LIST_DEFAULT_WIDTH = 320;
-export const WORKSPACE_LIST_MAX_WIDTH = 480;
+export const WORKSPACE_LIST_MIN_WIDTH = LAYOUT_PX.workspaceList.minWidth;
+export const WORKSPACE_LIST_DEFAULT_WIDTH = LAYOUT_PX.workspaceList.defaultWidth;
+export const WORKSPACE_LIST_MAX_WIDTH = LAYOUT_PX.workspaceList.maxWidth;
 
 /**
  * 索引栏再宽也要给左边预览留出的宽度（px）。
@@ -23,7 +24,7 @@ export const WORKSPACE_LIST_MAX_WIDTH = 480;
  * 补丁行要放得下行号加一截代码，还要留得住横向滚动条；`panel.css` 里 `clamp()` 的第二个
  * 上限用的是同一个数。
  */
-export const WORKSPACE_DETAIL_KEEP_WIDTH = 280;
+export const WORKSPACE_DETAIL_KEEP_WIDTH = LAYOUT_PX.workspaceList.detailKeepWidth;
 
 /** 索引栏宽度的边界与回落值。 */
 export const WORKSPACE_LIST_WIDTH_BOUNDS: PaneWidthBounds = {

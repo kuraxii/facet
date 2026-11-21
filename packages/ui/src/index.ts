@@ -111,6 +111,7 @@ export type { ChangeMarkProps, ChangeStatusLabelKey } from "./git/git-status-mar
 export { ChangeMark, changeStatusLabelKey } from "./git/git-status-mark.tsx";
 export type { I18nProviderProps, I18nValue } from "./i18n/I18nProvider.tsx";
 export { I18nProvider, useI18n } from "./i18n/I18nProvider.tsx";
+export { LAYOUT_PX, SHELL_DATA_ATTRS } from "./layout/layout-contract.ts";
 export type { CodeBlockShape } from "./markdown/code-block-state.ts";
 export { shouldShowCodeBlock } from "./markdown/code-block-state.ts";
 export { extractLangToken, PLAIN, resolveCodeLang } from "./markdown/code-lang.ts";

@@ -154,13 +154,27 @@
 	/*
 	 * 工作区里「预览 + 索引」两栏：索引栏宽度与两栏顶栏里图标与文字之间的间距。索引栏在
 	 * 右边，分隔线画在它的左缘；容器窄于 680px 时换单栏钻取（见 `panel.css`）。
+	 *
+	 * 索引栏的上下限、缺省宽与「给预览留多宽」各有一个名字：`panel.css` 的 `clamp()` 读它们，
+	 * 与 `workspace-list-state.ts` 的常量由 `layout-contract.test.ts` 对齐。
 	 */
 	--workspace-head-gap: 4px;
+	--workspace-list-min: 200px;
+	--workspace-list-default: 320px;
+	--workspace-list-max: 480px;
+	--workspace-detail-keep-width: 280px;
 	/*
 	 * 悬浮文件树的宽度：缺省值在这里，实际值由界面按本地存储写在根节点上（见
 	 * `file-tree-state.ts`）。样式里再套一层 `clamp()` 兜底，容器被拖窄时不会铺满整条右栏。
+	 *
+	 * 上下限与「给编辑器留多宽」也各给一个名字：`panel.css` 的 `clamp()` 读它们，
+	 * `layout-contract.ts` 里的常量与这几个值由 `layout-contract.test.ts` 对齐。
 	 */
-	--file-tree-width: 240px;
+	--file-tree-min: 180px;
+	--file-tree-default: 240px;
+	--file-tree-max: 420px;
+	--editor-keep-width: 120px;
+	--file-tree-width: var(--file-tree-default);
 	/*
 	 * `+` 菜单与空态启动清单：菜单最小宽度、一行的高度、菜单离窗口边缘与离 `+` 按钮的距离、
 	 * 启动清单的宽度。两者共用行高，看起来是同一件东西的两种摆法。

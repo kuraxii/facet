@@ -5,12 +5,13 @@
  * 夹紧口径与右栏共用 `clampPaneWidth`。
  */
 
+import { LAYOUT_PX } from "../layout/layout-contract.ts";
 import { clampPaneWidth, type PaneWidthBounds } from "../panel/pane-width.ts";
 
 /** 宽度的默认值与上下限。 */
-export const SIDEBAR_DEFAULT_WIDTH = 272;
-export const SIDEBAR_MIN_WIDTH = 220;
-export const SIDEBAR_MAX_WIDTH = 420;
+export const SIDEBAR_DEFAULT_WIDTH = LAYOUT_PX.sidebar.defaultWidth;
+export const SIDEBAR_MIN_WIDTH = LAYOUT_PX.sidebar.minWidth;
+export const SIDEBAR_MAX_WIDTH = LAYOUT_PX.sidebar.maxWidth;
 
 /** 侧栏宽度的边界与回落值：读盘、落盘与拖动共用这一份。 */
 export const SIDEBAR_WIDTH_BOUNDS: PaneWidthBounds = {

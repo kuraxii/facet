@@ -13,6 +13,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../i18n/I18nProvider.tsx";
+import { SHELL_DATA_ATTRS } from "../layout/layout-contract.ts";
 import { PaneResizer, type PaneResizerProps } from "./pane-resizer.tsx";
 
 /** 左栏的边界与拖收阈值：220 / 2 = 110。 */
@@ -20,7 +21,7 @@ const MIN = 220;
 const MAX = 420;
 const THRESHOLD = MIN / 2;
 /** 折叠预览属性：与 `SessionSidebar` 传给分隔条的是同一个名字。 */
-const PREVIEW_ATTR = "data-sidebar-drag-collapsed";
+const PREVIEW_ATTR = SHELL_DATA_ATTRS.sidebarDragCollapsed;
 
 beforeAll(() => {
 	for (const name of ["setPointerCapture", "releasePointerCapture"]) {

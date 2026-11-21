@@ -9,12 +9,13 @@
  * `clamp()` 兜底，容器被拖窄时编辑器不会被压成 0。
  */
 
+import { LAYOUT_PX } from "../layout/layout-contract.ts";
 import { clampPaneWidth, type PaneWidthBounds } from "./pane-width.ts";
 
 /** 悬浮文件树的下限、上限与缺省宽度（px）。 */
-export const FILE_TREE_MIN_WIDTH = 180;
-export const FILE_TREE_DEFAULT_WIDTH = 240;
-export const FILE_TREE_MAX_WIDTH = 420;
+export const FILE_TREE_MIN_WIDTH = LAYOUT_PX.fileTree.minWidth;
+export const FILE_TREE_DEFAULT_WIDTH = LAYOUT_PX.fileTree.defaultWidth;
+export const FILE_TREE_MAX_WIDTH = LAYOUT_PX.fileTree.maxWidth;
 
 /**
  * 文件树再宽也要给编辑器留出的宽度（px）。
@@ -23,7 +24,7 @@ export const FILE_TREE_MAX_WIDTH = 420;
  * ——行号加一截代码，读得下去也点得到滚动条。`panel.css` 里 `clamp()` 的第二个上限用的是
  * 同一个数。
  */
-export const EDITOR_KEEP_WIDTH = 120;
+export const EDITOR_KEEP_WIDTH = LAYOUT_PX.fileTree.editorKeepWidth;
 
 /** 文件树宽度的边界与回落值。 */
 export const FILE_TREE_WIDTH_BOUNDS: PaneWidthBounds = {

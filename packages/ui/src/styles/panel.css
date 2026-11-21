@@ -169,7 +169,8 @@
  *
  * 查询容器是顶带右格与抽屉顶头（`chrome.css` 的 `.chrome-slot.is-panel`、本节的
  * `.panel-head`），量到的是整列宽。640 这个数同时写在 `workspace-tab-bar.tsx` 的
- * `WORKSPACE_TAB_LABEL_BREAKPOINT_PX` 里：容器查询里不能写变量，改一处要改两处。
+ * `WORKSPACE_TAB_LABEL_BREAKPOINT_PX` 里：容器查询里不能写变量，两处由
+ * `layout-contract.test.ts` 比对（真值在 `layout-contract.ts`）。
  *
  * 640 是实测出来的：四个图文标签中文 343、英文 403，加上 `+`、两枚动作与 132px 的窗口
  * 按钮簇，容器至少要 579（中文）/ 639（英文）才不撞车；取英文那一侧再留一点余量。
@@ -457,8 +458,10 @@
  *
  * 底色与文件内容相同、不投影：它与编辑器是同一块工作区的两半，不是压上去的一层。
  * 宽度三层保护：这条 `clamp()` 兜底（容器窄于 `100% - 120px` 时收住，编辑器至少剩
- * `EDITOR_KEEP_WIDTH`），界面按本地存储写的 `--file-tree-width`，以及拖动时按容器宽现算的
- * 上限（`fileTreeMaxWidth()`）。`position: relative` 只为让左缘那条拖拽条压在自己的边界上。
+ * `--editor-keep-width`），界面按本地存储写的 `--file-tree-width`，以及拖动时按容器宽现算的
+ * 上限（`fileTreeMaxWidth()`）。三个边界与缺省值都是 `:root` 里的变量，真值在
+ * `layout-contract.ts`，由 `layout-contract.test.ts` 对齐（这里因此不再写死数字）。
+ * `position: relative` 只为让左缘那条拖拽条压在自己的边界上。
  */
 .file-tree {
 	position: relative;
@@ -466,7 +469,11 @@
 	flex: 0 0 auto;
 	flex-direction: column;
 	min-height: 0;
-	width: clamp(180px, var(--file-tree-width, 240px), min(420px, calc(100% - 120px)));
+	width: clamp(
+		var(--file-tree-min),
+		var(--file-tree-width, var(--file-tree-default)),
+		min(var(--file-tree-max), calc(100% - var(--editor-keep-width)))
+	);
 	border-inline-start: 1px solid var(--line);
 	background: var(--bg);
 }
@@ -525,12 +532,17 @@
  *
  * 三层：界面按本地存储写的偏好宽（`--workspace-list-width`，`workspace-list-state.ts`），拖动
  * 期间分隔条把它临时写在 `.app` 上（更近的祖先赢，不经过渲染），最后这条 `clamp()` 兜底——
- * 容器窄时索引自己收住，预览始终留得下 `WORKSPACE_DETAIL_KEEP_WIDTH`。`200 / 320 / 480 / 280`
- * 与那个文件里的常量是同一组数，改一处要改两处。
+ * 容器窄时索引自己收住，预览始终留得下 `--workspace-detail-keep-width`。四个数都是 `:root`
+ * 变量，真值在 `layout-contract.ts`，由 `layout-contract.test.ts` 对齐。
  */
 .workspace-split-list {
 	display: flex;
-	flex: 0 0 clamp(200px, var(--workspace-list-width, 320px), min(480px, calc(100% - 280px)));
+	flex: 0 0
+		clamp(
+			var(--workspace-list-min),
+			var(--workspace-list-width, var(--workspace-list-default)),
+			min(var(--workspace-list-max), calc(100% - var(--workspace-detail-keep-width)))
+		);
 	flex-direction: column;
 	min-width: 0;
 	min-height: 0;
@@ -552,7 +564,11 @@
 .workspace-list-resizer {
 	position: absolute;
 	inset-block: 0;
-	inset-inline-end: calc(var(--workspace-list-width, 320px) - var(--divider-hit-width) / 2);
+	inset-inline-end: calc(
+		var(--workspace-list-width, var(--workspace-list-default)) -
+		var(--divider-hit-width) /
+		2
+	);
 	z-index: var(--z-content-local);
 	width: var(--divider-hit-width);
 	margin: 0;
@@ -608,7 +624,7 @@
  * 容器窄于 680px：两栏放不下（预览只剩一条窄缝、索引也只有一百来像素），改成单栏钻取。
  *
  * 680 这个数同时写在 `workspace-split.tsx` 的 `WORKSPACE_SPLIT_WIDE_WIDTH_PX` 里：容器查询
- * 里不能写变量，改一处要改两处。
+ * 里不能写变量，两处由 `layout-contract.test.ts` 比对（真值在 `layout-contract.ts`）。
  */
 @container (width < 680px) {
 	.workspace-split-detail,

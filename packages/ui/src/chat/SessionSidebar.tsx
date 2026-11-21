@@ -10,6 +10,7 @@ import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState
 import { ScrollArea, ScrollRow } from "../common/scroll-area.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { isComposingKey } from "../keys.ts";
+import { SHELL_DATA_ATTRS } from "../layout/layout-contract.ts";
 import { PaneResizer } from "../panel/pane-resizer.tsx";
 import { useHoverTip } from "../tip.tsx";
 import { ChevronIcon } from "../transcript/chevron.tsx";
@@ -502,7 +503,7 @@ export const SessionSidebar = memo(function SessionSidebar({
 					// 缩到最小宽一半以内松手就收起这一栏，落盘里仍留着原来的偏好宽
 					collapseThreshold={SIDEBAR_MIN_WIDTH / 2}
 					{...(onDragCollapse === undefined ? {} : { onCollapse: onDragCollapse })}
-					collapsePreviewAttr="data-sidebar-drag-collapsed"
+					collapsePreviewAttr={SHELL_DATA_ATTRS.sidebarDragCollapsed}
 				/>
 			)}
 			{showHeader ? (

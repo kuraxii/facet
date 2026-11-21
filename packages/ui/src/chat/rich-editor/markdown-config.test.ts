@@ -7,6 +7,7 @@ import {
 	COMPOSER_NODES,
 	importComposerMarkdown,
 } from "./markdown-config.ts";
+import { $createSlashCommandNode, $isSlashCommandNode } from "./slash-command-node.ts";
 
 /** 建一个只在用例里用的编辑器：有 DOM、有节点，不挂 React。 */
 function testEditor(): LexicalEditor {
@@ -20,17 +21,34 @@ function testEditor(): LexicalEditor {
 }
 
 /** 把一段 Markdown 铺进编辑器再导出，模拟「外部写入之后用户接着编辑」这一趟。 */
-function roundTrip(markdown: string, files: readonly string[] = []): string {
+function roundTrip(markdown: string, files: readonly string[] = [], known: readonly string[] = []): string {
 	const editor = testEditor();
 	let exported = "";
 	editor.update(
 		() => {
-			$importComposerMarkdown(markdown, new Set(files));
+			$importComposerMarkdown(markdown, new Set(files), new Set(known));
 			exported = $exportComposerMarkdown();
 		},
 		{ discrete: true },
 	);
 	return exported;
+}
+
+/** 铺一段 Markdown 之后，树里 `/命令` 胶囊的命令名。 */
+function commandsOf(markdown: string, known: readonly string[]): string[] {
+	const editor = testEditor();
+	let names: string[] = [];
+	editor.update(
+		() => {
+			$importComposerMarkdown(markdown, new Set(), new Set(known));
+			names = $getRoot()
+				.getAllTextNodes()
+				.filter((node) => $isSlashCommandNode(node))
+				.map((node) => node.getCommandName());
+		},
+		{ discrete: true },
+	);
+	return names;
 }
 
 /** 铺一段 Markdown 之后，树里 `@` 引用胶囊的路径。 */
@@ -167,5 +185,47 @@ describe("`@文件` 胶囊", () => {
 			{ discrete: true },
 		);
 		expect(editor.getEditorState().read(() => $exportComposerMarkdown())).toBe("@src/a.ts");
+	});
+});
+
+describe("`/命令` 胶囊", () => {
+	const KNOWN = ["review", "compact"] as const;
+
+	it("导出就是 `/名字`，屏幕上也是它", () => {
+		const editor = testEditor();
+		editor.update(
+			() => {
+				$getRoot().append($createParagraphNode().append($createSlashCommandNode("review")));
+			},
+			{ discrete: true },
+		);
+		// 草稿对外的写法与逐字敲出来的一模一样，`parseCommand` 不用另认一套
+		expect(editor.getEditorState().read(() => $exportComposerMarkdown())).toBe("/review");
+	});
+
+	it("首段命中已知命令的 `/名字` 还原成胶囊,参数留在后面", () => {
+		expect(commandsOf("/review 看下 diff", KNOWN)).toEqual(["review"]);
+		expect(roundTrip("/review 看下 diff", [], KNOWN)).toBe("/review 看下 diff");
+		// 选中命令之后那个空格也照原样读回
+		expect(commandsOf("/compact ", KNOWN)).toEqual(["compact"]);
+		expect(roundTrip("/compact ", [], KNOWN)).toBe("/compact ");
+	});
+
+	it("路径与非首段的斜杠保持文本", () => {
+		// `/usr/bin/env` 是路径：整段不是某条命令的名字
+		expect(commandsOf("/usr/bin/env node", KNOWN)).toEqual([]);
+		expect(roundTrip("/usr/bin/env node", [], KNOWN)).toBe("/usr/bin/env node");
+		// 命令只在文首生效，第二段里的 `/review` 只是一段文字
+		expect(commandsOf("第一行\n\n/review", KNOWN)).toEqual([]);
+		expect(roundTrip("第一行\n\n/review", [], KNOWN)).toBe("第一行\n\n/review");
+	});
+
+	it("没有命令清单时不认任何斜杠", () => {
+		expect(commandsOf("/review 看下 diff", [])).toEqual([]);
+	});
+
+	it("行内代码与代码块里的 `/名字` 不还原成胶囊", () => {
+		expect(commandsOf("`/review`", KNOWN)).toEqual([]);
+		expect(commandsOf("```\n/review\n```", KNOWN)).toEqual([]);
 	});
 });

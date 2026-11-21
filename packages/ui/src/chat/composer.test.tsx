@@ -261,17 +261,58 @@ describe("命令面板", () => {
 		{ name: "review", description: "审查改动", source: "skill", handler: "pi" },
 	] as SlashCommand[];
 
-	it("开头打斜杠时列出候选", async () => {
-		const { container, unmount } = await renderComposer({ value: "/co", commands });
+	/** 把光标放到编辑器里最后一个文本节点的末尾。 */
+	async function caretAtLastText(rendered: EditorRendered): Promise<void> {
+		await act(async () => {
+			rendered.editorElement.focus();
+			const texts = rendered.container.querySelectorAll(".composer-editor [data-lexical-text]");
+			const last = texts[texts.length - 1]?.lastChild ?? null;
+			if (last === null) {
+				throw new Error("编辑器里没有文字");
+			}
+			const range = document.createRange();
+			range.setStart(last, (last.textContent ?? "").length);
+			range.collapse(true);
+			const selection = window.getSelection();
+			selection?.removeAllRanges();
+			selection?.addRange(range);
+			document.dispatchEvent(new Event("selectionchange"));
+		});
+	}
+
+	it("开头打斜杠时列出候选,挂在输入区外框上", async () => {
+		const { container, editor, unmount } = await renderComposer({ value: "/co", commands });
+		await focusEditor(editor);
 		const palette = container.querySelector('[role="listbox"]');
 		expect(palette).not.toBeNull();
 		expect(palette?.textContent).toContain("/compact");
 		// 只有前缀命中的那条
 		expect(palette?.textContent).not.toContain("/review");
+		// 与 `@` 菜单同一处：挂在 `.composer` 下、不在编辑器里，不会被编辑区滚动裁切
+		expect(palette?.parentElement).toBe(container.querySelector(".composer"));
+		expect(editor.contains(palette)).toBe(false);
 		unmount();
 	});
 
-	it("方向键换高亮,回车选中", async () => {
+	it("空输入区里打斜杠就列候选,接着打的字收窄范围", async () => {
+		const rendered = await renderEditor("", false, { commands });
+		await focusEditor(rendered.editorElement);
+
+		await typeText(rendered.editor, "/");
+		const palette = rendered.container.querySelector('[role="listbox"]');
+		expect(palette).not.toBeNull();
+		expect(palette?.textContent).toContain("/compact");
+		expect(palette?.textContent).toContain("/review");
+
+		await typeText(rendered.editor, "co");
+		const narrowed = rendered.container.querySelector('[role="listbox"]');
+		expect(narrowed).not.toBeNull();
+		expect(narrowed?.textContent).toContain("/compact");
+		expect(narrowed?.textContent).not.toContain("/review");
+		rendered.unmount();
+	});
+
+	it("方向键换高亮,回车选中交给 pi 的命令", async () => {
 		const onChange = vi.fn();
 		const onRunCommand = vi.fn();
 		const { container, editor, unmount } = await renderComposer({
@@ -280,6 +321,7 @@ describe("命令面板", () => {
 			onChange,
 			onRunCommand,
 		});
+		await focusEditor(editor);
 
 		// 默认高亮第一条；下移一次落到第二条
 		await pressKey(editor, "ArrowDown");
@@ -287,20 +329,30 @@ describe("命令面板", () => {
 		expect(rows[0]?.className).not.toContain("is-on");
 		expect(rows[1]?.className).toContain("is-on");
 
-		// 交回给 pi 的命令：只把 `/名字 ` 填进输入框
+		// 交给 pi 的命令：换成胶囊再补一个空格，草稿对外的写法不变
 		await pressKey(editor, "Enter");
-		expect(onChange).toHaveBeenCalledWith("/review ");
+		expect(onChange).toHaveBeenLastCalledWith("/review ");
 		expect(onRunCommand).not.toHaveBeenCalled();
+		expect(container.querySelector(".composer-command")?.textContent).toBe("/review");
 		unmount();
 	});
 
 	it("界面自己处理的命令选中后就地执行", async () => {
 		const onChange = vi.fn();
 		const onRunCommand = vi.fn();
-		const { editor, unmount } = await renderComposer({ value: "/comp", commands, onChange, onRunCommand });
+		const { container, editor, unmount } = await renderComposer({
+			value: "/comp",
+			commands,
+			onChange,
+			onRunCommand,
+		});
+		await focusEditor(editor);
 		await pressKey(editor, "Enter");
 		expect(onRunCommand).toHaveBeenCalledWith(expect.objectContaining({ name: "compact" }), "");
-		expect(onChange).toHaveBeenCalledWith("");
+		// 触发文本清掉，草稿跟着空，不留一枚胶囊
+		expect(onChange).toHaveBeenLastCalledWith("");
+		expect(container.querySelector(".composer-command")).toBeNull();
+		expect(editor.textContent).toBe("");
 		unmount();
 	});
 
@@ -313,6 +365,7 @@ describe("命令面板", () => {
 			handler: "pi",
 		})) as SlashCommand[];
 		const { container, editor, unmount } = await renderComposer({ value: "/", commands: many });
+		await focusEditor(editor);
 		const list = container.querySelector<HTMLElement>(".cmd-pop");
 		expect(list).not.toBeNull();
 		if (list === null) {
@@ -343,11 +396,15 @@ describe("命令面板", () => {
 		unmount();
 	});
 
-	it("Esc 收起面板,回车回到发送", async () => {
+	it("Esc 收起面板并挡掉默认行为", async () => {
 		const onSend = vi.fn();
 		const { container, editor, unmount } = await renderComposer({ value: "/", commands, onSend });
+		await focusEditor(editor);
 		expect(container.querySelector('[role="listbox"]')).not.toBeNull();
-		await pressKey(editor, "Escape");
+
+		const event = await pressKey(editor, "Escape");
+		// 面板吃掉这次按键：窄档下的外层抽屉看到 defaultPrevented 就不会跟着关
+		expect(event.defaultPrevented).toBe(true);
 		expect(container.querySelector('[role="listbox"]')).toBeNull();
 		// 内容没变，面板不再弹回来
 		expect(container.querySelector('[role="listbox"]')).toBeNull();
@@ -356,9 +413,83 @@ describe("命令面板", () => {
 
 	it("组词期间的上下键不换高亮", async () => {
 		const { container, editor, unmount } = await renderComposer({ value: "/", commands });
+		await focusEditor(editor);
 		const before = container.querySelector(".cmd-row.is-on")?.textContent;
 		await pressKey(editor, "ArrowDown", { keyCode: 229 });
 		expect(container.querySelector(".cmd-row.is-on")?.textContent).toBe(before);
+		unmount();
+	});
+
+	it("Tab 选中高亮项,Shift+Tab 不选", async () => {
+		const rendered = await renderEditor("/rev", false, { commands });
+		await focusEditor(rendered.editorElement);
+
+		// Shift+Tab 管的是焦点链，菜单不吃这个键，也就不选中任何东西
+		const shifted = await pressKey(rendered.editorElement, "Tab", { shiftKey: true });
+		expect(shifted.defaultPrevented).toBe(false);
+		expect(rendered.container.querySelector(".composer-command")).toBeNull();
+
+		await pressKey(rendered.editorElement, "Tab");
+		expect(rendered.draft()).toBe("/review ");
+		rendered.unmount();
+	});
+
+	it("选中的胶囊是一个原子 token,后面补一个空格接着写参数", async () => {
+		const rendered = await renderEditor("/rev", false, { commands });
+		await focusEditor(rendered.editorElement);
+		await pressKey(rendered.editorElement, "Enter");
+
+		const capsule = rendered.container.querySelector(".composer-command");
+		expect(capsule?.textContent).toBe("/review");
+		expect(capsule?.getAttribute("data-command")).toBe("review");
+		// 胶囊后面跟着一个空格，光标停在那儿等参数
+		expect(capsule?.nextElementSibling?.textContent).toBe(" ");
+		expect(rendered.draft()).toBe("/review ");
+
+		// 原子性来自 token 模式：退格整块删除、光标整块跳过。jsdom 没有布局，编辑器的
+		// 按字符删除在这里是空操作，所以只断言语义，不模拟那一下按键。
+		const mode = rendered.editor.getEditorState().read(() => {
+			const node = $getRoot()
+				.getAllTextNodes()
+				.find((item) => item.getType() === "slash-command");
+			return node?.getMode() ?? null;
+		});
+		expect(mode).toBe("token");
+
+		// 接着写的参数落在胶囊之后，胶囊本身不受影响
+		await typeText(rendered.editor, "看下 diff");
+		expect(rendered.draft()).toBe("/review 看下 diff");
+		expect(rendered.container.querySelector(".composer-command")?.textContent).toBe("/review");
+		rendered.unmount();
+	});
+
+	it("第二段与代码块里的斜杠不弹面板", async () => {
+		const second = await renderEditor("第一行\n\n/co", false, { commands });
+		await caretAtLastText(second);
+		expect(second.container.querySelector('[role="listbox"]')).toBeNull();
+		second.unmount();
+
+		const code = await renderEditor("```\n/co\n```", false, { commands });
+		await caretAtLastText(code);
+		expect(code.container.querySelector('[role="listbox"]')).toBeNull();
+		code.unmount();
+	});
+
+	it("已有命令胶囊之后不再弹面板", async () => {
+		const rendered = await renderEditor("/review 看下 diff", false, { commands });
+		// 外部铺进来的草稿本身就带胶囊：照旧导出同样的写法
+		expect(rendered.container.querySelector(".composer-command")?.textContent).toBe("/review");
+		expect(rendered.draft()).toBe("/review 看下 diff");
+
+		await caretAtLastText(rendered);
+		expect(rendered.container.querySelector('[role="listbox"]')).toBeNull();
+		rendered.unmount();
+	});
+
+	it("一条候选都匹配不上时不弹空框", async () => {
+		const { container, editor, unmount } = await renderComposer({ value: "/zz", commands });
+		await focusEditor(editor);
+		expect(container.querySelector('[role="listbox"]')).toBeNull();
 		unmount();
 	});
 });
@@ -479,15 +610,7 @@ describe("发送受阻", () => {
 
 /** 富文本输入域的按键落点：块级用例只关心换行键位与能不能发。 */
 function editorRoutes(shiftEnterToSend: boolean): ComposerKeyRoutes {
-	return {
-		isPaletteOpen: false,
-		onPaletteMove: () => {},
-		onPalettePick: () => {},
-		onPaletteClose: () => {},
-		canSend: true,
-		shiftEnterToSend,
-		onSend: () => {},
-	};
+	return { canSend: true, shiftEnterToSend, onSend: () => {} };
 }
 
 /**
@@ -500,6 +623,7 @@ function EditorHost(props: {
 	editorRef: RefObject<LexicalEditor | null>;
 	handleRef: RefObject<ComposerHandle | null>;
 	mentionFiles?: readonly string[];
+	commands?: readonly SlashCommand[];
 	onDraft: (draft: string) => void;
 }): ReactElement {
 	const [draft, setDraft] = useState(props.initial);
@@ -514,6 +638,7 @@ function EditorHost(props: {
 				}}
 				placeholder="输入消息"
 				routes={editorRoutes(props.shiftEnterToSend)}
+				commands={props.commands}
 				mentionFiles={props.mentionFiles}
 				menuContainerRef={boxRef}
 				handleRef={props.handleRef}
@@ -539,7 +664,7 @@ interface EditorRendered extends Rendered {
 async function renderEditor(
 	initial: string,
 	shiftEnterToSend: boolean,
-	options: { mentionFiles?: readonly string[] } = {},
+	options: { mentionFiles?: readonly string[]; commands?: readonly SlashCommand[] } = {},
 ): Promise<EditorRendered> {
 	const editorRef: RefObject<LexicalEditor | null> = { current: null };
 	const handleRef: RefObject<ComposerHandle | null> = { current: null };
@@ -551,6 +676,7 @@ async function renderEditor(
 			editorRef,
 			handleRef,
 			mentionFiles: options.mentionFiles,
+			commands: options.commands,
 			onDraft: (next: string) => {
 				latest = next;
 			},
@@ -942,5 +1068,38 @@ describe("命令式句柄", () => {
 		await typeText(rendered.editor, "!");
 		expect(rendered.draft()).toBe("一段草稿!");
 		rendered.unmount();
+	});
+});
+
+describe("探针", () => {
+	it("backspace 行为", async () => {
+		const commands: SlashCommand[] = [
+			{ name: "review", description: "审查改动", source: "skill", handler: "pi" },
+		] as SlashCommand[];
+		const onChange = vi.fn();
+		const { container, editor, unmount } = await renderComposer({ value: "/rev", commands, onChange });
+		await focusEditor(editor);
+		console.log("panel open:", container.querySelector('[role="listbox"]') !== null);
+		await pressKey(editor, "Enter");
+		await act(async () => {});
+		console.log("editor text:", JSON.stringify(editor.textContent));
+		console.log(
+			"after enter:",
+			JSON.stringify(onChange.mock.calls),
+			container.querySelector(".composer-command")?.outerHTML,
+		);
+		await pressKey(editor, "Backspace");
+		console.log(
+			"after bs1:",
+			JSON.stringify(onChange.mock.calls),
+			container.querySelector(".composer-command")?.outerHTML,
+		);
+		await pressKey(editor, "Backspace");
+		console.log(
+			"after bs2:",
+			JSON.stringify(onChange.mock.calls),
+			container.querySelector(".composer-command")?.outerHTML,
+		);
+		unmount();
 	});
 });

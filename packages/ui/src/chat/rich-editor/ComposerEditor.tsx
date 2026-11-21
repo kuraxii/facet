@@ -10,6 +10,7 @@
  * 回退、重试、扩展写入）才会重新导入内容并把光标放到末尾。
  */
 
+import type { SlashCommand } from "@facet/protocol";
 import { $isCodeNode } from "@lexical/code";
 import { PrismTokenizer, registerCodeHighlighting } from "@lexical/code-prism";
 import { $isListItemNode } from "@lexical/list";
@@ -42,7 +43,6 @@ import {
 	KEY_ARROW_UP_COMMAND,
 	KEY_BACKSPACE_COMMAND,
 	KEY_ENTER_COMMAND,
-	KEY_ESCAPE_COMMAND,
 	KEY_TAB_COMMAND,
 	type LexicalEditor,
 	type LexicalNode,
@@ -73,17 +73,10 @@ import {
 	exportComposerMarkdown,
 	importComposerMarkdown,
 } from "./markdown-config.ts";
+import { SlashCommandPlugin } from "./SlashCommandPlugin.tsx";
 
-/** 命令面板与会话状态的按键落点：这些状态都在 `Composer` 里，编辑器只负责把按键送过去。 */
+/** 发送相关的按键落点与状态：这些都在 `Composer` 里，编辑器只负责把按键送过去。 */
 export interface ComposerKeyRoutes {
-	/** 命令候选面板此刻是否开着 */
-	isPaletteOpen: boolean;
-	/** 移动高亮项：+1 下移，-1 上移 */
-	onPaletteMove: (step: 1 | -1) => void;
-	/** 选中当前高亮项 */
-	onPalettePick: () => void;
-	/** 收起面板（Esc） */
-	onPaletteClose: () => void;
 	/** 此刻能不能发送 */
 	canSend: boolean;
 	/** true 表示 Shift+回车才是发送键位 */
@@ -115,11 +108,15 @@ export interface ComposerEditorProps {
 	onChange: (value: string) => void;
 	/** 占位符文案，同时作为输入域的 `aria-label` */
 	placeholder: string;
-	/** 命令面板与发送的按键落点 */
+	/** 发送的按键落点 */
 	routes: ComposerKeyRoutes;
+	/** 输入区可以触发的命令；`/` 面板从这里取候选 */
+	commands?: readonly SlashCommand[];
+	/** 选中一条界面自己处理的命令 */
+	onRunCommand?: ((command: SlashCommand, args: string) => void) | undefined;
 	/** 可 `@` 引用的文件：项目根下的相对路径。空列表时 `@` 不弹菜单 */
 	mentionFiles?: readonly string[];
-	/** `@` 菜单挂载的容器：输入区外框，菜单要和 `/` 命令面板贴在同一处 */
+	/** 两处补全菜单挂载的容器：输入区外框。菜单挂在它下面才和输入框同处、等宽 */
 	menuContainerRef?: RefObject<HTMLElement | null>;
 	/** 命令式句柄：引用正文之类的动作从外面调它 */
 	handleRef?: Ref<ComposerHandle>;
@@ -250,11 +247,14 @@ function $newlineInBlock(editor: LexicalEditor): boolean {
 function ValueSyncPlugin({
 	value,
 	files,
+	knownCommands,
 	lastEmitted,
 }: {
 	value: string;
 	/** 已知文件：铺内容时把命中它们的 `@路径` 还原成胶囊 */
 	files: ReadonlySet<string>;
+	/** 已知命令：铺内容时把文首命中它们的 `/命令` 还原成胶囊 */
+	knownCommands: ReadonlySet<string>;
 	lastEmitted: RefObject<string>;
 }): null {
 	const [editor] = useLexicalComposerContext();
@@ -263,34 +263,25 @@ function ValueSyncPlugin({
 			return;
 		}
 		lastEmitted.current = value;
-		importComposerMarkdown(editor, value, files);
-	}, [editor, files, lastEmitted, value]);
+		importComposerMarkdown(editor, value, files, knownCommands);
+	}, [editor, files, knownCommands, lastEmitted, value]);
 	return null;
-}
-
-/** 面板开着时上下键只移动高亮，不动光标。 */
-function movePalette(routes: RefObject<ComposerKeyRoutes>, event: KeyboardEvent, step: 1 | -1): boolean {
-	if (isComposingKey(event) || !routes.current.isPaletteOpen) {
-		return false;
-	}
-	event.preventDefault();
-	routes.current.onPaletteMove(step);
-	return true;
 }
 
 /**
  * 键盘与输入法。
  *
- * 命令都注册在 `COMMAND_PRIORITY_HIGH`：回车与方向键在富文本里自带默认行为（新建段落、
- * 列表内上下换条目、被编辑器吃掉），面板开着的时候必须先由这里接住，接不住再放行。
+ * 命令都注册在 `COMMAND_PRIORITY_HIGH`：回车、Tab 与方向键在富文本里都有默认行为（新建
+ * 段落、挪焦点、挪光标），候选菜单开着的时候必须先在这里看清楚再决定放不放行——菜单自己的
+ * 键盘处理挂在 `COMMAND_PRIORITY_LOW` 上，这里返回 false 才轮得到它。
  */
 function KeyboardPlugin({
 	routes,
-	isMentionOpen,
+	isTypeaheadOpen,
 }: {
 	routes: ComposerKeyRoutes;
-	/** `@` 文件菜单开着：回车、方向键、Tab 与 Esc 都归它 */
-	isMentionOpen: boolean;
+	/** 候选菜单（`/` 或 `@`）开着：回车、方向键、Tab 与 Esc 都归它 */
+	isTypeaheadOpen: boolean;
 }): null {
 	const [editor] = useLexicalComposerContext();
 	/** 按键回调里读最新的一份路由，避免父级每次重渲染都重注册一遍命令 */
@@ -305,24 +296,13 @@ function KeyboardPlugin({
 				KEY_ENTER_COMMAND,
 				(event) => {
 					const current = routesRef.current;
-					// 组词期间的回车是选词，不是发送，也不是选中命令
-					if (event !== null && isComposingKey(event)) {
-						return false;
+					// 组词期间的回车是选词，既不是发送也不是选中候选
+					const composing = event !== null && isComposingKey(event);
+					// 菜单开着时回车是选中候选，放行给菜单；组词期间的回车谁也别接
+					if (isTypeaheadOpen) {
+						return composing;
 					}
-					// `@` 文件菜单开着：回车是选中候选，放行给菜单自己处理
-					if (isMentionOpen) {
-						return false;
-					}
-					if (current.isPaletteOpen) {
-						// 面板开着时回车与 Tab 都是「选中这一条」，Shift+回车仍然是换行
-						if (event !== null && !event.shiftKey) {
-							event.preventDefault();
-							current.onPalettePick();
-							return true;
-						}
-						return false;
-					}
-					if (event === null) {
+					if (composing || event === null) {
 						return false;
 					}
 					const isSendCombo = current.shiftEnterToSend ? event.shiftKey : !event.shiftKey;
@@ -371,12 +351,12 @@ function KeyboardPlugin({
 			),
 			editor.registerCommand<KeyboardEvent>(
 				KEY_ARROW_UP_COMMAND,
-				(event) => (isMentionOpen ? false : movePalette(routesRef, event, -1)),
+				(event) => composingInMenu(event, isTypeaheadOpen),
 				COMMAND_PRIORITY_HIGH,
 			),
 			editor.registerCommand<KeyboardEvent>(
 				KEY_ARROW_DOWN_COMMAND,
-				(event) => (isMentionOpen ? false : movePalette(routesRef, event, 1)),
+				(event) => composingInMenu(event, isTypeaheadOpen),
 				COMMAND_PRIORITY_HIGH,
 			),
 			editor.registerCommand<KeyboardEvent>(
@@ -385,15 +365,10 @@ function KeyboardPlugin({
 					if (isComposingKey(event)) {
 						return false;
 					}
-					// `@` 菜单开着时 Tab 也是「选中当前候选」
-					if (isMentionOpen) {
-						return false;
-					}
-					const current = routesRef.current;
-					if (current.isPaletteOpen && !event.shiftKey) {
-						event.preventDefault();
-						current.onPalettePick();
-						return true;
+					// 菜单开着：无 Shift 的 Tab 选中当前候选，交给菜单；Shift+Tab 不选，
+					// 接管这一下但不拦默认行为，键盘的反向焦点链照走
+					if (isTypeaheadOpen) {
+						return event.shiftKey;
 					}
 					// 代码块里 Tab 是缩进；其它地方放行，保住键盘的焦点链
 					if ($indentInCode(event)) {
@@ -404,27 +379,18 @@ function KeyboardPlugin({
 				},
 				COMMAND_PRIORITY_HIGH,
 			),
-			editor.registerCommand<KeyboardEvent>(
-				KEY_ESCAPE_COMMAND,
-				(event) => {
-					// `@` 菜单自己吃掉 Esc 并 preventDefault，外层抽屉就不会跟着关
-					if (isMentionOpen) {
-						return false;
-					}
-					const current = routesRef.current;
-					if (!current.isPaletteOpen) {
-						return false;
-					}
-					event.preventDefault();
-					current.onPaletteClose();
-					return true;
-				},
-				COMMAND_PRIORITY_HIGH,
-			),
 		);
-	}, [editor, isMentionOpen]);
+	}, [editor, isTypeaheadOpen]);
 
 	return null;
+}
+
+/**
+ * 菜单开着时，组词里的方向键不能被当成「换候选」：它是输入法在选自己的候选词。
+ * 接管这一下（返回 true）但不拦默认行为，输入法照常收键。
+ */
+function composingInMenu(event: KeyboardEvent | null, isTypeaheadOpen: boolean): boolean {
+	return isTypeaheadOpen && event !== null && isComposingKey(event);
 }
 
 /** 代码块里按一次 Tab 缩进多少格。 */
@@ -545,6 +511,8 @@ export function ComposerEditor({
 	onChange,
 	placeholder,
 	routes,
+	commands = [],
+	onRunCommand,
 	mentionFiles = [],
 	menuContainerRef,
 	handleRef,
@@ -552,10 +520,14 @@ export function ComposerEditor({
 }: ComposerEditorProps): ReactNode {
 	/** 最近一次与外界对齐过的 Markdown；初值取挂载时的内容，首屏不必再导入一次 */
 	const lastEmitted = useRef(value);
-	/** `@` 文件菜单开着没有：开着的时候键盘归它 */
+	/** `@` 文件菜单与 `/` 命令菜单各自的开合；任一开着，键盘就归它 */
 	const [isMentionOpen, setMentionOpen] = useState(false);
+	const [isCommandOpen, setCommandOpen] = useState(false);
+	const isTypeaheadOpen = isMentionOpen || isCommandOpen;
 	/** 已知文件，铺内容时把命中它们的 `@路径` 还原成胶囊 */
 	const files = useMemo(() => new Set(mentionFiles), [mentionFiles]);
+	/** 已知命令，铺内容时把文首命中它们的 `/命令` 还原成胶囊 */
+	const knownCommands = useMemo(() => new Set(commands.map((command) => command.name)), [commands]);
 
 	/**
 	 * 初始内容同步铺进来：等一次效应落下去会让人看见一瞬空编辑框。
@@ -570,7 +542,7 @@ export function ComposerEditor({
 			console.error(error);
 		},
 		editorState: () => {
-			$importComposerMarkdown(value, files);
+			$importComposerMarkdown(value, files, knownCommands);
 		},
 	}));
 
@@ -613,13 +585,21 @@ export function ComposerEditor({
 				ignoreSelectionChange
 				onChange={(state) => handleChange(exportComposerMarkdown(state))}
 			/>
-			<ValueSyncPlugin value={value} files={files} lastEmitted={lastEmitted} />
-			<KeyboardPlugin routes={routes} isMentionOpen={isMentionOpen} />
+			<ValueSyncPlugin value={value} files={files} knownCommands={knownCommands} lastEmitted={lastEmitted} />
+			<KeyboardPlugin routes={routes} isTypeaheadOpen={isTypeaheadOpen} />
 			<PlainPastePlugin />
 			{mentionFiles.length === 0 ? null : (
 				<FileMentionPlugin
 					files={mentionFiles}
 					onOpenChange={setMentionOpen}
+					menuContainerRef={menuContainerRef}
+				/>
+			)}
+			{commands.length === 0 ? null : (
+				<SlashCommandPlugin
+					commands={commands}
+					runCommand={onRunCommand}
+					onOpenChange={setCommandOpen}
 					menuContainerRef={menuContainerRef}
 				/>
 			)}

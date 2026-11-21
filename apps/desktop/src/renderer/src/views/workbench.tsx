@@ -262,7 +262,8 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 		<CodeThemeProvider value={shell.codeTheme}>
 			<AppFrame
 				sidebarWidth={`${shell.sidebarWidth}px`}
-				panelWidth={`${shell.panel.width}px`}
+				// 列轨道用实占宽：偏好宽可能比「给正文留够地方」之后剩下的宽度更宽
+				panelWidth={`${shell.panelEffectiveWidth}px`}
 				sidebarVisible={shell.sidebarVisible}
 				panelVisible={shell.panelVisible}
 				chrome={
@@ -387,7 +388,7 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 						<RightPanel
 							// 占列时是分隔条可拖的那一栏，浮层时是一层盖住正文的全高抽屉
 							variant={hasPanelColumn ? "tiled" : "drawer"}
-							width={hasPanelColumn ? shell.panel.width : undefined}
+							width={hasPanelColumn ? shell.panelEffectiveWidth : undefined}
 							onWidthChange={hasPanelColumn ? (width) => shell.updatePanel({ width }) : undefined}
 							maxWidth={shell.panelMaxWidth}
 							onDraggingChange={shell.setPaneResizing}

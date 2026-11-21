@@ -33,15 +33,20 @@ export interface RightPanelState {
 	width: number;
 }
 
-/** 宽度的默认值与上下限。 */
+/**
+ * 宽度的默认值与下限。
+ *
+ * 右栏**没有固定的宽度上限**：它最宽能到多少由「视口宽 − 正文最小可用宽 − 左栏」现算
+ * （`apps/desktop/.../resolve-layout.ts` 的 `paneMaxWidth()`）。偏好宽因此只收下限，落盘
+ * 里留着用户拖出来的宽度，窗口变大之后还能长回去。
+ */
 export const PANEL_DEFAULT_WIDTH = 520;
 export const PANEL_MIN_WIDTH = 360;
-export const PANEL_MAX_WIDTH = 840;
 
-/** 右栏宽度的边界与回落值：读盘、落盘与拖动共用这一份。 */
+/** 右栏宽度的边界与回落值：读盘、落盘与拖动共用这一份。上限交给正文的宽度约束。 */
 export const PANEL_WIDTH_BOUNDS: PaneWidthBounds = {
 	min: PANEL_MIN_WIDTH,
-	max: PANEL_MAX_WIDTH,
+	max: Number.POSITIVE_INFINITY,
 	defaultWidth: PANEL_DEFAULT_WIDTH,
 };
 

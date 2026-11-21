@@ -10,6 +10,7 @@ import {
 	type LayoutInput,
 	layoutTierOf,
 	MAIN_MIN_WIDTH,
+	paneMaxWidth,
 	resolveLayout,
 } from "./resolve-layout.ts";
 
@@ -210,33 +211,73 @@ describe("非法输入回落", () => {
 	});
 });
 
-describe("中档拖动上限", () => {
-	const bounds = { min: 360, max: 840 };
+describe("拖动上限：给正文留出最小可用宽", () => {
+	/** 右栏：没有固定上限 */
+	const panel = { min: 360 };
+	/** 左栏：自己有固定的上限 */
+	const sidebar = { min: 260, max: 420 };
 
 	it("另一栏收起时让出正文最小宽", () => {
-		expect(clampDragMax({ tier: "mid", viewportWidth: 900, otherWidth: 0, ...bounds })).toBe(
-			900 - MAIN_MIN_WIDTH,
-		);
+		expect(clampDragMax({ viewportWidth: 900, otherWidth: 0, ...panel })).toBe(900 - MAIN_MIN_WIDTH);
 	});
 
 	it("另一栏也在时再扣掉它", () => {
-		expect(clampDragMax({ tier: "mid", viewportWidth: 1099, otherWidth: 272, ...bounds })).toBe(
+		expect(clampDragMax({ viewportWidth: 1099, otherWidth: 272, ...panel })).toBe(
 			1099 - MAIN_MIN_WIDTH - 272,
 		);
 	});
 
 	it("预算不足时不把上限钳到下限以下", () => {
-		expect(clampDragMax({ tier: "mid", viewportWidth: 881, otherWidth: 420, ...bounds })).toBe(bounds.min);
+		expect(clampDragMax({ viewportWidth: 881, otherWidth: 420, ...panel })).toBe(panel.min);
 	});
 
-	it("宽档与窄档原样返回上限", () => {
-		expect(clampDragMax({ tier: "wide", viewportWidth: 1400, otherWidth: 272, ...bounds })).toBe(bounds.max);
-		expect(clampDragMax({ tier: "narrow", viewportWidth: 640, otherWidth: 0, ...bounds })).toBe(bounds.max);
+	it("三档一体：宽档也按正文的约束钳住，不再原样返回", () => {
+		// 1400 的视口里，左栏 272 之后右栏最多 708，正文仍是 420
+		expect(clampDragMax({ viewportWidth: 1400, otherWidth: 272, ...panel })).toBe(
+			1400 - MAIN_MIN_WIDTH - 272,
+		);
+		expect(clampDragMax({ viewportWidth: 2560, otherWidth: 272, ...panel })).toBe(
+			2560 - MAIN_MIN_WIDTH - 272,
+		);
+	});
+
+	it("有固定上限的一栏再与正文的约束取小", () => {
+		// 左栏：宽视口下被它自己的 420 收住
+		expect(clampDragMax({ viewportWidth: 2560, otherWidth: 0, ...sidebar })).toBe(420);
+		// 窄一点的视口里被正文的约束收住
+		expect(clampDragMax({ viewportWidth: 700, otherWidth: 0, ...sidebar })).toBe(700 - MAIN_MIN_WIDTH);
 	});
 
 	it("钳制后的上限不会让松手时超预算", () => {
 		const other = 272;
-		const max = clampDragMax({ tier: "mid", viewportWidth: 1212, otherWidth: other, ...bounds });
+		const max = clampDragMax({ viewportWidth: 1212, otherWidth: other, ...panel });
 		expect(other + MAIN_MIN_WIDTH + max).toBeLessThanOrEqual(1212);
+	});
+});
+
+describe("右栏实占宽", () => {
+	it("偏好宽比预算宽时按预算走，偏好宽本身不变", () => {
+		const budget = paneMaxWidth({ viewportWidth: 1400, otherWidth: 272, min: 360 });
+		expect(budget).toBe(708);
+		expect(Math.min(2400, budget)).toBe(708);
+	});
+
+	it("窗口变大之后按偏好宽长回去", () => {
+		// 偏好宽 2400：2560 的视口仍然放不下，3200 才完全容得下
+		const narrow = paneMaxWidth({ viewportWidth: 2560, otherWidth: 272, min: 360 });
+		expect(Math.min(2400, narrow)).toBe(2560 - MAIN_MIN_WIDTH - 272);
+		const wide = paneMaxWidth({ viewportWidth: 3200, otherWidth: 272, min: 360 });
+		expect(Math.min(2400, wide)).toBe(2400);
+	});
+
+	it("正文最小宽是这条上限的全部来源，没有别的固定上限", () => {
+		for (const viewportWidth of [880, 1240, 1920, 3840]) {
+			const max = paneMaxWidth({ viewportWidth, otherWidth: 0, min: 360 });
+			expect(max, String(viewportWidth)).toBe(Math.max(360, viewportWidth - MAIN_MIN_WIDTH));
+		}
+	});
+
+	it("预算不足时回落到下限", () => {
+		expect(paneMaxWidth({ viewportWidth: 700, otherWidth: 420, min: 360 })).toBe(360);
 	});
 });

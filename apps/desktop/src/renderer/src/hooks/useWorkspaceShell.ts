@@ -14,7 +14,6 @@ import {
 	clampSidebarWidth,
 	isDarkTheme,
 	normalizeUiScale,
-	PANEL_MAX_WIDTH,
 	PANEL_MIN_WIDTH,
 	type RightPanelState,
 	type RightPanelTab,
@@ -118,8 +117,14 @@ export interface WorkspaceShell {
 	sidebarVisible: boolean;
 	/** 右栏此刻是否占列 */
 	panelVisible: boolean;
-	/** 右栏分隔条的实时上限（中档按空间预算钳制） */
+	/** 右栏分隔条的实时上限：给正文留够地方之后剩下的宽度 */
 	panelMaxWidth: number;
+	/**
+	 * 右栏此刻实占的宽度（偏好宽被正文的约束压窄之后的值）。
+	 *
+	 * 分隔条与列轨道都用它：拖动起点与屏幕上看到的一致，不会一抓手就跳。
+	 */
+	panelEffectiveWidth: number;
 	/** 左栏分隔条的实时上限 */
 	sidebarMaxWidth: number;
 	/** 分隔条开始/结束拖动的提示，拖动期间锁住折叠 */
@@ -354,31 +359,24 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 	}, [isNarrow, layout.sidebarVisible]);
 
 	/**
-	 * 中档下拖动的实时上限：松手那一刻同样不超预算（约束 2）。
+	 * 右栏实占宽：偏好宽与「给正文留够地方」取小。
 	 *
-	 * 取 `max(当前宽, 预算上限)`：中档只开一栏时没有可折的对象，当前宽可能已经比预算宽，
-	 * 这时别让指针一抓住分隔条就把它跳下去；上限等于当前宽，只能缩不能长。
+	 * 右栏没有固定的上限，窗口一缩它跟着收、窗口一大它按偏好宽长回去；偏好宽本身不改，
+	 * 所以只是暂时被压窄，不是把用户拖出来的宽度写小（口径见 `docs/layout.md` §3 约束 2）。
 	 */
-	const panelMaxWidth = Math.max(
-		panel.width,
-		clampDragMax({
-			tier: layout.tier,
-			viewportWidth: layout.viewportWidth,
-			otherWidth: layout.sidebarVisible ? sidebarWidth : 0,
-			min: PANEL_MIN_WIDTH,
-			max: PANEL_MAX_WIDTH,
-		}),
-	);
-	const sidebarMaxWidth = Math.max(
-		sidebarWidth,
-		clampDragMax({
-			tier: layout.tier,
-			viewportWidth: layout.viewportWidth,
-			otherWidth: layout.panelVisible ? panel.width : 0,
-			min: SIDEBAR_MIN_WIDTH,
-			max: SIDEBAR_MAX_WIDTH,
-		}),
-	);
+	const panelMaxWidth = clampDragMax({
+		viewportWidth: layout.viewportWidth,
+		otherWidth: layout.sidebarVisible ? sidebarWidth : 0,
+		min: PANEL_MIN_WIDTH,
+	});
+	const panelEffectiveWidth = Math.min(panel.width, panelMaxWidth);
+	/** 左栏拖动的上限：它自己有 `SIDEBAR_MAX_WIDTH`，再与正文的约束取小 */
+	const sidebarMaxWidth = clampDragMax({
+		viewportWidth: layout.viewportWidth,
+		otherWidth: layout.panelVisible ? panelEffectiveWidth : 0,
+		min: SIDEBAR_MIN_WIDTH,
+		max: SIDEBAR_MAX_WIDTH,
+	});
 	const setPaneResizing = useCallback((dragging: boolean) => setIsResizing(dragging), []);
 
 	/**
@@ -488,6 +486,7 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 		sidebarVisible: layout.sidebarVisible,
 		panelVisible: layout.panelVisible,
 		panelMaxWidth,
+		panelEffectiveWidth,
 		sidebarMaxWidth,
 		setPaneResizing,
 		sidebarWidth,

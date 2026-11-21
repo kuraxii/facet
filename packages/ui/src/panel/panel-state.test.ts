@@ -7,7 +7,6 @@ import { describe, expect, it } from "vitest";
 import {
 	clampPanelWidth,
 	DEFAULT_PANEL_STATE,
-	PANEL_MAX_WIDTH,
 	PANEL_MIN_WIDTH,
 	type PanelStorage,
 	readPanelState,
@@ -61,8 +60,9 @@ describe("readPanelState", () => {
 		expect(readPanelState(legacy).pinned).toBe(true);
 	});
 
-	it("宽度超界收回范围", () => {
-		expect(readPanelState(createStorage({ "facet.panel.width": "9999" })).width).toBe(PANEL_MAX_WIDTH);
+	it("宽度没有上限，只收下限", () => {
+		// 上限由正文的最小宽现算，落盘里留用户拖出来的宽度
+		expect(readPanelState(createStorage({ "facet.panel.width": "9999" })).width).toBe(9999);
 		expect(readPanelState(createStorage({ "facet.panel.width": "10" })).width).toBe(PANEL_MIN_WIDTH);
 		expect(readPanelState(createStorage({ "facet.panel.width": "宽" })).width).toBe(
 			DEFAULT_PANEL_STATE.width,
@@ -87,9 +87,10 @@ describe("writePanelState", () => {
 });
 
 describe("clampPanelWidth", () => {
-	it("取整并收在范围内", () => {
+	it("取整、收下限，不设上限", () => {
 		expect(clampPanelWidth(520.6)).toBe(521);
 		expect(clampPanelWidth(PANEL_MIN_WIDTH - 40)).toBe(PANEL_MIN_WIDTH);
+		expect(clampPanelWidth(4000)).toBe(4000);
 		expect(clampPanelWidth(Number.NaN)).toBe(DEFAULT_PANEL_STATE.width);
 	});
 });

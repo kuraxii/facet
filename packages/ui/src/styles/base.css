@@ -53,7 +53,7 @@
 	/* 输入区富文本的缩进：引用块竖线到正文、列表标记到条目文字，以及行内代码的左右留白 */
 	--composer-quote-inset: 10px;
 	--composer-quote-rule: 2px;
-	--composer-list-indent: 20px;
+	--composer-list-indent: 24px;
 	--composer-inline-code-padding-x: 3px;
 	/* 聚焦时外面那圈光晕：与 `:focus-visible` 的描边同一种强调色 */
 	--focus-ring: 0 0 0 3px color-mix(in srgb, var(--acc) 22%, transparent);

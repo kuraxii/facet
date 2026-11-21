@@ -10,30 +10,43 @@
  * 回退、重试、扩展写入）才会重新导入内容并把光标放到末尾。
  */
 
+import { $isListItemNode } from "@lexical/list";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
+import { EditorRefPlugin } from "@lexical/react/LexicalEditorRefPlugin";
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
 import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
 import { ListPlugin } from "@lexical/react/LexicalListPlugin";
 import { MarkdownShortcutPlugin } from "@lexical/react/LexicalMarkdownShortcutPlugin";
 import { OnChangePlugin } from "@lexical/react/LexicalOnChangePlugin";
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
+import { $isQuoteNode, type QuoteNode } from "@lexical/rich-text";
 import {
 	$createParagraphNode,
 	$createTextNode,
+	$getSelection,
 	$insertNodes,
+	$isLineBreakNode,
+	$isRangeSelection,
+	$isTextNode,
 	COMMAND_PRIORITY_HIGH,
+	COMMAND_PRIORITY_LOW,
 	COMMAND_PRIORITY_NORMAL,
 	type EditorThemeClasses,
+	INSERT_PARAGRAPH_COMMAND,
 	KEY_ARROW_DOWN_COMMAND,
 	KEY_ARROW_UP_COMMAND,
+	KEY_BACKSPACE_COMMAND,
 	KEY_ENTER_COMMAND,
 	KEY_ESCAPE_COMMAND,
 	KEY_TAB_COMMAND,
+	type LexicalEditor,
+	type LexicalNode,
 	mergeRegister,
 	PASTE_COMMAND,
 	type PasteCommandType,
+	type RangeSelection,
 } from "lexical";
 import {
 	type ReactNode,
@@ -105,6 +118,122 @@ export interface ComposerEditorProps {
 	routes: ComposerKeyRoutes;
 	/** 输入域本身。引用之类的动作要把光标放回末尾，所以把它交给调用方。 */
 	ref?: Ref<HTMLElement>;
+	/**
+	 * 编辑器句柄。要往输入区里程序化地写内容、或在编辑器上派发命令时用它；用例也靠它在
+	 * jsdom 里模拟输入（jsdom 没有原生编辑，写不进字符）。
+	 */
+	editorRef?: RefObject<LexicalEditor | null>;
+}
+
+/** 从节点往上找最近的某类祖先（含节点自己）。 */
+function $nearestAncestor<T extends LexicalNode>(
+	node: LexicalNode,
+	matches: (candidate: LexicalNode) => candidate is T,
+): T | null {
+	let current: LexicalNode | null = node;
+	while (current !== null) {
+		if (matches(current)) {
+			return current;
+		}
+		current = current.getParent();
+	}
+	return null;
+}
+
+/** 引用块里光标之前的文字；块内的换行是 `LineBreakNode`，按 `\n` 计。 */
+function $textBeforeCaret(quote: QuoteNode, selection: RangeSelection): string {
+	const anchor = selection.anchor;
+	const node = anchor.getNode();
+	if (node.is(quote)) {
+		// 光标落在引用本身：按子节点下标取它前面的内容
+		return quote
+			.getChildren()
+			.slice(0, anchor.offset)
+			.map((child) => child.getTextContent())
+			.join("");
+	}
+	const head = node
+		.getPreviousSiblings()
+		.map((sibling) => sibling.getTextContent())
+		.join("");
+	return head + ($isTextNode(node) ? node.getTextContent().slice(0, anchor.offset) : "");
+}
+
+/** 引用块里光标之后的文字，用来判断光标是不是停在末尾的空行上。 */
+function $textAfterCaret(quote: QuoteNode, selection: RangeSelection): string {
+	const anchor = selection.anchor;
+	const node = anchor.getNode();
+	if (node.is(quote)) {
+		return quote
+			.getChildren()
+			.slice(anchor.offset)
+			.map((child) => child.getTextContent())
+			.join("");
+	}
+	const rest = $isTextNode(node) ? node.getTextContent().slice(anchor.offset) : "";
+	const tail = node
+		.getNextSiblings()
+		.map((sibling) => sibling.getTextContent())
+		.join("");
+	return rest + tail;
+}
+
+/**
+ * 退出引用：收掉末尾那个空行记号，在引用后面另起一个普通段落。
+ *
+ * 末行那个换行只是「再按一次就出去」的记号，留着它会让引用竖线白白拖出一行。
+ */
+function $exitQuote(quote: QuoteNode): void {
+	const last = quote.getLastChild();
+	if (last !== null && $isLineBreakNode(last)) {
+		last.remove();
+	}
+	const paragraph = $createParagraphNode();
+	quote.insertAfter(paragraph);
+	// 引用里一个字也没留下时整块一并收掉，不留一条空竖线
+	if (quote.getTextContent().trim().length === 0) {
+		quote.remove();
+	}
+	paragraph.selectEnd();
+}
+
+/**
+ * 引用块里按换行键：先续一行接着写，光标已经站在引用末尾那道空行上时退出引用。
+ *
+ * 「末尾那道空行」的判据要看光标两侧：前面紧挨着一个换行、后面一个字都不剩。只看最后
+ * 一个子节点是不是换行不够——光标停在前面某一行时也会命中。
+ */
+function $handleQuoteNewline(quote: QuoteNode, selection: RangeSelection): void {
+	const tailLine = $textBeforeCaret(quote, selection).endsWith("\n");
+	if (tailLine && $textAfterCaret(quote, selection).length === 0) {
+		$exitQuote(quote);
+		return;
+	}
+	selection.insertLineBreak();
+}
+
+/**
+ * 换行键位上落在列表或引用里的块级处理。
+ *
+ * 列表项里应当是「切出新条目」而不是插入一个空行：插入段落那条命令会拆开当前条目，
+ * 在空条目上按则退出列表回到普通段落（`ListPlugin` 与核心各接一段）。
+ * 返回 false 表示这一下交给编辑器默认行为。
+ */
+function $newlineInBlock(editor: LexicalEditor): boolean {
+	const selection = $getSelection();
+	if (!$isRangeSelection(selection) || !selection.isCollapsed()) {
+		return false;
+	}
+	const anchorNode = selection.anchor.getNode();
+	if ($nearestAncestor(anchorNode, $isListItemNode) !== null) {
+		return editor.dispatchCommand(INSERT_PARAGRAPH_COMMAND, undefined);
+	}
+	const quote = $nearestAncestor(anchorNode, $isQuoteNode);
+	if (quote === null) {
+		return false;
+	}
+	$handleQuoteNewline(quote, selection);
+	return true;
 }
 
 /**
@@ -172,17 +301,48 @@ function KeyboardPlugin({ routes }: { routes: ComposerKeyRoutes }): null {
 						return false;
 					}
 					const isSendCombo = current.shiftEnterToSend ? event.shiftKey : !event.shiftKey;
-					if (!isSendCombo) {
-						return false;
+					if (isSendCombo) {
+						// 发送键位即使此刻发不出去也不换行：空白内容不该因为按了回车多出一行
+						event.preventDefault();
+						if (current.canSend) {
+							current.onSend();
+						}
+						return true;
 					}
-					// 发送键位即使此刻发不出去也不换行：空白内容不该因为按了回车多出一行
-					event.preventDefault();
-					if (current.canSend) {
-						current.onSend();
+					// 换行键位落在列表或引用里：按块级结构处理，而不是插一个空行
+					if ($newlineInBlock(editor)) {
+						event.preventDefault();
+						return true;
 					}
-					return true;
+					return false;
 				},
 				COMMAND_PRIORITY_HIGH,
+			),
+			editor.registerCommand<KeyboardEvent>(
+				KEY_BACKSPACE_COMMAND,
+				(event) => {
+					const selection = $getSelection();
+					if (!$isRangeSelection(selection) || !selection.isCollapsed()) {
+						return false;
+					}
+					// 只接「光标在最开头」那一下：块内的普通删除照常交给编辑器
+					if (selection.anchor.offset !== 0) {
+						return false;
+					}
+					const quote = $nearestAncestor(selection.anchor.getNode(), $isQuoteNode);
+					// 空的引用块在开头退格：退化成普通段落。列表项同一步由 `ListPlugin` 做，
+					// 它注册在编辑器队列的最前面，这里不抢。
+					if (quote === null || quote.getTextContent().trim().length > 0) {
+						return false;
+					}
+					event.preventDefault();
+					const paragraph = $createParagraphNode();
+					quote.replace(paragraph);
+					paragraph.selectStart();
+					return true;
+				},
+				// 低优先级：列表自己的退格处理在编辑器队列里，本处理器只管引用
+				COMMAND_PRIORITY_LOW,
 			),
 			editor.registerCommand<KeyboardEvent>(
 				KEY_ARROW_UP_COMMAND,
@@ -294,6 +454,7 @@ export function ComposerEditor({
 	placeholder,
 	routes,
 	ref,
+	editorRef,
 }: ComposerEditorProps): ReactNode {
 	/** 最近一次与外界对齐过的 Markdown；初值取挂载时的内容，首屏不必再导入一次 */
 	const lastEmitted = useRef(value);
@@ -347,6 +508,7 @@ export function ComposerEditor({
 				ErrorBoundary={LexicalErrorBoundary}
 			/>
 			<HistoryPlugin />
+			{/* 列表的拆分、序号递增与空项退出都由它接：少了它，回车只会往条目里插空行 */}
 			<ListPlugin />
 			<MarkdownShortcutPlugin transformers={CHAT_TRANSFORMERS} />
 			<OnChangePlugin
@@ -356,6 +518,7 @@ export function ComposerEditor({
 			<ValueSyncPlugin value={value} lastEmitted={lastEmitted} />
 			<KeyboardPlugin routes={routes} />
 			<PlainPastePlugin />
+			{editorRef === undefined ? null : <EditorRefPlugin editorRef={editorRef} />}
 		</LexicalComposer>
 	);
 }

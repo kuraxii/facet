@@ -115,8 +115,13 @@
 	color: var(--t2);
 }
 
+/*
+ * 列表：标记画在条目外侧，由左内边距腾出位置。输入域自己是 `padding: 0`，
+ * 所以这段留白只能给在这里，而且得留够——两位数的 `10.` 也要完整露出来。
+ */
 .composer-list {
 	padding-left: var(--composer-list-indent);
+	list-style-position: outside;
 }
 
 /* 代码块与行内代码只求可读：等宽字体，行内代码压一档底色 */

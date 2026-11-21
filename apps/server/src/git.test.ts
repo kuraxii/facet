@@ -283,14 +283,21 @@ describe("gitDiff", () => {
 describe("gitCommits", () => {
 	it("解析短哈希、说明、正文、作者与改动规模", () => {
 		const output = [
-			"\u001eaaa\u0000aaa1111\u0000张三\u0000a@example.com\u00002026-01-02T03:04:05+08:00\u0000第二个提交\u0000正文第一段\n\n正文第二段\n\u001f\n\n 2 files changed, 46 insertions(+), 3 deletions(-)\n",
-			"\u001ebbb\u0000bbb2222\u0000李四\u0000b@example.com\u00002026-01-01T00:00:00+08:00\u0000初始提交\u0000\u001f\n\n 1 file changed, 2 insertions(+)\n",
-			"\u001eccc\u0000ccc3333\u0000王五\u0000c@example.com\u00002026-01-01T00:00:00+08:00\u0000合并分支\u0000\u001f\n",
+			"\u001eaaa\u0000aaa1111\u0000a0a0\u0000HEAD -> refs/heads/main, refs/remotes/origin/main, tag: refs/tags/v1\u0000张三\u0000a@example.com\u00002026-01-02T03:04:05+08:00\u0000第二个提交\u0000正文第一段\n\n正文第二段\n\u001f\n\n 2 files changed, 46 insertions(+), 3 deletions(-)\n",
+			"\u001ebbb\u0000bbb2222\u0000aaa\u0000\u0000李四\u0000b@example.com\u00002026-01-01T00:00:00+08:00\u0000初始提交\u0000\u001f\n\n 1 file changed, 2 insertions(+)\n",
+			"\u001eccc\u0000ccc3333\u0000aaa bbb\u0000HEAD\u0000王五\u0000c@example.com\u00002026-01-01T00:00:00+08:00\u0000合并分支\u0000\u001f\n",
 		].join("");
 		expect(parseCommitLog(output)).toEqual([
 			{
 				sha: "aaa",
 				shortSha: "aaa1111",
+				parents: ["a0a0"],
+				refs: [
+					{ name: "HEAD", kind: "head" },
+					{ name: "main", kind: "branch" },
+					{ name: "origin/main", kind: "remote" },
+					{ name: "v1", kind: "tag" },
+				],
 				subject: "第二个提交",
 				body: "正文第一段\n\n正文第二段",
 				authorName: "张三",
@@ -301,6 +308,7 @@ describe("gitCommits", () => {
 			{
 				sha: "bbb",
 				shortSha: "bbb2222",
+				parents: ["aaa"],
 				subject: "初始提交",
 				body: "",
 				authorName: "李四",
@@ -311,6 +319,8 @@ describe("gitCommits", () => {
 			{
 				sha: "ccc",
 				shortSha: "ccc3333",
+				parents: ["aaa", "bbb"],
+				refs: [{ name: "HEAD", kind: "head" }],
 				subject: "合并分支",
 				body: "",
 				authorName: "王五",
@@ -318,6 +328,39 @@ describe("gitCommits", () => {
 				authorDate: "2026-01-01T00:00:00+08:00",
 			},
 		]);
+	});
+
+	it("带出父提交与装饰引用：HEAD、本地分支与 Tag 都能分辨", async () => {
+		const root = await createRepo();
+		git(root, "tag", "v0.1.0");
+		await writeFile(join(root, "tracked.txt"), "第三行\n", "utf8");
+		git(root, "add", "tracked.txt");
+		git(root, "commit", "-m", "第二个提交");
+		const [head, first] = (await gitCommits(root)).commits;
+		expect(head?.parents).toEqual([first?.sha]);
+		expect(head?.refs).toEqual([
+			{ name: "HEAD", kind: "head" },
+			{ name: "main", kind: "branch" },
+		]);
+		expect(first?.refs).toEqual([{ name: "v0.1.0", kind: "tag" }]);
+		// 根提交没有父提交，图谱据此把它画成一条线的起点
+		expect(first?.parents).toEqual([]);
+	});
+
+	it("分页：limit 截断并给 hasMore，skip 跳过最新的几条", async () => {
+		const root = await createRepo();
+		for (const message of ["第二个提交", "第三个提交"]) {
+			await writeFile(join(root, "tracked.txt"), `${message}\n`, "utf8");
+			git(root, "add", "tracked.txt");
+			git(root, "commit", "-m", message);
+		}
+		const page = await gitCommits(root, { limit: 2 });
+		expect(page.commits.map((commit) => commit.subject)).toEqual(["第三个提交", "第二个提交"]);
+		expect(page.hasMore).toBe(true);
+
+		const tail = await gitCommits(root, { limit: 2, skip: 2 });
+		expect(tail.commits.map((commit) => commit.subject)).toEqual(["初始提交"]);
+		expect(tail.hasMore).toBeUndefined();
 	});
 
 	it("从新到旧列出提交，带上作者、正文与改动规模", async () => {

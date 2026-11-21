@@ -15,6 +15,8 @@ import type {
 	GitDiff,
 	GitFileChange,
 	GitFileStatus,
+	GitRef,
+	GitRefKind,
 	GitStatus,
 } from "@facet/protocol";
 
@@ -522,7 +524,10 @@ export async function gitStatus(cwd: string, options: { limit?: number } = {}): 
  * 记录之间用 `0x1e` 分隔，字段用 NUL 分隔；末尾的 `0x1f` 把正文与 git 随后追加的
  * `--shortstat` 统计块分开——统计块由 git 自己输出，排版不固定，只能靠这个标记切开。
  */
-const COMMIT_FORMAT = "%x1e%H%x00%h%x00%an%x00%ae%x00%aI%x00%s%x00%b%x1f";
+const COMMIT_FORMAT = "%x1e%H%x00%h%x00%P%x00%D%x00%an%x00%ae%x00%aI%x00%s%x00%b%x1f";
+
+/** 一次最多交回多少条提交；图谱分页按页取，单页不放开到整段历史。 */
+const MAX_COMMIT_PAGE = 500;
 
 /** `--shortstat` 那一行里的文件数与增删行数；只改一行时后面的小句缺省。 */
 const SHORT_STAT = /(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/;
@@ -541,10 +546,60 @@ function parseShortStat(text: string): GitCommitStats | undefined {
 }
 
 /**
+ * 把 `--decorate=full` 的输出拆成引用清单。
+ *
+ * 全名才好分种类：`refs/heads/...` 是本地分支、`refs/remotes/...` 是远端分支、
+ * `refs/tags/...` 是 Tag，`HEAD` 单独一种。其它命名空间（notes、stash 之类）不展示。
+ */
+export function parseDecorations(raw: string): GitRef[] {
+	const refs: GitRef[] = [];
+	const push = (ref: GitRef | undefined): void => {
+		if (ref !== undefined && !refs.some((item) => item.name === ref.name && item.kind === ref.kind)) {
+			refs.push(ref);
+		}
+	};
+	for (const token of raw.split(", ")) {
+		const text = token.trim();
+		if (text.length === 0) {
+			continue;
+		}
+		if (text === "HEAD") {
+			push({ name: "HEAD", kind: "head" });
+			continue;
+		}
+		const arrow = text.indexOf(" -> ");
+		if (arrow >= 0) {
+			if (text.slice(0, arrow) === "HEAD") {
+				push({ name: "HEAD", kind: "head" });
+			}
+			push(refOfFullName(text.slice(arrow + 4)));
+			continue;
+		}
+		push(refOfFullName(text.startsWith("tag: ") ? text.slice(5) : text));
+	}
+	return refs;
+}
+
+/** 完整引用名到短名字 + 种类；认不出的命名空间返回空。 */
+function refOfFullName(full: string): GitRef | undefined {
+	const table: readonly (readonly [string, GitRefKind])[] = [
+		["refs/heads/", "branch"],
+		["refs/remotes/", "remote"],
+		["refs/tags/", "tag"],
+	];
+	for (const [prefix, kind] of table) {
+		if (full.startsWith(prefix)) {
+			return { name: full.slice(prefix.length), kind };
+		}
+	}
+	return undefined;
+}
+
+/**
  * 解析 `git log` 按 `COMMIT_FORMAT` 输出的记录。
  *
- * 每条记录依次是完整哈希、短哈希、作者名、作者邮箱、作者时间、说明第一行、正文与统计块；
- * 说明里不会出现 NUL 与这两个分隔符，空记录直接跳过。
+ * 每条记录依次是完整哈希、短哈希、父提交、装饰、作者名、作者邮箱、作者时间、说明第一行、
+ * 正文与统计块；说明里不会出现 NUL 与这两个分隔符，空记录直接跳过。
  */
 export function parseCommitLog(output: string): GitCommit[] {
 	const commits: GitCommit[] = [];
@@ -553,10 +608,12 @@ export function parseCommitLog(output: string): GitCommit[] {
 			continue;
 		}
 		const fields = record.split("\u0000");
-		const [sha, shortSha, authorName, authorEmail, authorDate, subject, rest] = fields;
+		const [sha, shortSha, parentsRaw, refsRaw, authorName, authorEmail, authorDate, subject, rest] = fields;
 		if (
 			sha === undefined ||
 			shortSha === undefined ||
+			parentsRaw === undefined ||
+			refsRaw === undefined ||
 			authorName === undefined ||
 			authorEmail === undefined ||
 			authorDate === undefined ||
@@ -569,9 +626,13 @@ export function parseCommitLog(output: string): GitCommit[] {
 		const cut = rest.indexOf("\u001f");
 		const body = (cut < 0 ? rest : rest.slice(0, cut)).replace(/\n+$/, "");
 		const stats = cut < 0 ? undefined : parseShortStat(rest.slice(cut + 1));
+		const parents = parentsRaw.split(" ").filter((parent) => parent.length > 0);
+		const refs = parseDecorations(refsRaw);
 		commits.push({
 			sha,
 			shortSha,
+			parents,
+			...(refs.length === 0 ? {} : { refs }),
 			subject,
 			body,
 			authorName,
@@ -680,13 +741,32 @@ export function remoteWebUrl(remote: string): string | undefined {
 	return `https://${host.toLowerCase()}/${trimmed}`;
 }
 
-/** 当前分支的全部提交，从新到旧；不是仓库时 isRepo 为假。 */
-export async function gitCommits(cwd: string): Promise<GitCommits> {
+/** 分页参数：不给 `limit` 就是整段历史，给 `skip` 表示跳过最新的多少条。 */
+export interface CommitPage {
+	/** 这一次最多要几条 */
+	limit?: number;
+	/** 跳过最新的多少条 */
+	skip?: number;
+}
+
+/** 当前分支的提交，从新到旧；不是仓库时 isRepo 为假。 */
+export async function gitCommits(cwd: string, page: CommitPage = {}): Promise<GitCommits> {
 	if (!(await isGitRepository(cwd))) {
 		return { isRepo: false, commits: [] };
 	}
+	const limit =
+		page.limit === undefined ? undefined : Math.min(Math.max(Math.trunc(page.limit), 1), MAX_COMMIT_PAGE);
+	const skip = page.skip === undefined ? 0 : Math.max(Math.trunc(page.skip), 0);
+	// 多取一条：看到它就说明后面还有，界面据此决定要不要给「加载更多」
+	const args = ["log", `--format=${COMMIT_FORMAT}`, "--decorate=full", "--shortstat"];
+	if (skip > 0) {
+		args.push(`--skip=${skip}`);
+	}
+	if (limit !== undefined) {
+		args.push("-n", String(limit + 1));
+	}
 	const [logResult, remoteResult] = await Promise.all([
-		runGit(["log", `--format=${COMMIT_FORMAT}`, "--shortstat"], {
+		runGit(args, {
 			cwd,
 			timeoutMs: GIT_LOG_TIMEOUT_MS,
 			maxBuffer: MAX_LOG_BYTES,
@@ -697,9 +777,12 @@ export async function gitCommits(cwd: string): Promise<GitCommits> {
 		return { isRepo: true, commits: [] };
 	}
 	const webUrl = remoteResult.code === 0 ? remoteWebUrl(remoteResult.stdout) : undefined;
+	const parsed = parseCommitLog(logResult.stdout);
+	const hasMore = limit !== undefined && parsed.length > limit;
 	return {
 		isRepo: true,
-		commits: parseCommitLog(logResult.stdout),
+		commits: hasMore ? parsed.slice(0, limit) : parsed,
+		...(hasMore ? { hasMore } : {}),
 		...(webUrl === undefined ? {} : { webUrl }),
 	};
 }

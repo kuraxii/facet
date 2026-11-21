@@ -239,7 +239,14 @@ export class GitRefreshService {
 	 *
 	 * 与状态分开排队：它贵得多，冷却也更长，但不该拖住状态刷新。
 	 */
-	async commits(repoRoot: string, options: { force?: boolean } = {}): Promise<GitCommits> {
+	async commits(
+		repoRoot: string,
+		options: { force?: boolean; limit?: number; skip?: number } = {},
+	): Promise<GitCommits> {
+		// 分页请求不进车道：每页内容都不一样，缓存与冷却只会把「加载更多」拖慢
+		if (options.limit !== undefined || options.skip !== undefined) {
+			return await gitCommits(repoRoot, { limit: options.limit, skip: options.skip });
+		}
 		return await this.commitsLane.run(repoRoot, options.force === true);
 	}
 

@@ -91,8 +91,8 @@ interface FrozenRequestParams {
 	gitStatus: { cwd: string; force?: boolean };
 	/** 取单个文件的补丁。untracked 为真时按「从空文件新增」合成补丁。 */
 	gitDiff: { cwd: string; path: string; untracked?: boolean };
-	/** 列出当前分支的全部提交。force 跳过主机侧的冷却窗口。 */
-	gitCommits: { cwd: string; force?: boolean };
+	/** 列出当前分支的提交。force 跳过主机侧的冷却窗口；limit / skip 是非图谱分页。 */
+	gitCommits: { cwd: string; force?: boolean; limit?: number; skip?: number };
 	/** 取一次提交相对第一父提交的改动清单。 */
 	gitCommit: { cwd: string; sha: string };
 	/** 取一次提交里某个文件的补丁。 */

@@ -7,7 +7,7 @@ import { type CustomProviderEntry, fetchUpstreamModels } from "@facet/agent";
 import { type CustomProviderInfo, PROTOCOL_VERSION, type RequestResults } from "@facet/protocol";
 import { buildDiagnostics } from "../../diagnostics.ts";
 import { listDirectory, readTextFile, writeTextFile } from "../../files.ts";
-import { gitCommit, gitCommitDiff, gitDiff } from "../../git.ts";
+
 import { ProjectNotFoundError } from "../../project-store.ts";
 import { revealInFileManager } from "../../reveal.ts";
 import type { RequestHandlerMap } from "../gateway.ts";
@@ -97,10 +97,12 @@ export const systemHandlers: Pick<RequestHandlerMap, SystemMethod> = {
 			force: params.force === true,
 		}),
 
-	gitDiff: async (params): Promise<RequestResults["gitDiff"]> => {
-		const cwd = await resolveProjectDirectory(params.cwd);
-		return await gitDiff(cwd, params.path, params.untracked === true);
-	},
+	gitDiff: async (params, context): Promise<RequestResults["gitDiff"]> =>
+		await context.gitRefresh.diff(
+			await resolveProjectDirectory(params.cwd),
+			params.path,
+			params.untracked === true,
+		),
 
 	gitCommits: async (params, context): Promise<RequestResults["gitCommits"]> =>
 		await context.gitRefresh.commits(await resolveProjectDirectory(params.cwd), {
@@ -109,15 +111,16 @@ export const systemHandlers: Pick<RequestHandlerMap, SystemMethod> = {
 			...(params.skip === undefined ? {} : { skip: params.skip }),
 		}),
 
-	gitCommit: async (params): Promise<RequestResults["gitCommit"]> => {
-		const cwd = await resolveProjectDirectory(params.cwd);
-		return await gitCommit(cwd, params.sha);
-	},
+	gitCommit: async (params, context): Promise<RequestResults["gitCommit"]> =>
+		await context.gitRefresh.commit(await resolveProjectDirectory(params.cwd), params.sha),
 
-	gitCommitDiff: async (params): Promise<RequestResults["gitCommitDiff"]> => {
-		const cwd = await resolveProjectDirectory(params.cwd);
-		return await gitCommitDiff(cwd, params.sha, params.path, params.oldPath);
-	},
+	gitCommitDiff: async (params, context): Promise<RequestResults["gitCommitDiff"]> =>
+		await context.gitRefresh.commitDiff(
+			await resolveProjectDirectory(params.cwd),
+			params.sha,
+			params.path,
+			params.oldPath,
+		),
 
 	listProjects: (_params, context): RequestResults["listProjects"] => ({
 		projects: [...context.projectStore.list()],

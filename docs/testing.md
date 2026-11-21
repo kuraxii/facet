@@ -48,6 +48,9 @@
 
 - **`test` 里会建临时 git 仓库**：用例自己屏蔽全局与系统配置、钉死提交身份，本机没配
   `user.name` 也能跑；反过来，本机的 `commit.gpgsign` 之类也不会影响用例。
+- **git 执行层靠假 runner 断言**：参数与环境、写操作的串行窗口、`index.lock` 退避重试都在
+  `git-exec.test.ts` 里用 `createGitExec({ runner })` 记账，不必真跑 git；真进程那条路只留
+  取消、超时与输出上限三个用例（`git cat-file --batch` 一直等 stdin，进程必然还在）。
 - **`mock:check` 占端口**：冒烟会起假主机，端口被占时会直接失败，先看有没有残留进程。
 - **界面单测跑在 jsdom 里**：`packages/ui/vitest.config.ts` 把默认环境定成 `jsdom`，`vitest.setup.ts` 给 `Range` 补上矩形查询、给 `ResizeObserver` 补一个空实现（jsdom 不做布局，而编辑器恢复选区、补全菜单跟光标时都会去量尺寸）。需要在 Node 环境跑的用例（读仓库文件、WASM 高亮器、只看服务端静态标记的用例）在文件头用 `// @vitest-environment node` 单独切回去；其它包（如 `apps/desktop`）仍默认 Node，要 DOM 的单个用例反过来在文件头写 `// @vitest-environment jsdom`。
 - **CI 与本机的 glibc 不一样**：本机产物只能在本机这类新系统上跑，能给老系统的包从 CI 取

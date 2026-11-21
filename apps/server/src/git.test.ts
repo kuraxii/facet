@@ -470,3 +470,70 @@ describe("gitCommit", () => {
 		await expect(gitCommit(root, "abcdef0")).rejects.toThrow("not a git repository");
 	});
 });
+
+describe("特殊路径与提交说明的解析", () => {
+	it("中文、空格、单引号、箭头与重命名的路径都按原样解析", async () => {
+		const root = await createRepo();
+		await writeFile(join(root, "中文 空格.txt"), "一\n", "utf8");
+		await writeFile(join(root, "it's.txt"), "二\n", "utf8");
+		await writeFile(join(root, "箭头 -> 文件.txt"), "三\n", "utf8");
+		await writeFile(join(root, "原名.txt"), "四\n", "utf8");
+		git(root, "add", ".");
+		git(root, "commit", "-m", "加上这些文件");
+
+		// 一个已跟踪的改动、一个带箭头的改动、一个重命名
+		await writeFile(join(root, "中文 空格.txt"), "一\n改过\n", "utf8");
+		await writeFile(join(root, "箭头 -> 文件.txt"), "三\n改过\n", "utf8");
+		git(root, "mv", "--", "原名.txt", "改名 后.txt");
+
+		const status = await gitStatus(root);
+		expect(status.isRepo).toBe(true);
+		const paths = status.files.map((file) => file.path);
+		expect(paths).toContain("中文 空格.txt");
+		expect(paths).toContain("箭头 -> 文件.txt");
+		const renamed = status.files.find((file) => file.status === "renamed");
+		expect(renamed?.path).toBe("改名 后.txt");
+		expect(renamed?.oldPath).toBe("原名.txt");
+
+		// 单文件补丁按路径取得到，路径原样出现在 diff 头里
+		const patch = await gitDiff(root, "中文 空格.txt");
+		expect(patch.patch).toContain("中文 空格.txt");
+		expect(patch.patch).toContain("+改过");
+		expect(patch.binary).toBe(false);
+
+		// 重命名之后取它相对 HEAD 的补丁：旧路径与新路径都能找到
+		const moved = await gitDiff(root, "改名 后.txt");
+		expect(moved.patch).toContain("改名 后.txt");
+	});
+
+	it("提交说明里的竖线与制表符不会让字段错位", async () => {
+		const root = await createRepo();
+		await writeFile(join(root, "b.txt"), "一\n", "utf8");
+		git(root, "add", ".");
+		git(root, "commit", "-m", "标题|带竖线", "-m", '正文\t里有制表符与"引号"');
+
+		const commits = await gitCommits(root, { limit: 5 });
+		const head = commits.commits[0];
+		expect(head?.subject).toBe("标题|带竖线");
+		expect(head?.body).toContain("制表符");
+		expect(head?.body).toContain('"引号"');
+		// 字段没被顶位：作者与时间照样解析得出来
+		expect(head?.authorName).toBe("facet");
+		expect(head?.authorDate).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+	});
+
+	it("提交里的特殊路径也解析得准", async () => {
+		const root = await createRepo();
+		await writeFile(join(root, "中文 文件.txt"), "一\n", "utf8");
+		git(root, "add", ".");
+		git(root, "commit", "-m", "加一个中文文件");
+
+		const commits = await gitCommits(root, { limit: 1 });
+		const sha = commits.commits[0]?.sha ?? "";
+		const detail = await gitCommit(root, sha);
+		expect(detail.files.map((file) => file.path)).toContain("中文 文件.txt");
+
+		const patch = await gitCommitDiff(root, sha, "中文 文件.txt");
+		expect(patch.patch).toContain("中文 文件.txt");
+	});
+});

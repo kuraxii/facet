@@ -3,8 +3,10 @@
  *
  * 变更侧栏只看 git：工作树相对 HEAD 的差异，已暂存与未暂存合成一份。主机侧执行 git 命令，
  * 远端主机读的是它自己的仓库；非仓库、超时、输出超限都收成明确的结果，不往界面上抛原始报错。
+ *
+ * 所有子进程都走 `git-exec.ts` 那一个出口，这里只管「查什么、怎么解析」；并发与合并由
+ * `git-refresh.ts` 按仓库调度。本文件中段的四个解析器都是纯函数，可以单独断言。
  */
-import { execFile, spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
@@ -19,11 +21,12 @@ import type {
 	GitRefKind,
 	GitStatus,
 } from "@facet/protocol";
+import { gitExec } from "./git-exec.ts";
 
-/** 单次 git 命令的超时，毫秒。 */
+/** 单次查询的超时，毫秒：状态与单文件补丁都是界面同步等待的，超过就得让位。 */
 const GIT_TIMEOUT_MS = 3000;
 
-/** stdout 的上限，超出按失败处理，避免一个巨大 diff 把内存吃满。 */
+/** stdout 的上限，超出抛 `GitOutputLimitError`，避免一个巨大 diff 把内存吃满。 */
 const MAX_BUFFER_BYTES = 8 * 1024 * 1024;
 
 /** 全部提交历史的输出上限，比单次 diff 放宽。 */
@@ -55,7 +58,7 @@ interface GitResult {
 	stdout: string;
 }
 
-/** 运行时的可替换点，测试里不需要替换。 */
+/** 一次查询的可选参数。 */
 export interface GitOptions {
 	/** 工作目录 */
 	cwd: string;
@@ -63,46 +66,24 @@ export interface GitOptions {
 	timeoutMs?: number;
 	/** stdout 上限，缺省用单次 diff 的上限 */
 	maxBuffer?: number;
+	/** 取消信号：同一仓库来了更新的请求时，上层用它把这一条子进程收掉 */
+	signal?: AbortSignal | undefined;
 }
 
-/**
- * 跑一条 git 命令。
- *
- * 不经 shell，参数逐个传入；`GIT_TERMINAL_PROMPT=0` 保证不会卡在要密码的提示上，
- * `GIT_OPTIONAL_LOCKS=0` 避免顺手刷新索引。
- */
-function runGit(args: readonly string[], options: GitOptions): Promise<GitResult> {
-	return new Promise((resolvePromise, reject) => {
-		execFile(
-			"git",
-			["-C", options.cwd, "--no-pager", ...args],
-			{
-				timeout: options.timeoutMs ?? GIT_TIMEOUT_MS,
-				maxBuffer: options.maxBuffer ?? MAX_BUFFER_BYTES,
-				windowsHide: true,
-				env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" },
-			},
-			(error, stdout) => {
-				if (error === null) {
-					resolvePromise({ code: 0, stdout });
-					return;
-				}
-				// git 用退出码 1 表示「有差异」这类正常结果，只有起不来或超时才当失败
-				const code = (error as NodeJS.ErrnoException & { code?: number | string }).code;
-				if (typeof code === "number" && code !== 127) {
-					resolvePromise({ code, stdout });
-					return;
-				}
-				reject(error);
-			},
-		);
+/** 跑一条只读 git 命令；环境、超时与取消都交给适配层。 */
+async function runGit(args: readonly string[], options: GitOptions): Promise<GitResult> {
+	const result = await gitExec.runRead(options.cwd, args, {
+		timeoutMs: options.timeoutMs ?? GIT_TIMEOUT_MS,
+		maxBuffer: options.maxBuffer ?? MAX_BUFFER_BYTES,
+		signal: options.signal,
 	});
+	return { code: result.code, stdout: result.stdout };
 }
 
 /** 项目根是不是 git 仓库。 */
-export async function isGitRepository(cwd: string): Promise<boolean> {
+export async function isGitRepository(cwd: string, signal?: AbortSignal): Promise<boolean> {
 	try {
-		const result = await runGit(["rev-parse", "--is-inside-work-tree"], { cwd });
+		const result = await runGit(["rev-parse", "--is-inside-work-tree"], { cwd, signal });
 		return result.code === 0 && result.stdout.trim() === "true";
 	} catch {
 		return false;
@@ -377,48 +358,17 @@ interface StatusProbe extends Pick<GitStatus, "branch" | "upstream"> {
  * 拿到的 `aborted` 就是那一刻的状态。输出多的场景（`git status` 在大仓里）只能这么做：
  * 等全量 buffer 再截断的话，进程仍然要把整棵树走完。
  */
-function runGitStreaming(
+async function runGitStreaming(
 	args: readonly string[],
-	options: { cwd: string; timeoutMs?: number },
+	options: { cwd: string; timeoutMs?: number; signal?: AbortSignal | undefined },
 	onChunk: (chunk: string) => boolean,
 ): Promise<{ code: number | null; stderr: string; aborted: boolean }> {
-	return new Promise((resolvePromise) => {
-		const child = spawn("git", ["-C", options.cwd, "--no-pager", ...args], {
-			env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" },
-			windowsHide: true,
-		});
-		let stderr = "";
-		let aborted = false;
-		const timer = setTimeout(() => {
-			aborted = true;
-			child.kill();
-		}, options.timeoutMs ?? GIT_TIMEOUT_MS);
-		child.stdout.setEncoding("utf8");
-		child.stdout.on("data", (chunk: string) => {
-			if (aborted) {
-				return;
-			}
-			if (onChunk(chunk)) {
-				// 到上限了：进程不必再往下走，但照样等它收尾再交差
-				aborted = true;
-				child.kill();
-			}
-		});
-		child.stderr.setEncoding("utf8");
-		child.stderr.on("data", (chunk: string) => {
-			// 只留尾部：出错时给界面的是最后那句话，不必攒整个 stderr
-			stderr = (stderr + chunk).slice(-4096);
-		});
-		const settle = (code: number | null): void => {
-			clearTimeout(timer);
-			resolvePromise({ code, stderr, aborted });
-		};
-		child.on("error", (error: unknown) => {
-			stderr = stderr.length > 0 ? stderr : String(error);
-			settle(null);
-		});
-		child.on("close", (code) => settle(code));
+	const result = await gitExec.runReadStreaming(options.cwd, args, {
+		timeoutMs: options.timeoutMs ?? GIT_TIMEOUT_MS,
+		signal: options.signal,
+		onStdout: onChunk,
 	});
+	return { code: result.code, stderr: result.stderr, aborted: result.stopped !== null };
 }
 
 /**
@@ -438,11 +388,11 @@ function isNotRepository(stderr: string): boolean {
  * 头同样是 NUL 结尾，所以分支信息与文件条目一次读完，不必再单跑一条带 `-b` 的命令。
  * 到上限就 kill，并把已经解析出来的交回去。
  */
-async function probeStatus(cwd: string, limit: number): Promise<StatusProbe> {
+async function probeStatus(cwd: string, limit: number, signal?: AbortSignal): Promise<StatusProbe> {
 	const parser = new StatusParser(limit);
 	const result = await runGitStreaming(
 		["status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all"],
-		{ cwd },
+		{ cwd, signal },
 		(chunk) => parser.push(chunk),
 	);
 	if (result.aborted && !parser.isFull) {
@@ -473,8 +423,11 @@ async function probeStatus(cwd: string, limit: number): Promise<StatusProbe> {
  * 改动条数超过上限时就在那里停下：不再跑 numstat，也不逐个读未跟踪文件的行数，只把前一批
  * 交给界面并标 `truncated`——那种仓库每次刷新都是纯浪费，界面会据此停掉自动刷新。
  */
-export async function gitStatus(cwd: string, options: { limit?: number } = {}): Promise<GitStatus> {
-	const probe = await probeStatus(cwd, options.limit ?? STATUS_LIMIT);
+export async function gitStatus(
+	cwd: string,
+	options: { limit?: number; signal?: AbortSignal } = {},
+): Promise<GitStatus> {
+	const probe = await probeStatus(cwd, options.limit ?? STATUS_LIMIT, options.signal);
 	if (!probe.isRepo) {
 		return { isRepo: false, files: [] };
 	}
@@ -497,7 +450,7 @@ export async function gitStatus(cwd: string, options: { limit?: number } = {}): 
 			truncated: true,
 		};
 	}
-	const numstat = await runGit(["diff", "--numstat", "-z", "HEAD", "--"], { cwd });
+	const numstat = await runGit(["diff", "--numstat", "-z", "HEAD", "--"], { cwd, signal: options.signal });
 	const counts = parseNumstat(numstat.code === 0 ? numstat.stdout : "");
 	const files: GitFileChange[] = [];
 	for (const record of probe.records) {
@@ -747,11 +700,13 @@ export interface CommitPage {
 	limit?: number;
 	/** 跳过最新的多少条 */
 	skip?: number;
+	/** 取消信号：同源列表来了新的刷新时，上层用它把这一条子进程收掉 */
+	signal?: AbortSignal;
 }
 
 /** 当前分支的提交，从新到旧；不是仓库时 isRepo 为假。 */
 export async function gitCommits(cwd: string, page: CommitPage = {}): Promise<GitCommits> {
-	if (!(await isGitRepository(cwd))) {
+	if (!(await isGitRepository(cwd, page.signal))) {
 		return { isRepo: false, commits: [] };
 	}
 	const limit =
@@ -766,12 +721,14 @@ export async function gitCommits(cwd: string, page: CommitPage = {}): Promise<Gi
 		args.push("-n", String(limit + 1));
 	}
 	const [logResult, remoteResult] = await Promise.all([
+		// 这两个覆盖不能丢：适配层默认 15s / 8MB，大仓整段历史会被判超时或超上限
 		runGit(args, {
 			cwd,
 			timeoutMs: GIT_LOG_TIMEOUT_MS,
 			maxBuffer: MAX_LOG_BYTES,
+			signal: page.signal,
 		}),
-		runGit(["config", "--get", "remote.origin.url"], { cwd }),
+		runGit(["config", "--get", "remote.origin.url"], { cwd, signal: page.signal }),
 	]);
 	if (logResult.code !== 0) {
 		return { isRepo: true, commits: [] };
@@ -796,20 +753,20 @@ function requireCommitSha(sha: string): string {
 }
 
 /** 取一次提交相对第一父提交的改动；根提交按空树比较。 */
-export async function gitCommit(cwd: string, sha: string): Promise<GitCommitDetail> {
+export async function gitCommit(cwd: string, sha: string, signal?: AbortSignal): Promise<GitCommitDetail> {
 	const safeSha = requireCommitSha(sha);
-	if (!(await isGitRepository(cwd))) {
+	if (!(await isGitRepository(cwd, signal))) {
 		throw new Error("not a git repository");
 	}
 	const [metaResult, statusResult, numstatResult] = await Promise.all([
-		runGit(["show", "-s", "--shortstat", `--format=${COMMIT_FORMAT}`, safeSha], { cwd }),
+		runGit(["show", "-s", "--shortstat", `--format=${COMMIT_FORMAT}`, safeSha], { cwd, signal }),
 		runGit(
 			["diff-tree", "--no-commit-id", "--name-status", "-r", "--root", "--first-parent", "-M", "-z", safeSha],
-			{ cwd },
+			{ cwd, signal },
 		),
 		runGit(
 			["diff-tree", "--no-commit-id", "--numstat", "-r", "--root", "--first-parent", "-M", "-z", safeSha],
-			{ cwd },
+			{ cwd, signal },
 		),
 	]);
 	const commit = parseCommitLog(metaResult.stdout)[0];
@@ -838,15 +795,16 @@ export async function gitCommitDiff(
 	sha: string,
 	path: string,
 	oldPath?: string,
+	signal?: AbortSignal,
 ): Promise<GitDiff> {
 	const safeSha = requireCommitSha(sha);
-	if (!(await isGitRepository(cwd))) {
+	if (!(await isGitRepository(cwd, signal))) {
 		return { patch: "", truncated: false, binary: false };
 	}
 	const paths = oldPath === undefined ? [path] : [path, oldPath];
 	const result = await runGit(
 		["diff-tree", "--no-commit-id", "--root", "--first-parent", "-p", "-M", safeSha, "--", ...paths],
-		{ cwd },
+		{ cwd, signal },
 	);
 	if (result.code !== 0 && result.stdout.length === 0) {
 		return { patch: "", truncated: false, binary: false };
@@ -892,14 +850,19 @@ async function untrackedPatch(cwd: string, path: string): Promise<GitDiff> {
  * 已跟踪的文件用 `git diff HEAD`，一次覆盖暂存与未暂存；未跟踪的文件由主机按「从空文件新增」
  * 合成补丁，不走 `--no-index`（那个在 Windows 上没有 /dev/null）。截断只按字节数判断。
  */
-export async function gitDiff(cwd: string, path: string, untracked = false): Promise<GitDiff> {
-	if (!(await isGitRepository(cwd))) {
+export async function gitDiff(
+	cwd: string,
+	path: string,
+	untracked = false,
+	signal?: AbortSignal,
+): Promise<GitDiff> {
+	if (!(await isGitRepository(cwd, signal))) {
 		return { patch: "", truncated: false, binary: false };
 	}
 	if (untracked) {
 		return await untrackedPatch(cwd, path);
 	}
-	const result = await runGit(["diff", "HEAD", "--", path], { cwd });
+	const result = await runGit(["diff", "HEAD", "--", path], { cwd, signal });
 	if (result.code !== 0 && result.stdout.length === 0) {
 		return { patch: "", truncated: false, binary: false };
 	}

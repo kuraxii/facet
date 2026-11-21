@@ -10,7 +10,7 @@
 export interface PaneWidthBounds {
 	/** 最小允许宽度（px） */
 	readonly min: number;
-	/** 最大允许宽度（px） */
+	/** 最大允许宽度（px）；`Number.POSITIVE_INFINITY` 表示没有固定上限 */
 	readonly max: number;
 	/** 非法或缺失输入时的回落默认宽度（px） */
 	readonly defaultWidth: number;

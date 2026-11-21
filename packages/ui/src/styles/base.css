@@ -192,10 +192,12 @@
 	--workspace-term-padding-y: 6px;
 	--workspace-term-padding-x: 8px;
 	/*
-	 * 三栏宽度分两层。`--sidebar-width` / `--panel-width` 是偏好宽：用户拖动决定、跟本地存储走，
-	 * 由界面按当前状态写在 `.app` 上；`--col-sidebar` / `--col-panel` 是实占宽：当前布局里这一列真正
-	 * 占的空间，由样式表从偏好宽派生，折叠态与窄档抽屉态为 0（见 `chrome.css` 的 `.app`）。
-	 * 列轨道与顶带格子都只读实占宽。
+	 * 列宽分两层。
+	 *
+	 * `--sidebar-width` / `--panel-width` 是界面写在 `.app` 上的宽度：左栏就是偏好宽；右栏
+	 * 没有固定上限，写下来之前先与「给正文留够地方」取小，所以它已经是实占宽。
+	 * `--col-sidebar` / `--col-panel` 是当前布局里这一列真正占的空间，由样式表从上一行派生，
+	 * 折叠态与窄档抽屉态为 0（见 `chrome.css` 的 `.app`）。列轨道与顶带格子都只读这一层。
 	 */
 	--sidebar-width: 272px;
 	--panel-width: 0px;

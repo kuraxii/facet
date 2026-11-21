@@ -157,33 +157,49 @@ export function resolveLayout(input: LayoutInput): LayoutResolution {
 	};
 }
 
-/** 拖动上限的输入。 */
-export interface DragMaxInput {
-	/** 当前档位；只有中档钳制 */
-	readonly tier: LayoutTier;
+/** 「给正文留够地方」这个约束的输入。 */
+export interface PaneBudgetInput {
 	/** 判定用的视口宽（CSS px） */
 	readonly viewportWidth: number;
 	/** 另一栏此刻占的宽度；它被折起或收起时传 0 */
 	readonly otherWidth: number;
 	/** 这一栏自己的下限，保证返回的宽度不会被钳到下限以下 */
 	readonly min: number;
-	/** 这一栏自己的上限 */
-	readonly max: number;
 }
 
 /**
- * 中档拖动的实时上限。
+ * 一栏此刻最多能占多宽。
  *
- * 预算里先扣掉正文最小宽与另一栏的宽度，剩下的才是这一栏能拖到的最大宽度；松手时因此
- * 不会立刻触发折叠，也就不会出现「拖完就被折起」的观感。宽档按意图平铺、窄档不渲染分隔条，
- * 两者都原样返回 `max`。
+ * 右栏与左栏都没有固定的宽度上限：上限就是「视口宽扣掉正文最小可用宽与另一栏之后剩下
+ * 的部分」。窗口越宽它越宽，窗口一缩它跟着收——正文因此永远不小于 `--main-min`，不需要
+ * 给右栏再钉一个像素数（口径见 `docs/layout.md` §3 约束 2）。
+ *
+ * 预算不足时返回下限：宁可让正文窄一点，也不把这一栏钳到它自己的下限以下。
  */
-export function clampDragMax(input: DragMaxInput): number {
-	if (input.tier !== "mid") {
-		return input.max;
-	}
+export function paneMaxWidth(input: PaneBudgetInput): number {
 	const budget = Math.floor(
 		usableViewport(input.viewportWidth) - MAIN_MIN_WIDTH - usableWidth(input.otherWidth),
 	);
-	return Math.max(input.min, Math.min(input.max, budget));
+	return Math.max(input.min, budget);
+}
+
+/** 拖动上限的输入。 */
+export interface DragMaxInput extends PaneBudgetInput {
+	/**
+	 * 这一栏自己的固定上限；不给就是不设上限。
+	 *
+	 * 左栏有（`SIDEBAR_MAX_WIDTH`），右栏没有——它的上限完全由 {@link paneMaxWidth} 现算。
+	 */
+	readonly max?: number;
+}
+
+/**
+ * 分隔条拖动的实时上限。
+ *
+ * 三档一体：扣掉正文最小宽与另一栏之后剩下的宽度就是能拖到的最大值。拖动过程中只钳上限、
+ * 不触发折叠，松手提交的宽度一定是折完还放得下的宽度（`docs/layout.md` §5.2）。
+ */
+export function clampDragMax(input: DragMaxInput): number {
+	const ceiling = input.max ?? Number.POSITIVE_INFINITY;
+	return Math.min(ceiling, paneMaxWidth(input));
 }

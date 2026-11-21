@@ -8,7 +8,7 @@
 import type { ReactNode } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { PaneResizer } from "./pane-resizer.tsx";
-import { PANEL_MAX_WIDTH, PANEL_MIN_WIDTH } from "./panel-state.ts";
+import { PANEL_MIN_WIDTH } from "./panel-state.ts";
 
 /** 右栏的两种落脚方式。 */
 export type RightPanelVariant = "tiled" | "drawer";
@@ -18,8 +18,13 @@ export interface RightPanelProps {
 	width?: number | undefined;
 	/** 拖动分隔条时给出新宽度 */
 	onWidthChange?: ((width: number) => void) | undefined;
-	/** 分隔条此刻能拖到的最大宽度；不给用 `PANEL_MAX_WIDTH`。中档按空间预算给出 */
-	maxWidth?: number | undefined;
+	/**
+	 * 分隔条此刻能拖到的最大宽度。
+	 *
+	 * 右栏没有固定的宽度上限，这个值由调用方按「视口宽 − 正文最小可用宽 − 左栏」现算
+	 * （`paneMaxWidth()`）；这一层不自己拍一个数字。
+	 */
+	maxWidth: number;
 	/** 拖动开始与结束的提示，外壳用它在拖动期间锁住折叠 */
 	onDraggingChange?: ((dragging: boolean) => void) | undefined;
 	/**
@@ -61,7 +66,7 @@ export function RightPanel({
 					label={t("panel.resizePanel")}
 					width={width}
 					min={PANEL_MIN_WIDTH}
-					max={maxWidth ?? PANEL_MAX_WIDTH}
+					max={maxWidth}
 					cssVar="--panel-width"
 					side="start"
 					onWidthChange={onWidthChange}

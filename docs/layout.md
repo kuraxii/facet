@@ -84,7 +84,7 @@
 
 - **文件视图的文件树（只在 `files` 视图）**：编辑器与文件树是**同一个 flex 行里的两栏**——编辑器 `flex: 1 1 0; min-width: 0`，文件树 `flex: 0 0 auto`，互不覆盖。底色与文件内容相同（`--bg`）、无投影，只有左缘一条 `1px` 线。
   - 每层都写 `min-width: 0`（`.panel-body` → `.workspace-files` → 编辑器外壳 → `.code-surface`）：不给 0 时 flex 子项的自动最小宽度会被长代码行顶成内容宽，一路把容器撑破。
-  - 宽度三层：样式 `clamp(180px, var(--file-tree-width, 240px), min(420px, calc(100% - 120px)))` 兜底；界面按本地存储写的偏好宽（`facet.files.treeWidth`，`file-tree-state.ts`）；拖动时的实时上限 `fileTreeMaxWidth()`（`min(420, max(180, 容器宽 − 120))`，`120` 是 `EDITOR_KEEP_WIDTH`）。右栏拖到下限 `300` 时树让到 `180`、编辑器还剩 `120`。
+  - 宽度三层：样式 `clamp(var(--file-tree-min), var(--file-tree-width, var(--file-tree-default)), min(var(--file-tree-max), calc(100% - var(--editor-keep-width))))` 兜底；界面按本地存储写的偏好宽（`facet.files.treeWidth`，`file-tree-state.ts`）；拖动时的实时上限 `fileTreeMaxWidth()`（`min(420, max(180, 容器宽 − 120))`，`120` 是 `EDITOR_KEEP_WIDTH`）。四个数都在 `:root` 与 `layout-contract.ts` 里各有一份并逐条对齐。右栏拖到下限 `300` 时树让到 `180`、编辑器还剩 `120`。
   - 偏好宽写在根节点的 `--file-tree-width` 上；拖动期间分隔条把同一个变量写在 `.app` 上（更近的祖先赢），松手才落盘，拖动不经过 React 渲染。
   - 左缘一条透明命中区（`.file-tree-resizer`）加宽 / 收窄；收起时整栏 `display: none`（`is-hidden`），编辑器吃满整行，树的展开状态与滚动位置都留着。
   - 树的滚动容器带 `.scroll-y`（与变更索引栏、正文滚动区同一套细滚动条与沟槽口径），不另写一套 `overflow` 规则。
@@ -150,6 +150,8 @@
 - 非窄档不再有贴右缘的悬浮竖轨：三件工具的入口统一在顶带右格的 `+` 菜单里。
 
 **数值口径**：
+
+样式与脚本共用的那几个数只在 `packages/ui/src/layout/layout-contract.ts` 里写一次（`LAYOUT_PX` 与 `SHELL_DATA_ATTRS`）：左栏 / 右栏 / 文件树 / 索引栏的上下限与缺省、正文最小可用宽、两个档位断点、单栏两栏折点、顶栏标签的两个折点、窗口按钮簇，以及 `.app` 上的两个拖拽折叠属性名。各领域模块（`sidebar-state.ts`、`panel-state.ts`、`file-tree-state.ts`、`workspace-list-state.ts`、`workspace-split.tsx`、`resolve-layout.ts`）的导出常量都指向它，`index.ts` 一并转发 `LAYOUT_PX` / `SHELL_DATA_ATTRS`。容器查询与属性选择器里不能写变量，样式表那边仍是字面量，所以 `layout-contract.test.ts` 反过来读 `panel.css` / `base.css` / `chrome.css` 的源码逐条比对：三个容器折点、`--main-min`、文件树与索引栏那两组 `:root` 变量、窗口按钮簇的派生式、两个 `data-*-drag-collapsed` 选择器——任何一边单独改都会红。
 
 | 变量 | 值 | 含义 |
 | :--- | :--- | :--- |

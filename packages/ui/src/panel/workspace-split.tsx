@@ -21,6 +21,7 @@
 
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { LAYOUT_PX } from "../layout/layout-contract.ts";
 import { PaneResizer } from "./pane-resizer.tsx";
 import { WORKSPACE_LIST_MIN_WIDTH, workspaceListMaxWidth } from "./workspace-list-state.ts";
 
@@ -51,7 +52,7 @@ export interface WorkspaceSplitProps {
  * 与 `panel.css` 里 `@container (width >= 680px)` 是同一个数：容器查询里不能写变量，改一处
  * 要改两处。680 是「预览还能放下一屏代码、索引还能放下一列文件名」的宽度。
  */
-export const WORKSPACE_SPLIT_WIDE_WIDTH_PX = 680;
+export const WORKSPACE_SPLIT_WIDE_WIDTH_PX = LAYOUT_PX.workspaceSplitWideWidth;
 
 export function WorkspaceSplit({
 	detail,

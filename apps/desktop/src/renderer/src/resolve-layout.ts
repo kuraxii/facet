@@ -12,8 +12,10 @@
  * （`docs/layout.md` §5.1、§5.2）。空间不够时折起一栏，另一栏保持它的偏好宽。
  */
 
+import { LAYOUT_PX } from "@facet/ui";
+
 /** 窄档阈值（CSS px）：小于它是窄档，两栏都进抽屉。 */
-export const LAYOUT_BREAKPOINT_PX = 880;
+export const LAYOUT_BREAKPOINT_PX = LAYOUT_PX.breakpoint.narrow;
 
 /**
  * 宽档阈值（CSS px）：大于等于它是宽档，三栏按意图平铺，不做预算判断。
@@ -22,15 +24,15 @@ export const LAYOUT_BREAKPOINT_PX = 880;
  * 取整到 1120 留一点余量。宽档即使被两栏一起拉满也挤不坏正文——右栏的实占宽另有
  * `paneMaxWidth()` 收着（见约束 2）。
  */
-export const LAYOUT_WIDE_BREAKPOINT_PX = 1120;
+export const LAYOUT_WIDE_BREAKPOINT_PX = LAYOUT_PX.breakpoint.wide;
 
 /**
  * 正文最小可用宽（CSS px）。
  *
- * 与 `base.css` 的 `--main-min` 同一个数：样式表里那份是这个值的渲染兜底，改一处要改两处
- * （`docs/layout.md` §2「数值口径」）。
+ * 与 `base.css` 的 `--main-min` 同一个数：样式表那份是这个值的渲染兜底，真值在
+ * `layout-contract.ts`（`docs/layout.md` §2「数值口径」）。
  */
-export const MAIN_MIN_WIDTH = 420;
+export const MAIN_MIN_WIDTH = LAYOUT_PX.mainMinWidth;
 
 /** 档位。 */
 export type LayoutTier = "narrow" | "mid" | "wide";

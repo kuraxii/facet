@@ -21,6 +21,7 @@ import {
 	useState,
 } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { LAYOUT_PX } from "../layout/layout-contract.ts";
 import { useHoverTip } from "../tip.tsx";
 import type { RightPanelTab } from "./panel-state.ts";
 
@@ -75,7 +76,7 @@ export interface WorkspaceTabBarProps {
  * 中文 343、英文 403，加上固定项后分别是 579 与 639 的容器宽；取英文那一侧再留一点余量，
  * 进撞车之前就已经退化成纯图标。缺省 420 的右栏因此只显示图标，`⤢` 展开之后才出文字。
  */
-export const WORKSPACE_TAB_LABEL_BREAKPOINT_PX = 640;
+export const WORKSPACE_TAB_LABEL_BREAKPOINT_PX = LAYOUT_PX.workspaceTabBar.labelBreakpoint;
 
 /**
  * 最近的查询容器。

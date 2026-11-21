@@ -6,6 +6,7 @@
  * `clampPaneWidth`。
  */
 
+import { LAYOUT_PX } from "../layout/layout-contract.ts";
 import { clampPaneWidth, type PaneWidthBounds } from "./pane-width.ts";
 
 /**
@@ -42,8 +43,8 @@ export interface RightPanelState {
  * 下限与缺省比三栏时期更窄：单栏钻取（`< 680px`）把索引与预览叠成一层，`420px` 也能读得
  * 下去，缺省因此取 `420`。
  */
-export const PANEL_DEFAULT_WIDTH = 420;
-export const PANEL_MIN_WIDTH = 300;
+export const PANEL_DEFAULT_WIDTH = LAYOUT_PX.panel.defaultWidth;
+export const PANEL_MIN_WIDTH = LAYOUT_PX.panel.minWidth;
 
 /** 右栏宽度的边界与回落值：读盘、落盘与拖动共用这一份。上限交给正文的宽度约束。 */
 export const PANEL_WIDTH_BOUNDS: PaneWidthBounds = {

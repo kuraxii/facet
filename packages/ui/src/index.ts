@@ -15,7 +15,6 @@ export { CreateProjectDialog } from "./chat/CreateProjectDialog.tsx";
 export type { OutlinePrompt } from "./chat/chat-outline.ts";
 export { outlinePrompts } from "./chat/chat-outline.ts";
 export {
-	commandQuery,
 	filterCommands,
 	isFacetCommand,
 	parseCommand,

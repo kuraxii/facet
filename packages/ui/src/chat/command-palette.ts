@@ -14,23 +14,6 @@ export const SOURCE_LABEL_KEYS = {
 	skill: "commands.skill",
 } as const satisfies Record<SlashCommand["source"], string>;
 
-/**
- * 输入框里正在输入的命令前缀。
- *
- * 只在开头且还没有空格时给值：`/comp` 是加命令，`/compact 现在` 已经在填参数，`关掉 /x`
- * 是正文里的斜杠，都不该弹列表。
- */
-export function commandQuery(text: string): string | undefined {
-	if (!text.startsWith("/")) {
-		return undefined;
-	}
-	const rest = text.slice(1);
-	if (rest.includes(" ") || rest.includes("\n")) {
-		return undefined;
-	}
-	return rest;
-}
-
 /** 把一条输入拆成命令名与参数；开头不是命令时返回 undefined。 */
 export function parseCommand(text: string): { name: string; args: string } | undefined {
 	const trimmed = text.trim();

@@ -9,14 +9,12 @@
 import type { ChatActivity } from "@facet/client-core";
 import type { ContextUsage, ModelInfo, SlashCommand, ThinkingLevel } from "@facet/protocol";
 import { Brain, FileUp, ImagePlus, Plus, X } from "lucide-react";
-import { type Ref, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type Ref, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { useHoverTip } from "../tip.tsx";
 import { ChevronIcon } from "../transcript/chevron.tsx";
 import { SendIcon, StopIcon } from "../transcript/icons.tsx";
 import { ContextRing, usageDetailText, usageLabel, usagePercentText } from "./ContextRing.tsx";
-import { commandQuery, filterCommands, isFacetCommand, SOURCE_LABEL_KEYS } from "./command-palette.ts";
-import { OptionList } from "./OptionList.tsx";
 import { ComposerEditor, type ComposerHandle } from "./rich-editor/ComposerEditor.tsx";
 
 /** 输入区里一张待发的图片。 */
@@ -191,41 +189,12 @@ export function Composer({
 	const [openMenu, setOpenMenu] = useState<"model" | "level" | "attach" | "context" | undefined>(undefined);
 	/** 有文件悬在输入区上方，界面据此给出可投放的样子 */
 	const [isDropping, setIsDropping] = useState(false);
-	/** 输入区外框：`@` 补全菜单挂在它下面，和 `/` 命令面板贴在同一处 */
+	/** 输入区外框：`@` 与 `/` 两处补全菜单都挂在它下面 */
 	const boxRef = useRef<HTMLDivElement>(null);
 	const modelRef = useDismiss(openMenu === "model", () => setOpenMenu(undefined));
 	const attachRef = useDismiss(openMenu === "attach", () => setOpenMenu(undefined));
 	const levelRef = useDismiss(openMenu === "level", () => setOpenMenu(undefined));
 	const contextRef = useDismiss(openMenu === "context", () => setOpenMenu(undefined));
-	/** 命令列表里高亮的那一条 */
-	const [commandIndex, setCommandIndex] = useState(0);
-	/** 用户按 Esc 关掉列表之后，输入内容没变就不再弹出来 */
-	const [isCommandClosed, setCommandClosed] = useState(false);
-
-	/** 现在要列出的候选：只在开头打命令且还没写参数时出现 */
-	const query = commandQuery(value);
-	const matches = useMemo(
-		() => (query === undefined || isCommandClosed ? [] : filterCommands(commands ?? [], query)),
-		[commands, isCommandClosed, query],
-	);
-	const isPaletteOpen = matches.length > 0;
-	const highlighted = matches[Math.min(commandIndex, matches.length - 1)];
-
-	/** 选中一条候选：界面自己处理的直接执行，交给 pi 的填进输入框等用户补参数。 */
-	const pickCommand = useCallback(
-		(command: SlashCommand): void => {
-			if (isFacetCommand(command)) {
-				onRunCommand?.(command, "");
-				onChange("");
-			} else {
-				onChange(`/${command.name} `);
-			}
-			setCommandClosed(true);
-			setCommandIndex(0);
-		},
-		[onChange, onRunCommand],
-	);
-
 	// 没有给出可选模型时退化成只展示的芯片
 	const canPickModel = models !== undefined && onModelChange !== undefined;
 	const levels =
@@ -311,6 +280,8 @@ export function Composer({
 			<ComposerEditor
 				handleRef={ref}
 				mentionFiles={mentionFiles}
+				commands={commands}
+				onRunCommand={onRunCommand}
 				menuContainerRef={boxRef}
 				value={value}
 				placeholder={
@@ -320,48 +291,9 @@ export function Composer({
 							? t("composer.sendPlaceholder")
 							: t("composer.shiftEnterPlaceholder")
 				}
-				onChange={(next) => {
-					onChange(next);
-					setCommandClosed(false);
-					setCommandIndex(0);
-				}}
-				routes={{
-					isPaletteOpen,
-					onPaletteMove: (step) =>
-						setCommandIndex((current) => (current + step + matches.length) % matches.length),
-					onPalettePick: () => {
-						if (highlighted !== undefined) {
-							pickCommand(highlighted);
-						}
-					},
-					onPaletteClose: () => setCommandClosed(true),
-					canSend,
-					shiftEnterToSend,
-					onSend,
-				}}
+				onChange={onChange}
+				routes={{ canSend, shiftEnterToSend, onSend }}
 			/>
-			{isPaletteOpen ? (
-				<OptionList
-					items={matches}
-					keyOf={(command) => `${command.source}:${command.name}`}
-					activeIndex={Math.min(commandIndex, matches.length - 1)}
-					label={t("composer.commandList")}
-					onHighlight={setCommandIndex}
-					onPick={(command) => pickCommand(command)}
-					// 行上先挂悬浮提示（命令来源），列表自己的指针与点击处理在它之后覆盖
-					rowProps={(command) => tip.handlers(command.origin)}
-					renderRow={(command) => (
-						<>
-							<span className="cmd-name">/{command.name}</span>
-							{command.argumentHint === undefined ? null : (
-								<span className="cmd-hint">{command.argumentHint}</span>
-							)}
-							<span className="cmd-desc">{command.description ?? ""}</span>
-							<span className="cmd-source">{t(SOURCE_LABEL_KEYS[command.source])}</span>
-						</>
-					)}
-				/>
-			) : null}
 			<div className="composer-row">
 				<div className="chip-wrap" ref={attachRef}>
 					<button

@@ -3,7 +3,7 @@
  */
 import type { SlashCommand } from "@facet/protocol";
 import { describe, expect, it } from "vitest";
-import { commandQuery, filterCommands, isFacetCommand, parseCommand } from "./command-palette.ts";
+import { filterCommands, isFacetCommand, parseCommand } from "./command-palette.ts";
 
 const MODEL: SlashCommand = { name: "model", description: "切换模型", source: "builtin", handler: "facet" };
 const COMPACT: SlashCommand = {
@@ -22,15 +22,7 @@ const SKILL: SlashCommand = { name: "skill:deploy", description: "发布流程",
 const PREVIEW: SlashCommand = { name: "preview", description: "预览改动", source: "prompt", handler: "pi" };
 const COMMANDS = [MODEL, COMPACT, REVIEW, SKILL, PREVIEW];
 
-describe("命令前缀", () => {
-	it("斜杠开头且还没空格时才算在打命令", () => {
-		expect(commandQuery("/comp")).toBe("comp");
-		expect(commandQuery("/")).toBe("");
-		expect(commandQuery("/compact 现在压缩")).toBeUndefined();
-		expect(commandQuery("看一下 /model")).toBeUndefined();
-		expect(commandQuery("")).toBeUndefined();
-	});
-
+describe("命令的解析与过滤", () => {
 	it("拆出命令名与参数", () => {
 		expect(parseCommand("/model openai/gpt-5")).toEqual({ name: "model", args: "openai/gpt-5" });
 		expect(parseCommand("/compact")).toEqual({ name: "compact", args: "" });

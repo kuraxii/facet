@@ -148,17 +148,27 @@
 }
 
 /*
- * `@文件` 胶囊：一个原子 token，整块选中、整块删除。
- * 底色压一档、文字用强调色，悬停由 `title` 给完整路径；里面不许断行。
+ * 两枚胶囊共用的几何：一个原子 token，整块选中、整块删除，里面不许断行。
+ * `@文件` 与 `/命令` 只在底色上分开——都是「草稿里的一枚整体」，尺寸不该有第二套。
  */
-.composer-mention {
+.composer-mention,
+.composer-command {
 	padding: 0 var(--composer-inline-code-padding-x);
 	border-radius: 4px;
-	background: var(--card2);
 	color: var(--acc);
 	font-size: calc(var(--composer-font-size) - 1px);
 	white-space: nowrap;
 	cursor: default;
+}
+
+/* `@文件` 胶囊：底色压一档，悬停由 `title` 给完整路径 */
+.composer-mention {
+	background: var(--card2);
+}
+
+/* `/命令` 胶囊：压一层强调色。指令是「要主机做的事」，和引用文件不是一回事 */
+.composer-command {
+	background: color-mix(in srgb, var(--acc) 14%, transparent);
 }
 
 /* 代码块高亮：颜色全部取现有语义色，跟着主题走 */

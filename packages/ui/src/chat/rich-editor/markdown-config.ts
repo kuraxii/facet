@@ -29,6 +29,7 @@ import {
 	$createParagraphNode,
 	$createTextNode,
 	$getRoot,
+	$isParagraphNode,
 	$isTextNode,
 	type EditorState,
 	type EditorThemeClasses,
@@ -38,6 +39,7 @@ import {
 	type TextNode,
 } from "lexical";
 import { $createFileMentionNode, $isFileMentionNode, FileMentionNode } from "./file-mention-node.ts";
+import { $createSlashCommandNode, SlashCommandNode } from "./slash-command-node.ts";
 
 /**
  * 编辑器要注册的节点。
@@ -53,6 +55,7 @@ export const COMPOSER_NODES = [
 	ListItemNode,
 	LinkNode,
 	FileMentionNode,
+	SlashCommandNode,
 ];
 
 /**
@@ -100,6 +103,7 @@ export const COMPOSER_THEME: EditorThemeClasses = {
 	},
 	link: "composer-link",
 	fileMention: "composer-mention",
+	slashCommand: "composer-command",
 };
 
 /**
@@ -108,8 +112,8 @@ export const COMPOSER_THEME: EditorThemeClasses = {
  * 顺序只在同类转换器之间有影响：代码块（多行）排在引用与列表之前，行内格式按
  * 「粗斜体 → 粗体 → 斜体」从长到短排，否则 `**x**` 会先被当成斜体吃掉一层星号。
  *
- * 文件胶囊不用转换器：它的文本内容本来就是 `@完整路径`，导出时按文本走；导入时由
- * `$restoreFileMentions` 把它认回来。
+ * 胶囊不用转换器：文件胶囊的文本内容本来就是 `@完整路径`，命令胶囊是 `/命令名`，导出时
+ * 按文本走；导入时分别由 `$restoreFileMentions` 与 `$restoreSlashCommands` 认回来。
  */
 export const CHAT_TRANSFORMERS: Transformer[] = [
 	CODE,
@@ -202,6 +206,45 @@ export function $restoreFileMentions(files: ReadonlySet<string>): void {
 	}
 }
 
+/** 段首的 `/命令名`：名字到空白或结尾为止，和 `parseCommand` 的切法一致。 */
+const SLASH_PREFIX = /^\/([^\s]+)(?=\s|$)/;
+
+/**
+ * 把文首的 `/命令名` 还成胶囊。
+ *
+ * 只认文档第一段、且只有名字命中已知命令的那一处：`/usr/bin/env` 这类路径、`/foo` 这种
+ * 正文里的斜杠、第二段之后的 `/cmd` 全都保持普通文字。命令只能在文首生效（`parseCommand`
+ * 也只看开头），所以别处不该长成胶囊——否则它会显示成一条根本不会执行的命令。
+ */
+export function $restoreSlashCommands(known: ReadonlySet<string>): void {
+	if (known.size === 0) {
+		return;
+	}
+	const paragraph = $getRoot().getFirstChild();
+	if (!$isParagraphNode(paragraph)) {
+		return;
+	}
+	const head = paragraph.getFirstChild();
+	// 行内代码里的 `/` 是命令行或路径，不是命令
+	if (!$isTextNode(head) || head.hasFormat("code")) {
+		return;
+	}
+	const text = head.getTextContent();
+	const match = SLASH_PREFIX.exec(text);
+	const name = match?.[1];
+	if (match === null || name === undefined || !known.has(name)) {
+		return;
+	}
+	const capsule = $createSlashCommandNode(name);
+	head.insertBefore(capsule);
+	const rest = text.slice(match[0].length);
+	// 名字后面还有内容（参数、正文）时照原格式留在胶囊之后
+	if (rest.length > 0) {
+		head.insertBefore($textPieceLike(head, rest));
+	}
+	head.remove();
+}
+
 /**
  * 从当前编辑状态导出 Markdown。
  *
@@ -228,13 +271,19 @@ export function exportComposerMarkdown(state: EditorState): string {
  *
  * 保留单个换行（`shouldPreserveNewLines`）：旧的纯文本草稿是一段字符串，引用块也是逐行
  * `> ` 拼出来的，不保换行会把它们粘成一整段的段落，等于改写了用户已经写好的内容。
- * 铺完再把命中 `files` 的 `@路径` 还原成胶囊。必须在一次 `editor.update` 里调用。
+ * 铺完再把命中 `files` 的 `@路径` 与文首命中 `knownCommands` 的 `/命令` 还原成胶囊。
+ * 必须在一次 `editor.update` 里调用。
  */
-export function $importComposerMarkdown(markdown: string, files: ReadonlySet<string> = new Set()): void {
+export function $importComposerMarkdown(
+	markdown: string,
+	files: ReadonlySet<string> = new Set(),
+	knownCommands: ReadonlySet<string> = new Set(),
+): void {
 	const root = $getRoot();
 	root.clear();
 	if (markdown.trim().length > 0) {
 		$convertFromMarkdownString(markdown, CHAT_TRANSFORMERS, root, true);
+		$restoreSlashCommands(knownCommands);
 		$restoreFileMentions(files);
 	}
 	// 根节点没有子节点时浏览器给不出光标位置，空内容也留一个空段落
@@ -261,8 +310,9 @@ export function importComposerMarkdown(
 	editor: LexicalEditor,
 	markdown: string,
 	files: ReadonlySet<string> = new Set(),
+	knownCommands: ReadonlySet<string> = new Set(),
 ): void {
-	editor.update(() => $importComposerMarkdown(markdown, files), {
+	editor.update(() => $importComposerMarkdown(markdown, files, knownCommands), {
 		tag: COMPOSER_EXTERNAL_TAG,
 		discrete: true,
 	});

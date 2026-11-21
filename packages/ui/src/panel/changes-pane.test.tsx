@@ -11,9 +11,6 @@ function render(status: GitStatus | undefined, error?: string): string {
 			status,
 			error,
 			onRefresh: () => {},
-			commits: { isRepo: true, commits: [] },
-			commitsLoading: false,
-			commitsError: undefined,
 		}),
 	);
 }

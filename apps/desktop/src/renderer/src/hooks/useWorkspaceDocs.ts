@@ -1,13 +1,18 @@
 /**
  * 工作区里的文档与改动。
  *
- * 右栏的三个分页各有自己的数据：文件分页要读文件、要预览的那一份内容；变更分页要工作树
- * 状态、提交历史与补丁；终端分页的数据在终端域里。这一层只放前两个分页的数据，不碰标签
- * 栏，也不决定分页停在哪——那是外壳的事。依赖方向自上而下，这里不引用连接层与终端层。
+ * 右栏的四类工具各有自己的数据：文件要读文件与预览的那一份内容；变更要工作树状态与补丁；
+ * 提交图谱要分页的提交历史与单次提交的详情；终端的数据在终端域里。这一层只管前三个，
+ * 不碰标签栏，也不决定停在哪个标签——那是外壳的事。依赖方向自上而下，这里不引用连接层
+ * 与终端层。
+ *
+ * 两层的刷新节奏刻意不同：工作树状态跟着文件保存走（高频）；提交历史只在图谱看得见时
+ * 才取，并且分页（低频）。图谱打开时如果工作树状态已经刷新过（HEAD 很可能动了），就标记
+ * 成「历史过期」，由图谱自己决定什么时候重取第一页。
  */
 
 import type { SessionClient, SessionView } from "@facet/client-core";
-import { type FileContent, type GitCommit, type GitFileChange, workspaceChannelFor } from "@facet/protocol";
+import { type FileContent, type GitFileChange, workspaceChannelFor } from "@facet/protocol";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { decideOnSignal, shouldCatchUp } from "../changes-refresh.ts";
 import type {
@@ -15,7 +20,6 @@ import type {
 	CommitDetailState,
 	CommitsState,
 	HostWorkspaceSnapshot,
-	WorkspaceCommitRef,
 	WorkspaceFileRef,
 } from "../workspace-state.ts";
 
@@ -34,6 +38,9 @@ const SIGNAL_SETTLE_MS = 250;
  * 一次请求。
  */
 const WAKE_SETTLE_MS = 80;
+
+/** 提交图谱每页取多少条：一页够撑满一屏多一点，滚到底再要下一页。 */
+const COMMIT_PAGE_SIZE = 50;
 
 /** 窗口此刻在前台吗。失焦或隐藏时不该为主机拉一次 git 探测。 */
 function windowIsActive(): boolean {
@@ -57,8 +64,10 @@ export interface WorkspaceDocsOptions {
 	session: SessionView | undefined;
 	/** 这台主机上一次离开时的文档状态；切回来时从这里接着显示 */
 	snapshot?: HostWorkspaceSnapshot;
-	/** 变更预览是否正在显示：它决定要不要盯住工作树 */
+	/** 变更页是否正在显示：它决定要不要盯住工作树 */
 	isChangesVisible: boolean;
+	/** 提交图谱是否正在显示：历史只在有人看的时候才取 */
+	isHistoryVisible: boolean;
 }
 
 export interface WorkspaceDocs {
@@ -70,12 +79,12 @@ export interface WorkspaceDocs {
 	fileError: string | undefined;
 	/** 变更页数据 */
 	changes: ChangesState;
-	/** 提交历史 */
+	/** 提交历史（分页累积） */
 	commits: CommitsState;
+	/** 拿到手的这段历史可能已经过期：工作树刷新过，HEAD 也许动了 */
+	isHistoryStale: boolean;
 	/** 每个提交的改动详情，按 `workspaceCommitKey` 存 */
 	commitDetails: Readonly<Record<string, CommitDetailState>>;
-	/** 变更预览里正在看的提交；为空时看工作树 */
-	commit: WorkspaceCommitRef | undefined;
 	/** 变更预览要定位到的文件；没有时从文档顶部开始 */
 	changesFocus: { path: string; requestId: number } | undefined;
 	/** 打开一个文件：取内容之后放进预览 */
@@ -86,16 +95,18 @@ export interface WorkspaceDocs {
 	clearFileError: () => void;
 	/** 在变更预览里定位到某个文件，并回到工作树那一份 */
 	focusDiff: (file: GitFileChange) => void;
-	/** 在变更预览里打开一次提交 */
-	openCommit: (cwd: string, commit: GitCommit) => void;
 	/** 重取某个提交的详情 */
 	loadCommit: (cwd: string, sha: string) => Promise<void>;
-	/** 重取工作树状态与提交历史 */
+	/** 重取工作树状态（变更页的刷新） */
 	refreshChanges: (options?: { force?: boolean }) => Promise<void>;
+	/** 重取提交历史的第一页（图谱的刷新） */
+	refreshCommits: (options?: { force?: boolean }) => Promise<void>;
+	/** 取下一页追加到列表末尾 */
+	loadMoreCommits: () => Promise<void>;
 }
 
 export function useWorkspaceDocs(options: WorkspaceDocsOptions): WorkspaceDocs {
-	const { client, session, snapshot, isChangesVisible } = options;
+	const { client, session, snapshot, isChangesVisible, isHistoryVisible } = options;
 	const [file, setFile] = useState<WorkspaceFileRef | undefined>(() => snapshot?.file);
 	const [fileContents, setFileContents] = useState<Readonly<Record<string, FileContent>>>(
 		() => snapshot?.fileContents ?? {},
@@ -107,11 +118,13 @@ export function useWorkspaceDocs(options: WorkspaceDocsOptions): WorkspaceDocs {
 	const [commitDetails, setCommitDetails] = useState<Record<string, CommitDetailState>>(
 		() => snapshot?.commitDetails ?? {},
 	);
-	const [commit, setCommit] = useState<WorkspaceCommitRef | undefined>(undefined);
 	const [changesFocus, setChangesFocus] = useState<{ path: string; requestId: number } | undefined>(
 		undefined,
 	);
 	const commitRequests = useRef(new Map<string, number>());
+	/** 工作树状态刷新的次数与取历史时的那一次：两个数不等就说明历史可能落后于 HEAD */
+	const worktreeRevision = useRef(0);
+	const [historyRevision, setHistoryRevision] = useState(0);
 
 	// 每次变化都写回快照：切走这台主机时组件卸载，下次挂回来从这里接着显示
 	useEffect(() => {
@@ -130,7 +143,8 @@ export function useWorkspaceDocs(options: WorkspaceDocsOptions): WorkspaceDocs {
 	useEffect(() => {
 		changesSeq.current += 1;
 		setCommits({ isLoading: false });
-		setCommit((current) => (current !== undefined && current.cwd === sessionCwd ? current : undefined));
+		worktreeRevision.current = 0;
+		setHistoryRevision(0);
 		setChangesFocus(undefined);
 		setFile((current) => (current !== undefined && current.cwd === sessionCwd ? current : undefined));
 	}, [sessionCwd]);
@@ -162,9 +176,8 @@ export function useWorkspaceDocs(options: WorkspaceDocsOptions): WorkspaceDocs {
 
 	const clearFileError = useCallback(() => setFileError(undefined), []);
 
-	/** 在变更预览里定位到某个文件：先把预览从提交切回工作树。 */
+	/** 在变更预览里定位到某个文件。 */
 	const focusDiff = useCallback((changed: GitFileChange): void => {
-		setCommit(undefined);
 		setChangesFocus({ path: changed.path, requestId: Date.now() });
 	}, []);
 
@@ -199,19 +212,6 @@ export function useWorkspaceDocs(options: WorkspaceDocsOptions): WorkspaceDocs {
 		[client],
 	);
 
-	/** 在变更预览里打开一次提交；详情没取过就顺手取一次。 */
-	const openCommit = useCallback(
-		(cwd: string, target: GitCommit): void => {
-			setCommit({ cwd, sha: target.sha, shortSha: target.shortSha, subject: target.subject });
-			setChangesFocus(undefined);
-			const current = commitDetails[workspaceCommitKey(cwd, target.sha)];
-			if (current?.isLoading !== true && (current?.detail === undefined || current.error !== undefined)) {
-				void loadCommit(cwd, target.sha);
-			}
-		},
-		[commitDetails, loadCommit],
-	);
-
 	/** 重新取工作树状态。并发调用只采用最后一次的结果。 */
 	const refreshStatus = useCallback(
 		async (options: { force?: boolean } = {}): Promise<void> => {
@@ -229,6 +229,7 @@ export function useWorkspaceDocs(options: WorkspaceDocsOptions): WorkspaceDocs {
 				return;
 			}
 			if (result.ok) {
+				worktreeRevision.current += 1;
 				setChanges({ status: result.status });
 				return;
 			}
@@ -240,29 +241,68 @@ export function useWorkspaceDocs(options: WorkspaceDocsOptions): WorkspaceDocs {
 	);
 
 	/**
-	 * 重新取提交历史。
+	 * 重新取提交历史的第一页。
 	 *
-	 * 比工作树状态贵得多：主机要读完整的 log，每条还要算一次 diff 规模。所以只在提交历史
-	 * 可能变了的信号上取，不跟工作树的每一次保存；主机那边也是单独一条车道，冷却更长。
+	 * 比工作树状态贵得多：主机要读 log，每条还要算一次 diff 规模。所以只在图谱看得见、
+	 * 或者图谱自己发现历史过期时才取；主机那边也是单独一条车道，冷却更长。
 	 */
 	const refreshCommits = useCallback(
 		async (options: { force?: boolean } = {}): Promise<void> => {
 			if (sessionCwd === undefined) {
 				return;
 			}
+			const revision = worktreeRevision.current;
 			setCommits((current) => ({ ...current, isLoading: true, error: undefined }));
 			try {
-				setCommits({ data: await client.gitCommits(sessionCwd, options), isLoading: false });
+				const data = await client.gitCommits(sessionCwd, { ...options, limit: COMMIT_PAGE_SIZE });
+				setCommits({ data, isLoading: false, isLoadingMore: false });
+				setHistoryRevision(revision);
 			} catch (error: unknown) {
 				setCommits((current) => ({
 					data: current.data,
 					isLoading: false,
+					isLoadingMore: false,
 					error: error instanceof Error ? error.message : String(error),
 				}));
 			}
 		},
 		[client, sessionCwd],
 	);
+
+	/** 取下一页并追加：主机那边按 `skip` 跳过已经拿到的那几条。 */
+	const loadMoreCommits = useCallback(async (): Promise<void> => {
+		if (sessionCwd === undefined) {
+			return;
+		}
+		const loaded = commits.data;
+		if (loaded === undefined || loaded.hasMore !== true || commits.isLoadingMore) {
+			return;
+		}
+		setCommits((current) => ({ ...current, isLoadingMore: true, error: undefined }));
+		try {
+			const next = await client.gitCommits(sessionCwd, {
+				limit: COMMIT_PAGE_SIZE,
+				skip: loaded.commits.length,
+			});
+			setCommits((current) => {
+				const head = current.data?.commits ?? [];
+				return {
+					data: {
+						...next,
+						commits: [...head, ...next.commits],
+					},
+					isLoading: false,
+					isLoadingMore: false,
+				};
+			});
+		} catch (error: unknown) {
+			setCommits((current) => ({
+				...current,
+				isLoadingMore: false,
+				error: error instanceof Error ? error.message : String(error),
+			}));
+		}
+	}, [client, commits.data, commits.isLoadingMore, sessionCwd]);
 
 	/**
 	 * 两样一起重取：刚打开变更页、切会话、错误态的重试与回到前台时用它。
@@ -272,9 +312,9 @@ export function useWorkspaceDocs(options: WorkspaceDocsOptions): WorkspaceDocs {
 	 */
 	const refreshChanges = useCallback(
 		async (options: { force?: boolean } = {}): Promise<void> => {
-			await Promise.all([refreshStatus(options), refreshCommits(options)]);
+			await refreshStatus(options);
 		},
-		[refreshStatus, refreshCommits],
+		[refreshStatus],
 	);
 
 	/** 当前项目目录的工作树通道；没有会话时没有通道可订。 */
@@ -287,11 +327,11 @@ export function useWorkspaceDocs(options: WorkspaceDocsOptions): WorkspaceDocs {
 	 * 跟着停，没人看的时候不为任何目录付出代价。
 	 */
 	useEffect(() => {
-		if (!isChangesVisible || sessionCwd === undefined) {
+		if ((!isChangesVisible && !isHistoryVisible) || sessionCwd === undefined) {
 			return;
 		}
 		return client.watchWorkspace(sessionCwd);
-	}, [client, isChangesVisible, sessionCwd]);
+	}, [client, isChangesVisible, isHistoryVisible, sessionCwd]);
 
 	// 主机推来的两类信号：工作树变了，以及其中提交历史可能也变了
 	const statusSignal = useSyncExternalStore(
@@ -322,7 +362,7 @@ export function useWorkspaceDocs(options: WorkspaceDocsOptions): WorkspaceDocs {
 			return;
 		}
 		const decision = decideOnSignal({
-			isVisible: isChangesVisible,
+			isVisible: isChangesVisible || isHistoryVisible,
 			isActive: windowIsActive(),
 			isTruncated,
 		});
@@ -334,14 +374,14 @@ export function useWorkspaceDocs(options: WorkspaceDocsOptions): WorkspaceDocs {
 		}
 		const timer = setTimeout(() => void refreshStatus(), SIGNAL_SETTLE_MS);
 		return () => clearTimeout(timer);
-	}, [isChangesVisible, isTruncated, statusSignal, refreshStatus]);
+	}, [isChangesVisible, isHistoryVisible, isTruncated, statusSignal, refreshStatus]);
 
 	useEffect(() => {
 		if (historySignal === 0) {
 			return;
 		}
 		const decision = decideOnSignal({
-			isVisible: isChangesVisible,
+			isVisible: isHistoryVisible,
 			isActive: windowIsActive(),
 			isTruncated,
 		});
@@ -353,7 +393,7 @@ export function useWorkspaceDocs(options: WorkspaceDocsOptions): WorkspaceDocs {
 		}
 		const timer = setTimeout(() => void refreshCommits(), SIGNAL_SETTLE_MS);
 		return () => clearTimeout(timer);
-	}, [isChangesVisible, historySignal, isTruncated, refreshCommits]);
+	}, [isHistoryVisible, historySignal, isTruncated, refreshCommits]);
 
 	// 展开变更页、切换会话时各取一次：信号只覆盖「之后变了」，打开那一刻手上还没有东西
 	useEffect(() => {
@@ -361,6 +401,21 @@ export function useWorkspaceDocs(options: WorkspaceDocsOptions): WorkspaceDocs {
 			void refreshChanges();
 		}
 	}, [isChangesVisible, refreshChanges]);
+
+	/*
+	 * 图谱第一次打开、或者历史已经过期时取一次第一页。
+	 *
+	 * 过期判据是「工作树状态刷新过，而那次刷新晚于取历史」——最常见的来源就是用户在别处
+	 * 提交了东西（HEAD 动了），这时图谱该显示新提交，而不是上一次的缓存。
+	 */
+	useEffect(() => {
+		if (!isHistoryVisible) {
+			return;
+		}
+		if (commits.data === undefined || worktreeRevision.current > historyRevision) {
+			void refreshCommits({ force: true });
+		}
+	}, [isHistoryVisible, commits.data, historyRevision, refreshCommits]);
 
 	/**
 	 * 回到前台时补一次。
@@ -373,7 +428,7 @@ export function useWorkspaceDocs(options: WorkspaceDocsOptions): WorkspaceDocs {
 		const wake = (): void => {
 			timer = undefined;
 			const catchUp = shouldCatchUp({
-				isVisible: isChangesVisible,
+				isVisible: isChangesVisible || isHistoryVisible,
 				isActive: windowIsActive(),
 				hasPending: hasPendingSignal.current,
 				isTruncated,
@@ -383,6 +438,9 @@ export function useWorkspaceDocs(options: WorkspaceDocsOptions): WorkspaceDocs {
 			}
 			hasPendingSignal.current = false;
 			void refreshChanges({ force: true });
+			if (isHistoryVisible) {
+				void refreshCommits({ force: true });
+			}
 		};
 		const onWake = (): void => {
 			if (timer !== undefined) {
@@ -399,7 +457,7 @@ export function useWorkspaceDocs(options: WorkspaceDocsOptions): WorkspaceDocs {
 			window.removeEventListener("focus", onWake);
 			document.removeEventListener("visibilitychange", onWake);
 		};
-	}, [isChangesVisible, isTruncated, refreshChanges]);
+	}, [isChangesVisible, isHistoryVisible, isTruncated, refreshChanges, refreshCommits]);
 
 	return useMemo(
 		() => ({
@@ -408,16 +466,17 @@ export function useWorkspaceDocs(options: WorkspaceDocsOptions): WorkspaceDocs {
 			fileError,
 			changes,
 			commits,
+			isHistoryStale: commits.data !== undefined && worktreeRevision.current > historyRevision,
 			commitDetails,
-			commit,
 			changesFocus,
 			openFile,
 			setFileContent,
 			clearFileError,
 			focusDiff,
-			openCommit,
 			loadCommit,
 			refreshChanges,
+			refreshCommits,
+			loadMoreCommits,
 		}),
 		[
 			file,
@@ -425,16 +484,17 @@ export function useWorkspaceDocs(options: WorkspaceDocsOptions): WorkspaceDocs {
 			fileError,
 			changes,
 			commits,
+			historyRevision,
 			commitDetails,
-			commit,
 			changesFocus,
 			openFile,
 			setFileContent,
 			clearFileError,
 			focusDiff,
-			openCommit,
 			loadCommit,
 			refreshChanges,
+			refreshCommits,
+			loadMoreCommits,
 		],
 	);
 }

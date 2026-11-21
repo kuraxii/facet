@@ -1,0 +1,39 @@
+/*
+ * 提交图谱。
+ *
+ * 图与列表的样式在 `packages/ui/src/git/git.module.css` 里；这里只有两件事：泳道配色
+ * （全局变量，模块里按名字取）与图谱页自己的容器声明——列表里的可见性折点由容器查询决定，
+ * 查询容器必须是一个有 `container-type` 的祖先。
+ */
+
+:root {
+	/* 泳道配色：六个够用，多出来的循环取用；暗色下也保持可分辨 */
+	--graph-lane-1: var(--acc);
+	--graph-lane-2: #b480e8;
+	--graph-lane-3: #56b6a8;
+	--graph-lane-4: #d9a441;
+	--graph-lane-5: #e06c9f;
+	--graph-lane-6: #7e9cd8;
+}
+
+/* 图谱列表与提交详情都挂在这一层里：它的宽度就是「工作区正文宽」，窄了列表自己藏次要信息 */
+.git-graph-view {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+	container-type: inline-size;
+}
+
+/*
+ * 详情只有一层：一份改动文档，顶栏上并排着退回图谱、短哈希与说明、总 `+N −M`、全部折叠与
+ * 折行（`ChangesDocument` 的 `toolbarLeading` + `title`）。没有中间的文件列表，也没有单独的
+ * 概览块——作者、时间、改动规模在列表里悬停那条提交就能看到（`CommitTip`）。
+ *
+ * 退回图谱那枚箭头（`.workspace-back`）在变更页是「单栏钻取才有」的，图谱这边是唯一的退路，
+ * 所以这里强制任何宽度都显示。
+ */
+.git-graph-view .workspace-back {
+	display: grid;
+}

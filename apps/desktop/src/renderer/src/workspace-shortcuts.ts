@@ -4,17 +4,19 @@
  * 提示与真实绑定共用这一份：启动清单与 `+` 菜单上写的就是这里算出来的键位，`Ctrl + 反引号`
  * 那一条同时由 `views/host-workspace.tsx` 的键盘处理读它，两边不可能写岔。
  *
- * 与已有的绑定不冲突：`Mod+K` 是会话搜索，`Mod+=/-/0` 是界面缩放，`Mod+Shift+E/G` 与
+ * 与已有的绑定不冲突：`Mod+K` 是会话搜索，`Mod+=/-/0` 是界面缩放，`Mod+Shift+E/G/H` 与
  * `Mod+\`` 此前都没人用（口径见 `docs/ui_design_specification.md` §2）。
  */
 import { formatShortcut, type ShortcutChord, type WorkspaceTabId } from "@facet/ui";
 
-/** 三件工具的键位。 */
+/** 四件工具的键位。 */
 export const WORKSPACE_SHORTCUTS: Readonly<Record<WorkspaceTabId, ShortcutChord>> = {
 	/** 文件：与编辑器的「资源管理器」同一套 */
 	files: { mod: true, shift: true, key: "E" },
 	/** 变更：与编辑器的「源代码管理」同一套 */
 	changes: { mod: true, shift: true, key: "G" },
+	/** 提交图谱：`H` 取 history，与变更的 `G` 挨着 */
+	"git-graph": { mod: true, shift: true, key: "H" },
 	/** 终端：沿用三栏时期就有的 `Ctrl + 反引号` */
 	terminal: { mod: true, key: "`" },
 };

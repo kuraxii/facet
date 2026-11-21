@@ -205,8 +205,13 @@ export const REQUEST_SCHEMAS = {
 	},
 	gitCommits: {
 		auth: "public",
-		// force 与 gitStatus 一致：跳过主机侧的冷却窗口
-		params: Type.Object({ cwd: Cwd, force: Type.Optional(Type.Boolean()) }),
+		// force 与 gitStatus 一致：跳过主机侧的冷却窗口；limit / skip 是图谱的分页参数
+		params: Type.Object({
+			cwd: Cwd,
+			force: Type.Optional(Type.Boolean()),
+			limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 500 })),
+			skip: Type.Optional(Type.Integer({ minimum: 0 })),
+		}),
 		nonEmpty: ["cwd"],
 	},
 	gitCommit: { auth: "public", params: Type.Object({ cwd: Cwd, sha: Id }) },

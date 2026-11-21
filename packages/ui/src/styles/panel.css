@@ -165,15 +165,46 @@
 }
 
 /*
- * 容器窄于 440px 时把文字折起来，只剩图标、计数与关闭按钮。
+ * 容器窄于 640px 时把文字折起来，只剩图标、计数与关闭按钮。
  *
  * 查询容器是顶带右格与抽屉顶头（`chrome.css` 的 `.chrome-slot.is-panel`、本节的
- * `.panel-head`），量到的是整列宽。440 这个数同时写在 `workspace-tab-bar.tsx` 的
+ * `.panel-head`），量到的是整列宽。640 这个数同时写在 `workspace-tab-bar.tsx` 的
  * `WORKSPACE_TAB_LABEL_BREAKPOINT_PX` 里：容器查询里不能写变量，改一处要改两处。
+ *
+ * 640 是实测出来的：四个图文标签中文 343、英文 403，加上 `+`、两枚动作与 132px 的窗口
+ * 按钮簇，容器至少要 579（中文）/ 639（英文）才不撞车；取英文那一侧再留一点余量。
  */
-@container (width < 360px) {
+@container (width < 640px) {
 	.workspace-tab-label {
 		display: none;
+	}
+}
+
+/*
+ * 容器再窄一档（`< 420px`，右栏被拖到下限时就是这一段）：只剩图标也不够放四枚标签、
+ * 两枚动作与 132px 的窗口按钮簇，于是把每条标签的关闭按钮藏掉、间距收紧。
+ *
+ * 关闭仍然可用：中键、`Delete` / `Backspace`，或者把右栏拖宽再用 `×`。标签同时也
+ * `min-width: 0`，实在放不下时向内裁，绝不撑出这一格。
+ */
+@container (width < 420px) {
+	.workspace-tabs {
+		gap: 2px;
+	}
+
+	.workspace-tab {
+		min-width: 0;
+		padding-inline: 5px;
+		overflow: hidden;
+	}
+
+	.workspace-tab-close {
+		display: none;
+	}
+
+	.chrome-slot-row,
+	.panel-head-row {
+		gap: 2px;
 	}
 }
 
@@ -470,9 +501,12 @@
  * 方向，不反转。索引那一栏的分隔线画在它的左缘：外层左侧本来就有一条分隔条
  * （`.panel-resizer`），窗口右缘是纯边界，两条线各在一侧，不会叠成双线。
  *
+ * `position: relative` 是给两栏之间那条拖拽条当定位祖先用的（与 `.file-tree` 同一个路子）。
+ *
  * 单栏态（更窄）：一次只显示一层，另一层整层不占位（规则在同一节末尾的 `@container` 里）。
  */
 .workspace-split {
+	position: relative;
 	display: flex;
 	flex: 1;
 	min-height: 0;
@@ -486,9 +520,17 @@
 	min-height: 0;
 }
 
+/*
+ * 索引栏的宽度。
+ *
+ * 三层：界面按本地存储写的偏好宽（`--workspace-list-width`，`workspace-list-state.ts`），拖动
+ * 期间分隔条把它临时写在 `.app` 上（更近的祖先赢，不经过渲染），最后这条 `clamp()` 兜底——
+ * 容器窄时索引自己收住，预览始终留得下 `WORKSPACE_DETAIL_KEEP_WIDTH`。`200 / 320 / 480 / 280`
+ * 与那个文件里的常量是同一组数，改一处要改两处。
+ */
 .workspace-split-list {
 	display: flex;
-	flex: 0 0 var(--workspace-list-width);
+	flex: 0 0 clamp(200px, var(--workspace-list-width, 320px), min(480px, calc(100% - 280px)));
 	flex-direction: column;
 	min-width: 0;
 	min-height: 0;
@@ -498,6 +540,35 @@
 
 /* 收起：索引整栏不占位，预览向右长满（左缘不动，它就是工作区边界） */
 .workspace-split.is-list-collapsed .workspace-split-list {
+	display: none;
+}
+
+/*
+ * 两栏之间的拖拽条。
+ *
+ * 与文件树那条同一个路子：透明命中区，跨半个命中宽压在索引栏左缘上——索引栏自己那条
+ * `border-inline-start` 就是分界线，高亮时只染它的颜色，不额外叠线、不改宽度，内容不跳。
+ */
+.workspace-list-resizer {
+	position: absolute;
+	inset-block: 0;
+	inset-inline-end: calc(var(--workspace-list-width, 320px) - var(--divider-hit-width) / 2);
+	z-index: var(--z-content-local);
+	width: var(--divider-hit-width);
+	margin: 0;
+	border: 0;
+	cursor: col-resize;
+	background: transparent;
+}
+
+/* 悬停或拖动时染颜色，目标包在 `:where()` 里：不与档位规则比权重 */
+.app:has(.workspace-list-resizer:hover) :where(.workspace-split-list),
+.app:has(.workspace-list-resizer:active) :where(.workspace-split-list) {
+	border-inline-start-color: var(--divider-highlight);
+}
+
+/* 收起时没有边界可拖；单栏态那条规则在同一节末尾的 `@container` 里 */
+.workspace-split.is-list-collapsed .workspace-list-resizer {
 	display: none;
 }
 
@@ -559,6 +630,11 @@
 	/* 单栏态没有「收起索引」这回事：钻取的那一层已经占满整宽 */
 	.workspace-split.is-list-collapsed .workspace-split-list {
 		display: flex;
+	}
+
+	/* 单栏态两栏不并存，也就没有边界可拖 */
+	.workspace-list-resizer {
+		display: none;
 	}
 
 	.workspace-collapse-list,
@@ -667,205 +743,6 @@
 .app[data-panel-drag-collapsed="true"] .panel-resizer[data-collapse-pending="true"] {
 	left: auto;
 	right: 0;
-}
-
-.diff-scroll {
-	flex: 1;
-	min-height: 0;
-	overflow: auto;
-	/* 滚动条出现时不影响行宽；横向那条在内容下方，不占这一份沟槽 */
-	scrollbar-gutter: stable;
-}
-
-.diff-scroll .diff-body {
-	width: max-content;
-	min-width: 100%;
-}
-
-/* 增删行数的颜色，对话里的文件改动与变更页共用 */
-.add {
-	color: var(--add);
-}
-
-.del {
-	color: var(--del);
-}
-
-/* 变更页：分支头、文件行与就地展开的补丁 */
-.chg-head {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 8px;
-	margin-bottom: 6px;
-	padding: 0 2px 6px;
-}
-
-.chg-branch {
-	min-width: 0;
-	overflow: hidden;
-	color: var(--t2);
-	font-size: 12px;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.chg-upstream {
-	margin-left: 6px;
-	color: var(--t3);
-	font-size: 11px;
-}
-
-.chg-list {
-	display: flex;
-	flex-direction: column;
-	gap: 1px;
-	margin: 0;
-	padding: 0;
-	list-style: none;
-}
-
-.chg-line {
-	display: flex;
-	align-items: center;
-	gap: 2px;
-}
-
-.chg-row {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	flex: 1;
-	min-width: 0;
-	padding: 4px 6px;
-	border: 0;
-	border-radius: 6px;
-	background: transparent;
-	color: var(--t2);
-	font-size: 12px;
-	text-align: left;
-}
-
-.chg-row:hover {
-	background: var(--surface2);
-	color: var(--t1);
-}
-
-.chg-open {
-	display: grid;
-	place-items: center;
-	flex: none;
-	width: 22px;
-	height: 22px;
-	padding: 0;
-	border: 0;
-	border-radius: 5px;
-	background: transparent;
-	color: var(--t3);
-	opacity: 0;
-}
-
-.chg-line:hover .chg-open,
-.chg-open:focus-visible {
-	opacity: 1;
-}
-
-.chg-open:hover {
-	background: var(--surface2);
-	color: var(--t1);
-}
-
-/* 状态字母：增删改各一色，未跟踪与冲突用弱色与危险色 */
-.chg-status {
-	flex: none;
-	width: 14px;
-	color: var(--t3);
-	font-family: var(--font-mono);
-	font-size: 11px;
-	text-align: center;
-}
-
-.chg-status.is-added,
-.chg-status.is-untracked {
-	color: var(--ok);
-}
-
-.chg-status.is-deleted,
-.chg-status.is-conflicted {
-	color: var(--err);
-}
-
-.chg-status.is-renamed {
-	color: var(--warn);
-}
-
-.chg-name {
-	flex: none;
-	max-width: 55%;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.chg-dir {
-	flex: 1;
-	min-width: 0;
-	overflow: hidden;
-	color: var(--t3);
-	font-size: 11px;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.chg-counts {
-	display: flex;
-	flex: none;
-	gap: 4px;
-	margin-left: auto;
-	font-family: var(--font-mono);
-	font-size: 11px;
-}
-
-.chg-binary {
-	color: var(--t3);
-	font-size: 10.5px;
-}
-
-.chg-diff {
-	margin: 2px 0 8px 20px;
-}
-
-.chg-note {
-	margin: 6px 2px;
-	color: var(--t3);
-	font-size: 12px;
-	line-height: 1.6;
-}
-
-.chg-note.is-error {
-	color: var(--err);
-}
-
-.chg-retry {
-	margin-left: 6px;
-	padding: 0;
-	border: 0;
-	background: transparent;
-	color: var(--acc);
-	font-size: 12px;
-}
-
-.chg-total {
-	margin: 8px 2px 0;
-	color: var(--t3);
-	font-size: 11px;
-	text-align: right;
-}
-
-/* 颜色沿用全局的 .add / .del，这里只统一数字的字体 */
-.chg-total .add,
-.chg-total .del {
-	font-family: var(--font-mono);
 }
 
 /*

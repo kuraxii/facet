@@ -642,11 +642,21 @@ export class SessionClient {
 		});
 	}
 
-	/** 列出当前分支的全部提交，从新到旧。 */
-	async gitCommits(cwd: string, options: { force?: boolean } = {}): Promise<GitCommits> {
+	/**
+	 * 列出当前分支的提交，从新到旧。
+	 *
+	 * 不给 `limit` 就是整段历史；给 `limit` / `skip` 时按页取，返回的 `hasMore` 说明后面
+	 * 还有没有更旧的提交。
+	 */
+	async gitCommits(
+		cwd: string,
+		options: { force?: boolean; limit?: number; skip?: number } = {},
+	): Promise<GitCommits> {
 		return await this.transport.request("gitCommits", {
 			cwd,
 			...(options.force === true ? { force: true } : {}),
+			...(options.limit === undefined ? {} : { limit: options.limit }),
+			...(options.skip === undefined ? {} : { skip: options.skip }),
 		});
 	}
 

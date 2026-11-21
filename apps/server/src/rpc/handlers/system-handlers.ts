@@ -105,6 +105,8 @@ export const systemHandlers: Pick<RequestHandlerMap, SystemMethod> = {
 	gitCommits: async (params, context): Promise<RequestResults["gitCommits"]> =>
 		await context.gitRefresh.commits(await resolveProjectDirectory(params.cwd), {
 			force: params.force === true,
+			...(params.limit === undefined ? {} : { limit: params.limit }),
+			...(params.skip === undefined ? {} : { skip: params.skip }),
 		}),
 
 	gitCommit: async (params): Promise<RequestResults["gitCommit"]> => {

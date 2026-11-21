@@ -351,7 +351,7 @@ const checkRequestGitDiff = buildRequestGitDiff();
  */
 function buildRequestGitCommits(): (value: unknown) => boolean {
 	// @ts-ignore
-	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && ("cwd" in value && (typeof value.cwd === "string" && (value.force === undefined || (!("force" in value) || typeof value.force === "boolean"))))));
+	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && ("cwd" in value && (((typeof value.cwd === "string" && (value.force === undefined || (!("force" in value) || typeof value.force === "boolean"))) && (value.limit === undefined || (!("limit" in value) || (Number.isInteger(value.limit) && (!((Number.isFinite(value.limit) || typeof value.limit === "bigint")) || (value.limit <= 500 && value.limit >= 1)))))) && (value.skip === undefined || (!("skip" in value) || (Number.isInteger(value.skip) && (!((Number.isFinite(value.skip) || typeof value.skip === "bigint")) || value.skip >= 0))))))));
 	return (value: unknown): boolean => {
 		if (!check_0(value)) return false;
 		const source = value as Record<string, unknown>;

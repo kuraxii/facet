@@ -1,19 +1,21 @@
 /**
- * 变更页。
+ * 变更索引栏。
  *
  * 列工作树相对 HEAD 的改动：分支与上下游、按目录分组的文件、每个文件的状态图标与增删
  * 行数。点文件在主区域打开变更文档；这里不展开补丁。
+ *
+ * 提交历史不在这里：它是低频的历史态，归「提交图谱」那个标签（`GitGraphTab`）。变更页只
+ * 管高频的工作树状态。
  */
 
-import type { GitCommit, GitCommits, GitFileChange, GitStatus } from "@facet/protocol";
+import type { GitFileChange, GitStatus } from "@facet/protocol";
 import { ChevronRight, FileText, PanelRightClose } from "lucide-react";
 import { type CSSProperties, type ReactNode, useCallback, useMemo, useState } from "react";
+import { ChangeMark, changeStatusLabelKey } from "../git/git-status-mark.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { useHoverTip } from "../tip.tsx";
 import styles from "./changes.module.css";
-import { ChangeMark, changeStatusLabelKey } from "./changes-mark.tsx";
 import { buildChangesTree, type ChangesTreeRow, flattenChangesTree } from "./changes-tree.ts";
-import { CommitHistory } from "./commit-history.tsx";
 
 export interface ChangesPaneProps {
 	/** 工作树状态；还没取到时为空 */
@@ -24,14 +26,6 @@ export interface ChangesPaneProps {
 	onRefresh: () => void;
 	/** 在主区域打开某个文件的补丁 */
 	onOpenDiff?: (file: GitFileChange) => void;
-	/** 当前项目的提交历史 */
-	commits: GitCommits | undefined;
-	/** 正在取提交历史 */
-	commitsLoading: boolean;
-	/** 取提交历史失败的原因 */
-	commitsError: string | undefined;
-	/** 点一条提交时打开它的改动 */
-	onCommitPress?: (commit: GitCommit) => void;
 	/** 收起这一栏；不给时不显示收起按钮（整列独占时没地方可收） */
 	onCollapse?: (() => void) | undefined;
 }
@@ -123,10 +117,6 @@ export function ChangesPane({
 	error,
 	onRefresh,
 	onOpenDiff,
-	commits,
-	commitsLoading,
-	commitsError,
-	onCommitPress,
 	onCollapse,
 }: ChangesPaneProps): ReactNode {
 	const { t } = useI18n();
@@ -223,12 +213,6 @@ export function ChangesPane({
 		<div className={styles.pane}>
 			{header}
 			{body}
-			<CommitHistory
-				commits={commits}
-				isLoading={commitsLoading}
-				error={commitsError}
-				onCommitPress={onCommitPress}
-			/>
 		</div>
 	);
 }

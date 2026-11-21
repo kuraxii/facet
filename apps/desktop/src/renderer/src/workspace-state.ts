@@ -19,10 +19,12 @@ export interface ChangesState {
 
 /** 提交历史的数据、加载状态与失败原因。 */
 export interface CommitsState {
-	/** 提交列表 */
+	/** 已经拿到的提交列表；分页时是累积的那一份 */
 	readonly data?: GitCommits;
-	/** 是否正在取 */
+	/** 是否正在取第一页 */
 	readonly isLoading: boolean;
+	/** 是否正在取下一页 */
+	readonly isLoadingMore?: boolean;
 	/** 失败原因 */
 	readonly error?: string;
 }

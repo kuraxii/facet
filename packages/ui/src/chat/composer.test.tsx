@@ -1,9 +1,11 @@
 import type { ModelInfo, SlashCommand } from "@facet/protocol";
-import { act, createElement, type ReactElement } from "react";
+import { $getSelection, $isRangeSelection, type LexicalEditor } from "lexical";
+import { act, createElement, type ReactElement, type RefObject, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Composer, type ComposerProps } from "./Composer.tsx";
 import { QueueStrip } from "./QueueStrip.tsx";
+import { ComposerEditor, type ComposerKeyRoutes } from "./rich-editor/ComposerEditor.tsx";
 
 // React 19 的 act 只在测试环境里开关作批处理，这个开关是 React 的约定
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -414,5 +416,200 @@ describe("发送受阻", () => {
 		expect(container.querySelector(".composer-blocked")).toBeNull();
 		expect(sendButton(container).disabled).toBe(true);
 		unmount();
+	});
+});
+
+/** 富文本输入域的按键落点：块级用例只关心换行键位与能不能发。 */
+function editorRoutes(shiftEnterToSend: boolean): ComposerKeyRoutes {
+	return {
+		isPaletteOpen: false,
+		onPaletteMove: () => {},
+		onPalettePick: () => {},
+		onPaletteClose: () => {},
+		canSend: true,
+		shiftEnterToSend,
+		onSend: () => {},
+	};
+}
+
+/** 受控外壳：草稿跟着 `onChange` 回传，与 `Composer` 接线的方式一致。 */
+function EditorHost(props: {
+	initial: string;
+	shiftEnterToSend: boolean;
+	editorRef: RefObject<LexicalEditor | null>;
+	onDraft: (draft: string) => void;
+}): ReactElement {
+	const [draft, setDraft] = useState(props.initial);
+	return (
+		<ComposerEditor
+			value={draft}
+			onChange={(next) => {
+				setDraft(next);
+				props.onDraft(next);
+			}}
+			placeholder="输入消息"
+			routes={editorRoutes(props.shiftEnterToSend)}
+			editorRef={props.editorRef}
+		/>
+	);
+}
+
+/** 一份渲染好的富文本输入域。 */
+interface EditorRendered extends Rendered {
+	/** 输入域根节点 */
+	editorElement: HTMLElement;
+	/** 编辑器句柄，用例靠它模拟输入 */
+	editor: LexicalEditor;
+	/** 最近一次回传给父级的草稿 */
+	draft: () => string;
+}
+
+/** 挂一个受控的富文本输入域。 */
+function renderEditor(initial: string, shiftEnterToSend: boolean): EditorRendered {
+	const editorRef: RefObject<LexicalEditor | null> = { current: null };
+	let latest = initial;
+	const rendered = render(
+		createElement(EditorHost, {
+			initial,
+			shiftEnterToSend,
+			editorRef,
+			onDraft: (next: string) => {
+				latest = next;
+			},
+		}),
+	);
+	const editorElement = rendered.container.querySelector<HTMLElement>(".composer-editor");
+	const editor = editorRef.current;
+	if (editorElement === null || editor === null) {
+		throw new Error("编辑器没有渲染出来");
+	}
+	return { ...rendered, editorElement, editor, draft: () => latest };
+}
+
+/**
+ * 在光标处打一段字。
+ *
+ * jsdom 没有原生编辑，字符写不进 contenteditable，只能走编辑器自己的插入：对模型来说
+ * 与用户敲进来是同一个结果。
+ */
+async function typeText(editor: LexicalEditor, text: string): Promise<void> {
+	await act(async () => {
+		editor.update(
+			() => {
+				const selection = $getSelection();
+				if ($isRangeSelection(selection)) {
+					selection.insertText(text);
+				}
+			},
+			{ discrete: true },
+		);
+	});
+}
+
+/** 输入域顶层块的名字，用来确认引用、列表有没有干净地结束。 */
+function topBlocks(container: HTMLElement): string[] {
+	return [...container.querySelectorAll(".composer-editor > *")].map((node) => node.tagName.toLowerCase());
+}
+
+describe("块级结构换行", () => {
+	for (const shiftEnterToSend of [false, true]) {
+		const mode = shiftEnterToSend ? "Shift+回车发送" : "回车发送";
+		/** 这一档设置下「换行」是哪一个组合：回车发送时靠 Shift，反之回车就是换行 */
+		const newlineKey = shiftEnterToSend ? {} : { shiftKey: true };
+
+		it(`${mode}：引用里换一次行继续写引用，再换行退回普通段落`, async () => {
+			const rendered = renderEditor("> quote", shiftEnterToSend);
+			await focusEditor(rendered.editorElement);
+
+			// 第一下：引用内换行，竖线接着往下画
+			await pressKey(rendered.editorElement, "Enter", newlineKey);
+			expect(rendered.draft()).toBe("> quote\n> ");
+
+			// 第二下：站在末尾空行上，退出引用另起一段
+			await pressKey(rendered.editorElement, "Enter", newlineKey);
+			await typeText(rendered.editor, "normal");
+
+			expect(rendered.draft()).toBe("> quote\nnormal");
+			expect(topBlocks(rendered.container)).toEqual(["blockquote", "p"]);
+			rendered.unmount();
+		});
+
+		it(`${mode}：有序列表里换行切出新条目，空条目上再换行退出列表`, async () => {
+			const rendered = renderEditor("1. first", shiftEnterToSend);
+			await focusEditor(rendered.editorElement);
+
+			await pressKey(rendered.editorElement, "Enter", newlineKey);
+			expect(rendered.container.querySelectorAll("li")).toHaveLength(2);
+			await typeText(rendered.editor, "second");
+			expect(rendered.draft()).toBe("1. first\n2. second");
+
+			// 再换行出一个空条目，然后在空条目上换行：退出列表，已写的条目留在原地
+			await pressKey(rendered.editorElement, "Enter", newlineKey);
+			expect(rendered.container.querySelectorAll("li")).toHaveLength(3);
+			await pressKey(rendered.editorElement, "Enter", newlineKey);
+			expect(rendered.container.querySelectorAll("li")).toHaveLength(2);
+			expect(topBlocks(rendered.container)).toEqual(["ol", "p"]);
+			expect(rendered.draft().startsWith("1. first\n2. second")).toBe(true);
+			rendered.unmount();
+		});
+	}
+
+	it("引用中间换行只是续行，不退出引用", async () => {
+		const rendered = renderEditor("> first\n> second", false);
+		await focusEditor(rendered.editorElement);
+		// 光标挪到引用第一行开头：不是末尾那道空行，换行应当就地插一行
+		await act(async () => {
+			const text = rendered.editorElement.querySelector("blockquote [data-lexical-text]")?.firstChild;
+			if (text === undefined || text === null) {
+				throw new Error("引用里的文字没有渲染出来");
+			}
+			const range = document.createRange();
+			range.setStart(text, 0);
+			range.collapse(true);
+			const selection = window.getSelection();
+			selection?.removeAllRanges();
+			selection?.addRange(range);
+			document.dispatchEvent(new Event("selectionchange"));
+		});
+
+		await pressKey(rendered.editorElement, "Enter", { shiftKey: true });
+		expect(topBlocks(rendered.container)).toEqual(["blockquote"]);
+		expect(rendered.draft()).toBe("> \n> first\n> second");
+		rendered.unmount();
+	});
+
+	it("空引用上连按两次换行会整块收掉", async () => {
+		const rendered = renderEditor("> ", false);
+		await focusEditor(rendered.editorElement);
+
+		// 第一下在引用里起一行，第二下退出：一个字都没有的引用不该留下一条空竖线
+		await pressKey(rendered.editorElement, "Enter", { shiftKey: true });
+		expect(topBlocks(rendered.container)).toEqual(["blockquote"]);
+		await pressKey(rendered.editorElement, "Enter", { shiftKey: true });
+		expect(topBlocks(rendered.container)).toEqual(["p"]);
+		expect(rendered.draft()).toBe("");
+		rendered.unmount();
+	});
+
+	it("空的引用块在开头退格会变回普通段落", async () => {
+		const rendered = renderEditor("> ", false);
+		await focusEditor(rendered.editorElement);
+
+		await pressKey(rendered.editorElement, "Backspace");
+		expect(rendered.container.querySelector("blockquote")).toBeNull();
+		expect(topBlocks(rendered.container)).toEqual(["p"]);
+		rendered.unmount();
+	});
+
+	it("空的列表项在开头退格会变回普通段落", async () => {
+		const rendered = renderEditor("1. first", false);
+		await focusEditor(rendered.editorElement);
+		// 换行出来的第二项是空的，在它开头退格应当退出列表
+		await pressKey(rendered.editorElement, "Enter", { shiftKey: true });
+		expect(rendered.container.querySelectorAll("li")).toHaveLength(2);
+		await pressKey(rendered.editorElement, "Backspace");
+		expect(rendered.container.querySelectorAll("li")).toHaveLength(1);
+		expect(topBlocks(rendered.container)).toEqual(["ol", "p"]);
+		rendered.unmount();
 	});
 });

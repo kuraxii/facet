@@ -116,7 +116,10 @@ export { clampPaneWidth } from "./panel/pane-width.ts";
 export type { PanelStorage, RightPanelState, RightPanelTab } from "./panel/panel-state.ts";
 export {
 	clampPanelWidth,
+	closePanelTab,
 	DEFAULT_PANEL_STATE,
+	normalizePanelState,
+	openPanelTab,
 	PANEL_DEFAULT_WIDTH,
 	PANEL_MIN_WIDTH,
 	PANEL_WIDTH_BOUNDS,
@@ -125,15 +128,21 @@ export {
 } from "./panel/panel-state.ts";
 export type { RightPanelProps } from "./panel/right-panel.tsx";
 export { RightPanel } from "./panel/right-panel.tsx";
+export type { ShortcutChord } from "./panel/shortcuts.ts";
+export { formatShortcut } from "./panel/shortcuts.ts";
 export { PanelToggle, SidebarToggle } from "./panel/top-bar.tsx";
-export type { WorkspaceSplitProps } from "./panel/workspace-split.tsx";
-export { WORKSPACE_SPLIT_MIN_WIDTH_PX, WorkspaceSplit } from "./panel/workspace-split.tsx";
+export type { WorkspaceLauncherProps } from "./panel/workspace-launcher.tsx";
+export { WorkspaceLauncher } from "./panel/workspace-launcher.tsx";
+export type { WorkspaceSplitProps, WorkspaceSplitView } from "./panel/workspace-split.tsx";
+export { WORKSPACE_SPLIT_WIDE_WIDTH_PX, WorkspaceSplit } from "./panel/workspace-split.tsx";
 export type {
 	WorkspaceTabBarProps,
 	WorkspaceTabId,
 	WorkspaceTabItem,
 } from "./panel/workspace-tab-bar.tsx";
 export { WorkspaceTabBar } from "./panel/workspace-tab-bar.tsx";
+export type { WorkspaceTabMenuProps } from "./panel/workspace-tab-menu.tsx";
+export { WorkspaceTabMenu } from "./panel/workspace-tab-menu.tsx";
 export type { TextMenuProps } from "./text-menu.tsx";
 export { TextMenu } from "./text-menu.tsx";
 export type { CodeThemeOption, UiThemeOption } from "./theme.ts";

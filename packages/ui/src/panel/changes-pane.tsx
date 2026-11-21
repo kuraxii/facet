@@ -159,7 +159,7 @@ export function ChangesPane({
 			{onCollapse === undefined ? null : (
 				<button
 					type="button"
-					className={styles.iconButton}
+					className={`${styles.iconButton} workspace-collapse-list`}
 					aria-label={t("panel.collapseChanges")}
 					onClick={onCollapse}
 				>

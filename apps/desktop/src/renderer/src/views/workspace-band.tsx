@@ -1,60 +1,78 @@
 /**
- * 顶带里的工作区控件，与收起态的悬浮竖轨。
+ * 顶带右格里的工作区控件。
  *
- * 三处用到同一组东西：顶带右格（右栏占列时）、抽屉顶头（右栏是浮层时）与竖轨（右栏收起
- * 时）。三处都是分页 + 图钉 + 关闭，差别只在排布方向与让位方式，所以控件本身只写一份。
+ * 两处用到同一组东西：占列时的顶带右格、窄档抽屉的顶头。两处都是「动态标签 + `+` 菜单 +
+ * 右端两枚动作（`⤢` 宽展开 / 收起）」，差别只在画到哪一格、给不给宽展开，所以控件本身只写
+ * 一份。
  *
- * 顶带那一格与抽屉顶头各是一处容器查询的容器（宽度即整列/整条抽屉宽），里面这一行负责
- * 让出右上角那 132px 的窗口按钮簇——位置口径见 `docs/layout.md` §3 约束 1。
+ * 这一格与抽屉顶头各是一处容器查询的容器（宽度即整列/整条抽屉宽），里面这一行负责让出
+ * 右上角那 132px 的窗口按钮簇——位置口径见 `docs/layout.md` §3 约束 1。
  */
 
 import type { WorkspaceTabId, WorkspaceTabItem } from "@facet/ui";
-import { useI18n, WorkspaceTabBar } from "@facet/ui";
-import { Pin, X } from "lucide-react";
+import { useI18n, WorkspaceTabBar, WorkspaceTabMenu } from "@facet/ui";
+import { Maximize2, Minimize2, PanelRightClose } from "lucide-react";
 import type { ReactNode } from "react";
 import type { WorkspaceShell } from "../hooks/useWorkspaceShell.ts";
 
-/** 工作区分页那一组控件。 */
+/** 工作区那一组控件。 */
 export interface WorkspacePanelControlsProps {
-	/** 外壳状态：分页停在哪、钉没钉住、此刻是不是浮层 */
+	/** 外壳状态：开着哪些标签、停在哪个上、是不是在宽展开里 */
 	shell: WorkspaceShell;
-	/** 三张分页 */
+	/** 全部三类工具，`+` 菜单用它 */
 	items: readonly WorkspaceTabItem[];
-	/** 切到某一页 */
+	/** 打开或切到某个工具 */
 	onSelectTab: (id: WorkspaceTabId) => void;
-	/** 要不要放图钉；窄档忽略图钉，那时不放 */
-	showPin: boolean;
-	/** 分页对应的面板 id，给到 `aria-controls` */
+	/** 关掉一个标签 */
+	onCloseTab: (id: WorkspaceTabId) => void;
+	/** 标签栏对应的面板 id，给到 `aria-controls` */
 	controlsId?: string;
+	/** 给不给 `⤢` 宽展开：抽屉已经接近满宽，那时不给 */
+	showExpand: boolean;
 }
 
-/** 分页 + 图钉 + 关闭：顶带右格与抽屉顶头共用。 */
+/** 动态标签 + `+` 菜单 + 宽展开 / 收起：顶带右格与抽屉顶头共用。 */
 export function WorkspacePanelControls({
 	shell,
 	items,
 	onSelectTab,
-	showPin,
+	onCloseTab,
 	controlsId,
+	showExpand,
 }: WorkspacePanelControlsProps): ReactNode {
 	const { t } = useI18n();
+	// 标签栏只放已经打开的那些，顺序就是打开顺序
+	const openTabs = shell.panel.openTabs;
+	const openItems = openTabs
+		.map((id) => items.find((item) => item.id === id))
+		.filter((item): item is WorkspaceTabItem => item !== undefined);
+	const ExpandIcon = shell.isPanelExpanded ? Minimize2 : Maximize2;
+
 	return (
 		<>
 			<WorkspaceTabBar
-				items={items}
-				activeId={shell.panel.tab}
+				items={openItems}
+				activeId={shell.panel.activeTab}
 				onSelect={onSelectTab}
+				onClose={onCloseTab}
 				controlsId={controlsId}
 			/>
+			<WorkspaceTabMenu
+				items={items}
+				openTabs={openTabs}
+				activeId={shell.panel.activeTab}
+				onPick={onSelectTab}
+			/>
 			<span className="chrome-spacer" />
-			{showPin ? (
+			{showExpand ? (
 				<button
 					type="button"
 					className="chrome-toggle"
-					aria-label={t("panel.pinPanel")}
-					aria-pressed={shell.panel.pinned}
-					onClick={() => shell.setPanelPinned(!shell.panel.pinned)}
+					aria-label={shell.isPanelExpanded ? t("panel.restoreWide") : t("panel.expandWide")}
+					aria-pressed={shell.isPanelExpanded}
+					onClick={shell.togglePanelExpanded}
 				>
-					<Pin size={14} strokeWidth={1.5} />
+					<ExpandIcon size={14} strokeWidth={1.5} />
 				</button>
 			) : null}
 			<button
@@ -63,70 +81,8 @@ export function WorkspacePanelControls({
 				aria-label={t("panel.collapsePanel")}
 				onClick={shell.isPanelDrawerOpen ? shell.closePanelDrawer : shell.togglePanel}
 			>
-				<X size={15} strokeWidth={1.5} />
+				<PanelRightClose size={14} strokeWidth={1.5} />
 			</button>
 		</>
-	);
-}
-
-/** 抽屉顶头的内容：分页、图钉（非窄档）与关闭。 */
-export interface PanelHeadProps {
-	/** 外壳状态 */
-	shell: WorkspaceShell;
-	/** 三张分页 */
-	items: readonly WorkspaceTabItem[];
-	/** 切到某一页 */
-	onSelectTab: (id: WorkspaceTabId) => void;
-}
-
-export function PanelHead({ shell, items, onSelectTab }: PanelHeadProps): ReactNode {
-	return (
-		<WorkspacePanelControls
-			shell={shell}
-			items={items}
-			onSelectTab={onSelectTab}
-			// 窄档忽略图钉：那里一律是抽屉，钉不钉没有区别
-			showPin={!shell.isNarrow}
-			controlsId="workspace-panel"
-		/>
-	);
-}
-
-/**
- * 收起态右侧的悬浮竖轨。
- *
- * 只在非窄档且右栏收着时出现：三张分页竖着排，底部一枚图钉。窄档不显示它——那里正文
- * 本来就窄，竖轨会盖住正文控件与滚动条，入口统一留在顶带右上角。
- */
-export interface PanelRailProps {
-	/** 外壳状态 */
-	shell: WorkspaceShell;
-	/** 三张分页 */
-	items: readonly WorkspaceTabItem[];
-	/** 切到某一页 */
-	onSelectTab: (id: WorkspaceTabId) => void;
-}
-
-export function PanelRail({ shell, items, onSelectTab }: PanelRailProps): ReactNode {
-	const { t } = useI18n();
-	return (
-		<div className="panel-rail">
-			<WorkspaceTabBar
-				items={items}
-				activeId={shell.panel.tab}
-				onSelect={onSelectTab}
-				orientation="vertical"
-				labelMode="never"
-			/>
-			<button
-				type="button"
-				className="panel-rail-pin"
-				aria-label={t("panel.pinPanel")}
-				aria-pressed={shell.panel.pinned}
-				onClick={() => shell.setPanelPinned(!shell.panel.pinned)}
-			>
-				<Pin size={13} strokeWidth={1.5} />
-			</button>
-		</div>
 	);
 }

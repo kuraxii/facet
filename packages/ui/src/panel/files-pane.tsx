@@ -138,7 +138,12 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath, onCollapse 
 	const header = (
 		<div className="tree-head">
 			{onCollapse === undefined ? null : (
-				<button type="button" className="ib" aria-label={t("panel.collapseTree")} onClick={onCollapse}>
+				<button
+					type="button"
+					className="ib workspace-collapse-list"
+					aria-label={t("panel.collapseTree")}
+					onClick={onCollapse}
+				>
 					<PanelRightClose size={13} strokeWidth={1.5} />
 				</button>
 			)}

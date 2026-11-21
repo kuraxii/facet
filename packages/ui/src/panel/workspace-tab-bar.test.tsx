@@ -2,7 +2,7 @@
 /**
  * 工作区标签栏。
  *
- * 纯展示组件，交互全部落在按钮上，所以这里要真的挂一棵 DOM：点击切换、方向键切换与
+ * 纯展示组件，交互全部落在按钮上，所以这里要真的挂一棵 DOM：点击切换、关闭、方向键切换与
  * 无障碍属性都按用户看得见的行为断言，而不是只看静态标记。
  */
 import { act } from "react";
@@ -41,24 +41,35 @@ afterEach(() => {
 	document.body.innerHTML = "";
 });
 
-/** 挂一棵标签栏，返回容器与选中回调。 */
-function mount(props: Partial<WorkspaceTabBarProps> = {}): {
+/**
+ * 挂一棵标签栏。
+ *
+ * 容器宽度是假的：组件按祖先容器的 `clientWidth` 决定要不要折起文字，jsdom 里一律是 0，
+ * 所以这里显式给一个宽度，两种口径都能测到。
+ */
+function mount(
+	props: Partial<WorkspaceTabBarProps> = {},
+	{ width = 800 }: { width?: number } = {},
+): {
 	container: HTMLDivElement;
 	onSelect: ReturnType<typeof vi.fn>;
+	onClose: ReturnType<typeof vi.fn>;
 } {
 	const container = document.createElement("div");
+	Object.defineProperty(container, "clientWidth", { value: width, configurable: true });
 	document.body.append(container);
 	const onSelect = vi.fn();
+	const onClose = vi.fn();
 	const root = createRoot(container);
 	act(() => {
 		root.render(
 			<I18nProvider language="zh-CN">
-				<WorkspaceTabBar items={ITEMS} activeId="files" onSelect={onSelect} {...props} />
+				<WorkspaceTabBar items={ITEMS} activeId="files" onSelect={onSelect} onClose={onClose} {...props} />
 			</I18nProvider>,
 		);
 	});
 	unmount = () => root.unmount();
-	return { container, onSelect };
+	return { container, onSelect, onClose };
 }
 
 /** 取所有标签按钮。 */
@@ -83,12 +94,17 @@ function press(node: HTMLElement, key: string): void {
 }
 
 describe("工作区标签栏", () => {
-	it("按顺序渲染三类标签，当前项带 aria-selected", () => {
+	it("按顺序渲染已打开的标签，当前项带 aria-selected", () => {
 		const { container } = mount();
 		expect(container.querySelector('[role="tablist"]')).not.toBeNull();
 		expect(tabs(container).map((node) => node.textContent)).toEqual(["文件", "变更3", "终端"]);
 		expect(tab(container, "文件").getAttribute("aria-selected")).toBe("true");
 		expect(tab(container, "变更").getAttribute("aria-selected")).toBe("false");
+	});
+
+	it("一条标签都没开时不渲染标签栏本身", () => {
+		const { container } = mount({ items: [] });
+		expect(container.querySelector('[role="tablist"]')).toBeNull();
 	});
 
 	it("当前项是唯一能 Tab 到的那一条", () => {
@@ -118,24 +134,15 @@ describe("工作区标签栏", () => {
 		act(() => tab(container, "变更").click());
 		expect(onSelect).not.toHaveBeenCalled();
 		expect(tab(container, "变更").disabled).toBe(true);
-
 		press(tab(container, "文件"), "ArrowRight");
 		expect(onSelect).toHaveBeenLastCalledWith("terminal");
 	});
 
-	it("横向用左右键，到头绕回另一头", () => {
+	it("左右键在同一条可用项序列里循环，Home / End 跳到两头", () => {
 		const { container, onSelect } = mount({ activeId: "files" });
 		press(tab(container, "文件"), "ArrowRight");
 		expect(onSelect).toHaveBeenLastCalledWith("changes");
 		press(tab(container, "文件"), "ArrowLeft");
-		expect(onSelect).toHaveBeenLastCalledWith("terminal");
-	});
-
-	it("纵向用上下键，Home / End 跳到两头", () => {
-		const { container, onSelect } = mount({ orientation: "vertical", labelMode: "never" });
-		press(tab(container, "文件"), "ArrowDown");
-		expect(onSelect).toHaveBeenLastCalledWith("changes");
-		press(tab(container, "文件"), "ArrowUp");
 		expect(onSelect).toHaveBeenLastCalledWith("terminal");
 		press(tab(container, "文件"), "End");
 		expect(onSelect).toHaveBeenLastCalledWith("terminal");
@@ -143,30 +150,49 @@ describe("工作区标签栏", () => {
 		expect(onSelect).toHaveBeenLastCalledWith("files");
 	});
 
-	it("两种方向各自给出 aria-orientation 与类名", () => {
-		const horizontal = mount();
-		const list = horizontal.container.querySelector('[role="tablist"]');
-		expect(list?.getAttribute("aria-orientation")).toBe("horizontal");
-		expect(list?.className).toContain("is-horizontal");
-		act(() => unmount?.());
-		unmount = undefined;
-
-		const vertical = mount({ orientation: "vertical", labelMode: "never" });
-		const verticalList = vertical.container.querySelector('[role="tablist"]');
-		expect(verticalList?.getAttribute("aria-orientation")).toBe("vertical");
-		expect(verticalList?.className).toContain("is-vertical");
+	it("关闭按钮带标识，点它就关那一条", () => {
+		const { container, onClose } = mount();
+		const close = container.querySelector<HTMLButtonElement>(
+			".workspace-tab-shell:nth-child(2) .workspace-tab-close",
+		);
+		expect(close?.getAttribute("aria-label")).toBe("关闭变更");
+		act(() => close?.click());
+		expect(onClose).toHaveBeenCalledWith("changes");
 	});
 
-	it("文字折起时用无障碍名称与悬浮提示补上文案", () => {
-		const { container } = mount({ labelMode: "never" });
-		const node = tab(container, "文件");
-		expect(node.getAttribute("aria-label")).toBe("文件");
-		expect(container.querySelector('[role="tablist"]')?.getAttribute("data-label-mode")).toBe("never");
+	it("中键关闭，与浏览器标签一致", () => {
+		const { container, onClose } = mount();
+		act(() => {
+			tab(container, "终端").dispatchEvent(
+				new MouseEvent("auxclick", { button: 1, bubbles: true, cancelable: true }),
+			);
+		});
+		expect(onClose).toHaveBeenCalledWith("terminal");
 	});
 
-	it("始终给文字时不加无障碍名称，避免与可见文字重复", () => {
-		const { container } = mount({ labelMode: "always" });
+	it("Delete / Backspace 关掉当前标签，不用先把焦点挪到叉上", () => {
+		const { container, onClose } = mount({ activeId: "changes" });
+		press(tab(container, "变更"), "Delete");
+		expect(onClose).toHaveBeenLastCalledWith("changes");
+		press(tab(container, "变更"), "Backspace");
+		expect(onClose).toHaveBeenLastCalledWith("changes");
+	});
+
+	it("不给关闭回调时不渲染关闭按钮", () => {
+		const { container } = mount({ onClose: undefined });
+		expect(container.querySelectorAll(".workspace-tab-close")).toHaveLength(0);
+		// 没有关闭按钮时 Delete 也不该关任何东西
+		press(tab(container, "文件"), "Delete");
+	});
+
+	it("容器够宽时给文字、不加无障碍名称，避免与可见文字重复", () => {
+		const { container } = mount({}, { width: 800 });
 		expect(tab(container, "文件").getAttribute("aria-label")).toBeNull();
+	});
+
+	it("容器窄时折起文字，用无障碍名称补上文案", () => {
+		const { container } = mount({}, { width: 300 });
+		expect(tab(container, "文件").getAttribute("aria-label")).toBe("文件");
 	});
 
 	it("读屏名称与方向键顺序跟着条目走，不认硬编码的业务", () => {

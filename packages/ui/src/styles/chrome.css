@@ -38,6 +38,16 @@
 	--col-panel: 0px;
 }
 
+/*
+ * 宽展开：右栏最大化——吃掉正文那一列，盖住主栏。
+ *
+ * 判据只有一条：`100%`（`.app` 的宽）扣掉左栏之后剩下的都归右栏，正文那一列因此是 `0`。
+ * 左栏按它自己的意图摆（它不在被盖住的范围内），意图位与偏好宽都不动，退出展开时原样恢复。
+ */
+.app.is-panel-expanded:not(.is-narrow) {
+	--col-panel: calc(100% - var(--col-sidebar));
+}
+
 /* 拖动区盖住整条顶带，格子里的控件自己标 no-drag */
 .app-drag {
 	position: absolute;
@@ -101,6 +111,15 @@
 }
 
 /*
+ * 宽展开时中格是 `0` 宽、整格不渲染控件（见 `workbench.tsx`），这条让位也得清零：
+ * 展开的 `--col-panel` 含百分比，百分比在 padding 里会按中格自己的（零）宽度解析，
+ * 算出来是个负数，内层内容会被推到格子外面去。窗口按钮簇此刻落在右栏那一格里。
+ */
+.app.is-panel-expanded:not(.is-narrow) .chrome-slot.is-main {
+	padding-inline-end: 0px;
+}
+
+/*
  * 右栏那一格：占右列，内容行自己让出窗口按钮簇的那一段。
  *
  * 它自己是容器查询的容器，量到的宽度就是右栏整列宽（`panel.css` 里的 440px 断点用它），
@@ -134,6 +153,17 @@
 	flex: 1;
 }
 
+/* 中格左端的会话标题：过长时省略，不与右端的开关抢位置 */
+.chrome-title {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	color: var(--t2);
+	font-size: 12.5px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 /* 顶带里的图标按钮：开与关同一个亮度，展开与否由面板本身看得出来 */
 .chrome-toggle {
 	display: grid;
@@ -153,9 +183,30 @@
 	color: var(--t1);
 }
 
-/* 双态开关按住时只换颜色：图钉是否生效由它自己看得出来 */
+/* 双态开关按住时只换颜色：宽展开是否生效由它自己看得出来 */
 .chrome-toggle[aria-pressed="true"] {
 	color: var(--acc);
+}
+
+/* 右栏开关上的计数：收起时提示还有多少改动没看，展开之后由标签上的计数接手 */
+.chrome-toggle.is-panel {
+	position: relative;
+}
+
+.chrome-toggle-badge {
+	position: absolute;
+	top: 0;
+	right: 0;
+	min-width: 13px;
+	padding: 0 3px;
+	border-radius: 999px;
+	background: var(--acc);
+	color: var(--bg);
+	font-family: var(--font-mono);
+	font-size: 9.5px;
+	line-height: 12px;
+	text-align: center;
+	pointer-events: none;
 }
 
 /*

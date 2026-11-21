@@ -6,6 +6,7 @@
  * 带里，各自标 `no-drag`，带中间的空白仍然可以拖窗口。
  */
 import { PanelLeft, PanelRight } from "lucide-react";
+import type { ReactNode } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 
 /** 左栏开关：主区左上角。 */
@@ -26,9 +27,19 @@ export function SidebarToggle({ isOpen, onToggle }: { isOpen: boolean; onToggle:
 }
 
 /** 右栏开关：主区右上角。 */
-export function PanelToggle({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void }) {
+export function PanelToggle({
+	isOpen,
+	onToggle,
+	badge,
+}: {
+	isOpen: boolean;
+	onToggle: () => void;
+	/** 角标：右栏收起时把未提交的改动数挂在它上面；不给或为 0 时不显示 */
+	badge?: number | string | undefined;
+}): ReactNode {
 	const { t } = useI18n();
 	const label = isOpen ? t("panel.collapsePanel") : t("panel.expandPanel");
+	const showsBadge = badge !== undefined && badge !== 0 && badge !== "";
 	return (
 		<button
 			type="button"
@@ -38,6 +49,11 @@ export function PanelToggle({ isOpen, onToggle }: { isOpen: boolean; onToggle: (
 			onClick={onToggle}
 		>
 			<PanelRight size={15} strokeWidth={1.5} />
+			{showsBadge ? (
+				<span className="chrome-toggle-badge" aria-hidden="true">
+					{badge}
+				</span>
+			) : null}
 		</button>
 	);
 }

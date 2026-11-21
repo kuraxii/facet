@@ -1,11 +1,12 @@
 /**
  * 主工作区。
  *
- * 三栏骨架、顶带里的工作区控件、右栏与各种弹窗的组装；状态都来自上层建好的几个域，这里
- * 只把它们摆到位并接上回调。
+ * 三栏骨架、顶带三格、右栏与各种弹窗的组装；状态都来自上层建好的几个域，这里只把它们
+ * 摆到位并接上回调。
  *
  * 主区只有对话：消息流与输入区直接撑满中列，主区自己不再有标签栏。文件、变更与终端都在
- * 右栏那三张分页里（口径见 `docs/layout.md` §2）。
+ * 右栏那几个动态标签里（口径见 `docs/layout.md` §2）。顶带三格的分工：左格是侧栏自己的
+ * 头部（搜索、新建、收起），中格是会话标题与右栏入口，右格是右栏的标签、`+` 与两枚动作。
  */
 
 import type { ChatView } from "@facet/client-core";
@@ -25,6 +26,7 @@ import {
 	SettingsPage,
 	SidebarHeader,
 	SidebarToggle,
+	sessionTitle,
 	TrustDialog,
 	useI18n,
 	type WorkspaceTabId,
@@ -45,7 +47,7 @@ import { LOCAL_TARGET } from "../host-connection.ts";
 import { useHostClient } from "../host-context.tsx";
 import { workspaceTabItems } from "../workspace-tabs.ts";
 import { ChatArea } from "./chat-area.tsx";
-import { PanelHead, PanelRail, WorkspacePanelControls } from "./workspace-band.tsx";
+import { WorkspacePanelControls } from "./workspace-band.tsx";
 import { WorkspaceBody } from "./workspace-body.tsx";
 
 export interface WorkbenchProps {
@@ -68,7 +70,7 @@ export interface WorkbenchProps {
 	onLanguageChange: (setting: LanguageSetting) => void;
 	/** 当前会话标识 */
 	openedSessionId: string | undefined;
-	/** 终端分页要显示的那个终端 */
+	/** 终端标签要显示的那个终端 */
 	terminalId: string | undefined;
 	/** 复制一段文本 */
 	copyText: (text: string) => void;
@@ -103,6 +105,8 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 	const activity = chatActivity(sessionView);
 	const sessionCwd: string | undefined = sessionView?.state.cwd;
 	const canUseTerminal = host.host?.capabilities.includes("terminal") ?? false;
+	/** mac 的主修饰键写成 ⌘，其它平台是 Ctrl；启动清单与 `+` 菜单的提示共用这一份 */
+	const isMac = bridge.platform === "darwin";
 	const tabItems = useMemo(
 		() =>
 			workspaceTabItems(
@@ -112,9 +116,16 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 					canUseTerminal,
 				},
 				{ files: t("panel.files"), changes: t("panel.changes"), terminal: t("panel.terminal") },
+				isMac,
 			),
-		[canUseTerminal, docs.changes.status, t, terminal.terminals.length],
+		[canUseTerminal, docs.changes.status, isMac, t, terminal.terminals.length],
 	);
+	/** 主区顶带里的会话标题：跟着侧栏里那一条走，没名字时用首条消息 */
+	const activeSession = session.sessions.find((item) => item.path === session.activeFile);
+	const chromeTitle =
+		activeSession === undefined
+			? undefined
+			: sessionTitle(activeSession.name, activeSession.firstMessage, t("sidebar.untitled"));
 	const settingsData = useMemo<SettingsDataSource>(
 		() => ({
 			loadSettings: () => client.getSettings(),
@@ -199,10 +210,10 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 		);
 
 	/**
-	 * 打开工作区的某一张分页。
+	 * 打开工作区的一件工具（启动清单、`+` 菜单与标签栏三处共用）。
 	 *
-	 * 终端还没有就地新建一个：分页本身是入口，用户点了它要的就是一个能用的终端，而不是
-	 * 一片空白；建成之后由上层把分页切过去。
+	 * 终端还没有就地新建一个：标签本身就是入口，用户点了它要的就是一个能用的终端，而不是
+	 * 一片空白；建成之后由上层把标签切过去。
 	 */
 	const selectWorkspaceTab = useCallback(
 		(id: WorkspaceTabId): void => {
@@ -213,6 +224,22 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 			shell.setPanelTab(id);
 		},
 		[openTerminal, shell, terminalId],
+	);
+
+	/**
+	 * 关掉右栏的一个标签。
+	 *
+	 * 关终端标签时顺手把它的 PTY 关掉：标签没了还留一个进程在主机上，下次打开在同一列里
+	 * 会看到一个没人看的会话。文件与变更只卸界面，不碰磁盘。
+	 */
+	const closeWorkspaceTab = useCallback(
+		(id: WorkspaceTabId): void => {
+			if (id === "terminal" && terminalId !== undefined) {
+				void terminal.closeTerminal(terminalId);
+			}
+			shell.closePanelTab(id);
+		},
+		[shell, terminal, terminalId],
 	);
 
 	/** 主区的内容：有会话就是对话，没有会话就是空状态 */
@@ -255,8 +282,6 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 	const hasPanelColumn = shell.panelVisible && !shell.isNarrow;
 	/* 右栏要渲染：要么占列，要么作为浮层展开着 */
 	const rendersPanel = hasPanelColumn || shell.isPanelDrawerOpen;
-	/* 收起态的非窄档给一条悬浮竖轨；窄档不给，入口统一留在顶带 */
-	const showsRail = !shell.isNarrow && !hasPanelColumn && !shell.isPanelDrawerOpen;
 
 	return (
 		<CodeThemeProvider value={shell.codeTheme}>
@@ -266,6 +291,7 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 				panelWidth={`${shell.panelEffectiveWidth}px`}
 				sidebarVisible={shell.sidebarVisible}
 				panelVisible={shell.panelVisible}
+				panelExpanded={shell.isPanelExpanded}
 				chrome={
 					<>
 						<div
@@ -286,17 +312,29 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 						</div>
 						<div className="chrome-slot is-main">
 							{/*
-							 * 侧栏展开时开关在它自己的头部里，收起之后才回到主区左上角。
-							 * 窄档抽屉开着时这个开关留在原地（被抽屉与遮罩盖住）：抽屉关掉之后
-							 * 焦点要还给它，元素不能在打开期间就被卸载掉。
+							 * 宽展开时这一列被右栏整个盖住（轨道宽度是 0），整格不渲染控件：
+							 * 留着的按钮看不见却还能 Tab 到，还会溢出到右栏那一格上。
 							 */}
-							{shell.isNarrow || !shell.isSidebarOpen ? (
-								<SidebarToggle isOpen={false} onToggle={shell.toggleSidebar} />
-							) : null}
-							{hasPanelColumn ? null : (
+							{shell.isPanelExpanded ? null : (
 								<>
+									{/*
+									 * 侧栏展开时开关在它自己的头部里，收起之后才回到主区左上角。
+									 * 窄档抽屉开着时这个开关留在原地（被抽屉与遮罩盖住）：抽屉关掉之后
+									 * 焦点要还给它，元素不能在打开期间就被卸载掉。
+									 */}
+									{shell.isNarrow || !shell.isSidebarOpen ? (
+										<SidebarToggle isOpen={false} onToggle={shell.toggleSidebar} />
+									) : null}
+									{chromeTitle === undefined ? null : <span className="chrome-title">{chromeTitle}</span>}
 									<span className="chrome-spacer" />
-									<PanelToggle isOpen={shell.isPanelOpen} onToggle={shell.togglePanel} />
+									{/* 右栏占列时它的入口在右格；收起（或进抽屉）时回到主区右端 */}
+									{hasPanelColumn ? null : (
+										<PanelToggle
+											isOpen={shell.isPanelOpen}
+											onToggle={shell.togglePanel}
+											badge={tabItems.find((item) => item.id === "changes")?.badge}
+										/>
+									)}
 								</>
 							)}
 						</div>
@@ -307,8 +345,9 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 										shell={shell}
 										items={tabItems}
 										onSelectTab={selectWorkspaceTab}
-										showPin={!shell.isNarrow}
+										onCloseTab={closeWorkspaceTab}
 										controlsId="workspace-panel"
+										showExpand={!shell.isNarrow}
 									/>
 								</div>
 							</div>
@@ -386,21 +425,38 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 
 					{rendersPanel ? (
 						<RightPanel
-							// 占列时是分隔条可拖的那一栏，浮层时是一层盖住正文的全高抽屉
+							// 占列时是分隔条可拖的那一栏，窄档时是一层盖住正文的全高抽屉
 							variant={hasPanelColumn ? "tiled" : "drawer"}
-							width={hasPanelColumn ? shell.panelEffectiveWidth : undefined}
-							onWidthChange={hasPanelColumn ? (width) => shell.updatePanel({ width }) : undefined}
+							/*
+							 * 宽展开期间不给宽度：那一列的宽度由样式按视口现算，拖动会把它改回
+							 * 偏好宽。展开态本来也不需要拖动——它已经是「能给多宽就给多宽」。
+							 */
+							width={hasPanelColumn && !shell.isPanelExpanded ? shell.panelEffectiveWidth : undefined}
+							onWidthChange={
+								hasPanelColumn && !shell.isPanelExpanded ? (width) => shell.updatePanel({ width }) : undefined
+							}
 							maxWidth={shell.panelMaxWidth}
 							onDraggingChange={shell.setPaneResizing}
 							head={
 								hasPanelColumn ? undefined : (
-									<PanelHead shell={shell} items={tabItems} onSelectTab={selectWorkspaceTab} />
+									<WorkspacePanelControls
+										shell={shell}
+										items={tabItems}
+										onSelectTab={selectWorkspaceTab}
+										onCloseTab={closeWorkspaceTab}
+										controlsId="workspace-panel"
+										// 抽屉已经接近满宽，宽展开在那里没有意义
+										showExpand={false}
+									/>
 								)
 							}
 							bodyClassName="is-workspace"
 						>
 							<WorkspaceBody
-								tab={shell.panel.tab}
+								openTabs={shell.panel.openTabs}
+								activeTab={shell.panel.activeTab}
+								items={tabItems}
+								onOpenTab={selectWorkspaceTab}
 								docs={docs}
 								terminal={terminal}
 								sessionCwd={sessionCwd}
@@ -408,8 +464,6 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 							/>
 						</RightPanel>
 					) : null}
-
-					{showsRail ? <PanelRail shell={shell} items={tabItems} onSelectTab={selectWorkspaceTab} /> : null}
 
 					<SessionSearch
 						isOpen={shell.isSearchOpen}

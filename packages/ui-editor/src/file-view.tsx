@@ -32,6 +32,13 @@ export interface FileViewProps {
 	/** 重新从磁盘读取 */
 	onReload: () => Promise<FileContent>;
 	/**
+	 * 挂在标题行最左端、路径之前的额外动作。
+	 *
+	 * 工作区用它放「返回列表」：右栏窄到只能单栏钻取时，路径前面一枚向左的箭头就是唯一的
+	 * 退路。
+	 */
+	headerLeading?: ReactNode;
+	/**
 	 * 挂在标题行最右端的额外动作。
 	 *
 	 * 工作区用它放「展开文件树」：树收起之后预览占满，这个入口跟着标题行走，位置固定。
@@ -49,7 +56,7 @@ function isConflict(error: unknown): boolean {
 /** Markdown 文件的两种呈现：渲染后的预览，与可编辑的源码。 */
 type MarkdownView = "preview" | "source";
 
-export function FileView({ path, content, onSave, onReload, headerTrailing }: FileViewProps) {
+export function FileView({ path, content, onSave, onReload, headerLeading, headerTrailing }: FileViewProps) {
 	const { t } = useI18n();
 	// 路径被省略号截断时由提示补全
 	const tip = useHoverTip();
@@ -161,6 +168,7 @@ export function FileView({ path, content, onSave, onReload, headerTrailing }: Fi
 	return (
 		<div className="file-view">
 			<div className="file-head">
+				{headerLeading}
 				<span className="file-path" {...tip.handlers(path)}>
 					{path}
 				</span>

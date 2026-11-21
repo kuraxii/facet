@@ -1,24 +1,27 @@
 /**
  * 界面外壳。
  *
- * 侧栏的抽屉与收起、右栏的分页、图钉与宽度、设置视图、界面缩放与全局快捷键——都是与
- * 主机无关的呈现状态，谁都不依赖，只依赖设置与窗口。
+ * 侧栏的抽屉与收起、右栏的标签与宽度、`⤢` 宽展开、设置视图、界面缩放与全局快捷键——都是
+ * 与主机无关的呈现状态，谁都不依赖，只依赖设置与窗口。
  *
- * 右栏有两种落脚方式，由图钉决定：固定时占 Grid 第 3 列（中档超预算时与左栏互斥折叠），
- * 取消固定时 `--col-panel` 为 `0`，展开态是一层盖住正文的全高抽屉。窄档忽略图钉，一律
- * 走抽屉（口径见 `docs/layout.md` §2）。
+ * 右栏只在窄档走抽屉；宽档与中档一律占 Grid 第 3 列（中档超预算时与左栏互斥折叠）。
+ * `⤢` 宽展开是临时视图状态，不落盘：展开期间左栏让位、右栏整行，退出时按原偏好宽与
+ * 意图位完整恢复（口径见 `docs/layout.md` §2）。
  */
 import type { FacetSettings } from "@facet/protocol";
 import {
+	openPanelTab as addPanelTab,
 	type CodeThemeValue,
 	clampSidebarWidth,
 	isDarkTheme,
+	normalizePanelState,
 	normalizeUiScale,
 	PANEL_MIN_WIDTH,
 	type RightPanelState,
 	type RightPanelTab,
 	readPanelState,
 	readSidebarWidth,
+	closePanelTab as removePanelTab,
 	resolveUiTheme,
 	type SettingsSection,
 	SIDEBAR_MAX_WIDTH,
@@ -41,7 +44,8 @@ function sameLayout(left: LayoutResolution, right: LayoutResolution): boolean {
 		left.viewportWidth === right.viewportWidth &&
 		left.sidebarVisible === right.sidebarVisible &&
 		left.panelVisible === right.panelVisible &&
-		left.foldedPane === right.foldedPane
+		left.foldedPane === right.foldedPane &&
+		left.expanded === right.expanded
 	);
 }
 
@@ -95,6 +99,9 @@ function shellClassName(isSidebarOpen: boolean, isDrawerOpen: boolean, isNarrow:
 	return names.join(" ");
 }
 
+/** 一次右栏改动：补丁，或者按当前状态算出下一份状态。 */
+export type PanelPatch = Partial<RightPanelState> | ((state: RightPanelState) => RightPanelState);
+
 export interface WorkspaceShellOptions {
 	/** 主机上的偏好设置，外观从这里取 */
 	settings: FacetSettings;
@@ -109,10 +116,12 @@ export interface WorkspaceShell {
 	isSidebarCollapsed: boolean;
 	/** 侧栏此刻是否可见 */
 	isSidebarOpen: boolean;
-	/** 右抽屉是否开着：窄档的临时抽屉，或取消固定后的浮层展开态 */
+	/** 右抽屉是否开着：窄档下的临时抽屉 */
 	isPanelDrawerOpen: boolean;
-	/** 右栏此刻看不看得见：抽屉开没开，或者固定时占没占列 */
+	/** 右栏此刻看不看得见：抽屉开没开，或者占没占列 */
 	isPanelOpen: boolean;
+	/** `⤢` 宽展开是否生效：左栏临时让位、右栏占满整行 */
+	isPanelExpanded: boolean;
 	/** 左栏此刻是否占列（宽档/中档下要么是意图，要么是中档预算留下的那一栏） */
 	sidebarVisible: boolean;
 	/** 右栏此刻是否占列 */
@@ -137,7 +146,7 @@ export interface WorkspaceShell {
 	view: "chat" | "settings";
 	/** 设置页停在哪一节 */
 	settingsSection: SettingsSection;
-	/** 右栏的状态：展开、分页与宽度 */
+	/** 右栏的状态：展开、开着哪些标签、宽度 */
 	panel: RightPanelState;
 	/** 本机界面缩放百分比 */
 	uiScale: number;
@@ -159,16 +168,23 @@ export interface WorkspaceShell {
 	closeSettings: () => void;
 	/** 换设置页的分节 */
 	setSettingsSection: (section: SettingsSection) => void;
-	/** 改右栏状态并写回本地 */
-	updatePanel: (patch: Partial<RightPanelState>) => void;
+	/**
+	 * 改右栏状态并写回本地。
+	 *
+	 * 收补丁或更新函数两种写法：更新函数用于「开着就切过去、没开就追加」这类要看当前状态
+	 * 的改动（见 `addPanelTab` / `removePanelTab`）。
+	 */
+	updatePanel: (patch: PanelPatch) => void;
 	/** 开关右栏：窄档切抽屉，未固定时展开或收起浮层，固定时改意图位 */
 	togglePanel: () => void;
-	/** 切右栏分页；窄档把抽屉调出来，中档被折起时把预算让给它 */
+	/** 打开一个工具并切过去；窄档把抽屉调出来，中档被折起时把预算让给它 */
 	setPanelTab: (tab: RightPanelTab) => void;
-	/** 打开或收起右抽屉：窄档的临时抽屉与未固定时的浮层都走它 */
+	/** 关掉一个工具标签；最后一个关掉后右栏停在启动清单上，不跟着收起 */
+	closePanelTab: (tab: RightPanelTab) => void;
+	/** 打开或收起右抽屉（窄档的临时抽屉） */
 	closePanelDrawer: () => void;
-	/** 设置图钉：固定回三栏，或改成盖住正文的浮层 */
-	setPanelPinned: (pinned: boolean) => void;
+	/** `⤢` 与 `⤡`：进出宽展开 */
+	togglePanelExpanded: () => void;
 	/** 应用本机界面缩放 */
 	changeUiScale: (next: number) => void;
 	/** 代码块主题，浅色与深色各取一份 */
@@ -195,15 +211,15 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 	const isNarrow = useSyncExternalStore(subscribeLayout, readLayoutIsNarrow);
 	/** 左抽屉是否开着 */
 	const isDrawerOpen = narrowDrawer === "sidebar";
-	/** 右栏取消了固定：平铺时不占列，展开时是浮层 */
-	const isPanelFloating = !isNarrow && !panel.pinned;
+	/** 右抽屉是否开着：只有窄档有抽屉，宽档与中档右栏一律占列 */
+	const isPanelDrawerOpen = isNarrow && narrowDrawer === "panel";
 	/**
-	 * 右抽屉是否开着。
+	 * `⤢` 宽展开是否生效。
 	 *
-	 * 窄档看临时抽屉；宽档与中档下这也是「未固定且展开了」的唯一表达——那时右栏不占列，
-	 * `panel.open` 就是抽屉的开关。
+	 * 临时视图状态，不落盘：窗口进窄档、右栏收起、用户手动点开左栏，三者任一发生就归
+	 * `false`，回到按偏好宽与意图位排的三栏。
 	 */
-	const isPanelDrawerOpen = isNarrow ? narrowDrawer === "panel" : isPanelFloating && panel.open;
+	const [isPanelExpanded, setIsPanelExpanded] = useState(false);
 	/** 最近一次被用户主动打开或调宽的那一栏：中档预算不够时保留它 */
 	const [priorityPane, setPriorityPane] = useState<LayoutPane>("sidebar");
 	/** 分隔条是否正在拖：拖动期间锁住折叠结果 */
@@ -219,7 +235,7 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 			panelPref: panel.width,
 			sidebarIntent,
 			panelIntent,
-			panelPinned: panel.pinned,
+			isPanelExpanded,
 			priorityPane,
 		}),
 	);
@@ -242,7 +258,7 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 				panelPref: panel.width,
 				sidebarIntent,
 				panelIntent,
-				panelPinned: panel.pinned,
+				isPanelExpanded,
 				priorityPane,
 			});
 			setLayout((current) => (sameLayout(current, next) ? current : next));
@@ -250,7 +266,7 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 		apply();
 		window.addEventListener("resize", apply);
 		return () => window.removeEventListener("resize", apply);
-	}, [isResizing, sidebarWidth, panel.width, panel.pinned, sidebarIntent, panelIntent, priorityPane]);
+	}, [isResizing, sidebarWidth, panel.width, isPanelExpanded, sidebarIntent, panelIntent, priorityPane]);
 
 	// 离开窄档就把抽屉收掉：抽屉是窄档的临时视图，拉宽后由意图位接管
 	useEffect(() => {
@@ -258,6 +274,18 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 			setNarrowDrawer(undefined);
 		}
 	}, [isNarrow]);
+
+	/*
+	 * 进窄档、或者右栏收起，宽展开自动归 `false`。
+	 *
+	 * 窄档本来就没有「展开」这回事（抽屉已经接近满宽），右栏收起时展开位留着，下次打开会
+	 * 莫名其妙地整行铺开——两个都不是用户请求的状态，所以在这里统一收掉。
+	 */
+	useEffect(() => {
+		if (isNarrow || !panel.open) {
+			setIsPanelExpanded(false);
+		}
+	}, [isNarrow, panel.open]);
 
 	// 设置变化时应用外观
 	useEffect(() => {
@@ -363,13 +391,16 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 	 *
 	 * 右栏没有固定的上限，窗口一缩它跟着收、窗口一大它按偏好宽长回去；偏好宽本身不改，
 	 * 所以只是暂时被压窄，不是把用户拖出来的宽度写小（口径见 `docs/layout.md` §3 约束 2）。
+	 *
+	 * 窄档是例外：那时右栏是盖在正文上的一层抽屉，没有并列的正文要保护，预算钳制只会把
+	 * 抽屉压到 `PANEL_MIN_WIDTH`。这里因此直接用偏好宽，抽屉自己按 `min(宽度, 92vw)` 收。
 	 */
 	const panelMaxWidth = clampDragMax({
 		viewportWidth: layout.viewportWidth,
 		otherWidth: layout.sidebarVisible ? sidebarWidth : 0,
 		min: PANEL_MIN_WIDTH,
 	});
-	const panelEffectiveWidth = Math.min(panel.width, panelMaxWidth);
+	const panelEffectiveWidth = isNarrow ? panel.width : Math.min(panel.width, panelMaxWidth);
 	/** 左栏拖动的上限：它自己有 `SIDEBAR_MAX_WIDTH`，再与正文的约束取小 */
 	const sidebarMaxWidth = clampDragMax({
 		viewportWidth: layout.viewportWidth,
@@ -385,16 +416,18 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 	 * 窄屏下右栏是浮层、宽度由样式表定，改宽度既看不出效果，又会把桌面端的偏好写坏。
 	 */
 	const updatePanel = useCallback(
-		(patch: Partial<RightPanelState>) => {
-			if (isNarrow && patch.width !== undefined) {
+		(patch: PanelPatch) => {
+			if (isNarrow && typeof patch === "object" && patch.width !== undefined) {
 				return;
 			}
-			// 手动打开或调宽都算主动交互：优先级换到右栏，预算不够时折起左栏
-			if (patch.open === true || patch.width !== undefined) {
+			// 手动打开、调宽、增减标签都算主动交互：优先级换到右栏，预算不够时折起左栏
+			if (typeof patch === "function" || patch.open === true || patch.width !== undefined) {
 				setPriorityPane("panel");
 			}
 			setPanel((current) => {
-				const next = { ...current, ...patch };
+				const next = normalizePanelState(
+					typeof patch === "function" ? patch(current) : { ...current, ...patch },
+				);
 				writePanelState(localStorage, next);
 				return next;
 			});
@@ -408,54 +441,56 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 	/**
 	 * 开关右栏。
 	 *
-	 * 窄档切临时抽屉（不动宽档的意图位）；未固定时切浮层的展开态；固定时改意图位——看得见
-	 * 就收起，被预算折起时点一下是把它调出来（所以看的是列上有没占位，不是意图位）。
+	 * 窄档切临时抽屉（不动宽档的意图位）；宽档与中档改意图位——看得见就收起，被预算折起时
+	 * 点一下是把它调出来（所以看的是列上有没占位，不是意图位）。
 	 */
 	const togglePanel = useCallback(() => {
 		if (isNarrow) {
 			setNarrowDrawer((current) => toggleNarrowDrawer(current, "panel"));
 			return;
 		}
-		if (isPanelFloating) {
-			updatePanel({ open: !panel.open });
-			return;
-		}
 		updatePanel({ open: !layout.panelVisible });
-	}, [isNarrow, isPanelFloating, layout.panelVisible, panel.open, updatePanel]);
+	}, [isNarrow, layout.panelVisible, updatePanel]);
 
-	/** 关掉右抽屉：窄档的临时抽屉与未固定时的浮层各自收尾 */
+	/** 关掉右抽屉：宽档下右栏收起时顺带退出宽展开 */
 	const closePanelDrawer = useCallback(() => {
 		if (isNarrow) {
 			setNarrowDrawer(undefined);
 			return;
 		}
+		setIsPanelExpanded(false);
 		updatePanel({ open: false });
 	}, [isNarrow, updatePanel]);
 
-	/**
-	 * 换图钉。
-	 *
-	 * 展开状态不动：固定时占列、取消固定时变成浮层，两种落脚方式下右栏都还看得见；被预算
-	 * 折起的那一栏换成固定之后按意图重新参与平铺。
-	 */
-	const setPanelPinned = useCallback(
-		(pinned: boolean) => {
-			updatePanel({ pinned });
-		},
-		[updatePanel],
-	);
+	/** `⤢` 与 `⤡`：只切临时视图位，不碰右栏的展开位与两侧的偏好宽 */
+	const togglePanelExpanded = useCallback(() => {
+		setIsPanelExpanded((current) => !current);
+	}, []);
 
-	/** 切分页：窄档把抽屉调出来，宽档与中档顺手把右栏打开（被折起时预算换边） */
+	/** 打开一个工具并切过去：窄档把抽屉调出来，宽档与中档顺手把右栏打开（被折起时预算换边） */
 	const setPanelTab = useCallback(
 		(tab: RightPanelTab) => {
 			if (isNarrow) {
 				setNarrowDrawer("panel");
-				updatePanel({ tab });
+				updatePanel((current) => addPanelTab(current, tab));
 				return;
 			}
-			updatePanel({ tab, open: true });
+			updatePanel((current) => ({ ...addPanelTab(current, tab), open: true }));
 		},
 		[isNarrow, updatePanel],
+	);
+
+	/**
+	 * 关掉一个标签。
+	 *
+	 * 右栏不跟着收起：关光之后停在启动清单上（`activeTab` 为 `null`），再点一下就打开新的
+	 * 一个。终端在这里被卸载，PTY 会话也就在这一下结束。
+	 */
+	const closePanelTab = useCallback(
+		(tab: RightPanelTab) => {
+			updatePanel((current) => removePanelTab(current, tab));
+		},
+		[updatePanel],
 	);
 
 	// 两个抽屉各挂一份 Escape 与焦点归还；同一时刻只有一个开着，所以两份互不打扰
@@ -473,14 +508,15 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 		[settings.appearance.codeTheme, settings.appearance.theme],
 	);
 
-	/** 右栏此刻看不看得见：抽屉开着，或者固定着占列 */
-	const isPanelOpen = isNarrow || isPanelFloating ? isPanelDrawerOpen : layout.panelVisible;
+	/** 右栏此刻看不看得见：窄档看抽屉，其余看有没有占列 */
+	const isPanelOpen = isNarrow ? isPanelDrawerOpen : layout.panelVisible;
 
 	return {
 		isNarrow,
 		isDrawerOpen,
 		isPanelDrawerOpen,
 		isPanelOpen,
+		isPanelExpanded: layout.expanded,
 		isSidebarCollapsed,
 		isSidebarOpen,
 		sidebarVisible: layout.sidebarVisible,
@@ -507,8 +543,9 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 		updatePanel,
 		togglePanel,
 		setPanelTab,
+		closePanelTab,
 		closePanelDrawer,
-		setPanelPinned,
+		togglePanelExpanded,
 		changeUiScale,
 		codeTheme,
 	};

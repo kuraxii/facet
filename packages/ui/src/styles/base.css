@@ -126,20 +126,29 @@
 	 */
 	--main-min: 420px;
 	/*
-	 * 工作区标签栏：单个标签的高度、相邻两条之间的距离、标签内左右留白与图标到文字的间距。
-	 * 顶带（36px）与抽屉顶头用同一组数，纵向竖轨沿用高度当按钮宽度。
+	 * 工作区标签栏：单个标签的高度、相邻两条之间的距离、标签内左侧留白、图标到文字的间距，
+	 * 以及关闭按钮的边长。顶带（36px）与抽屉顶头用同一组数。
 	 */
 	--workspace-tab-height: 26px;
 	--workspace-tab-gap: 2px;
 	--workspace-tab-padding-x: 8px;
 	--workspace-tab-icon-gap: 6px;
+	--workspace-tab-close-size: 16px;
 	/*
-	 * 工作区里「预览 + 索引」两栏：索引栏宽度、两栏顶栏里图标与文字之间的间距、
-	 * 收起态竖轨的上下留白。索引栏在右边，分隔线画在它的左缘。
+	 * 工作区里「预览 + 索引」两栏：索引栏宽度与两栏顶栏里图标与文字之间的间距。索引栏在
+	 * 右边，分隔线画在它的左缘；容器窄于 680px 时换单栏钻取（见 `panel.css`）。
 	 */
 	--workspace-list-width: min(46%, 320px);
 	--workspace-head-gap: 4px;
-	--panel-rail-padding: 6px;
+	/*
+	 * `+` 菜单与空态启动清单：菜单最小宽度、一行的高度、菜单离窗口边缘与离 `+` 按钮的距离、
+	 * 启动清单的宽度。两者共用行高，看起来是同一件东西的两种摆法。
+	 */
+	--workspace-menu-min-width: 200px;
+	--workspace-menu-row-height: 30px;
+	--workspace-menu-edge: 8px;
+	--workspace-menu-offset: 4px;
+	--workspace-launcher-width: 240px;
 	/* 文件预览标题行：左右留白与标题行高度 */
 	--editor-gutter-x: 4px;
 	--editor-head-height: 18px;

@@ -165,7 +165,7 @@ export function HostWorkspace({
 	}, []);
 
 	/** 对话里选中的文字被引用之后把光标放回输入框末尾 */
-	const composerInput = useRef<HTMLTextAreaElement>(null);
+	const composerInput = useRef<HTMLElement>(null);
 	/** 把选中的文字做成引用块接进草稿 */
 	const quoteInto = useCallback(
 		(text: string): void => {

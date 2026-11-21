@@ -19,7 +19,11 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
 import { EditorRefPlugin } from "@lexical/react/LexicalEditorRefPlugin";
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
-import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
+import {
+	createEmptyHistoryState,
+	HistoryPlugin,
+	type HistoryState,
+} from "@lexical/react/LexicalHistoryPlugin";
 import { ListPlugin } from "@lexical/react/LexicalListPlugin";
 import { MarkdownShortcutPlugin } from "@lexical/react/LexicalMarkdownShortcutPlugin";
 import { OnChangePlugin } from "@lexical/react/LexicalOnChangePlugin";
@@ -32,8 +36,10 @@ import {
 	$getRoot,
 	$getSelection,
 	$insertNodes,
+	$isElementNode,
 	$isLineBreakNode,
 	$isRangeSelection,
+	$isRootNode,
 	$isTextNode,
 	COMMAND_PRIORITY_HIGH,
 	COMMAND_PRIORITY_LOW,
@@ -64,8 +70,17 @@ import {
 	useState,
 } from "react";
 import { isComposingKey } from "../../keys.ts";
-import { FileMentionPlugin } from "./FileMentionPlugin.tsx";
 import {
+	type HistoryNavState,
+	normalizeHistory,
+	resetHistoryNav,
+	stepHistoryDown,
+	stepHistoryUp,
+} from "../history-nav.ts";
+import { FileMentionPlugin } from "./FileMentionPlugin.tsx";
+import { $createFileMentionNode } from "./file-mention-node.ts";
+import {
+	$exportComposerMarkdown,
 	$importComposerMarkdown,
 	CHAT_TRANSFORMERS,
 	COMPOSER_NODES,
@@ -98,6 +113,8 @@ export interface ComposerHandle {
 	appendQuote: (text: string) => void;
 	/** 把光标放到内容末尾 */
 	placeCaretAtEnd: () => void;
+	/** 在光标处插一枚 `@文件` 胶囊，光标落在它后面的空格里 */
+	insertMention: (filePath: string) => void;
 }
 
 /** 富文本输入域的参数。 */
@@ -116,6 +133,15 @@ export interface ComposerEditorProps {
 	onRunCommand?: ((command: SlashCommand, args: string) => void) | undefined;
 	/** 可 `@` 引用的文件：项目根下的相对路径。空列表时 `@` 不弹菜单 */
 	mentionFiles?: readonly string[];
+	/**
+	 * 当前草稿的键（会话文件）。撤销栈按它分开保存，切走再切回来还能接着撤销；
+	 * 不传时所有内容共用一份默认栈。
+	 */
+	draftKey?: string;
+	/** 点 `@文件` 胶囊要打开的文件：给了它，胶囊才带可点的样子 */
+	onOpenMentionFile?: ((filePath: string) => void) | undefined;
+	/** 当前会话里用户发过的文字，从旧到新：`↑`/`↓` 按它回溯 */
+	sentHistory?: readonly string[];
 	/** 两处补全菜单挂载的容器：输入区外框。菜单挂在它下面才和输入框同处、等宽 */
 	menuContainerRef?: RefObject<HTMLElement | null>;
 	/** 命令式句柄：引用正文之类的动作从外面调它 */
@@ -248,6 +274,7 @@ function ValueSyncPlugin({
 	value,
 	files,
 	knownCommands,
+	historyState,
 	lastEmitted,
 }: {
 	value: string;
@@ -255,25 +282,38 @@ function ValueSyncPlugin({
 	files: ReadonlySet<string>;
 	/** 已知命令：铺内容时把文首命中它们的 `/命令` 还原成胶囊 */
 	knownCommands: ReadonlySet<string>;
+	/** 当前草稿的撤销栈：铺完内容要给它一个基线，见下 */
+	historyState: HistoryState;
 	lastEmitted: RefObject<string>;
 }): null {
 	const [editor] = useLexicalComposerContext();
 	useLayoutEffect(() => {
-		if (value === lastEmitted.current) {
-			return;
+		if (value !== lastEmitted.current) {
+			lastEmitted.current = value;
+			importComposerMarkdown(editor, value, files, knownCommands);
 		}
-		lastEmitted.current = value;
-		importComposerMarkdown(editor, value, files, knownCommands);
-	}, [editor, files, knownCommands, lastEmitted, value]);
+		/*
+		 * 给这份撤销栈一个基线。
+		 *
+		 * Lexical 只在撤销栈已经有「当前状态」时才会把上一步压栈：一份全新的栈里，第一笔
+		 * 编辑是撤不掉的。同一个会话切走再切回来时这里正好是刚铺进来的那一份内容，把它记成
+		 * 起点，第一笔编辑就撤得回去，也撤不出别的会话的东西——铺内容那一下本身带
+		 * `HISTORIC_TAG`，不进栈。
+		 */
+		if (historyState.current === null) {
+			historyState.current = { editor, editorState: editor.getEditorState() };
+		}
+	}, [editor, files, historyState, knownCommands, lastEmitted, value]);
 	return null;
 }
 
 /**
  * 键盘与输入法。
  *
- * 命令都注册在 `COMMAND_PRIORITY_HIGH`：回车、Tab 与方向键在富文本里都有默认行为（新建
- * 段落、挪焦点、挪光标），候选菜单开着的时候必须先在这里看清楚再决定放不放行——菜单自己的
- * 键盘处理挂在 `COMMAND_PRIORITY_LOW` 上，这里返回 false 才轮得到它。
+ * 命令都注册在 `COMMAND_PRIORITY_HIGH`：回车与 Tab 在富文本里都有默认行为（新建段落、
+ * 挪焦点），候选菜单开着的时候必须先在这里看清楚再决定放不放行——菜单自己的键盘处理挂在
+ * `COMMAND_PRIORITY_LOW` 上，这里返回 false 才轮得到它。方向键归历史回溯那一层（`↑`/`↓`
+ * 在空输入框里翻已发消息），它自己也会给菜单让路。
  */
 function KeyboardPlugin({
 	routes,
@@ -350,16 +390,6 @@ function KeyboardPlugin({
 				COMMAND_PRIORITY_LOW,
 			),
 			editor.registerCommand<KeyboardEvent>(
-				KEY_ARROW_UP_COMMAND,
-				(event) => composingInMenu(event, isTypeaheadOpen),
-				COMMAND_PRIORITY_HIGH,
-			),
-			editor.registerCommand<KeyboardEvent>(
-				KEY_ARROW_DOWN_COMMAND,
-				(event) => composingInMenu(event, isTypeaheadOpen),
-				COMMAND_PRIORITY_HIGH,
-			),
-			editor.registerCommand<KeyboardEvent>(
 				KEY_TAB_COMMAND,
 				(event) => {
 					if (isComposingKey(event)) {
@@ -385,12 +415,244 @@ function KeyboardPlugin({
 	return null;
 }
 
+/** 光标在它那个顶层块里是不是首行/末行。 */
+interface LineEdges {
+	/** 块内光标之前没有换行：这一行是块的首行 */
+	first: boolean;
+	/** 块内光标之后没有换行：这一行是块的末行 */
+	last: boolean;
+}
+
+/** 直接挂在根下的那个块：段落、列表、引用、代码块各自算一个。 */
+function $topLevelBlock(node: LexicalNode): LexicalNode | null {
+	let current: LexicalNode | null = node;
+	while (current !== null) {
+		const parent = current.getParent();
+		if (parent === null) {
+			return null;
+		}
+		if ($isRootNode(parent)) {
+			return current;
+		}
+		current = parent;
+	}
+	return null;
+}
+
 /**
- * 菜单开着时，组词里的方向键不能被当成「换候选」：它是输入法在选自己的候选词。
- * 接管这一下（返回 true）但不拦默认行为，输入法照常收键。
+ * 光标在它那个块里的首/末行。
+ *
+ * 块内的换行是 `LineBreakNode`（`getTextContent()` 里是 `\n`），把光标之前与之后的那两截
+ * 文字收起来数换行就够了：前面没有换行就是首行，后面没有就是末行。顺序无关紧要，这里只问
+ * 「有没有」。
  */
-function composingInMenu(event: KeyboardEvent | null, isTypeaheadOpen: boolean): boolean {
-	return isTypeaheadOpen && event !== null && isComposingKey(event);
+function $lineEdges(): LineEdges | null {
+	const selection = $getSelection();
+	if (!$isRangeSelection(selection) || !selection.isCollapsed()) {
+		return null;
+	}
+	const anchor = selection.anchor;
+	const node = anchor.getNode();
+	const block = $topLevelBlock(node);
+	if (block === null) {
+		return null;
+	}
+	const head: string[] = [];
+	const tail: string[] = [];
+	let current: LexicalNode = node;
+	let isAnchor = true;
+	while (!current.is(block)) {
+		if (isAnchor) {
+			if ($isTextNode(current)) {
+				const text = current.getTextContent();
+				head.push(text.slice(0, anchor.offset));
+				tail.push(text.slice(anchor.offset));
+			} else if ($isElementNode(current)) {
+				const children = current.getChildren();
+				head.push(
+					children
+						.slice(0, anchor.offset)
+						.map((child) => child.getTextContent())
+						.join(""),
+				);
+				tail.push(
+					children
+						.slice(anchor.offset)
+						.map((child) => child.getTextContent())
+						.join(""),
+				);
+			}
+			isAnchor = false;
+		}
+		head.push(...current.getPreviousSiblings().map((sibling) => sibling.getTextContent()));
+		tail.push(...current.getNextSiblings().map((sibling) => sibling.getTextContent()));
+		const parent = current.getParent();
+		if (parent === null) {
+			return null;
+		}
+		current = parent;
+	}
+	return {
+		first: !head.join("").includes("\n"),
+		last: !tail.join("").includes("\n"),
+	};
+}
+
+/**
+ * 光标是不是在整篇的第一行（或最后一行）。
+ *
+ * 除了块内位置，还要求光标所在的块就是根下的第一个（最后一个）块：第二段的开头在块内也是
+ * 「首行」，但那时 `↑` 该先把光标挪到上一段去，而不是翻历史。
+ */
+function $caretAtDocumentEdge(edge: "first" | "last"): boolean {
+	const edges = $lineEdges();
+	if (edges === null) {
+		return false;
+	}
+	const selection = $getSelection();
+	if (!$isRangeSelection(selection)) {
+		return false;
+	}
+	const block = $topLevelBlock(selection.anchor.getNode());
+	if (block === null) {
+		return false;
+	}
+	const root = $getRoot();
+	const edgeBlock = edge === "first" ? root.getFirstChild() : root.getLastChild();
+	return block.is(edgeBlock) && (edge === "first" ? edges.first : edges.last);
+}
+
+/** 最多留几个会话的撤销栈：再多的从最久没碰过的那份开始丢。 */
+const DRAFT_HISTORY_LIMIT = 50;
+
+/** 没给草稿键时用的那一份撤销栈。 */
+const DEFAULT_DRAFT_KEY = "facet.composer.default";
+
+/**
+ * 按草稿键取撤销栈。
+ *
+ * 一个会话一份 `HistoryState`：切走再切回来，撤销/重做还在原处。键在 `Map` 里的顺序就是
+ * 淘汰顺序——用过就挪到队尾，超限时从队首丢；被丢掉的会话再切回来等于开一段新历史。
+ *
+ * 这份缓存故意放在渲染里维护：它只负责「同一个键拿到同一个对象」，与 React 的状态无关；
+ * 挪进 `useEffect` 反而会让第一帧拿到别的实例，撤销栈与渲染出来的内容对不上。
+ */
+function useDraftHistoryState(draftKey: string | undefined): HistoryState {
+	const states = useRef(new Map<string, HistoryState>());
+	const key = draftKey ?? DEFAULT_DRAFT_KEY;
+	const existing = states.current.get(key);
+	if (existing !== undefined) {
+		states.current.delete(key);
+		states.current.set(key, existing);
+		return existing;
+	}
+	const created = createEmptyHistoryState();
+	states.current.set(key, created);
+	for (const oldest of states.current.keys()) {
+		if (states.current.size <= DRAFT_HISTORY_LIMIT) {
+			break;
+		}
+		states.current.delete(oldest);
+	}
+	return created;
+}
+
+/** 历史回溯要用的东西：浏览态住在编辑器外层，铺内容与「这次不是用户改的」也由外层判定。 */
+interface HistoryNavBridge {
+	/** 已发消息，已去重，从旧到新 */
+	history: readonly string[];
+	/** 浏览态 */
+	state: RefObject<HistoryNavState>;
+	/** 正在铺的是回溯的结果：它带来的那一次 `onChange` 不算用户动手 */
+	imported: RefObject<string | null>;
+}
+
+/**
+ * `↑` / `↓` 的历史回溯。
+ *
+ * 判定顺序有讲究：浮层开着方向键就是选候选的，组词期间是输入法在选词，选中了文字是在调整
+ * 选区——这三种都不许接管。剩下的才看位置：空输入框里 `↑` 直接翻最近一条；已经在浏览态里
+ * 时，光标得走到块的首行（末行）才继续翻，否则先把光标在消息内部挪上去。
+ */
+function HistoryNavPlugin({
+	bridge,
+	files,
+	knownCommands,
+	isTypeaheadOpen,
+}: {
+	bridge: HistoryNavBridge;
+	files: ReadonlySet<string>;
+	knownCommands: ReadonlySet<string>;
+	/** 候选菜单开着：方向键归它 */
+	isTypeaheadOpen: boolean;
+}): null {
+	const [editor] = useLexicalComposerContext();
+
+	useEffect(() => {
+		/** 把一条历史铺进编辑器，并记下「这一次不是用户改的」。 */
+		const apply = (text: string): void => {
+			bridge.imported.current = text;
+			$importComposerMarkdown(text, files, knownCommands);
+		};
+
+		return mergeRegister(
+			editor.registerCommand<KeyboardEvent>(
+				KEY_ARROW_UP_COMMAND,
+				(event) => {
+					// 浮层开着：组词里的方向键要吞掉（它是输入法的），其余归浮层
+					if (isTypeaheadOpen) {
+						return isComposingKey(event);
+					}
+					if (isComposingKey(event)) {
+						return false;
+					}
+					const text = $exportComposerMarkdown();
+					const state = bridge.state.current;
+					// 没在浏览态且已经写了字：这一下还是普通的光标上移
+					if (state.index === null && text.trim().length > 0) {
+						return false;
+					}
+					if (state.index !== null && !$caretAtDocumentEdge("first")) {
+						return false;
+					}
+					const step = stepHistoryUp(state, bridge.history, text);
+					if (step.text === null) {
+						return false;
+					}
+					event.preventDefault();
+					bridge.state.current = step.state;
+					apply(step.text);
+					return true;
+				},
+				COMMAND_PRIORITY_HIGH,
+			),
+			editor.registerCommand<KeyboardEvent>(
+				KEY_ARROW_DOWN_COMMAND,
+				(event) => {
+					if (isTypeaheadOpen) {
+						return isComposingKey(event);
+					}
+					if (isComposingKey(event) || bridge.state.current.index === null) {
+						return false;
+					}
+					if (!$caretAtDocumentEdge("last")) {
+						return false;
+					}
+					const step = stepHistoryDown(bridge.state.current, bridge.history);
+					if (step.text === null) {
+						return false;
+					}
+					event.preventDefault();
+					bridge.state.current = step.state;
+					apply(step.text);
+					return true;
+				},
+				COMMAND_PRIORITY_HIGH,
+			),
+		);
+	}, [bridge, editor, files, isTypeaheadOpen, knownCommands]);
+
+	return null;
 }
 
 /** 代码块里按一次 Tab 缩进多少格。 */
@@ -514,12 +776,31 @@ export function ComposerEditor({
 	commands = [],
 	onRunCommand,
 	mentionFiles = [],
+	draftKey,
+	onOpenMentionFile,
+	sentHistory = [],
 	menuContainerRef,
 	handleRef,
 	editorRef,
 }: ComposerEditorProps): ReactNode {
 	/** 最近一次与外界对齐过的 Markdown；初值取挂载时的内容，首屏不必再导入一次 */
 	const lastEmitted = useRef(value);
+	/** 当前草稿的撤销栈：每个会话一份，切回来还能接着撤销 */
+	const historyState = useDraftHistoryState(draftKey);
+	/** `↑`/`↓` 的浏览态 */
+	const navState = useRef<HistoryNavState>(resetHistoryNav());
+	/** 正在铺的那段是历史回溯的结果：它带来的 `onChange` 不算用户动手 */
+	const importedHistory = useRef<string | null>(null);
+	const history = useMemo(() => normalizeHistory(sentHistory), [sentHistory]);
+	/** 三样东西都稳定：插件不必每敲一个字就重装一遍命令 */
+	const navBridge = useMemo(() => ({ history, state: navState, imported: importedHistory }), [history]);
+
+	// 换草稿就把浏览态清掉：上一个会话翻到一半的位次，与新会话的历史没有关系
+	// biome-ignore lint/correctness/useExhaustiveDependencies: 只在换草稿时清一次，两个 ref 不在依赖里
+	useEffect(() => {
+		navState.current = resetHistoryNav();
+		importedHistory.current = null;
+	}, [draftKey]);
 	/** `@` 文件菜单与 `/` 命令菜单各自的开合；任一开着，键盘就归它 */
 	const [isMentionOpen, setMentionOpen] = useState(false);
 	const [isCommandOpen, setCommandOpen] = useState(false);
@@ -552,6 +833,13 @@ export function ComposerEditor({
 				return;
 			}
 			lastEmitted.current = markdown;
+			// 回溯铺进来的这一趟不算用户动手，否则按完 `↓` 就再也翻不动了；
+			// 其余任何改动都结束浏览态，别拿旧消息盖掉他刚写的东西
+			if (markdown === importedHistory.current) {
+				importedHistory.current = null;
+			} else {
+				navState.current = resetHistoryNav();
+			}
 			onChange(markdown);
 		},
 		[onChange],
@@ -562,10 +850,29 @@ export function ComposerEditor({
 			<RichTextPlugin
 				contentEditable={
 					<ContentEditable
-						className="composer-editor"
+						// 胶囊可点时给出指针与悬停提示，不可点时保持文字的手感
+						className={
+							onOpenMentionFile === undefined ? "composer-editor" : "composer-editor is-mention-clickable"
+						}
 						aria-label={placeholder}
 						aria-multiline="true"
 						spellCheck={false}
+						onClick={(event) => {
+							if (onOpenMentionFile === undefined) {
+								return;
+							}
+							const target = event.target;
+							if (!(target instanceof HTMLElement)) {
+								return;
+							}
+							const filePath = target.closest<HTMLElement>(".composer-mention")?.dataset.filePath;
+							// 正在拖选文字时不跳走：那一下的目的是选内容
+							const selection = window.getSelection();
+							if (filePath === undefined || (selection !== null && !selection.isCollapsed)) {
+								return;
+							}
+							onOpenMentionFile(filePath);
+						}}
 					/>
 				}
 				// 占位符与 `aria-label` 说的是同一句话，读屏只念一次
@@ -576,7 +883,8 @@ export function ComposerEditor({
 				}
 				ErrorBoundary={LexicalErrorBoundary}
 			/>
-			<HistoryPlugin />
+			{/* 撤销栈按草稿分开：切走再切回来，还能接着撤销自己那一份 */}
+			<HistoryPlugin externalHistoryState={historyState} />
 			{/* 列表的拆分、序号递增与空项退出都由它接：少了它，回车只会往条目里插空行 */}
 			<ListPlugin />
 			<CodeHighlightPlugin />
@@ -585,8 +893,20 @@ export function ComposerEditor({
 				ignoreSelectionChange
 				onChange={(state) => handleChange(exportComposerMarkdown(state))}
 			/>
-			<ValueSyncPlugin value={value} files={files} knownCommands={knownCommands} lastEmitted={lastEmitted} />
+			<ValueSyncPlugin
+				value={value}
+				files={files}
+				knownCommands={knownCommands}
+				historyState={historyState}
+				lastEmitted={lastEmitted}
+			/>
 			<KeyboardPlugin routes={routes} isTypeaheadOpen={isTypeaheadOpen} />
+			<HistoryNavPlugin
+				bridge={navBridge}
+				files={files}
+				knownCommands={knownCommands}
+				isTypeaheadOpen={isTypeaheadOpen}
+			/>
 			<PlainPastePlugin />
 			{mentionFiles.length === 0 ? null : (
 				<FileMentionPlugin
@@ -633,10 +953,36 @@ function HandlePlugin({ handleRef }: { handleRef: Ref<ComposerHandle> }): null {
 				editor.focus();
 				editor.update(() => $appendQuoteBlock(text), { discrete: true });
 			},
+			insertMention: (filePath: string) => {
+				editor.focus();
+				editor.update(() => $insertMentionAtCaret(filePath), { discrete: true });
+			},
 		}),
 		[editor],
 	);
 	return null;
+}
+
+/**
+ * 在光标处插一枚 `@文件` 胶囊，后面跟一个空格。
+ *
+ * 拖文件进来和 `@` 补全选一条是同一件事，落下来的样子也该一样：胶囊在前、空格在后、
+ * 光标停在空格之后，接着写正文。
+ */
+function $insertMentionAtCaret(filePath: string): void {
+	const mention = $createFileMentionNode(filePath);
+	const space = $createTextNode(" ");
+	const selection = $getSelection();
+	if ($isRangeSelection(selection)) {
+		selection.insertNodes([mention]);
+		mention.insertAfter(space);
+		space.select();
+		return;
+	}
+	// 没有选区时（例如刚切进来还没点过）接到文档末尾
+	const paragraph = $createParagraphNode().append(mention, space);
+	$getRoot().append(paragraph);
+	space.select();
 }
 
 /**

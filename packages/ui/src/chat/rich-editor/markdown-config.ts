@@ -34,6 +34,7 @@ import {
 	type EditorState,
 	type EditorThemeClasses,
 	type ElementNode,
+	HISTORIC_TAG,
 	type LexicalEditor,
 	type LexicalNode,
 	type TextNode,
@@ -313,7 +314,9 @@ export function importComposerMarkdown(
 	knownCommands: ReadonlySet<string> = new Set(),
 ): void {
 	editor.update(() => $importComposerMarkdown(markdown, files, knownCommands), {
-		tag: COMPOSER_EXTERNAL_TAG,
+		// 外来的值不进撤销栈：切到某个会话时铺回来的草稿若是可撤销的，第一下 `⌘/Ctrl+Z`
+		// 就会把它撤成空的，还会把上一个会话的内容带进来
+		tag: [COMPOSER_EXTERNAL_TAG, HISTORIC_TAG],
 		discrete: true,
 	});
 }

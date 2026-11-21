@@ -9,7 +9,8 @@
 import type { ChatActivity } from "@facet/client-core";
 import type { ContextUsage, ModelInfo, SlashCommand, ThinkingLevel } from "@facet/protocol";
 import { Brain, FileUp, ImagePlus, Plus, X } from "lucide-react";
-import { type Ref, useEffect, useMemo, useRef, useState } from "react";
+import { type Ref, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FACET_FILE_DRAG_MIME } from "../common/file-drag.ts";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { useHoverTip } from "../tip.tsx";
 import { ChevronIcon } from "../transcript/chevron.tsx";
@@ -95,6 +96,14 @@ export interface ComposerProps {
 	ref?: Ref<ComposerHandle>;
 	/** 可 `@` 引用的文件：项目根下的相对路径。空列表时 `@` 不弹菜单 */
 	mentionFiles?: readonly string[];
+	/**
+	 * 当前草稿的键（会话文件）：撤销栈按它分开。不传时所有内容共用一份默认栈。
+	 */
+	draftKey?: string;
+	/** 点 `@文件` 胶囊要打开的文件；给了它胶囊才带可点的样子 */
+	onOpenMentionFile?: ((filePath: string) => void) | undefined;
+	/** 当前会话里用户发过的文字，从旧到新：`↑`/`↓` 按它回溯 */
+	sentHistory?: readonly string[];
 }
 
 /** 模型芯片的显示文本。 */
@@ -172,6 +181,9 @@ export function Composer({
 	onRunCommand,
 	ref,
 	mentionFiles,
+	draftKey,
+	onOpenMentionFile,
+	sentHistory,
 }: ComposerProps) {
 	const { t } = useI18n();
 	// 一排按钮共用一份悬浮提示：谁被悬停就贴谁
@@ -191,6 +203,19 @@ export function Composer({
 	const [isDropping, setIsDropping] = useState(false);
 	/** 输入区外框：`@` 与 `/` 两处补全菜单都挂在它下面 */
 	const boxRef = useRef<HTMLDivElement>(null);
+	/** 编辑器句柄的内部引用：拖进来的文件要落到光标处，不经过外面那一份 */
+	const editorHandle = useRef<ComposerHandle | null>(null);
+	const handleRef = useCallback(
+		(handle: ComposerHandle | null) => {
+			editorHandle.current = handle;
+			if (typeof ref === "function") {
+				ref(handle);
+			} else if (ref !== null && ref !== undefined) {
+				ref.current = handle;
+			}
+		},
+		[ref],
+	);
 	const modelRef = useDismiss(openMenu === "model", () => setOpenMenu(undefined));
 	const attachRef = useDismiss(openMenu === "attach", () => setOpenMenu(undefined));
 	const levelRef = useDismiss(openMenu === "level", () => setOpenMenu(undefined));
@@ -217,6 +242,8 @@ export function Composer({
 
 	/** 回车发送还是换行随设置走。 */
 	const sendsOnEnter = !shiftEnterToSend;
+	/** 这一路能不能接图片：宿主给了入口、且当前模型收图片 */
+	const acceptsImages = onAddImages !== undefined && canAddImages;
 
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: 拖拽与粘贴是浏览器原生行为，这块只做事件委托，不承担键盘操作
@@ -224,7 +251,10 @@ export function Composer({
 			ref={boxRef}
 			className={isDropping ? "composer is-drop" : "composer"}
 			onDragOver={(event) => {
-				if (onAddImages === undefined || !canAddImages || !event.dataTransfer.types.includes("Files")) {
+				// 文件树拖来的一枚引用与系统拖来的图片是两条路：前者不受「能不能收图」限制
+				const isReference = event.dataTransfer.types.includes(FACET_FILE_DRAG_MIME);
+				const isImage = acceptsImages && event.dataTransfer.types.includes("Files");
+				if (!isReference && !isImage) {
 					return;
 				}
 				// 不拦下 dragover 的话浏览器会当成「打开这个文件」，drop 也不会触发
@@ -233,7 +263,14 @@ export function Composer({
 			}}
 			onDragLeave={() => setIsDropping(false)}
 			onDrop={(event) => {
-				if (onAddImages === undefined || !canAddImages) {
+				const filePath = event.dataTransfer.getData(FACET_FILE_DRAG_MIME);
+				if (filePath.length > 0) {
+					event.preventDefault();
+					setIsDropping(false);
+					editorHandle.current?.insertMention(filePath);
+					return;
+				}
+				if (!acceptsImages) {
 					return;
 				}
 				const files = pickedFiles(event.dataTransfer.files);
@@ -242,7 +279,7 @@ export function Composer({
 					return;
 				}
 				event.preventDefault();
-				onAddImages(files);
+				onAddImages?.(files);
 			}}
 			onPaste={(event) => {
 				if (onAddImages === undefined || !canAddImages) {
@@ -278,10 +315,13 @@ export function Composer({
 			)}
 			{attachmentNotice === undefined ? null : <p className="composer-note">{attachmentNotice}</p>}
 			<ComposerEditor
-				handleRef={ref}
+				handleRef={handleRef}
 				mentionFiles={mentionFiles}
 				commands={commands}
 				onRunCommand={onRunCommand}
+				draftKey={draftKey}
+				onOpenMentionFile={onOpenMentionFile}
+				sentHistory={sentHistory}
 				menuContainerRef={boxRef}
 				value={value}
 				placeholder={

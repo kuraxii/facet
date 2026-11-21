@@ -166,6 +166,18 @@
 	background: var(--card2);
 }
 
+/*
+ * 胶囊可点的时候才换指针与悬停底色：宿主接上了「点开这个文件」，就顺手把这件事画出来；
+ * 没接上时它只是一段文字，指针留在文本那一档。
+ */
+.is-mention-clickable .composer-mention {
+	cursor: pointer;
+}
+
+.is-mention-clickable .composer-mention:hover {
+	background: var(--surface3);
+}
+
 /* `/命令` 胶囊：压一层强调色。指令是「要主机做的事」，和引用文件不是一回事 */
 .composer-command {
 	background: color-mix(in srgb, var(--acc) 14%, transparent);

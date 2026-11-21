@@ -88,6 +88,7 @@ export {
 } from "./chat/ui-scale.ts";
 export type { ScrollRestore, StickToBottom } from "./chat/use-stick-to-bottom.ts";
 export { useStickToBottom } from "./chat/use-stick-to-bottom.ts";
+export { FACET_FILE_DRAG_MIME } from "./common/file-drag.ts";
 export type { ScrollAreaProps } from "./common/scroll-area.tsx";
 export { ScrollArea, ScrollRow } from "./common/scroll-area.tsx";
 export type { SelectOption, SelectProps } from "./common/select.tsx";

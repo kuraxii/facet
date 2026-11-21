@@ -4,7 +4,7 @@
  * 上面是投影后的会话内容，下面是提示、排队条与输入区；滚动位置与向上补历史都在对话
  * 状态那一层。
  */
-import type { ChatView, SessionView } from "@facet/client-core";
+import type { ChatView, SessionView, TextPart, TranscriptItem } from "@facet/client-core";
 import type { QueuedInput } from "@facet/protocol";
 import {
 	ArrowDownIcon,
@@ -16,7 +16,7 @@ import {
 	QueueStrip,
 	useI18n,
 } from "@facet/ui";
-import type { ReactNode, RefObject } from "react";
+import { type ReactNode, type RefObject, useMemo } from "react";
 import type { Composer as ComposerState } from "../hooks/useComposer.ts";
 import type { HostConnection } from "../hooks/useHostConnection.ts";
 import type { SessionLifecycle } from "../hooks/useSessionLifecycle.ts";
@@ -56,6 +56,26 @@ export interface ChatAreaProps {
 	copyText: (text: string) => void;
 	/** 输入区的命令式句柄：引用之后把结构插进去、光标放回末尾 */
 	composerInput: RefObject<ComposerHandle | null>;
+	/** 点输入区里的 `@文件` 胶囊：打开右栏的文件页并把它打开 */
+	onOpenMentionFile: (filePath: string) => void;
+}
+
+/** 当前会话里用户发过的文字，从旧到新：输入区的 `↑`/`↓` 按它回溯。 */
+function sentTexts(items: readonly TranscriptItem[]): string[] {
+	const texts: string[] = [];
+	for (const item of items) {
+		if (item.role !== "user") {
+			continue;
+		}
+		texts.push(
+			item.parts
+				.filter((part): part is TextPart => part.kind === "text")
+				.map((part) => part.text)
+				.join("\n")
+				.trim(),
+		);
+	}
+	return texts;
 }
 
 /** 对话区：内容、提示与输入。 */
@@ -77,10 +97,13 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 		copyText,
 		composerInput,
 		mentionFiles,
+		onOpenMentionFile,
 	} = props;
 	const { t } = useI18n();
 	const client = useHostClient();
 	const providerAuth = host.catalog.auth;
+	/** 已发消息按条记忆：流式期间每帧只有末尾那条换新，回溯用的列表不必重算 */
+	const sentHistory = useMemo(() => sentTexts(transcript.items), [transcript.items]);
 	return (
 		<>
 			<ChatOutline items={transcript.items} container={transcript.scrollElement} />
@@ -171,6 +194,9 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 						canCompact={activity === "idle"}
 						onCompact={() => client.compact()}
 						mentionFiles={mentionFiles}
+						draftKey={composer.draftKey}
+						sentHistory={sentHistory}
+						onOpenMentionFile={onOpenMentionFile}
 						commands={[...composer.commands]}
 						onRunCommand={(command, args) => {
 							composer.runFacetCommand(command.name, args);

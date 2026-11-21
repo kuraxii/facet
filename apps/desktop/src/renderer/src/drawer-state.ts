@@ -40,3 +40,27 @@ export interface DrawerEscapeInput {
 export function shouldCloseDrawerOnEscape(input: DrawerEscapeInput): boolean {
 	return !input.defaultPrevented && !input.hasOpenDialog;
 }
+
+/**
+ * 外壳的类名。
+ *
+ * 只管两件与抽屉有关的事：窄档里抽屉开着时给 `has-drawer`（遮罩与抽屉样式据此上屏），
+ * 侧栏可见时给 `is-sb-open`。栏位显隐是 `.app` 上的事，不在这里。
+ */
+export function shellClassName(input: {
+	/** 侧栏此刻是否可见 */
+	isSidebarOpen: boolean;
+	/** 左抽屉是否开着 */
+	isDrawerOpen: boolean;
+	/** 是否窄档 */
+	isNarrow: boolean;
+}): string {
+	const names = ["shell"];
+	if (input.isNarrow && input.isDrawerOpen) {
+		names.push("has-drawer");
+	}
+	if (input.isSidebarOpen) {
+		names.push("is-sb-open");
+	}
+	return names.join(" ");
+}

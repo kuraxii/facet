@@ -1,16 +1,18 @@
 /**
- * 仓库级刷新调度的测试。
+ * 仓库级调度的测试。
  *
- * 覆盖单飞、冷却、尾随合并、并发共享结果与 `force`；探针换成计数用的假实现，所以断言的是
- * 「拉起了几次探测」，与真实 git 无关。
+ * 覆盖冷却、合并方式（latest-wins 取代在途 / single-flight 搭车）、`force` 与失败恢复。
+ * 探针换成计数用的假实现，所以断言的是「拉起了几次探测」「那一批有没有被真的收掉」，与
+ * 真实 git 无关；`resolveKey` 也换成恒等函数，省掉每条用例去 spawn 一次 rev-parse。
  */
 import { execFileSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { GitCommits, GitStatus } from "@facet/protocol";
+import type { GitCommitDetail, GitCommits, GitDiff, GitStatus } from "@facet/protocol";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { gitStatus } from "./git.ts";
+import { GitAbortedError } from "./git-exec.ts";
 import { GitRefreshService } from "./git-refresh.ts";
 
 /** 一次探测的结果，内容不重要，只用来比对是不是同一份。 */
@@ -18,20 +20,36 @@ function statusOf(tag: string): GitStatus {
 	return { isRepo: true, branch: tag, files: [] };
 }
 
+/** 调度键就地取调用方给的目录：用例里不跑 rev-parse。 */
+async function sameKey(cwd: string): Promise<string> {
+	return cwd;
+}
+
 /**
  * 假探针：记下调用次数，每次给一个带序号的结果。
  *
- * `hold` 不为空时探测挂起，由用例决定何时放行，用来摆出「正在跑」的局面。
+ * `hold()` 之后探测挂住，直到用例 `let_go()`；`onAbort` 让用例看得见「那一条被子进程收掉」。
  */
 function probeStub() {
 	let calls = 0;
-	let release: (() => void) | undefined;
-	const probe = async (): Promise<GitStatus> => {
+	let holdNext = false;
+	let pending: (() => void) | undefined;
+	let abortedCount = 0;
+	const probe = async (_repo: string, signal?: AbortSignal): Promise<GitStatus> => {
 		calls += 1;
 		const tag = `run-${calls}`;
-		if (release !== undefined) {
-			await new Promise<void>((resolve) => {
-				release = resolve;
+		if (holdNext) {
+			holdNext = false;
+			await new Promise<void>((resolve, reject) => {
+				pending = resolve;
+				signal?.addEventListener(
+					"abort",
+					() => {
+						abortedCount += 1;
+						reject(new GitAbortedError());
+					},
+					{ once: true },
+				);
 			});
 		}
 		return statusOf(tag);
@@ -41,14 +59,45 @@ function probeStub() {
 		get calls(): number {
 			return calls;
 		},
+		get aborted(): number {
+			return abortedCount;
+		},
 		/** 让下一次探测挂住，直到 `let_go()`。 */
 		hold(): void {
-			release = () => undefined;
+			holdNext = true;
 		},
 		let_go(): void {
-			const resume = release;
-			release = undefined;
+			const resume = pending;
+			pending = undefined;
 			resume?.();
+		},
+	};
+}
+
+/** 假的提交历史探针：只记调用次数，每次给一个不同 sha 的列表。 */
+function commitsStub() {
+	let calls = 0;
+	const probe = async (): Promise<GitCommits> => {
+		calls += 1;
+		return {
+			isRepo: true,
+			commits: [
+				{
+					sha: `sha-${calls}`,
+					shortSha: `s${calls}`,
+					subject: `第 ${calls} 次`,
+					body: "",
+					authorName: "facet",
+					authorEmail: "facet@example.com",
+					authorDate: "2024-01-01T00:00:00Z",
+				},
+			],
+		};
+	};
+	return {
+		probe,
+		get calls(): number {
+			return calls;
 		},
 	};
 }
@@ -81,43 +130,34 @@ async function createRepo(): Promise<string> {
 	return root;
 }
 
-/** 假的提交历史探针：只记调用次数，每次给一个不同 sha 的列表。 */
-function commitsStub() {
-	let calls = 0;
-	const probe = async (): Promise<GitCommits> => {
-		calls += 1;
-		return {
-			isRepo: true,
-			commits: [
-				{
-					sha: `sha-${calls}`,
-					shortSha: `s${calls}`,
-					subject: `第 ${calls} 次`,
-					body: "",
-					authorName: "facet",
-					authorEmail: "facet@example.com",
-					authorDate: "2024-01-01T00:00:00Z",
-				},
-			],
-		};
-	};
-	return {
-		probe,
-		get calls(): number {
-			return calls;
-		},
-	};
-}
-
 describe("GitRefreshService", () => {
-	it("提交历史有自己的单飞：并发请求最多两轮", async () => {
+	it("同一批并发请求只拉起一次探测", async () => {
+		const stub = probeStub();
+		const service = new GitRefreshService({
+			cooldownMs: 40,
+			resolveKey: sameKey,
+			probeStatus: stub.probe,
+		});
+
+		const results = await Promise.all(Array.from({ length: 10 }, async () => await service.status("/repo")));
+
+		expect(stub.calls).toBe(1);
+		// 十个人拿的是同一份结果：run-1
+		expect(new Set(results.map((status) => status.branch))).toEqual(new Set(["run-1"]));
+	});
+
+	it("提交历史有自己的车道：并发请求只跑一轮", async () => {
 		const stub = commitsStub();
-		const service = new GitRefreshService({ commitsCooldownMs: 40, probeCommits: stub.probe });
+		const service = new GitRefreshService({
+			commitsCooldownMs: 40,
+			resolveKey: sameKey,
+			probeCommits: stub.probe,
+		});
 
 		const results = await Promise.all(Array.from({ length: 10 }, async () => await service.commits("/repo")));
 
-		expect(stub.calls).toBe(2);
-		expect(new Set(results.map((result) => result.commits[0]?.sha))).toEqual(new Set(["sha-1", "sha-2"]));
+		expect(stub.calls).toBe(1);
+		expect(results.every((result) => result.commits[0]?.sha === "sha-1")).toBe(true);
 	});
 
 	it("状态与提交历史各排各的，互不吃对方的冷却", async () => {
@@ -126,6 +166,7 @@ describe("GitRefreshService", () => {
 		const service = new GitRefreshService({
 			cooldownMs: 5000,
 			commitsCooldownMs: 5000,
+			resolveKey: sameKey,
 			probeStatus: status.probe,
 			probeCommits: commits.probe,
 		});
@@ -137,23 +178,135 @@ describe("GitRefreshService", () => {
 		expect(commits.calls).toBe(1);
 	});
 
-	it("force 跳过提交历史的冷却", async () => {
-		const stub = commitsStub();
-		const service = new GitRefreshService({ commitsCooldownMs: 5000, probeCommits: stub.probe });
+	it("force 跳过冷却，立刻再跑一次", async () => {
+		const stub = probeStub();
+		const service = new GitRefreshService({
+			cooldownMs: 5000,
+			resolveKey: sameKey,
+			probeStatus: stub.probe,
+		});
 
-		await service.commits("/repo");
-		const forced = await service.commits("/repo", { force: true });
+		await service.status("/repo");
+		const forced = await service.status("/repo", { force: true });
 		expect(stub.calls).toBe(2);
-		expect(forced.commits[0]?.sha).toBe("sha-2");
+		expect(forced.branch).toBe("run-2");
+	});
+
+	it("冷却窗口里的请求等到冷却结束才跑", async () => {
+		const stub = probeStub();
+		const service = new GitRefreshService({
+			cooldownMs: 120,
+			resolveKey: sameKey,
+			probeStatus: stub.probe,
+		});
+
+		await service.status("/repo");
+		expect(stub.calls).toBe(1);
+
+		const pending = service.status("/repo");
+		await new Promise((resolve) => setTimeout(resolve, 40));
+		// 冷却还没走完，不该拉起新探测
+		expect(stub.calls).toBe(1);
+		await pending;
+		expect(stub.calls).toBe(2);
+	});
+
+	it("新请求取代在途的状态探测：旧子进程被收掉，等待者一起拿最新结果", async () => {
+		const stub = probeStub();
+		const service = new GitRefreshService({
+			cooldownMs: 5000,
+			resolveKey: sameKey,
+			probeStatus: stub.probe,
+		});
+
+		stub.hold();
+		const first = service.status("/repo");
+		await vi.waitFor(() => expect(stub.calls).toBe(1));
+
+		// 第二个请求进来时立刻把在途那一条收掉
+		const second = service.status("/repo");
+		stub.let_go();
+		await vi.waitFor(() => expect(stub.calls).toBe(2), { timeout: 2000, interval: 10 });
+
+		// 被取代的那一轮不作数，先来的那一方也等最新结果
+		expect((await first).branch).toBe("run-2");
+		expect((await second).branch).toBe("run-2");
+		expect(stub.aborted).toBe(1);
+	});
+
+	it("不可变的提交详情按 (仓库, 提交) 搭车：并发只派生一次", async () => {
+		let calls = 0;
+		const service = new GitRefreshService({
+			resolveKey: sameKey,
+			probeCommit: async (_repo, sha): Promise<GitCommitDetail> => {
+				calls += 1;
+				await new Promise((resolve) => setTimeout(resolve, 10));
+				return {
+					commit: {
+						sha,
+						shortSha: sha.slice(0, 7),
+						subject: "标题",
+						body: "",
+						authorName: "facet",
+						authorEmail: "facet@example.com",
+						authorDate: "2024-01-01T00:00:00Z",
+					},
+					files: [],
+				};
+			},
+		});
+
+		const details = await Promise.all(
+			Array.from({ length: 5 }, async () => await service.commit("/repo", "abcdef1")),
+		);
+		expect(calls).toBe(1);
+		expect(new Set(details.map((detail) => detail.commit.sha))).toEqual(new Set(["abcdef1"]));
+
+		// 换一个提交就该各算一次
+		await service.commit("/repo", "abcdef2");
+		expect(calls).toBe(2);
+	});
+
+	it("工作区单文件补丁按文件分开排队，同文件的新请求取代旧的", async () => {
+		let calls = 0;
+		const seen: string[] = [];
+		const service = new GitRefreshService({
+			resolveKey: sameKey,
+			probeDiff: async (_repo, path): Promise<GitDiff> => {
+				calls += 1;
+				seen.push(path);
+				return { patch: "", truncated: false, binary: false };
+			},
+		});
+
+		await Promise.all([service.diff("/repo", "a.ts"), service.diff("/repo", "b.ts")]);
+		expect(calls).toBe(2);
+		expect(new Set(seen)).toEqual(new Set(["a.ts", "b.ts"]));
+	});
+
+	it("分页历史按页合并：同一页的并发请求只跑一次", async () => {
+		const stub = commitsStub();
+		const service = new GitRefreshService({
+			cooldownMs: 5000,
+			resolveKey: sameKey,
+			probeCommits: stub.probe,
+		});
+
+		await Promise.all([service.commits("/repo", { limit: 20 }), service.commits("/repo", { limit: 20 })]);
+		expect(stub.calls).toBe(1);
+
+		// 换一页是另一条键
+		await service.commits("/repo", { limit: 20, skip: 20 });
+		expect(stub.calls).toBe(2);
 	});
 
 	it("200ms 里连着来 10 次请求，真仓库上最多跑两轮探测", async () => {
 		const root = await createRepo();
 		let rounds = 0;
 		const service = new GitRefreshService({
-			probeStatus: async (repoRoot: string) => {
+			probeStatus: async (repoRoot: string, signal: AbortSignal) => {
 				rounds += 1;
-				return await gitStatus(repoRoot);
+				return await gitStatus(repoRoot, { signal });
 			},
 		});
 
@@ -170,60 +323,13 @@ describe("GitRefreshService", () => {
 		expect(results.every((status) => status.files.length === 1)).toBe(true);
 	});
 
-	it("并发请求只拉起两次探测：首轮加一次冷却后的尾随", async () => {
-		const stub = probeStub();
-		const service = new GitRefreshService({ cooldownMs: 40, probeStatus: stub.probe });
-
-		const results = await Promise.all(Array.from({ length: 10 }, async () => await service.status("/repo")));
-
-		expect(stub.calls).toBe(2);
-		// 后 9 个等的是同一份尾随结果
-		expect(new Set(results.map((status) => status.branch))).toEqual(new Set(["run-1", "run-2"]));
-	});
-
-	it("冷却窗口里的请求等到冷却结束才跑", async () => {
-		const stub = probeStub();
-		const service = new GitRefreshService({ cooldownMs: 120, probeStatus: stub.probe });
-
-		await service.status("/repo");
-		expect(stub.calls).toBe(1);
-
-		const pending = service.status("/repo");
-		await new Promise((resolve) => setTimeout(resolve, 40));
-		// 冷却还没走完，不该拉起新探测
-		expect(stub.calls).toBe(1);
-		await pending;
-		expect(stub.calls).toBe(2);
-	});
-
-	it("force 跳过冷却，立刻再跑一次", async () => {
-		const stub = probeStub();
-		const service = new GitRefreshService({ cooldownMs: 5000, probeStatus: stub.probe });
-
-		await service.status("/repo");
-		const forced = await service.status("/repo", { force: true });
-		expect(stub.calls).toBe(2);
-		expect(forced.branch).toBe("run-2");
-	});
-
-	it("正在跑时来的 force 排到这一轮结束后立刻跑", async () => {
-		const stub = probeStub();
-		stub.hold();
-		const service = new GitRefreshService({ cooldownMs: 5000, probeStatus: stub.probe });
-
-		const first = service.status("/repo");
-		await vi.waitFor(() => expect(stub.calls).toBe(1));
-		const forced = service.status("/repo", { force: true });
-		stub.let_go();
-		await first;
-		expect(stub.calls).toBe(1);
-		await vi.waitFor(() => expect(stub.calls).toBe(2), { timeout: 2000, interval: 10 });
-		expect((await forced).branch).toBe("run-2");
-	});
-
 	it("不同仓库各排各的，不会被对方的冷却挡住", async () => {
 		const stub = probeStub();
-		const service = new GitRefreshService({ cooldownMs: 5000, probeStatus: stub.probe });
+		const service = new GitRefreshService({
+			cooldownMs: 5000,
+			resolveKey: sameKey,
+			probeStatus: stub.probe,
+		});
 
 		await Promise.all([service.status("/a"), service.status("/b")]);
 		expect(stub.calls).toBe(2);
@@ -233,6 +339,7 @@ describe("GitRefreshService", () => {
 		let calls = 0;
 		const service = new GitRefreshService({
 			cooldownMs: 20,
+			resolveKey: sameKey,
 			probeStatus: async () => {
 				calls += 1;
 				if (calls === 1) {

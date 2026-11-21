@@ -86,11 +86,21 @@ flowchart BT
 - **按目录盯工作树**：`workspace:/<cwd>` 一个项目目录一条，订阅即由 `workspaces` 建一份
   `ProjectWatch`（逐目录 `fs.watch`，跳过被忽略的目录，500ms 合并），最后一个订阅者走了就停；
   动作只有 `workspace/changed`，`history` 标出 HEAD 或引用是否动过，状态仍由端按需来取。
-- **按仓库排队探测**：状态探测按规范化后的仓库根目录单飞，跑完冷却 1500ms，运行期与冷却期
-  的请求并成最多一次尾随执行并共享结果，`force` 跳过冷却；提交历史另有一条车道（冷却
-  5000ms），两条互不阻塞。`git status --porcelain=v2
-  --branch -z -uall` 流式消费，分支信息与文件条目一次读完；累计到 5000 条立刻 kill，跳过
-  `diff --numstat` 与逐文件读行数，结果标 `truncated`，界面据此暂停自动刷新。
+- **git 只有一条出口**：所有子进程都走 `apps/server/src/git-exec.ts`，业务层不再自己
+  `execFile("git", …)`。只读调用首位加 `--no-optional-locks` 并设 `GIT_OPTIONAL_LOCKS=0`
+  （`status` 之类不会顺手刷新索引自己去撞 `index.lock`）；写入调用反过来不加这两项，改为按
+  仓库根目录串行、撞上外部占用的 `index.lock` 时短退避重试。两条通道都关掉交互式凭据提示
+  （子进程不会挂在等 TTY 上），都带 `-c core.quotepath=false`，用户的 `PATH`、`SSH_AUTH_SOCK`
+  与 `GPG_TTY` 原样传下去；读取支持 `AbortSignal`（SIGTERM，宽限后 SIGKILL）、超时与输出上限，
+  三者都翻成可识别的错误而不是原始报错。
+- **按仓库排队查询**：按规范化后的仓库根目录隔离，同一时刻同一个仓库只跑一条。可变的工作区态
+  （`status`、工作区单文件 `diff`、分页 `log`）走 **latest-wins**：新请求到来就把在途子进程
+  `abort()` 掉，等在它上面的那一批一起改拿最新结果，既不会漏掉最新改动也不让进程堆起来；
+  不可变的历史态（某个提交的详情、提交内某个文件的补丁）走 **single-flight**：在途时新请求
+  直接搭车。状态车道跑完冷却 1500ms、提交历史车道 5000ms，两条互不阻塞，`force` 跳过冷却。
+  `git status --porcelain=v2 --branch -z -uall` 流式消费，分支信息与文件条目一次读完；累计到
+  5000 条立刻 kill，跳过 `diff --numstat` 与逐文件读行数，结果标 `truncated`，界面据此暂停
+  自动刷新。
 
 ### 4.4 客户端投影与重连（`packages/client-core` 与 `apps/desktop`）
 

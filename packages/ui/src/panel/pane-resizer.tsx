@@ -7,10 +7,33 @@
  * 拖动期间在 body 上铺一层透明遮罩：整屏的命中与光标都归它，指针滑出分隔条时不会忽然变回
  * 箭头，底下的按钮收不到 hover，正文也不会被顺手选中。遮罩只在开始与结束各渲染一次，拖动
  * 过程中仍然不经过 React。
+ *
+ * **拖收关闭**：给了 `collapseThreshold` 时，缩到「最小宽再往里一半」就算进了待关闭态——
+ * 越过那一刻在 `.app` 上挂 `collapsePreviewAttr`，样式据此把这一列的实占宽摁到 `0`，栏位
+ * 实时收起、正文实时补位；分隔条留在原地染上强调色，作为「松手就关」的提示。拖回阈值之上
+ * 立刻摘掉属性，宽度从 `min` 起重新跟手。松手时若仍在待关闭态就直接收起这一栏，且**不把
+ * 那个宽度写进本地存储**（变量还原成这次拖动的起点），所以下次打开还是原来那份偏好宽。
+ *
+ * 整个过程不卸载这一栏、不收指针捕获、也不给它 `display: none`：属性只改列轨道，分隔条
+ * 始终拿得住指针，会话列表的滚动位置与终端的 DOM 也不会在拖动中被重建。
  */
 import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { clampPaneWidth } from "./pane-width.ts";
+
+/** 一次拖动的现场。 */
+interface DragState {
+	/** 指针按下时的横坐标 */
+	startX: number;
+	/** 按下时的宽度；拖收关闭时用来还原 */
+	startWidth: number;
+	/** 已钳制的显示宽度，松手时提交它 */
+	current: number;
+	/** 是不是已经缩进待关闭区间 */
+	pending: boolean;
+	/** 宽度变量写在哪个元素上（通常是 `.app`） */
+	target: HTMLElement | null;
+}
 
 /** 分隔条参数。 */
 export interface PaneResizerProps {
@@ -37,6 +60,22 @@ export interface PaneResizerProps {
 	 * 拿不到 `pointerup` 的那次收尾会把一个没人在看的宽度提交上去。
 	 */
 	onDraggingChange?: ((dragging: boolean) => void) | undefined;
+	/**
+	 * 拖收关闭的阈值（未钳制的目标宽，单位 px）。
+	 *
+	 * 不给就不启用。启用时缩到 `<= collapseThreshold` 进入待关闭态：视觉停在 `min`，
+	 * 松手调用 `onCollapse()` 并放弃这次宽度。
+	 */
+	collapseThreshold?: number | undefined;
+	/** 在待关闭态里松手：关掉这一栏。与点它的收起按钮同一条路 */
+	onCollapse?: (() => void) | undefined;
+	/**
+	 * 折叠预览属性的名字（挂在 `.app` 上，如 `"data-sidebar-drag-collapsed"`）。
+	 *
+	 * 越过阈值时挂上、拖回阈值之上时摘掉，样式据此把这一列的实占宽摁到 `0`。属性直接写在
+	 * 元素上、不经过 React 状态，拖动期间因此一次渲染都不发生。
+	 */
+	collapsePreviewAttr?: string | undefined;
 }
 
 export function PaneResizer({
@@ -49,28 +88,50 @@ export function PaneResizer({
 	side,
 	onWidthChange,
 	onDraggingChange,
+	collapseThreshold,
+	onCollapse,
+	collapsePreviewAttr,
 }: PaneResizerProps) {
-	const dragging = useRef<{ startX: number; startWidth: number; current: number } | undefined>(undefined);
+	const dragging = useRef<DragState | undefined>(undefined);
 	/** 拖动中才挂遮罩；组件中途被卸掉时遮罩跟着它一起走 */
 	const [isDragging, setIsDragging] = useState(false);
+	/** 待关闭态的视觉提示挂在这条分隔条自己身上 */
+	const [isCollapsePending, setIsCollapsePending] = useState(false);
 	/** 拖动状态回调放 ref 里：拖动过程中它换引用不该重绑指针事件 */
 	const draggingListener = useRef(onDraggingChange);
 	draggingListener.current = onDraggingChange;
+	/** 收尾时读最新的两个回调，不把它们卷进 `useCallback` 的依赖里 */
+	const finishRef = useRef({ onCollapse, onWidthChange });
+	finishRef.current = { onCollapse, onWidthChange };
 
-	// 拖动到一半被卸载时补发一次「结束」：否则外壳会一直以为还在拖，折叠永远锁着
+	// 拖动到一半被卸载时补发一次「结束」：否则外壳会一直以为还在拖，折叠永远锁着。
+	// 变量也还原成起点、预览属性一并摘掉，别把一个没提交的宽度或一列零宽留在界面上。
 	useEffect(() => {
 		return () => {
-			if (dragging.current !== undefined) {
-				dragging.current = undefined;
-				draggingListener.current?.(false);
+			const start = dragging.current;
+			if (start === undefined) {
+				return;
+			}
+			dragging.current = undefined;
+			draggingListener.current?.(false);
+			start.target?.style.setProperty(cssVar, `${start.startWidth}px`);
+			if (start.pending && collapsePreviewAttr !== undefined) {
+				start.target?.removeAttribute(collapsePreviewAttr);
 			}
 		};
-	}, []);
+	}, [collapsePreviewAttr, cssVar]);
 
 	const handlePointerDown = useCallback(
 		(event: ReactPointerEvent<HTMLHRElement>) => {
 			event.preventDefault();
-			dragging.current = { startX: event.clientX, startWidth: width, current: width };
+			const target = event.currentTarget.closest(".app");
+			dragging.current = {
+				startX: event.clientX,
+				startWidth: width,
+				current: width,
+				pending: false,
+				target: target instanceof HTMLElement ? target : null,
+			};
 			event.currentTarget.setPointerCapture(event.pointerId);
 			setIsDragging(true);
 			draggingListener.current?.(true);
@@ -85,19 +146,29 @@ export function PaneResizer({
 				return;
 			}
 			const delta = event.clientX - start.startX;
+			// 未钳制的目标宽：拖收判定看它，显示看钳制之后的值
+			const raw = start.startWidth + (side === "start" ? -delta : delta);
 			// 算出来不是有限数时退回这次拖动的起点宽度，不要跳
-			const next = clampPaneWidth(start.startWidth + (side === "start" ? -delta : delta), {
-				min,
-				max,
-				defaultWidth: start.startWidth,
-			});
+			const next = clampPaneWidth(raw, { min, max, defaultWidth: start.startWidth });
 			start.current = next;
-			const app = event.currentTarget.closest(".app");
-			if (app instanceof HTMLElement) {
-				app.style.setProperty(cssVar, `${next}px`);
+			start.target?.style.setProperty(cssVar, `${next}px`);
+
+			// 跨阈值才翻状态：拖动过程中不做无谓的重渲染
+			const pending = collapseThreshold !== undefined && Number.isFinite(raw) && raw <= collapseThreshold;
+			if (pending !== start.pending) {
+				start.pending = pending;
+				setIsCollapsePending(pending);
+				// 实时收起 / 实时展开：只改 `.app` 上的属性，列轨道由样式跟着算
+				if (collapsePreviewAttr !== undefined) {
+					if (pending) {
+						start.target?.setAttribute(collapsePreviewAttr, "true");
+					} else {
+						start.target?.removeAttribute(collapsePreviewAttr);
+					}
+				}
 			}
 		},
-		[cssVar, side, min, max],
+		[collapsePreviewAttr, collapseThreshold, cssVar, max, min, side],
 	);
 
 	/**
@@ -105,24 +176,42 @@ export function PaneResizer({
 	 *
 	 * `pointerup`、`pointercancel` 与 `lostpointercapture` 都可能先到，重复调用是安全的：
 	 * 没有进行中的拖动时直接返回，已经放开的捕获也不再去释放。
+	 *
+	 * 取消与待关闭都不提交宽度：变量还原成起点，落盘里仍是用户原来那一份偏好宽。
+	 *
+	 * 待关闭时先同步提交一次收起（`flushSync`），等 `is-*-hidden` 落到 `.app` 上再摘预览
+	 * 属性——反过来的话，松手那一帧会先看见宽度还原、收起还没生效，闪一下原宽度。
 	 */
 	const finishDrag = useCallback(
-		(event: ReactPointerEvent<HTMLHRElement>) => {
+		(event: ReactPointerEvent<HTMLHRElement>, cancelled: boolean) => {
 			const start = dragging.current;
 			dragging.current = undefined;
 			setIsDragging(false);
-			if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+			setIsCollapsePending(false);
+			if (event.currentTarget.hasPointerCapture?.(event.pointerId) === true) {
 				event.currentTarget.releasePointerCapture(event.pointerId);
 			}
-			if (start !== undefined) {
-				draggingListener.current?.(false);
+			if (start === undefined) {
+				return;
+			}
+			draggingListener.current?.(false);
+			if (cancelled || start.pending) {
+				start.target?.style.setProperty(cssVar, `${start.startWidth}px`);
+				const collapse = finishRef.current.onCollapse;
+				if (!cancelled && collapse !== undefined) {
+					flushSync(collapse);
+				}
+				if (collapsePreviewAttr !== undefined) {
+					start.target?.removeAttribute(collapsePreviewAttr);
+				}
+				return;
 			}
 			// 松手时才提交：宿主保存宽度，并把变量对齐到同一个值
-			if (start !== undefined && start.current !== width) {
-				onWidthChange(start.current);
+			if (start.current !== width) {
+				finishRef.current.onWidthChange(start.current);
 			}
 		},
-		[onWidthChange, width],
+		[collapsePreviewAttr, cssVar, width],
 	);
 
 	return (
@@ -134,11 +223,12 @@ export function PaneResizer({
 				aria-valuenow={width}
 				aria-valuemin={min}
 				aria-valuemax={max}
+				data-collapse-pending={isCollapsePending ? "true" : undefined}
 				onPointerDown={handlePointerDown}
 				onPointerMove={handlePointerMove}
-				onPointerUp={finishDrag}
-				onPointerCancel={finishDrag}
-				onLostPointerCapture={finishDrag}
+				onPointerUp={(event) => finishDrag(event, false)}
+				onPointerCancel={(event) => finishDrag(event, true)}
+				onLostPointerCapture={(event) => finishDrag(event, true)}
 			/>
 			{isDragging
 				? createPortal(<div className="pane-resize-overlay" aria-hidden="true" />, document.body)

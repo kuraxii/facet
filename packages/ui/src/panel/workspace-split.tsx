@@ -54,7 +54,8 @@ export function WorkspaceSplit({
 	return (
 		<div className={classes} data-view={view}>
 			<div className="workspace-split-detail">{detail}</div>
-			<div className="workspace-split-list">{list}</div>
+			{/* 索引栏自己纵向滚；`scroll-y` 保证滚动条是全仓那一套细条 */}
+			<div className="workspace-split-list scroll-y">{list}</div>
 		</div>
 	);
 }

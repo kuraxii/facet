@@ -48,6 +48,21 @@
 	--col-panel: calc(100% - var(--col-sidebar));
 }
 
+/*
+ * 拖收关闭的实时预览：分隔条越过「最小宽一半」那一刻由脚本挂上属性，这一列的实占宽当场
+ * 归零，正文与顶带按既有列轨道一起重排——不需要任何 JS 布局，也不发生一次 React 渲染。
+ *
+ * 属性只改列轨道；那一栏本体怎么收干净、窗口内侧边缘那条强调色提示线怎么摆，见
+ * `panel.css` 末尾。松手若仍在预览态就换成 `is-*-hidden` 的常态收起，两者同帧换手。
+ */
+.app[data-sidebar-drag-collapsed="true"] {
+	--col-sidebar: 0px;
+}
+
+.app[data-panel-drag-collapsed="true"] {
+	--col-panel: 0px;
+}
+
 /* 拖动区盖住整条顶带，格子里的控件自己标 no-drag */
 .app-drag {
 	position: absolute;

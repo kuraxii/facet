@@ -60,6 +60,9 @@ export interface SessionSidebarProps {
 	maxWidth?: number | undefined;
 	/** 拖动开始与结束的提示，外壳用它在拖动期间锁住折叠 */
 	onDraggingChange?: ((dragging: boolean) => void) | undefined;
+	/** 缩到最小宽一半以内松手：收起侧栏。与点收起按钮同一条路 */
+	onDragCollapse?: (() => void) | undefined;
+	/** 此刻是不是拖到「松手就关」的位置 */
 	/** 收起侧栏；给了头部才显示收起按钮 */
 	onCollapse?: (() => void) | undefined;
 	/** 项目列表上一次刷新失败，过滤器里给出重试入口 */
@@ -142,6 +145,7 @@ export const SessionSidebar = memo(function SessionSidebar({
 	onWidthChange,
 	maxWidth,
 	onDraggingChange,
+	onDragCollapse,
 	onCollapse,
 	isProjectsStale = false,
 	onRefreshProjects,
@@ -495,6 +499,10 @@ export const SessionSidebar = memo(function SessionSidebar({
 					side="end"
 					onWidthChange={onWidthChange}
 					onDraggingChange={onDraggingChange}
+					// 缩到最小宽一半以内松手就收起这一栏，落盘里仍留着原来的偏好宽
+					collapseThreshold={SIDEBAR_MIN_WIDTH / 2}
+					{...(onDragCollapse === undefined ? {} : { onCollapse: onDragCollapse })}
+					collapsePreviewAttr="data-sidebar-drag-collapsed"
 				/>
 			)}
 			{showHeader ? (

@@ -107,6 +107,18 @@ export type { ChangesPaneProps } from "./panel/changes-pane.tsx";
 export { ChangesPane } from "./panel/changes-pane.tsx";
 export type { DiffViewProps } from "./panel/diff-view.tsx";
 export { DiffView } from "./panel/diff-view.tsx";
+export type { FileTreeStorage } from "./panel/file-tree-state.ts";
+export {
+	clampFileTreeWidth,
+	EDITOR_KEEP_WIDTH,
+	FILE_TREE_DEFAULT_WIDTH,
+	FILE_TREE_MAX_WIDTH,
+	FILE_TREE_MIN_WIDTH,
+	FILE_TREE_WIDTH_BOUNDS,
+	fileTreeMaxWidth,
+	readFileTreeWidth,
+	writeFileTreeWidth,
+} from "./panel/file-tree-state.ts";
 export type { FilesPaneProps } from "./panel/files-pane.tsx";
 export { FilesPane } from "./panel/files-pane.tsx";
 export type { PaneResizerProps } from "./panel/pane-resizer.tsx";

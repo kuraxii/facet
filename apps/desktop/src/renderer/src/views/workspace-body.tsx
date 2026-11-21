@@ -3,10 +3,12 @@
  *
  * 一个标签都没开时这一块是启动清单（图标 + 名字 + 快捷键），开了之后按标签装内容：
  *
- * - 文件与变更都是「预览 + 索引」。右栏宽到 `WORKSPACE_SPLIT_WIDE_WIDTH_PX` 时是两栏并排
- *   （左预览、右索引）；更窄时改成单栏钻取——先满宽看列表，点一条进满宽预览，预览顶栏
- *   左上角的箭头退回列表。哪一层显示由 `WorkspaceSplit` 的 `data-view` 给，样式负责换排布。
- * - 终端独占整宽，两边都没有索引。
+ * - **文件**：编辑器与文件树在同一层并排——编辑器占剩下的宽度，文件树按自己的宽度占位，
+ *   收起时整栏不占地方。两者之间一条拖拽条改树宽（180 / 240 / 420，落盘），编辑器被挤窄
+ *   之后长行改为横向滚动，不再折行。
+ * - **变更**：仍然是「预览 + 索引」两栏。右栏宽到 `WORKSPACE_SPLIT_WIDE_WIDTH_PX` 时两栏并排；
+ *   更窄时改成单栏钻取——先满宽看列表，点一条进满宽预览，预览顶栏左上角的箭头退回列表。
+ * - **终端**：独占整宽，两边都没有索引。
  *
  * 三块都留在 DOM 里，只切换显隐：终端藏起来是不让它丢 PTY 会话与回滚，文件树与变更列表
  * 藏起来是为了保住展开状态与滚动位置。关掉一个标签才是真的卸载——终端的 PTY 也就在那
@@ -20,8 +22,13 @@ import type { GitFileChange } from "@facet/protocol";
 import {
 	ChangesDocument,
 	ChangesPane,
+	clampFileTreeWidth,
+	FILE_TREE_MIN_WIDTH,
 	FilesPane,
+	fileTreeMaxWidth,
+	PaneResizer,
 	type RightPanelTab,
+	readFileTreeWidth,
 	useHoverTip,
 	useI18n,
 	WorkspaceLauncher,
@@ -29,11 +36,12 @@ import {
 	type WorkspaceSplitView,
 	type WorkspaceTabId,
 	type WorkspaceTabItem,
+	writeFileTreeWidth,
 } from "@facet/ui";
 import { FileView } from "@facet/ui-editor";
 import { TerminalView, type TerminalViewHandle } from "@facet/ui-terminal";
-import { ArrowLeft, PanelRightOpen } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { ArrowLeft, FolderTree, PanelRightOpen } from "lucide-react";
+import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { TerminalPanel } from "../hooks/useTerminalPanel.ts";
 import { type WorkspaceDocs, workspaceCommitKey, workspaceFileKey } from "../hooks/useWorkspaceDocs.ts";
 import { useHostClient, useHostTerminalClient } from "../host-context.tsx";
@@ -64,19 +72,54 @@ export function WorkspaceBody(props: WorkspaceBodyProps): ReactNode {
 	const { t } = useI18n();
 	const client = useHostClient();
 	const terminalClient = useHostTerminalClient();
-	/** 文件树与变更列表是不是被手动收起了（只在两栏态有意义） */
-	const [isFileTreeCollapsed, setFileTreeCollapsed] = useState(false);
+	/** 变更列表是不是被手动收起了（只在两栏态有意义） */
 	const [isChangesListCollapsed, setChangesListCollapsed] = useState(false);
 	/**
-	 * 单栏钻取停在哪一层。
+	 * 变更预览停在列表还是文档上（单栏钻取）。
 	 *
 	 * 两栏态忽略它：宽到放得下两栏时预览与索引一起显示，钻取状态留着不影响观感，缩窄回来
 	 * 还停在用户最后看的那一层。
 	 */
-	const [filesView, setFilesView] = useState<WorkspaceSplitView>("list");
 	const [changesView, setChangesView] = useState<WorkspaceSplitView>("list");
+	/** 悬浮文件树开着没有；关掉只藏起来，树的展开状态与滚动位置都留着 */
+	const [isFileTreeOpen, setIsFileTreeOpen] = useState(true);
+	/** 悬浮文件树的偏好宽，落盘里长期留着 */
+	const [treeWidth, setTreeWidth] = useState(() => readFileTreeWidth(window.localStorage));
+	/** 文件视图的容器宽：拖拽上限按它现算 */
+	const [filesWidth, setFilesWidth] = useState(0);
+	const filesRef = useRef<HTMLDivElement | null>(null);
 	/** 终端本身：切回终端标签时把键盘输入接过去 */
 	const terminalView = useRef<TerminalViewHandle | null>(null);
+
+	/*
+	 * 偏好宽写在根节点上。
+	 *
+	 * 拖动期间分隔条把同一个变量写在 `.app` 上——更近的祖先赢，所以拖动是即时的、不经过
+	 * 渲染；松手提交之后这里把根节点对齐到同一个值，两者不会打架。
+	 */
+	useLayoutEffect(() => {
+		document.documentElement.style.setProperty("--file-tree-width", `${treeWidth}px`);
+	}, [treeWidth]);
+
+	// 文件视图的容器宽：拖拽上限 = 容器 − EDITOR_KEEP_WIDTH，再收进 [180, 420]
+	useEffect(() => {
+		const node = filesRef.current;
+		if (node === null) {
+			return;
+		}
+		const read = (): void => setFilesWidth(node.clientWidth);
+		read();
+		const observer = new ResizeObserver(read);
+		observer.observe(node);
+		return () => observer.disconnect();
+	}, []);
+
+	/** 松手时提交文件树宽度并落盘。 */
+	const commitTreeWidth = useCallback((next: number) => {
+		const width = clampFileTreeWidth(next);
+		setTreeWidth(width);
+		writeFileTreeWidth(window.localStorage, width);
+	}, []);
 
 	/*
 	 * 切回终端标签就把焦点交给它。
@@ -102,11 +145,15 @@ export function WorkspaceBody(props: WorkspaceBodyProps): ReactNode {
 			? undefined
 			: docs.commitDetails[workspaceCommitKey(commitRef.cwd, commitRef.sha)];
 
+	/** 编辑器顶栏上那枚「文件树开关」；没有二级顶栏的空态里也用同一个按钮 */
+	const treeToggle = (
+		<FileTreeToggle isOpen={isFileTreeOpen} onToggle={() => setIsFileTreeOpen((open) => !open)} />
+	);
+
 	/*
 	 * 文件预览。
 	 *
 	 * 取文件失败时把原因摆在预览区：树那边只显示「读取失败」，具体是哪一句只有这里说得清。
-	 * 顶栏左端的那枚箭头只在单栏态出现（样式按容器宽度藏），它就是把列表叫回来的入口。
 	 */
 	let fileView: ReactNode = null;
 	if (docs.fileError !== undefined) {
@@ -132,22 +179,16 @@ export function WorkspaceBody(props: WorkspaceBodyProps): ReactNode {
 					docs.setFileContent(workspaceFileKey(fileRef.cwd, fileRef.path), next);
 					return next;
 				}}
-				headerLeading={<BackToListButton onBack={() => setFilesView("list")} />}
-				// 索引收起时，展开入口落在标题行最右端
-				headerTrailing={
-					isFileTreeCollapsed ? (
-						<RestoreListButton label={t("panel.showTree")} onShow={() => setFileTreeCollapsed(false)} />
-					) : null
-				}
+				headerTrailing={treeToggle}
 			/>
 		);
 	}
 
 	/*
-	 * 预览区的内容。
+	 * 编辑器那一层。
 	 *
-	 * 有文件时用 `FileView` 的标题行承载「返回列表」；空着、或者只剩一条读取失败的原文时
-	 * 没有二级顶栏，入口改挂在卡片里，钻取到空预览之后总归有一个地方能点回去。
+	 * 有文件时它就是 `FileView`；空着、或只剩一条读取失败的原文时没有二级顶栏，开关改挂在
+	 * 空状态卡片里——文件树藏起来之后总归有一个地方能点回去。
 	 */
 	const fileDetail =
 		fileView !== null && docs.fileError === undefined ? (
@@ -155,9 +196,7 @@ export function WorkspaceBody(props: WorkspaceBodyProps): ReactNode {
 		) : (
 			<>
 				{fileView}
-				<div className="workspace-split-empty">
-					<BackToListButton onBack={() => setFilesView("list")} />
-				</div>
+				<div className="workspace-split-empty">{isFileTreeOpen ? null : treeToggle}</div>
 			</>
 		);
 
@@ -224,12 +263,23 @@ export function WorkspaceBody(props: WorkspaceBodyProps): ReactNode {
 		<div className="workspace-body">
 			{openTabs.includes("files") ? (
 				<div className={activeTab === "files" ? "workspace-view" : "workspace-view is-inactive"}>
-					<WorkspaceSplit
-						className="is-files"
-						view={filesView}
-						isListCollapsed={isFileTreeCollapsed}
-						detail={fileDetail}
-						list={
+					{/*
+					 * 编辑器与文件树在同一层并排：编辑器 `flex: 1 1 0` 吃掉剩下的宽度，文件树
+					 * 收起时整栏 `display: none`，编辑器随之长满。
+					 */}
+					<div className="workspace-files" ref={filesRef}>
+						<div className="workspace-files-detail">{fileDetail}</div>
+						<div className={isFileTreeOpen ? "file-tree" : "file-tree is-hidden"}>
+							<PaneResizer
+								className="file-tree-resizer"
+								label={t("panel.resizeTree")}
+								width={treeWidth}
+								min={FILE_TREE_MIN_WIDTH}
+								max={fileTreeMaxWidth(filesWidth)}
+								cssVar="--file-tree-width"
+								side="start"
+								onWidthChange={commitTreeWidth}
+							/>
 							<FilesPane
 								loadDirectory={(path) =>
 									sessionCwd === undefined
@@ -239,16 +289,15 @@ export function WorkspaceBody(props: WorkspaceBodyProps): ReactNode {
 								onOpenFile={(path) => {
 									if (sessionCwd !== undefined) {
 										void docs.openFile(sessionCwd, path);
-										setFilesView("detail");
 									}
 								}}
 								selectedPath={
 									docs.file !== undefined && docs.file.cwd === sessionCwd ? docs.file.path : undefined
 								}
-								onCollapse={() => setFileTreeCollapsed(true)}
+								onCollapse={() => setIsFileTreeOpen(false)}
 							/>
-						}
-					/>
+						</div>
+					</div>
 				</div>
 			) : null}
 			{openTabs.includes("changes") ? (
@@ -303,10 +352,39 @@ export function WorkspaceBody(props: WorkspaceBodyProps): ReactNode {
 }
 
 /**
+ * 编辑器顶栏上的文件树开关（顶栏最右端）。
+ *
+ * 展开时提亮（`aria-pressed`），收起时压暗；文案即无障碍名称，也用作悬浮提示。
+ *
+ * 它在最右端而文件树浮在右缘上方，所以展开期间顶栏整条让出悬浮层的宽度（见 `panel.css` 的
+ * `[data-tree-open]`），按钮因此不会被那一层盖住。
+ */
+function FileTreeToggle({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void }): ReactNode {
+	const { t } = useI18n();
+	const label = isOpen ? t("panel.collapseTree") : t("panel.showTree");
+	const tip = useHoverTip();
+	return (
+		<>
+			<button
+				type="button"
+				className="workspace-head-action workspace-tree-toggle"
+				aria-label={label}
+				aria-pressed={isOpen}
+				{...tip.handlers(label)}
+				onClick={onToggle}
+			>
+				<FolderTree size={14} strokeWidth={1.5} />
+			</button>
+			{tip.render()}
+		</>
+	);
+}
+
+/**
  * 退回列表的小按钮。
  *
- * 只在单栏钻取时出现（两栏态由容器查询藏起来）：那时列表不在屏幕上，路径前面这枚向左的
- * 箭头就是唯一的退路。
+ * 只在变更视图的单栏钻取里出现（两栏态由容器查询藏起来）：那时列表不在屏幕上，顶栏左端
+ * 这枚向左的箭头就是唯一的退路。
  */
 function BackToListButton({ onBack }: { onBack: () => void }): ReactNode {
 	const { t } = useI18n();
@@ -329,10 +407,10 @@ function BackToListButton({ onBack }: { onBack: () => void }): ReactNode {
 }
 
 /**
- * 把索引栏叫回来的小按钮。
+ * 把变更列表叫回来的小按钮。
  *
- * 图标指向右侧：索引栏在右边，展开它就是让内容从右侧长出来。文案即无障碍名称，同时用作
- * 悬浮提示（按钮本身只有图标）。两栏态才有「收起」这回事，单栏态由容器查询藏起来。
+ * 图标指向右侧：列表在右边，展开它就是让内容从右侧长出来。两栏态才有「收起」这回事，
+ * 单栏态由容器查询藏起来。
  */
 function RestoreListButton({ label, onShow }: { label: string; onShow: () => void }): ReactNode {
 	const tip = useHoverTip();

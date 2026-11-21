@@ -1,5 +1,6 @@
-import { createEditor, type LexicalEditor } from "lexical";
+import { $createParagraphNode, $getRoot, createEditor, type LexicalEditor } from "lexical";
 import { describe, expect, it } from "vitest";
+import { $createFileMentionNode, $isFileMentionNode } from "./file-mention-node.ts";
 import {
 	$exportComposerMarkdown,
 	$importComposerMarkdown,
@@ -19,17 +20,34 @@ function testEditor(): LexicalEditor {
 }
 
 /** 把一段 Markdown 铺进编辑器再导出，模拟「外部写入之后用户接着编辑」这一趟。 */
-function roundTrip(markdown: string): string {
+function roundTrip(markdown: string, files: readonly string[] = []): string {
 	const editor = testEditor();
 	let exported = "";
 	editor.update(
 		() => {
-			$importComposerMarkdown(markdown);
+			$importComposerMarkdown(markdown, new Set(files));
 			exported = $exportComposerMarkdown();
 		},
 		{ discrete: true },
 	);
 	return exported;
+}
+
+/** 铺一段 Markdown 之后，树里 `@` 引用胶囊的路径。 */
+function mentionsOf(markdown: string, files: readonly string[]): string[] {
+	const editor = testEditor();
+	let paths: string[] = [];
+	editor.update(
+		() => {
+			$importComposerMarkdown(markdown, new Set(files));
+			paths = $getRoot()
+				.getAllTextNodes()
+				.filter((node) => $isFileMentionNode(node))
+				.map((node) => node.getFilePath());
+		},
+		{ discrete: true },
+	);
+	return paths;
 }
 
 describe("输入区的 Markdown 口径", () => {
@@ -87,5 +105,67 @@ describe("输入区的 Markdown 口径", () => {
 		editor.update(() => $importComposerMarkdown("要点"), { discrete: true });
 		importComposerMarkdown(editor, "");
 		expect(editor.getEditorState().read(() => $exportComposerMarkdown())).toBe("");
+	});
+});
+
+describe("`@文件` 胶囊", () => {
+	const FILES = ["src/a.ts", "docs/readme.md"] as const;
+
+	it("对外导出完整路径,屏幕上只显示文件名", () => {
+		const editor = testEditor();
+		let text = "";
+		let label = "";
+		let title = "";
+		editor.update(
+			() => {
+				$importComposerMarkdown("看 @src/a.ts 这个", new Set(FILES));
+				const mention = $getRoot()
+					.getAllTextNodes()
+					.find((node) => $isFileMentionNode(node));
+				text = mention?.getTextContent() ?? "";
+				label = mention?.getTextContent().replace("@src/", "@") ?? "";
+				title = $exportComposerMarkdown();
+			},
+			{ discrete: true },
+		);
+		// 节点文本是完整路径，Markdown 导出照着它走
+		expect(text).toBe("@src/a.ts");
+		// 屏幕上那份短名字由文件名推出来
+		expect(label).toBe("@a.ts");
+		expect(title).toBe("看 @src/a.ts 这个");
+	});
+
+	it("命中已知文件的 @路径 还原成胶囊,文本其余部分不动", () => {
+		expect(mentionsOf("看 @src/a.ts 与 @docs/readme.md 两处", FILES)).toEqual(["src/a.ts", "docs/readme.md"]);
+		// 往返之后一字不差
+		expect(roundTrip("看 @src/a.ts 与 @docs/readme.md 两处", FILES)).toBe(
+			"看 @src/a.ts 与 @docs/readme.md 两处",
+		);
+	});
+
+	it("不在清单里的 @路径、普通 @名字 与邮箱都保持文本", () => {
+		expect(mentionsOf("@src/other.ts 与 @someone 与 a@b.com", FILES)).toEqual([]);
+		expect(roundTrip("@src/other.ts 与 @someone 与 a@b.com", FILES)).toBe(
+			"@src/other.ts 与 @someone 与 a@b.com",
+		);
+	});
+
+	it("代码块里的 @路径 不还原成胶囊", () => {
+		expect(mentionsOf("```\n// @src/a.ts\n```", FILES)).toEqual([]);
+	});
+
+	it("行内代码里的 @路径 不还原成胶囊", () => {
+		expect(mentionsOf("`@src/a.ts`", FILES)).toEqual([]);
+	});
+
+	it("胶囊可以整块导出再读回", () => {
+		const editor = testEditor();
+		editor.update(
+			() => {
+				$getRoot().append($createParagraphNode().append($createFileMentionNode("src/a.ts")));
+			},
+			{ discrete: true },
+		);
+		expect(editor.getEditorState().read(() => $exportComposerMarkdown())).toBe("@src/a.ts");
 	});
 });

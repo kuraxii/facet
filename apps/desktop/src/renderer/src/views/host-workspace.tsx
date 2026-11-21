@@ -9,11 +9,12 @@
  */
 import { chatActivity } from "@facet/client-core";
 import type { LanguageSetting } from "@facet/i18n";
-import { appendQuote, TextMenu } from "@facet/ui";
+import { appendQuote, type ComposerHandle, TextMenu } from "@facet/ui";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { bridge } from "../bridge.ts";
 import { useComposer } from "../hooks/useComposer.ts";
 import type { HostConnection } from "../hooks/useHostConnection.ts";
+import { useMentionFiles } from "../hooks/useMentionFiles.ts";
 import { useNoticeBridge } from "../hooks/useNoticeBridge.ts";
 import { useSessionLifecycle } from "../hooks/useSessionLifecycle.ts";
 import { useTerminalPanel } from "../hooks/useTerminalPanel.ts";
@@ -21,7 +22,7 @@ import { useReadMarker, useTranscript } from "../hooks/useTranscript.ts";
 import { useWorkspaceDocs } from "../hooks/useWorkspaceDocs.ts";
 import { useWorkspaceShell } from "../hooks/useWorkspaceShell.ts";
 import { useHostRuntime } from "../host-context.tsx";
-import { placeCaretAtEnd, QUOTE_SOURCE_SELECTOR } from "../selection-quote.ts";
+import { QUOTE_SOURCE_SELECTOR } from "../selection-quote.ts";
 import { useToast } from "../toast-provider.tsx";
 import { workspaceShortcutOf } from "../workspace-shortcuts.ts";
 import { Workbench } from "./workbench.tsx";
@@ -164,16 +165,28 @@ export function HostWorkspace({
 		navigator.clipboard.writeText(text).catch(() => undefined);
 	}, []);
 
-	/** 对话里选中的文字被引用之后把光标放回输入框末尾 */
-	const composerInput = useRef<HTMLElement>(null);
-	/** 把选中的文字做成引用块接进草稿 */
+	/** 输入区的命令式句柄：引用之后由编辑器自己插结构、落光标 */
+	const composerInput = useRef<ComposerHandle>(null);
+	/**
+	 * 把选中的文字做成引用块接进草稿。
+	 *
+	 * 输入区在的时候把动作交给编辑器：它直接插引用块节点，光标落进引用下方的新段落，
+	 * 撤销历史与选区都跟着走。没有句柄（编辑器还没挂上）时才退回字符串拼接。
+	 */
 	const quoteInto = useCallback(
 		(text: string): void => {
+			const handle = composerInput.current;
+			if (handle !== null) {
+				handle.appendQuote(text);
+				return;
+			}
 			composer.updateDraft((current) => appendQuote(current, text));
-			placeCaretAtEnd(composerInput.current);
 		},
 		[composer],
 	);
+
+	/** `@` 补全的文件清单：跟着会话目录走 */
+	const mentionFiles = useMentionFiles(client, sessionCwd);
 
 	/*
 	 * 工作区三件工具的快捷键：文件与变更直接打开对应标签，终端还没有实例时先在当前目录
@@ -214,6 +227,7 @@ export function HostWorkspace({
 				copyText={copyText}
 				openTerminal={openTerminal}
 				composerInput={composerInput}
+				mentionFiles={mentionFiles}
 			/>
 			{/* 整棵工作区只挂一份：可选中文本处给复制，对话正文另加引用 */}
 			<TextMenu onCopy={copyText} onQuote={quoteInto} quoteScope={QUOTE_SOURCE_SELECTOR} />

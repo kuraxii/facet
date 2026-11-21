@@ -23,6 +23,7 @@
 		"@fontsource-variable/noto-sans-sc": "^5.3.1",
 		"@fontsource/inter": "^5.3.0",
 		"@lexical/code": "^0.53.0",
+		"@lexical/code-prism": "^0.53.0",
 		"@lexical/link": "^0.53.0",
 		"@lexical/list": "^0.53.0",
 		"@lexical/markdown": "^0.53.0",

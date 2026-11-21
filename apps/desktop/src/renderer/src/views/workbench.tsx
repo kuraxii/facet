@@ -14,6 +14,7 @@ import { chatActivity } from "@facet/client-core";
 import type { LanguageSetting } from "@facet/i18n";
 import {
 	CodeThemeProvider,
+	type ComposerHandle,
 	CreateProjectDialog,
 	EmptyState,
 	HostSwitcher,
@@ -74,8 +75,10 @@ export interface WorkbenchProps {
 	terminalId: string | undefined;
 	/** 复制一段文本 */
 	copyText: (text: string) => void;
-	/** 输入框本身：引用之后要把光标放回它末尾 */
-	composerInput: RefObject<HTMLElement | null>;
+	/** 输入区的命令式句柄：引用之后把结构插进去、光标放回末尾 */
+	composerInput: RefObject<ComposerHandle | null>;
+	/** 可 `@` 引用的文件：项目根下的相对路径 */
+	mentionFiles: readonly string[];
 	/** 开一个终端 */
 	openTerminal: () => Promise<void>;
 }
@@ -97,6 +100,7 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 		copyText,
 		openTerminal,
 		composerInput,
+		mentionFiles,
 	} = props;
 	const { t } = useI18n();
 	const client = useHostClient();
@@ -280,6 +284,7 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 				errorBar={errorBar}
 				copyText={copyText}
 				composerInput={composerInput}
+				mentionFiles={mentionFiles}
 			/>
 		);
 

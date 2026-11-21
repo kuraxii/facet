@@ -30,3 +30,17 @@ if (typeof Range === "function") {
 	Range.prototype.getBoundingClientRect = (): DOMRect => EMPTY_RECT;
 	Range.prototype.getClientRects = (): DOMRectList => EMPTY_RECTS as unknown as DOMRectList;
 }
+
+/**
+ * jsdom 没有 `ResizeObserver`。补全菜单用它跟踪锚点位置，缺了会在挂载时就抛错；
+ * 测试里不做布局，收到观察与断开就好。
+ */
+class TestResizeObserver implements ResizeObserver {
+	observe(): void {}
+	unobserve(): void {}
+	disconnect(): void {}
+}
+
+if (typeof globalThis.ResizeObserver !== "function") {
+	globalThis.ResizeObserver = TestResizeObserver;
+}

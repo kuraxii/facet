@@ -189,16 +189,26 @@
 
 .row {
 	/*
-	 * 只做布局与样式隔离，不用 content-visibility。
+	 * 屏外跳过绘制：一行滚出视口之后，浏览器不再为它做布局与绘制，长对话滚动因此只看得到
+	 * 视口里那几行。`contain-intrinsic-size: auto 64px` 里的 `auto` 是关键——滚过去一次就
+	 * 记住那一行的真实高度，回来时按记忆的高度占位，滚动条长度不跳。
 	 *
-	 * 视口裁剪会在行滚出视口后丢掉已渲染的结果，拖选跨过这些区域时浏览器要逐帧把内容
-	 * 重新渲染出来才能计算选区；实测主线程占用因此从 29% 涨到 70%，拖动时选区跟不上指针。
-	 * 换成纯粹的 contain 之后流式期间的单核占用与之前持平，拖选也恢复到跟手。
+	 * 代价写在明处：拖选跨过视口边界时，浏览器要现渲染那些子树才能算选区。为此用户消息行
+	 * （对话导航按它的位置跳转）、正在流式写入的行与末尾两行都不参与裁剪——前者的高度一变，
+	 * 竖轨与滚动总高都跟着抖；后者是"刚出来的内容"，延迟渲染会让贴底跟随看见高度反复切换。
 	 */
 	contain: layout style;
+	content-visibility: auto;
+	contain-intrinsic-size: auto 64px;
 	display: flex;
 	flex-direction: column;
 	gap: var(--space-4);
+}
+
+.row[data-outline-key],
+.row.is-streaming,
+.row:nth-last-child(-n + 2) {
+	content-visibility: visible;
 }
 
 .row.is-user {
@@ -374,6 +384,21 @@
 .row-action:hover {
 	color: var(--fg-default);
 	border-color: var(--border-default);
+}
+
+/*
+ * 折叠体收起时的"零痕迹"。
+ *
+ * `hidden="until-found"` 让浏览器对内容做尺寸包含，元素自己的高度归零；但边框、内边距与
+ * 外边距还留在盒子上——`.group-body` 那条左侧竖线会变成一小截悬空的线。这里把它们一起收掉，
+ * 展开时各自由原来的规则重新给回。
+ */
+.group-body[hidden="until-found"],
+.tr-out[hidden="until-found"],
+.tr-think[hidden="until-found"] {
+	margin: 0;
+	padding: 0;
+	border: 0;
 }
 
 .assistant-body {

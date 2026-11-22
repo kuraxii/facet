@@ -20,7 +20,17 @@ import {
 	Undo2,
 	Wrench,
 } from "lucide-react";
-import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	memo,
+	type ReactNode,
+	type RefObject,
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { Markdown } from "../markdown/Markdown.tsx";
 import { ICON_SIZE } from "../styles/visual-contract.ts";
@@ -149,7 +159,43 @@ function CopyButton({
 	);
 }
 
-/** 归类对应的行首图标。 */
+/**
+ * 收起体：留在 DOM 里，收起时标成 `hidden="until-found"`。
+ *
+ * 这样浏览器自己的页内查找（`Ctrl+F` / `⌘F`）能命中折叠起来的内容：命中前浏览器派一个
+ * `beforematch` 事件，我们在这里把这一块展开，查找结果就能滚到眼前——`display: none` 的
+ * 内容查找看不见，这也是不用条件渲染的原因。
+ *
+ * 属性用 `setAttribute` 直接写而不是走 JSX：React 把 `hidden` 当布尔属性，传字符串只会得到
+ * `hidden=""`（那是 `display: none`，正好把查找也一起关掉）。写在 `useLayoutEffect` 里是为了
+ * 赶在首次绘制之前——晚一帧的话，收起的折叠体会先亮一下再消失。
+ */
+function useUntilFound<T extends HTMLElement>(isOpen: boolean, reveal: () => void): RefObject<T | null> {
+	const ref = useRef<T>(null);
+	// 回调用 ref 兜住：调用方多半是内联箭头函数，每次渲染都换引用，不该因此重绑监听
+	const revealRef = useRef(reveal);
+	revealRef.current = reveal;
+	useLayoutEffect(() => {
+		const node = ref.current;
+		if (node === null) {
+			return;
+		}
+		if (isOpen) {
+			node.removeAttribute("hidden");
+			return;
+		}
+		node.setAttribute("hidden", "until-found");
+		const onBeforeMatch = (): void => {
+			revealRef.current();
+		};
+		// `beforematch` 只有 Chromium 系覆盖；别的引擎里折叠体仍是普通收起，不影响其它功能
+		node.addEventListener("beforematch", onBeforeMatch);
+		return () => node.removeEventListener("beforematch", onBeforeMatch);
+	}, [isOpen]);
+	return ref;
+}
+
+/** 归类对应的行首图标。 */ /** 归类对应的行首图标。 */
 function categoryIcon(category: ToolCategory): ReactNode {
 	switch (category) {
 		case "command":
@@ -234,6 +280,7 @@ function ToolRow({ part }: { part: ToolCallPart }) {
 	const hasDetail = detail.length > 0 && detail !== target;
 	const kind = toolKind(part.name);
 	const isRunning = part.status === "running";
+	const outputBody = useUntilFound<HTMLDivElement>(isOpen, () => setOpen(true));
 
 	return (
 		<div className={`tr is-${part.status}`}>
@@ -267,8 +314,8 @@ function ToolRow({ part }: { part: ToolCallPart }) {
 					))}
 				</div>
 			)}
-			{isOpen && body.length > 0 ? (
-				<div className="tr-out">
+			{body.length === 0 ? null : (
+				<div className="tr-out" ref={outputBody}>
 					<pre>{shown}</pre>
 					{isLong && !isExpanded ? (
 						<button type="button" className="tr-more" onClick={() => setExpanded(true)}>
@@ -276,7 +323,7 @@ function ToolRow({ part }: { part: ToolCallPart }) {
 						</button>
 					) : null}
 				</div>
-			) : null}
+			)}
 			{tip.render()}
 		</div>
 	);
@@ -285,6 +332,7 @@ function ToolRow({ part }: { part: ToolCallPart }) {
 /** 一段思考。收起时只有一行，点开是正文。 */
 function ThinkingRow({ text }: { text: string }) {
 	const [isOpen, setOpen] = useState(false);
+	const thinkingBody = useUntilFound<HTMLPreElement>(isOpen, () => setOpen(true));
 	return (
 		<div className="tr is-think">
 			<button type="button" className="tr-head" onClick={() => setOpen(!isOpen)} aria-expanded={isOpen}>
@@ -293,7 +341,9 @@ function ThinkingRow({ text }: { text: string }) {
 				</span>
 				<span className="tr-name">Thinking</span>
 			</button>
-			{isOpen ? <pre className="tr-think">{text}</pre> : null}
+			<pre className="tr-think" ref={thinkingBody}>
+				{text}
+			</pre>
 		</div>
 	);
 }
@@ -570,6 +620,8 @@ const RowView = memo(function RowView({
 
 	if (row.kind === "meta") {
 		// 收起时是一行图标加标题，展开时标题变成药丸底、左侧换成下箭头
+		// 折叠体常驻 DOM 并标 `hidden="until-found"`：页内查找命中它时自动展开
+		const groupBody = useUntilFound<HTMLDivElement>(!isCollapsed, () => onToggle(row));
 		return (
 			<Shell className="is-process" isStreaming={row.isStreaming}>
 				<div className="group">
@@ -587,15 +639,13 @@ const RowView = memo(function RowView({
 							{groupLabel(row, t)}
 						</span>
 					</button>
-					{isCollapsed ? null : (
-						<div className="group-body">
-							{row.items.flatMap((item) =>
-								item.parts.map((part) => (
-									<PartView key={`${item.id}-${part.partId}`} part={part} isStreaming={item.isStreaming} />
-								)),
-							)}
-						</div>
-					)}
+					<div className="group-body" ref={groupBody}>
+						{row.items.flatMap((item) =>
+							item.parts.map((part) => (
+								<PartView key={`${item.id}-${part.partId}`} part={part} isStreaming={item.isStreaming} />
+							)),
+						)}
+					</div>
 					{isAborted(row) ? <StoppedNote /> : null}
 				</div>
 			</Shell>

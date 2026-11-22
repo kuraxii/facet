@@ -144,13 +144,13 @@ export function TextMenu({ onCopy, onQuote, quoteScope }: TextMenuProps): React.
 		});
 		document.addEventListener("pointerdown", onPointerDown);
 		document.addEventListener("keydown", onKeyDown);
-		window.addEventListener("scroll", close, true);
+		window.addEventListener("scroll", close, { passive: true, capture: true });
 		window.addEventListener("resize", close);
 		return () => {
 			cancelAnimationFrame(frame);
 			document.removeEventListener("pointerdown", onPointerDown);
 			document.removeEventListener("keydown", onKeyDown);
-			window.removeEventListener("scroll", close, true);
+			window.removeEventListener("scroll", close, { capture: true });
 			window.removeEventListener("resize", close);
 		};
 	}, [close, menu]);

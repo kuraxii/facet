@@ -221,9 +221,23 @@
 	color: var(--fg-default);
 }
 
+/*
+ * 禁用：底色收成中性填充、文字压暗，不再有任何悬停反馈（与 `.ui-btn` 同一条口径）。
+ * 主按钮不能靠 `opacity` 压暗：半透明的强调底调成一个土色块，深色下图标与底色还看不出差。
+ */
 .ui-icon-btn:disabled {
+	background: var(--bg-active);
 	color: var(--fg-subtle);
 	cursor: default;
+}
+
+/*
+ * 幽灵与描边按钮没有底色可收，保持透明；它们的常态已经是最暗的 `--fg-subtle`，
+ * 只换文字色的话与可用态没区别，得靠 `opacity` 压暗。
+ */
+.ui-icon-btn:where([data-variant="ghost"]):disabled,
+.ui-icon-btn:where([data-variant="outline"]):disabled {
+	background: transparent;
 	opacity: 0.5;
 }
 

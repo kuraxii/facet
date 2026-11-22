@@ -1,14 +1,18 @@
 /* 对话区与侧栏行：消息行、工具行、状态标记、错误行与文件改动。 */
 
-/* 对话导航：贴在主区域左缘的一条竖轨，按轮次排列 */
+/*
+ * 对话导航：贴在主区右缘的一条竖轨，按轮次排列。
+ *
+ * 它落在三列网格的右轨里（`--outline-slot`）：右轨宽度是"轨宽 + 两侧间距"，正文那列的
+ * 上界是 `--chat-column-max`，两者互不相交，所以不需要脚本再判断"会不会撞上正文"。
+ */
 .outline {
 	position: absolute;
 	top: 10%;
 	bottom: 10%;
-	left: var(--outline-inset);
+	right: var(--outline-inset);
 	z-index: var(--z-content-local);
 	display: flex;
-	/* 竖轨宽度由变量给出，组件只在容器留得下这么宽时才渲染 */
 	width: var(--outline-rail-width);
 	align-items: center;
 }
@@ -39,8 +43,8 @@
 	width: 100%;
 	height: 100%;
 	align-items: center;
-	justify-content: flex-start;
-	padding: 0 0 0 var(--outline-rail-inset);
+	justify-content: flex-end;
+	padding: 0 var(--outline-rail-inset) 0 0;
 	border: 0;
 	border-radius: calc(4px * var(--outline-scale));
 	background: transparent;
@@ -78,10 +82,11 @@
 	background: var(--fg-default);
 }
 
+/* 预览向左展开：竖轨贴着窗口右缘，朝右放会被裁掉 */
 .outline-preview {
 	position: absolute;
 	top: 50%;
-	left: calc(var(--outline-rail-width) + 2px * var(--outline-scale));
+	right: calc(var(--outline-rail-width) + 2px * var(--outline-scale));
 	display: flex;
 	width: 260px;
 	min-height: 48px;
@@ -106,6 +111,44 @@
 }
 
 /*
+ * 聊天内容的三列轨道：左留白、正文、右留白（对话导航挂在右留白里）。
+ *
+ * 两侧轨道用**同一个下限、同一个 `1fr`**：正文到窗口左缘与右缘的间距恒等——这就是输入框
+ * 两侧那两条"红框"要一样宽的意思。右侧要放得下竖轨，左侧就陪着同宽的留白，宁可正文窄
+ * 一点，也不做"左宽右窄"。
+ *
+ * 中间那列上界是阅读上限、下限是 0：窗口不够宽时两侧一起退到下限、正文自己收，导航轨
+ * 落在右轨内，压不到正文上，也不需要脚本量宽度。
+ *
+ * 消息列与输入区共用这一份轨道，两者的左右边缘因此在任何宽度下都严格对齐。
+ */
+.chat-grid {
+	display: grid;
+	grid-template-columns:
+		minmax(var(--chat-rail-gutter), 1fr)
+		minmax(0, var(--chat-column-max))
+		minmax(var(--chat-rail-gutter), 1fr);
+	width: 100%;
+}
+
+/* 没有导航的内容（空对话，或导航条数不够）时不用给竖轨留位，两侧退回更小的最小留白 */
+:is(.chat-viewport, .footer)[data-outline-active="false"] .chat-grid {
+	grid-template-columns:
+		minmax(var(--chat-gutter-min), 1fr)
+		minmax(0, var(--chat-column-max))
+		minmax(var(--chat-gutter-min), 1fr);
+}
+
+/*
+ * 内容一律落在第 2 列，`min-width: 0` 是防撑爆的硬规则：宽代码块、长 URL、Mermaid 图与
+ * Markdown 表格只在各自容器里横向滚动，不会把这一列顶进右轨。
+ */
+.chat-grid > * {
+	grid-column: 2;
+	min-width: 0;
+}
+
+/*
  * 对话视口：滚动区加两层边缘渐隐。
  *
  * 渐隐层压在滚动区上、不接指针，只在对应方向还有内容时淡入（由 `data-can-scroll-top` /
@@ -120,16 +163,20 @@
 	isolation: isolate;
 }
 
+/*
+ * 聊天主滚动区：没有可见滚动条。
+ *
+ * 横向留白交给三列网格，所以这里只留纵向内边距——原先"扣掉滚动条沟槽"的那段补偿随之
+ * 一起删掉，否则文字会比输入区窄一截。滚轮、触控板与 PageUp/PageDown/Home/End 都由浏览器
+ * 原样提供，顶/底的 40px 渐隐负责说明"还有内容可滚"。
+ */
 .scroll {
 	flex: 1;
 	min-height: 0;
-	overflow-y: auto;
-	scrollbar-gutter: stable;
 	/* 交给原生惯性；吸底由脚本按 scrollTop 管，不让浏览器自己锚定 */
 	scroll-behavior: auto;
 	overflow-anchor: none;
-	/* 右侧扣掉滚动条沟槽，内容盒与 .footer 对齐 */
-	padding: 24px calc(var(--chat-gutter-x) - var(--scrollbar-width)) 14px var(--chat-gutter-x);
+	padding: var(--space-12) 0 var(--space-6);
 	/*
 	 * 底部留白与渐隐层等高再多一档：滚到最后一条消息时，它与渐隐区之间留出呼吸区，
 	 * 回到底部（`scrollToBottom`）也不会把最后一行压在渐隐里。
@@ -169,13 +216,14 @@
 	opacity: 1;
 }
 
+/*
+ * 消息列只留竖向节奏：横向的三列轨道、宽度与对齐全由 `.chat-grid` 给。
+ *
+ * 这里 MUST NOT 再写 `display` / `max-width` / `margin` 一类的横向属性——它们会和网格抢同一件
+ * 事，谁写在后面谁赢，正文就会再一次横跨整行压到导航轨上。
+ */
 .column {
-	display: flex;
-	flex-direction: column;
-	gap: var(--space-6);
-	width: 100%;
-	max-width: var(--chat-column-max);
-	margin: auto auto 0;
+	row-gap: var(--space-6);
 }
 
 .empty {
@@ -1007,15 +1055,11 @@
 	margin-top: 6px;
 }
 
-/* 窄档：正文列与滚动区收边 */
+/* 窄档：只把最小留白收一档，轨道与对齐关系不变 */
 .app.is-narrow .main {
-	--chat-gutter-x: 12px;
-}
-
-.app.is-narrow .column {
-	width: min(100%, var(--chat-column-max-narrow));
+	--chat-gutter-min: var(--space-6);
 }
 
 .app.is-narrow .scroll {
-	padding: 44px calc(var(--chat-gutter-x) - var(--scrollbar-width)) 8px var(--chat-gutter-x);
+	padding: var(--space-16) 0 var(--space-4);
 }

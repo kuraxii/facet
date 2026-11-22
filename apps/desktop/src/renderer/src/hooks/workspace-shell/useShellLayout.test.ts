@@ -178,9 +178,9 @@ describe("右栏实占宽", () => {
 	it("平铺态被正文预算钳住，偏好宽本身不动", () => {
 		const actions = actionsStub();
 		mount(panelOf(800), actions);
-		// 1400 − 正文 420 − 左栏 272 = 708
-		expect(layout().panelMaxWidth).toBe(708);
-		expect(layout().panelEffectiveWidth).toBe(708);
+		// 1400 − 正文最小 520 − 左栏 272 = 608
+		expect(layout().panelMaxWidth).toBe(608);
+		expect(layout().panelEffectiveWidth).toBe(608);
 	});
 
 	it("窄档直接用偏好宽：抽屉盖在正文上，没有并列的正文要保护", async () => {

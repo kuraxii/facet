@@ -42,19 +42,20 @@ describe("档位判定", () => {
 		expect(layoutTierOf(879)).toBe("narrow");
 	});
 
-	it("880 到 1119 是中档", () => {
-		for (const width of [880, 881, 899, 900, 1012, 1099, 1112, 1119]) {
+	it("880 到 1215 是中档", () => {
+		for (const width of [880, 881, 899, 900, 1012, 1099, 1112, 1215]) {
 			expect(layoutTierOf(width), String(width)).toBe("mid");
 		}
 	});
 
-	it("1120 起是宽档", () => {
-		expect(layoutTierOf(1120)).toBe("wide");
+	it("1216 起是宽档", () => {
+		expect(layoutTierOf(1216)).toBe("wide");
 		expect(layoutTierOf(1400)).toBe("wide");
 	});
 
 	it("宽档阈值就是三栏缺省宽刚好放得下的那条线", () => {
-		expect(DEFAULT_BUDGET).toBe(1112);
+		// 272（左栏）+ 520（正文最小）+ 420（右栏）
+		expect(DEFAULT_BUDGET).toBe(1212);
 		expect(LAYOUT_WIDE_BREAKPOINT_PX).toBeGreaterThanOrEqual(DEFAULT_BUDGET);
 	});
 
@@ -85,8 +86,8 @@ describe("窄档", () => {
 
 describe("宽档", () => {
 	it("按意图平铺，两栏同时开时不做预算判断", () => {
-		// 420 + 420 + 840 > 1120，宽档仍然两栏都摆：口径是平铺，不是折叠
-		const layout = resolveLayout(input({ viewportWidth: 1120, sidebarPref: 420, panelPref: 840 }));
+		// 420 + 420 + 840 > 1216，宽档仍然两栏都摆：口径是平铺，不是折叠
+		const layout = resolveLayout(input({ viewportWidth: 1216, sidebarPref: 420, panelPref: 840 }));
 		expect(layout.sidebarVisible).toBe(true);
 		expect(layout.panelVisible).toBe(true);
 		expect(resolveLayout(input({ viewportWidth: 1400 })).foldedPane).toBeUndefined();
@@ -295,8 +296,10 @@ describe("拖动上限：给正文留出最小可用宽", () => {
 	it("有固定上限的一栏再与正文的约束取小", () => {
 		// 左栏：宽视口下被它自己的 420 收住
 		expect(clampDragMax({ viewportWidth: 2560, otherWidth: 0, ...sidebar })).toBe(420);
-		// 窄一点的视口里被正文的约束收住
-		expect(clampDragMax({ viewportWidth: 700, otherWidth: 0, ...sidebar })).toBe(700 - MAIN_MIN_WIDTH);
+		// 窄一点的视口里被正文的约束收住（900 − 520 = 380，比左栏自己的 420 上限更紧）
+		expect(clampDragMax({ viewportWidth: 900, otherWidth: 0, ...sidebar })).toBe(380);
+		// 再窄就压到这一栏自己的下限，不再跟着正文的预算往下走
+		expect(clampDragMax({ viewportWidth: 700, otherWidth: 0, ...sidebar })).toBe(sidebar.min);
 	});
 
 	it("钳制后的上限不会让松手时超预算", () => {
@@ -308,9 +311,10 @@ describe("拖动上限：给正文留出最小可用宽", () => {
 
 describe("右栏实占宽", () => {
 	it("偏好宽比预算宽时按预算走，偏好宽本身不变", () => {
+		// 1400 − 正文最小 520 − 左栏 272 = 608
 		const budget = paneMaxWidth({ viewportWidth: 1400, otherWidth: 272, min: 300 });
-		expect(budget).toBe(708);
-		expect(Math.min(2400, budget)).toBe(708);
+		expect(budget).toBe(608);
+		expect(Math.min(2400, budget)).toBe(608);
 	});
 
 	it("窗口变大之后按偏好宽长回去", () => {

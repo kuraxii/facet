@@ -203,14 +203,37 @@
 	--status-ring-radius: calc(var(--status-ring-size) / 2 - var(--status-ring-stroke) / 2);
 	--sidebar-edge: 10px;
 	/* 聊天正文与输入区共用的内容列宽；输入框和过程组胶囊用同一个边界 */
-	--chat-column-max: 780px;
-	--chat-column-max-narrow: 760px;
+	--chat-column-max: 840px;
 	/*
-	 * 正文最小可用宽：输入区一行 chip 放得下、气泡不塌的宽度。与上一个值不是同一件事——
-	 * `--chat-column-max` 是最佳阅读上限，这里是“不能再窄”的下限，档位折叠按它算缺口
-	 * （口径见 `docs/layout.md` §2）。
+	 * 正文左侧的最小留白（没有导航轨时的对称留白）。
+	 *
+	 * 三列网格的左轨：窗口够宽时左轨与右轨等宽、正文视觉居中；不够宽时它退到这条下限，
+	 * 正文在中间那列自己收——正文与导航轨因此在数学上不可能重叠。
 	 */
-	--main-min: 420px;
+	--chat-gutter-min: var(--space-10);
+	/*
+	 * 导航轨的总占位宽：轨宽加两侧各一段间距。
+	 *
+	 * `--outline-rail-width` 已经乘过 `--outline-scale`，所以这条会跟着用户的导航缩放一起
+	 * 长大，正文那列自动避让，不需要脚本再算一次。
+	 */
+	--outline-slot: calc(var(--outline-rail-width) + var(--outline-inset) * 2);
+	/*
+	 * 正文两侧轨道共用的下限：有导航时至少要让出竖轨那一份，没有导航时退回 `--chat-gutter-min`。
+	 *
+	 * 两侧取同一个数，正文到窗口左右缘的间距才严格相等——一边放竖轨、另一边陪着同宽的留白。
+	 */
+	--chat-rail-gutter: max(var(--chat-gutter-min), var(--outline-slot));
+	/*
+	 * 正文最小可用宽：输入区一行 chip 放得下、气泡不塌的宽度。与上面的阅读上限不是同一件事——
+	 * `--chat-column-max` 是最佳阅读上限，这里是“不能再窄”的下限，档位折叠与右栏上限按它算
+	 * 缺口（口径见 `docs/layout.md` §2）。
+	 *
+	 * 520 = 52px 左留白 + 416px 正文 + 52px 右留白（100% 缩放时两侧都是 `--chat-rail-gutter`
+	 * = 导航轨占位 52）。两侧恒等，导航轨落在右留白里；再窄就该让左栏或右栏先让路，而不是
+	 * 把正文挤成细条。
+	 */
+	--main-min: 520px;
 	/*
 	 * 工作区标签栏：单个标签的高度、相邻两条之间的距离、标签内左侧留白、图标到文字的间距，
 	 * 以及关闭按钮的边长。顶带（36px）与抽屉顶头用同一组数。
@@ -558,6 +581,25 @@
 		scrollbar-width: auto;
 		scrollbar-color: var(--scrollbar-thumb-color) var(--scrollbar-track-color);
 	}
+}
+
+/*
+ * 不带可见滚动条的滚动区。
+ *
+ * 只给"滚动条会干扰内容节奏"的地方用（目前只有对话主滚动区）：滚轮、触控板、键盘翻页都由
+ * 浏览器原样提供，页面的滚动进度改由两端的渐隐提示。`scrollbar-width: none` 在 Chromium 里
+ * 会连带关掉 `::-webkit-scrollbar`，完整起见两条都写。
+ *
+ * 这是**新增**的模式：`.scroll-y` 的行为一个字节没改，其余区域的细滚动条照旧。
+ */
+.scroll-y-hidden {
+	overflow-x: hidden;
+	overflow-y: auto;
+	scrollbar-width: none;
+}
+
+.scroll-y-hidden::-webkit-scrollbar {
+	display: none;
 }
 
 @media (prefers-contrast: more) {

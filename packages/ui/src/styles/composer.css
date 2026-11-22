@@ -5,7 +5,7 @@
 .footer {
 	position: relative;
 	flex: none;
-	padding: 0 var(--chat-gutter-x) 18px;
+	padding: 0 0 var(--space-10);
 	isolation: isolate;
 }
 
@@ -61,12 +61,12 @@
 	color: var(--fg-default);
 }
 
+/*
+ * 输入区那一列：与消息列共用 `.chat-grid` 的三列轨道（类名在 `chat-area.tsx` 上），
+ * 所以输入框左右边缘与消息严格对齐。这里只补竖排的间距。
+ */
 .footer-column {
-	display: flex;
-	flex-direction: column;
-	gap: var(--space-5);
-	max-width: var(--chat-column-max);
-	margin: 0 auto;
+	row-gap: var(--space-5);
 }
 
 .composer {
@@ -640,11 +640,7 @@
 	font-size: var(--text-xs);
 }
 
-/* 窄档：输入区收边 */
-.app.is-narrow .footer-column {
-	width: min(100%, var(--chat-column-max-narrow));
-}
-
+/* 窄档：输入区下沿收一档 */
 .app.is-narrow .footer {
-	padding: 0 var(--chat-gutter-x) 10px;
+	padding: 0 0 var(--space-5);
 }

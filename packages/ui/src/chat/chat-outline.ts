@@ -14,6 +14,19 @@ export interface OutlinePrompt {
 	preview: string;
 }
 
+/**
+ * 导航要几个条目才值得画。
+ *
+ * 只有一轮对话时竖轨上没有可跳的东西；达到这个条数才渲染，与窗口宽度无关——宽度够不够
+ * 由三列网格里的 `--outline-slot` 兜着，不再由脚本判断。
+ */
+export const OUTLINE_MIN_ITEMS = 2;
+
+/** 这份对话有没有要画的导航。`ChatOutline` 与外壳的 `data-outline-active` 共用这一条判据。 */
+export function outlineIsActive(prompts: readonly OutlinePrompt[]): boolean {
+	return prompts.length >= OUTLINE_MIN_ITEMS;
+}
+
 /** 预览最多保留的字数。 */
 const PREVIEW_MAX_CHARS = 120;
 

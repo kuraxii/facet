@@ -229,6 +229,27 @@
 `overflow-anchor: none`（吸底由脚本按 `scrollTop` 管，不要让浏览器自己锚定）；`html, body`
 用 `overscroll-behavior-y: none` 关掉整窗回弹。
 
+**聊天轨道**：消息列与输入区共用 `.chat-grid` 的三列非对称网格——`minmax(--chat-gutter-min, 1fr)`
++ `minmax(0, --chat-column-max)` + `minmax(--outline-slot, 1fr)`。右轨锁住导航轨的占位宽
+（`--outline-slot` 由已缩放的轨宽拼出来），左轨退到 `--chat-gutter-min`，中间那列上界是阅读
+上限（`840px`）、下限是 `0`；宽屏时左右等宽、正文居中，窄屏时正文自己收，**与导航轨在数学上
+不可能重叠**。内容一律 `grid-column: 2` 且 `min-width: 0`：宽代码块、长 URL、Mermaid 图与
+表格只在各自容器里横滚，不会顶进右轨。没有导航内容时（`data-outline-active="false"`）右轨
+退回最小留白，左右对称。
+
+**无滚动条**：聊天主滚动区用 `.scroll-y-hidden`（`scrollbar-width: none` + `::-webkit-scrollbar
+{ display: none }`），横向留白交给网格而不是滚动条沟槽。`.scroll-y` 对其余区域的行为一字未改。
+
+正文（与输入框）到**窗口左缘与右缘的间距恒等**，导航轨落在右侧那段留白里：
+
+| 主区宽 | 左留白 | 正文 | 右留白 | 导航轨 |
+| ---: | ---: | ---: | ---: | :--- |
+| `1270` | `215` | `840` | `215` | 右留白远端（`1226–1262`） |
+| `1000` | `80` | `840` | `80` | 右留白远端（`956–992`） |
+| `880` | `52` | `776` | `52` | 右留白远端（`836–872`） |
+| `520` | `52` | `416` | `52` | 右留白远端（`476–512`） |
+| `1400`（`--outline-scale: 2`） | `280` | `840` | `280` | 右留白远端（右轨 `88` 仍在 280 内） |
+
 **聊天视口**：`.chat-viewport` 包住滚动区，上下各一层 40px 的渐隐（`--z-content`、不接指针），
 按 `data-can-scroll-top` / `data-can-scroll-bottom` 淡入——滚到头就收掉，静止时不凭空压暗一条。
 输入区上方另有一条六阶渐变（`.footer::before`，全部由 `color-mix` 从 `--bg-canvas` 派生），

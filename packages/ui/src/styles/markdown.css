@@ -14,18 +14,26 @@
 	contain-intrinsic-size: none;
 }
 
-/* markstream 自己的变量换成本项目的配色 */
-.md .markstream-react,
-.md .markstream-react.dark {
+/*
+ * markstream 自己的变量换成本项目的配色。
+ *
+ * 库把这一整套也定义在自己的根节点上（`.dark .markstream-react`），不带 `.markdown-renderer`
+ * 就只有同一档权重，产物里谁的规则靠后谁生效——覆盖会被整段顶掉，代码块退回库里的近黑色。
+ * 色板那边叫 `--code-block-*`：同一个元素上写 `--code-bg: var(--code-bg)` 是自我引用，
+ * 计算出来是无效值。
+ */
+.md .markstream-react.markdown-renderer,
+.md .markstream-react.markdown-renderer.dark {
 	--background: var(--bg-surface);
 	--foreground: var(--fg-default);
 	--border: var(--border-subtle);
 	--secondary: var(--bg-elevated);
 	--muted: var(--bg-elevated);
 	--muted-foreground: var(--fg-muted);
-	/* `--code-bg` / `--code-fg` 由 `:root` 直接给，这里不重复定义：同名覆盖会变成自我引用 */
+	--code-bg: var(--code-block-bg);
+	--code-fg: var(--code-block-fg);
 	--code-border: var(--border-subtle);
-	--code-header-bg: var(--code-bg);
+	--code-header-bg: var(--code-block-bg);
 	--code-action-fg: var(--fg-subtle);
 	--code-action-hover-bg: var(--bg-elevated);
 	--code-action-hover-fg: var(--fg-default);
@@ -42,7 +50,7 @@
 	position: relative;
 	margin: 0 0 10px;
 	border-radius: var(--radius-md);
-	background: var(--code-bg);
+	background: var(--code-block-bg);
 	box-shadow: var(--shadow-control);
 	overflow: hidden;
 }
@@ -107,7 +115,7 @@
 	line-height: var(--leading-code-block);
 	/* 代码里的缩进按四个空格对齐，与编辑器和补丁视图一致 */
 	tab-size: 4;
-	color: var(--code-fg);
+	color: var(--code-block-fg);
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 	word-break: break-word;
@@ -228,7 +236,7 @@
 	border: 0;
 	border-radius: var(--radius-sm);
 	background: var(--bg-elevated);
-	color: var(--code-fg);
+	color: var(--code-block-fg);
 	font-family: var(--font-mono);
 	font-size: var(--text-code-inline);
 }

@@ -78,7 +78,7 @@ const HIGHLIGHT_STYLE = HighlightStyle.define([
 	// Markdown：让标记符退成底噪，结构本身（行内代码、斜体、引用、链接地址）各自成形。
 	// 标记符一并淡掉是 Markdown 看着像纯文本的主因：`#`、`**`、`>` 与正文同色时整段是灰墙。
 	{ tag: tags.processingInstruction, color: "var(--fg-subtle)" },
-	{ tag: tags.monospace, color: "var(--code-fg)" },
+	{ tag: tags.monospace, color: "var(--code-block-fg)" },
 	{ tag: tags.emphasis, fontStyle: "italic" },
 	{ tag: tags.strikethrough, color: "var(--fg-subtle)", textDecoration: "line-through" },
 	{ tag: tags.quote, color: "var(--fg-subtle)" },

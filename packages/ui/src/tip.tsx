@@ -4,9 +4,10 @@
  * 触发元素给出自己的矩形，浮层用 portal 挂到 `body` 上，`position: fixed` 定位：
  * 祖先的 `overflow` 与 `contain` 都裁不到它，行里、滚动容器里、弹窗里都能用同一份。
  *
- * 显示带延迟，指针扫过去不打扰；指针离开后又留一个宽限再关，好让人把指针挪进浮层里
- * 滚动查看（WCAG 1.4.13 的 hoverable 与 persistent）。浮层贴到视口边缘时向右收、
- * 下边放不下就翻到触发元素上方。
+ * 显示带延迟，指针扫过去不打扰；默认指针一离开就收，手停在哪里浮层就在哪里消失。
+ * 只有「浮层里还有得看」的那一类（正文里工具调用的参数全文，能滚动）才留一段宽限，
+ * 好让人把指针挪进浮层里接着看（WCAG 1.4.13 的 hoverable 与 persistent）。浮层贴到视口
+ * 边缘时向右收、下边放不下就翻到触发元素上方。
  *
  * 浮层挂在 `body` 上，靠 `z-index` 压过普通浮层；原生 `<dialog>` 在顶部层里，`z-index`
  * 压不过它，所以弹层内部要用提示时，得把浮层挂进弹层自己的子树。
@@ -18,8 +19,8 @@ import { VISUAL_PX } from "./styles/visual-contract.ts";
 
 /** 指针在触发元素上停留这么久才显示，毫秒。 */
 const TIP_DELAY_MS = 500;
-/** 指针离开后留这么久再关，够把指针挪进浮层，毫秒。 */
-const TIP_HIDE_DELAY_MS = 300;
+/** 能滚动的提示：指针离开后留这么久再关，够把指针挪进浮层，毫秒。 */
+const TIP_HOLD_MS = 300;
 /** 浮层与触发元素之间的间隙，与 `--tool-tip-gap` 是同一个数。 */
 const TIP_GAP = VISUAL_PX.popover.tipGap;
 /** 浮层与视口边缘至少留的空白；没有同名变量，值就在契约里。 */
@@ -51,18 +52,20 @@ export interface HoverTip {
 	render(): ReactNode;
 }
 
-/**
- * 浮层外观。
- *
- * `plain` 是带内边距的一段文字；`card` 不给内边距，内容自己划分区段、自己给留白——
- * 需要整条分隔线通到浮层边缘的卡片（例如提交悬浮卡）用它。
- */
-export type HoverTipVariant = "plain" | "card";
+/** 一份悬浮提示的参数。 */
+export interface HoverTipOptions {
+	/**
+	 * 指针离开触发元素后先不关，留一段宽限再收。
+	 *
+	 * 只有浮层里还有得看的才需要（正文里工具调用的参数全文，在里面滚动）：不给这段
+	 * 宽限，指针就永远挪不进浮层。只给一行说明的提示不要开，迟半拍收起像是没跟上手。
+	 */
+	holdOnLeave?: boolean;
+}
 
-/** 浮层的落点、内容与两个指针事件。 */
+/** 浮层的落点与两个指针事件。 */
 interface TipBoxProps {
 	anchor: TipAnchor;
-	variant: HoverTipVariant;
 	onEnter: () => void;
 	onLeave: () => void;
 	children: ReactNode;
@@ -74,7 +77,7 @@ interface TipBoxProps {
  * 先按触发元素的落点摆好，挂载之后量一次自己的尺寸：超出视口右缘就往左收，下方放不下
  * 就翻到触发元素上方。量尺寸要等它进了 DOM，因此只在位置变化时再校正一次。
  */
-function TipBox({ anchor, variant, onEnter, onLeave, children }: TipBoxProps): ReactNode {
+function TipBox({ anchor, onEnter, onLeave, children }: TipBoxProps): ReactNode {
 	const ref = useRef<HTMLDivElement>(null);
 	const [place, setPlace] = useState({ left: anchor.left, top: anchor.bottom + TIP_GAP });
 
@@ -95,7 +98,7 @@ function TipBox({ anchor, variant, onEnter, onLeave, children }: TipBoxProps): R
 	return createPortal(
 		<div
 			ref={ref}
-			className={variant === "card" ? "pop-tip pop-tip-card" : "pop-tip"}
+			className="pop-tip"
 			style={{ left: place.left, top: place.top }}
 			onPointerEnter={onEnter}
 			onPointerLeave={onLeave}
@@ -107,7 +110,7 @@ function TipBox({ anchor, variant, onEnter, onLeave, children }: TipBoxProps): R
 }
 
 /** 一份悬浮提示的状态机。一个组件里只用一份，多处触发元素共用它。 */
-export function useHoverTip(variant: HoverTipVariant = "plain"): HoverTip {
+export function useHoverTip({ holdOnLeave = false }: HoverTipOptions = {}): HoverTip {
 	const [shown, setShown] = useState<{ anchor: TipAnchor; label: ReactNode } | undefined>(undefined);
 	const timer = useRef<number | undefined>(undefined);
 
@@ -120,10 +123,15 @@ export function useHoverTip(variant: HoverTipVariant = "plain"): HoverTip {
 		}, TIP_DELAY_MS);
 	}, []);
 
-	const hideSoon = useCallback(() => {
+	/** 关掉浮层：默认立刻收，`holdOnLeave` 的提示留一段宽限。 */
+	const hide = useCallback(() => {
 		window.clearTimeout(timer.current);
-		timer.current = window.setTimeout(() => setShown(undefined), TIP_HIDE_DELAY_MS);
-	}, []);
+		if (!holdOnLeave) {
+			setShown(undefined);
+			return;
+		}
+		timer.current = window.setTimeout(() => setShown(undefined), TIP_HOLD_MS);
+	}, [holdOnLeave]);
 
 	// 组件卸载时未到点的定时器不能再弹
 	useEffect(() => clear, [clear]);
@@ -136,10 +144,10 @@ export function useHoverTip(variant: HoverTipVariant = "plain"): HoverTip {
 			}
 			return {
 				onPointerEnter: (event) => showSoon(event.currentTarget.getBoundingClientRect(), label),
-				onPointerLeave: hideSoon,
+				onPointerLeave: hide,
 			};
 		},
-		[showSoon, hideSoon],
+		[showSoon, hide],
 	);
 
 	const render = useCallback((): ReactNode => {
@@ -147,11 +155,11 @@ export function useHoverTip(variant: HoverTipVariant = "plain"): HoverTip {
 			return null;
 		}
 		return (
-			<TipBox anchor={shown.anchor} variant={variant} onEnter={clear} onLeave={hideSoon}>
+			<TipBox anchor={shown.anchor} onEnter={clear} onLeave={hide}>
 				{shown.label}
 			</TipBox>
 		);
-	}, [shown, clear, hideSoon, variant]);
+	}, [shown, clear, hide]);
 
 	return { handlers, render };
 }

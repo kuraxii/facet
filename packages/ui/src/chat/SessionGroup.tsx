@@ -6,7 +6,6 @@
  */
 import type { ReactNode } from "react";
 import { memo } from "react";
-import type { HoverTip } from "../tip.tsx";
 import { SessionRow } from "./SessionRow.tsx";
 import type { SidebarGroup, SidebarSession } from "./sidebar-model.ts";
 
@@ -24,8 +23,6 @@ export interface SessionGroupProps {
 	onOpen: (session: SidebarSession) => void;
 	/** 右键一条会话 */
 	onContextMenu: (session: SidebarSession, event: React.MouseEvent<HTMLButtonElement>) => void;
-	/** 行的悬浮提示状态机 */
-	tip: HoverTip;
 }
 
 /** 一组会话。 */
@@ -36,7 +33,6 @@ export const SessionGroup = memo(function SessionGroup({
 	label,
 	onOpen,
 	onContextMenu,
-	tip,
 }: SessionGroupProps): ReactNode {
 	return (
 		<section className="sb-group">
@@ -51,7 +47,6 @@ export const SessionGroup = memo(function SessionGroup({
 					twoLine={twoLine}
 					onOpen={onOpen}
 					onContextMenu={onContextMenu}
-					tip={tip}
 				/>
 			))}
 		</section>

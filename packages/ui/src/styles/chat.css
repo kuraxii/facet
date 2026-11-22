@@ -426,7 +426,11 @@
 
 .bub {
 	max-width: 80%;
-	padding: var(--space-8);
+	/*
+	 * 气泡的内边距单独给：纵向是半档，横向是 14px。原来四边都是 `--space-8`，竖向上比横向多出
+	 * 一截，光学上偏松；改后单行气泡的高度从 56px 收到 44px。
+	 */
+	padding: var(--bubble-padding-y) var(--bubble-padding-x);
 	border: 0;
 	border-radius: var(--radius-xl) var(--radius-sm) var(--radius-xl) var(--radius-xl);
 	background: var(--bg-active);

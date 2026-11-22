@@ -70,8 +70,9 @@ export function GitGraphList({
 	scrollRef,
 }: GitGraphListProps): ReactNode {
 	const { t } = useI18n();
-	// 提交悬浮卡内容偏高，里面还要滚：指针离开后留一段宽限才收（见 `HoverTipOptions`）
-	const tip = useHoverTip({ holdOnLeave: true });
+	// 提交悬浮卡内容偏高，里面还要滚：指针离开后留一段宽限才收（见 `HoverTipOptions`）。
+	// 卡片自带分段内边距与通栏分隔线，外层浮层不再垫一圈留白（`flush`）
+	const tip = useHoverTip({ holdOnLeave: true, flush: true });
 	// 布局只跟哈希与父提交有关：换标题、换引用不必重算泳道
 	const layout = useMemo(
 		() => layoutGitGraph(commits.map((commit) => ({ sha: commit.sha, parents: commit.parents }))),

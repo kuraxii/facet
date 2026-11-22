@@ -61,6 +61,13 @@ export interface HoverTipOptions {
 	 * 宽限，指针就永远挪不进浮层。只给一行说明的提示不要开，迟半拍收起像是没跟上手。
 	 */
 	holdOnLeave?: boolean;
+	/**
+	 * 浮层不垫外层内边距，留给内容自己决定（`.pop-tip.is-flush`）。
+	 *
+	 * 只给自带内边距与分隔线的分段卡片用：外层再垫一圈就是双层套壳，文字被推到离边缘
+	 * 更远的地方，分隔线也顶不到边。纯文字提示不要开，那样文字会贴着边框。
+	 */
+	flush?: boolean;
 }
 
 /** 浮层的落点与两个指针事件。 */
@@ -68,6 +75,8 @@ interface TipBoxProps {
 	anchor: TipAnchor;
 	onEnter: () => void;
 	onLeave: () => void;
+	/** 浮层是否不垫外层内边距，见 `HoverTipOptions.flush` */
+	flush: boolean;
 	children: ReactNode;
 }
 
@@ -77,7 +86,7 @@ interface TipBoxProps {
  * 先按触发元素的落点摆好，挂载之后量一次自己的尺寸：超出视口右缘就往左收，下方放不下
  * 就翻到触发元素上方。量尺寸要等它进了 DOM，因此只在位置变化时再校正一次。
  */
-function TipBox({ anchor, onEnter, onLeave, children }: TipBoxProps): ReactNode {
+function TipBox({ anchor, onEnter, onLeave, flush, children }: TipBoxProps): ReactNode {
 	const ref = useRef<HTMLDivElement>(null);
 	const [place, setPlace] = useState({ left: anchor.left, top: anchor.bottom + TIP_GAP });
 
@@ -98,7 +107,7 @@ function TipBox({ anchor, onEnter, onLeave, children }: TipBoxProps): ReactNode 
 	return createPortal(
 		<div
 			ref={ref}
-			className="pop-tip"
+			className={flush ? "pop-tip is-flush" : "pop-tip"}
 			style={{ left: place.left, top: place.top }}
 			onPointerEnter={onEnter}
 			onPointerLeave={onLeave}
@@ -110,7 +119,7 @@ function TipBox({ anchor, onEnter, onLeave, children }: TipBoxProps): ReactNode 
 }
 
 /** 一份悬浮提示的状态机。一个组件里只用一份，多处触发元素共用它。 */
-export function useHoverTip({ holdOnLeave = false }: HoverTipOptions = {}): HoverTip {
+export function useHoverTip({ holdOnLeave = false, flush = false }: HoverTipOptions = {}): HoverTip {
 	const [shown, setShown] = useState<{ anchor: TipAnchor; label: ReactNode } | undefined>(undefined);
 	const timer = useRef<number | undefined>(undefined);
 
@@ -155,11 +164,11 @@ export function useHoverTip({ holdOnLeave = false }: HoverTipOptions = {}): Hove
 			return null;
 		}
 		return (
-			<TipBox anchor={shown.anchor} onEnter={clear} onLeave={hide}>
+			<TipBox anchor={shown.anchor} onEnter={clear} onLeave={hide} flush={flush}>
 				{shown.label}
 			</TipBox>
 		);
-	}, [shown, clear, hide]);
+	}, [shown, clear, hide, flush]);
 
 	return { handlers, render };
 }

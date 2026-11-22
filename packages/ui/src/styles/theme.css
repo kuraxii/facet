@@ -12,7 +12,7 @@
  *    跟着色相走。全仓只有这两个交互底色，别处不再各调一档。
  * 3. 前景 `--fg-*`：三档文字。
  * 4. 边框 `--border-*`：结构线、控件边框、焦点。
- * 5. 语义 `--accent-*` / `--status-*` / `--dot-*` / `--diff-*` / `--code-*`。
+ * 5. 语义 `--accent-*` / `--status-*` / `--dot-*` / `--diff-*` / `--code-block-*`。
  *
  * 阴影与选区也在这里：明暗两套的观感差得远，交给主题选，别在组件里各写一份 alpha。
  */
@@ -58,8 +58,8 @@
 	/* 增删行的 3px 左缘条：不透明实色，深色主题更亮、浅色主题不掺灰 */
 	--diff-add-bar: var(--diff-add-fg);
 	--diff-del-bar: var(--diff-del-fg);
-	--code-bg: #f6f6f6;
-	--code-fg: #3f3f46;
+	--code-block-bg: #f6f6f6;
+	--code-block-fg: #3f3f46;
 	/* 浅底靠一条压边撑起层次，不用大 alpha 的投影 */
 	--shadow-control: 0 1px 0 0 rgb(31 35 40 / 4%);
 	--shadow-popover: 0 8px 24px rgb(31 35 40 / 12%), 0 0 0 1px var(--border-subtle);
@@ -109,8 +109,8 @@
 	/* 增删行的 3px 左缘条：不透明实色，深色主题更亮、浅色主题不掺灰 */
 	--diff-add-bar: var(--diff-add-fg);
 	--diff-del-bar: var(--diff-del-fg);
-	--code-bg: #242427;
-	--code-fg: #d4d4d8;
+	--code-block-bg: #242427;
+	--code-block-fg: #d4d4d8;
 	/*
 	 * 深色不用压边阴影，浮层靠自己那条 1px 环与底色拉开：环色取 `--border-default`——
 	 * `--border-subtle` 在这里与浮层底色同值，勾不住边。
@@ -159,8 +159,8 @@
 	/* 增删行的 3px 左缘条：不透明实色，深色主题更亮、浅色主题不掺灰 */
 	--diff-add-bar: var(--diff-add-fg);
 	--diff-del-bar: var(--diff-del-fg);
-	--code-bg: #222430;
-	--code-fg: #d4d4d8;
+	--code-block-bg: #222430;
+	--code-block-fg: #d4d4d8;
 	--shadow-control: none;
 	--shadow-popover: 0 12px 32px rgb(0 0 0 / 40%), 0 0 0 1px var(--border-default);
 	--shadow-modal: 0 24px 64px rgb(0 0 0 / 45%), 0 0 0 1px var(--border-subtle);
@@ -205,8 +205,8 @@
 	/* 增删行的 3px 左缘条：不透明实色，深色主题更亮、浅色主题不掺灰 */
 	--diff-add-bar: var(--diff-add-fg);
 	--diff-del-bar: var(--diff-del-fg);
-	--code-bg: #2a2826;
-	--code-fg: #d4d4d8;
+	--code-block-bg: #2a2826;
+	--code-block-fg: #d4d4d8;
 	--shadow-control: none;
 	--shadow-popover: 0 12px 32px rgb(0 0 0 / 40%), 0 0 0 1px var(--border-default);
 	--shadow-modal: 0 24px 64px rgb(0 0 0 / 45%), 0 0 0 1px var(--border-subtle);
@@ -251,8 +251,8 @@
 	/* 增删行的 3px 左缘条：不透明实色，深色主题更亮、浅色主题不掺灰 */
 	--diff-add-bar: var(--diff-add-fg);
 	--diff-del-bar: var(--diff-del-fg);
-	--code-bg: #323643;
-	--code-fg: #d4d4d8;
+	--code-block-bg: #323643;
+	--code-block-fg: #d4d4d8;
 	--shadow-control: none;
 	--shadow-popover: 0 12px 32px rgb(0 0 0 / 40%), 0 0 0 1px var(--border-default);
 	--shadow-modal: 0 24px 64px rgb(0 0 0 / 45%), 0 0 0 1px var(--border-subtle);
@@ -297,8 +297,8 @@
 	/* 增删行的 3px 左缘条：不透明实色，深色主题更亮、浅色主题不掺灰 */
 	--diff-add-bar: var(--diff-add-fg);
 	--diff-del-bar: var(--diff-del-fg);
-	--code-bg: #0c0c0c;
-	--code-fg: #d4d4d8;
+	--code-block-bg: #0c0c0c;
+	--code-block-fg: #d4d4d8;
 	--shadow-control: none;
 	--shadow-popover: 0 12px 32px rgb(0 0 0 / 55%), 0 0 0 1px var(--border-subtle);
 	--shadow-modal: 0 24px 64px rgb(0 0 0 / 60%), 0 0 0 1px var(--border-subtle);

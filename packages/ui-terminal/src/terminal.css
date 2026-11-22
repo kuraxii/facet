@@ -6,7 +6,7 @@
 	flex-direction: column;
 	flex: none;
 	min-height: 0;
-	border-top: 1px solid var(--line);
+	border-top: 1px solid var(--border-subtle);
 	background: transparent;
 	/* 按自身宽度响应，不认外壳的档位类名：停靠栏可能出现在任何宽的列里 */
 	container-type: inline-size;
@@ -26,7 +26,7 @@
 }
 
 .term-dock-grip:hover {
-	background: color-mix(in oklab, var(--acc) 24%, transparent);
+	background: color-mix(in oklab, var(--accent-fg) 24%, transparent);
 }
 
 .term-dock-head {
@@ -36,7 +36,7 @@
 	flex: none;
 	height: 34px;
 	padding: 0 8px 0 10px;
-	border-bottom: 1px solid var(--line2);
+	border-bottom: 1px solid var(--border-default);
 }
 
 .term-dock-tabs {
@@ -60,18 +60,18 @@
 	height: 24px;
 	padding: 0 2px 0 2px;
 	border-radius: 6px;
-	color: var(--t2);
+	color: var(--fg-muted);
 	font-size: 12px;
 }
 
 .term-tab:hover {
-	background: var(--card2);
-	color: var(--t1);
+	background: var(--bg-hover);
+	color: var(--fg-default);
 }
 
 .term-tab.is-active {
-	background: var(--surface3);
-	color: var(--t1);
+	background: var(--bg-active);
+	color: var(--fg-default);
 }
 
 .term-tab-main {
@@ -96,7 +96,7 @@
 
 .term-tab-exit {
 	flex: none;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font-variant-numeric: tabular-nums;
 	font-size: 11px;
 }
@@ -112,13 +112,13 @@
 	border: 0;
 	border-radius: 4px;
 	background: transparent;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	cursor: pointer;
 }
 
 .term-tab-close:hover {
-	background: var(--surface4);
-	color: var(--t1);
+	background: var(--bg-active);
+	color: var(--fg-default);
 }
 
 .term-dock-actions {
@@ -138,13 +138,13 @@
 	border: 0;
 	border-radius: 6px;
 	background: transparent;
-	color: var(--t2);
+	color: var(--fg-muted);
 	cursor: pointer;
 }
 
 .term-tool:hover {
-	background: var(--card2);
-	color: var(--t1);
+	background: var(--bg-hover);
+	color: var(--fg-default);
 }
 
 .term-tool:disabled {
@@ -196,16 +196,16 @@
 	flex: none;
 	margin: 0;
 	padding: 6px 12px;
-	border-top: 1px solid var(--line2);
-	background: var(--errbg);
-	color: var(--err);
+	border-top: 1px solid var(--border-default);
+	background: var(--status-err-bg);
+	color: var(--status-err-fg);
 	font-size: 12px;
 }
 
 .term-empty {
 	margin: 0;
 	padding: 12px 4px;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font-size: 12px;
 }
 

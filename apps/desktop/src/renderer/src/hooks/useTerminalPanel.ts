@@ -37,13 +37,13 @@ function readTerminalAppearance(): TerminalAppearance {
 	};
 	return {
 		fontFamily: read("--font-terminal", "ui-monospace, monospace"),
-		fontSize: Number.parseFloat(read("--terminal-size", "12.5")),
+		fontSize: Number.parseFloat(read("--terminal-size", "12.5px")),
 		lineHeight: 1.35,
 		cursorBlink: true,
 		scrollback: 5000,
-		foreground: read("--t1", "#1a1a1e"),
-		cursor: read("--acc", "#2563eb"),
-		selection: read("--surface3", "#e4e4e7"),
+		foreground: read("--fg-default", "#1a1a1e"),
+		cursor: read("--accent-fg", "#2563eb"),
+		selection: read("--bg-active", "#e4e4e7"),
 		// 与界面其它滚动容器同一份宽度与配色
 		scrollbarWidth: Number.parseFloat(read("--scrollbar-width", "8")),
 		scrollbarThumb: resolve(read("--scrollbar-thumb-color", "rgba(161,161,170,0.4)")),

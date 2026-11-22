@@ -12,8 +12,8 @@
 	/* 横向内边距交给每一行（`.scroll-row`），滚动条才能贴着右缘；
 	   顶带里那行头部自己带 4px 下边距，这里再留 4px，头部控件到新建按钮正好 8px */
 	padding: 4px 0 8px;
-	border-right: 1px solid var(--line);
-	background: var(--sb);
+	border-right: 1px solid var(--border-subtle);
+	background: var(--bg-subtle);
 	overflow: hidden;
 	transition: background-color var(--dur-fast) var(--ease-standard);
 }
@@ -101,20 +101,24 @@
 	padding: 0 10px;
 	border: 0;
 	border-radius: 6px;
-	background: var(--acc-fill);
-	color: var(--on-acc);
+	background: var(--accent-fill);
+	color: var(--accent-on-fill);
 	font-size: 13px;
 	font-weight: 500;
 	transition: filter var(--dur-fast) var(--ease-standard);
 }
 
 .sb-new:hover:not(:disabled) {
-	filter: brightness(1.08);
+	background: var(--accent-fill-hover);
+}
+
+.sb-new:active:not(:disabled) {
+	background: var(--accent-fill-active);
 }
 
 .sb-new:disabled {
-	background: var(--surface2);
-	color: var(--t3);
+	background: var(--bg-active);
+	color: var(--fg-subtle);
 	cursor: default;
 }
 
@@ -131,10 +135,10 @@
 	width: 100%;
 	height: 28px;
 	padding: 0 8px;
-	border: 1px solid var(--line);
+	border: 1px solid var(--border-subtle);
 	border-radius: 6px;
 	background: transparent;
-	color: var(--t2);
+	color: var(--fg-muted);
 	font-size: 12.5px;
 	text-align: left;
 	transition:
@@ -145,9 +149,9 @@
 
 .sb-filter-btn:hover,
 .sb-filter-btn.is-open {
-	border-color: var(--line2);
-	background: var(--surface2);
-	color: var(--t1);
+	border-color: var(--border-default);
+	background: var(--bg-hover);
+	color: var(--fg-default);
 }
 
 .sb-filter-name {
@@ -163,10 +167,10 @@
 	left: 0;
 	z-index: var(--z-popup);
 	padding: 6px;
-	border: 1px solid var(--line2);
+	border: 1px solid var(--border-default);
 	border-radius: 8px;
-	background: var(--card);
-	box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+	background: var(--bg-surface);
+	box-shadow: var(--shadow-popover);
 }
 
 .sb-pop.is-up {
@@ -180,16 +184,16 @@
 	gap: 6px;
 	height: 28px;
 	padding: 0 8px;
-	border: 1px solid var(--line);
+	border: 1px solid var(--border-subtle);
 	border-radius: 6px;
-	background: var(--bg);
-	color: var(--t3);
+	background: var(--bg-canvas);
+	color: var(--fg-subtle);
 	font-size: 12.5px;
 	transition: border-color var(--dur-fast) var(--ease-standard);
 }
 
 .sb-search:focus-within {
-	border-color: var(--acc);
+	border-color: var(--border-focus);
 }
 
 .sb-search input {
@@ -198,13 +202,13 @@
 	border: 0;
 	outline: 0;
 	background: transparent;
-	color: var(--t1);
+	color: var(--fg-default);
 	font: inherit;
 	font-size: 12.5px;
 }
 
 .sb-search input::placeholder {
-	color: var(--t3);
+	color: var(--fg-subtle);
 }
 
 /* 弹层里的滚动条跟着弹层自己的内边距走，不追求贴窗口边缘 */
@@ -229,19 +233,19 @@
 	border: 0;
 	border-radius: 6px;
 	background: transparent;
-	color: var(--t2);
+	color: var(--fg-muted);
 	font-size: 12.5px;
 	text-align: left;
 }
 
 .sb-opt:hover:not(:disabled) {
-	background: var(--surface2);
-	color: var(--t1);
+	background: var(--bg-hover);
+	color: var(--fg-default);
 }
 
 .sb-opt.is-on {
-	background: var(--surface3);
-	color: var(--t1);
+	background: var(--bg-active);
+	color: var(--fg-default);
 }
 
 .sb-opt-name {
@@ -252,7 +256,7 @@
 .sb-opt.is-add {
 	margin-top: 2px;
 	padding-top: 2px;
-	border-top: 1px solid var(--line);
+	border-top: 1px solid var(--border-subtle);
 	border-radius: 0 0 6px 6px;
 	height: 30px;
 }
@@ -290,18 +294,18 @@
 	border: 0;
 	border-radius: 5px;
 	background: transparent;
-	color: var(--t2);
+	color: var(--fg-muted);
 	font-size: 12px;
 	text-align: left;
 }
 
 .sb-menu-item:hover:not(:disabled) {
-	background: var(--surface2);
-	color: var(--t1);
+	background: var(--bg-hover);
+	color: var(--fg-default);
 }
 
 .sb-menu-item.is-danger:hover:not(:disabled) {
-	color: var(--err);
+	color: var(--status-err-fg);
 }
 
 .sb-rename {
@@ -315,10 +319,10 @@
 	min-width: 0;
 	height: 24px;
 	padding: 0 8px;
-	border: 1px solid var(--line2);
+	border: 1px solid var(--border-default);
 	border-radius: 5px;
-	background: var(--card2);
-	color: var(--t1);
+	background: var(--bg-elevated);
+	color: var(--fg-default);
 	font-size: 12px;
 }
 
@@ -329,7 +333,7 @@
 }
 
 .sb-confirm-text {
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font-size: 11.5px;
 	line-height: 1.5;
 }
@@ -340,13 +344,13 @@
 }
 
 .sb-opt-action.is-danger {
-	border-color: var(--err);
-	color: var(--err);
+	border-color: var(--status-err-fg);
+	color: var(--status-err-fg);
 }
 
 .sb-menu-error {
 	margin: 0;
-	color: var(--err);
+	color: var(--status-err-fg);
 	font-size: 11.5px;
 	line-height: 1.5;
 }
@@ -357,8 +361,8 @@
 	gap: 6px;
 	margin-top: 2px;
 	padding: 4px 8px;
-	border-top: 1px solid var(--line);
-	color: var(--t3);
+	border-top: 1px solid var(--border-subtle);
+	color: var(--fg-subtle);
 	font-size: 11.5px;
 }
 
@@ -366,22 +370,22 @@
 	flex: none;
 	height: 22px;
 	padding: 0 8px;
-	border: 1px solid var(--line);
+	border: 1px solid var(--border-subtle);
 	border-radius: 5px;
-	background: var(--surface2);
-	color: var(--t2);
+	background: var(--bg-elevated);
+	color: var(--fg-muted);
 	font-size: 11.5px;
 }
 
 .sb-opt-action:hover {
-	background: var(--surface3);
-	color: var(--t1);
+	background: var(--bg-active);
+	color: var(--fg-default);
 }
 
 .sb-opt-empty {
 	margin: 0;
 	padding: 8px;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font-size: 12px;
 }
 
@@ -410,7 +414,7 @@
 	margin: 0;
 	/* 分组标题与行文字对齐：行外侧留白再加行自己那份 */
 	padding: 8px 0 3px calc(var(--sidebar-edge) + var(--sb-row-inset));
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font-size: 11px;
 	font-variant-numeric: tabular-nums;
 	font-weight: 500;
@@ -429,7 +433,7 @@
 	border: 0;
 	border-radius: 6px;
 	background: transparent;
-	color: var(--t2);
+	color: var(--fg-muted);
 	font-size: 13px;
 	text-align: left;
 	transition:
@@ -438,13 +442,13 @@
 }
 
 .sb-row:hover:not(:disabled):not(.is-active) {
-	background: var(--sb-row-hover);
-	color: var(--t1);
+	background: var(--bg-hover);
+	color: var(--fg-default);
 }
 
 .sb-row.is-active {
-	background: var(--sb-row-selected);
-	color: var(--t1);
+	background: var(--bg-active);
+	color: var(--fg-default);
 }
 
 .sb-row:disabled {
@@ -471,7 +475,7 @@
 	align-items: center;
 	justify-content: space-between;
 	min-width: 0;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font-size: 11px;
 }
 
@@ -491,17 +495,17 @@
 }
 
 .sb-row.is-active .sb-row-meta {
-	color: var(--t2);
+	color: var(--fg-muted);
 }
 
 .sb-row:hover:not(.is-active) .sb-row-meta {
-	color: var(--t2);
+	color: var(--fg-muted);
 }
 
 .sb-row-proj {
 	flex: none;
 	max-width: 72px;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font-size: 11px;
 }
 
@@ -512,7 +516,7 @@
 
 .sb-row-time {
 	flex: none;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font-size: 11px;
 	font-variant-numeric: tabular-nums;
 }
@@ -536,7 +540,7 @@
 	flex: none;
 	margin: 0;
 	padding: 10px 0 10px calc(var(--sidebar-edge) + var(--sb-row-inset));
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font-size: 12.5px;
 }
 
@@ -547,8 +551,8 @@
 	gap: 6px;
 	margin-top: 6px;
 	padding: 8px var(--sidebar-edge) 0;
-	border-top: 1px solid var(--line);
-	color: var(--t3);
+	border-top: 1px solid var(--border-subtle);
+	color: var(--fg-subtle);
 	font-size: 11px;
 }
 
@@ -557,17 +561,17 @@
 	border: 0;
 	border-radius: 6px;
 	background: transparent;
-	color: var(--t2);
+	color: var(--fg-muted);
 	font-size: 12px;
 }
 
 .sb-foot-btn.is-on {
-	background: var(--surface3);
-	color: var(--t1);
+	background: var(--bg-active);
+	color: var(--fg-default);
 }
 
 .sb-foot-btn:disabled {
-	color: var(--t3);
+	color: var(--fg-subtle);
 	cursor: default;
 }
 
@@ -580,21 +584,21 @@
 	border: 0;
 	border-radius: 6px;
 	background: transparent;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	transition:
 		background-color var(--dur-fast) var(--ease-standard),
 		color var(--dur-fast) var(--ease-standard);
 }
 
 .sb-foot-btn.is-icon:hover {
-	background: var(--surface2);
-	color: var(--t1);
+	background: var(--bg-hover);
+	color: var(--fg-default);
 }
 
 /* 页脚右端：连接状态提示贴着设置按钮，靠一个占位把这一组推到右边 */
 .sb-foot-status {
 	margin-left: auto;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font-size: 10.5px;
 }
 
@@ -605,9 +609,9 @@
 .kbd {
 	margin-left: auto;
 	padding: 0 6px;
-	border: 1px solid var(--line2);
+	border: 1px solid var(--border-default);
 	border-radius: 5px;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font-size: 11px;
 }
 
@@ -623,10 +627,10 @@
 	z-index: var(--z-popup);
 	width: 248px;
 	padding: 6px;
-	border: 1px solid var(--line2);
+	border: 1px solid var(--border-default);
 	border-radius: 10px;
-	background: var(--card2);
-	box-shadow: 0 12px 32px rgb(0 0 0 / 35%);
+	background: var(--bg-elevated);
+	box-shadow: var(--shadow-popover);
 }
 
 .host-list {
@@ -643,7 +647,7 @@
 }
 
 .host-row.is-on {
-	background: var(--surface3);
+	background: var(--bg-active);
 }
 
 .host-main {
@@ -657,17 +661,17 @@
 	border: 0;
 	border-radius: 6px;
 	background: transparent;
-	color: var(--t2);
+	color: var(--fg-muted);
 	font-size: 12px;
 	text-align: left;
 }
 
 .host-main:hover {
-	color: var(--t1);
+	color: var(--fg-default);
 }
 
 .host-row.is-on .host-main {
-	color: var(--t1);
+	color: var(--fg-default);
 }
 
 .host-name {
@@ -682,7 +686,7 @@
 	flex: 1;
 	min-width: 0;
 	overflow: hidden;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font-size: 11px;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -699,12 +703,12 @@
 	border: 0;
 	border-radius: 5px;
 	background: transparent;
-	color: var(--t3);
+	color: var(--fg-subtle);
 }
 
 .host-remove:hover {
-	background: var(--surface2);
-	color: var(--t1);
+	background: var(--bg-hover);
+	color: var(--fg-default);
 }
 
 .host-rename {
@@ -723,17 +727,17 @@
 	margin-top: 4px;
 	padding: 0 6px;
 	border: 0;
-	border-top: 1px solid var(--line);
+	border-top: 1px solid var(--border-subtle);
 	border-radius: 6px;
 	background: transparent;
-	color: var(--t2);
+	color: var(--fg-muted);
 	font-size: 12px;
 	text-align: left;
 }
 
 .host-add:hover {
-	background: var(--surface2);
-	color: var(--t1);
+	background: var(--bg-hover);
+	color: var(--fg-default);
 }
 
 .host-form {
@@ -742,12 +746,12 @@
 	gap: 6px;
 	margin-top: 6px;
 	padding-top: 6px;
-	border-top: 1px solid var(--line);
+	border-top: 1px solid var(--border-subtle);
 }
 
 .host-error {
 	margin: 0;
-	color: var(--err);
+	color: var(--status-err-fg);
 	font-size: 11.5px;
 }
 
@@ -780,5 +784,5 @@
 
 .app.is-narrow .sb.is-open {
 	transform: none;
-	box-shadow: 0 0 40px rgb(0 0 0 / 45%);
+	box-shadow: var(--shadow-modal);
 }

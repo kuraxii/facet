@@ -7,11 +7,11 @@
 
 /* 增删行数的颜色，对话里的文件改动与变更页共用 */
 .add {
-	color: var(--add);
+	color: var(--diff-add-fg);
 }
 
 .del {
-	color: var(--del);
+	color: var(--diff-del-fg);
 }
 
 /* 变更页：分支头、文件行与就地展开的补丁 */
@@ -27,7 +27,7 @@
 .chg-branch {
 	min-width: 0;
 	overflow: hidden;
-	color: var(--t2);
+	color: var(--fg-muted);
 	font-size: 12px;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -35,7 +35,7 @@
 
 .chg-upstream {
 	margin-left: 6px;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font-size: 11px;
 }
 
@@ -64,14 +64,14 @@
 	border: 0;
 	border-radius: 6px;
 	background: transparent;
-	color: var(--t2);
+	color: var(--fg-muted);
 	font-size: 12px;
 	text-align: left;
 }
 
 .chg-row:hover {
-	background: var(--surface2);
-	color: var(--t1);
+	background: var(--bg-hover);
+	color: var(--fg-default);
 }
 
 .chg-open {
@@ -84,7 +84,7 @@
 	border: 0;
 	border-radius: 5px;
 	background: transparent;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	opacity: 0;
 }
 
@@ -94,15 +94,15 @@
 }
 
 .chg-open:hover {
-	background: var(--surface2);
-	color: var(--t1);
+	background: var(--bg-hover);
+	color: var(--fg-default);
 }
 
 /* 状态字母：增删改各一色，未跟踪与冲突用弱色与危险色 */
 .chg-status {
 	flex: none;
 	width: 14px;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font-family: var(--font-mono);
 	font-size: 11px;
 	text-align: center;
@@ -110,16 +110,16 @@
 
 .chg-status.is-added,
 .chg-status.is-untracked {
-	color: var(--ok);
+	color: var(--status-ok-fg);
 }
 
 .chg-status.is-deleted,
 .chg-status.is-conflicted {
-	color: var(--err);
+	color: var(--status-err-fg);
 }
 
 .chg-status.is-renamed {
-	color: var(--warn);
+	color: var(--status-warn-fg);
 }
 
 .chg-name {
@@ -134,7 +134,7 @@
 	flex: 1;
 	min-width: 0;
 	overflow: hidden;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font-size: 11px;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -150,7 +150,7 @@
 }
 
 .chg-binary {
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font-size: 10.5px;
 }
 
@@ -160,13 +160,13 @@
 
 .chg-note {
 	margin: 6px 2px;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font-size: 12px;
 	line-height: 1.6;
 }
 
 .chg-note.is-error {
-	color: var(--err);
+	color: var(--status-err-fg);
 }
 
 .chg-retry {
@@ -174,13 +174,13 @@
 	padding: 0;
 	border: 0;
 	background: transparent;
-	color: var(--acc);
+	color: var(--accent-fg);
 	font-size: 12px;
 }
 
 .chg-total {
 	margin: 8px 2px 0;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font-size: 11px;
 	text-align: right;
 }

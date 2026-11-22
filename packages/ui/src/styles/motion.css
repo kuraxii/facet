@@ -1,4 +1,47 @@
-/* 减少动效：系统偏好与应用设置共用同一组时长变量，并停掉循环动画。 */
+/*
+ * 减少动效。
+ *
+ * 两个信号：系统的 `prefers-reduced-motion` 与设置里的开关（`data-motion="reduced"`），任一成立
+ * 就停下同一组东西。时长清零管住所有过渡——全仓过渡只读 `--dur-fast` / `--dur-slow`，清零之后
+ * 一律是瞬变；`animation` 另关，因为循环动效不吃时长变量。
+ *
+ * 两条信号用的选择器是同一组：加一个循环动效时两处一起加。
+ */
+
+/* 设置里打开减少动效 */
+:root[data-motion="reduced"] {
+	--dur-fast: 0ms;
+	--dur-slow: 0ms;
+}
+
+/* 系统要求减少动效：同一组时长归一，过渡退化成瞬变 */
+@media (prefers-reduced-motion: reduce) {
+	:root {
+		--dur-fast: 0ms;
+		--dur-slow: 0ms;
+	}
+}
+
+/* 运行中文字的呼吸与扫光：停在最终形态，不再循环 */
+:root[data-motion="reduced"] .tr-name.is-live,
+:root[data-motion="reduced"] .tr-arg.is-live,
+:root[data-motion="reduced"] .group-label.is-live {
+	animation: none;
+	opacity: 1;
+}
+
+:root[data-motion="reduced"] [data-live-motion="shimmer"] .tr-name.is-live,
+:root[data-motion="reduced"] [data-live-motion="shimmer"] .tr-arg.is-live,
+:root[data-motion="reduced"] [data-live-motion="shimmer"] .group-label.is-live {
+	color: var(--fg-default);
+	-webkit-text-fill-color: currentColor;
+	background: none;
+}
+
+:root[data-motion="reduced"] .pulse,
+:root[data-motion="reduced"] .caret {
+	animation: none;
+}
 
 @media (prefers-reduced-motion: reduce) {
 	.tr-name.is-live,
@@ -11,39 +54,13 @@
 	[data-live-motion="shimmer"] .tr-name.is-live,
 	[data-live-motion="shimmer"] .tr-arg.is-live,
 	[data-live-motion="shimmer"] .group-label.is-live {
-		color: var(--t1);
+		color: var(--fg-default);
 		-webkit-text-fill-color: currentColor;
 		background: none;
 	}
-}
 
-/* 设置里打开减少动效时,把动效时长清零并停掉循环动画 */
-:root[data-motion="reduced"] {
-	--dur-fast: 0ms;
-	--dur-slow: 0ms;
-}
-
-:root[data-motion="reduced"] .pulse,
-:root[data-motion="reduced"] .caret {
-	animation: none;
-}
-
-/* 减少动效时竖轨的短条直接跳到目标尺寸，不做过渡 */
-:root[data-motion="reduced"] .outline-pill {
-	transition: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
 	.pulse,
 	.caret {
 		animation: none;
-	}
-
-	.md .markstream-react .code-block-container .code-block-header {
-		transition: none;
-	}
-
-	.row-action {
-		transition: none;
 	}
 }

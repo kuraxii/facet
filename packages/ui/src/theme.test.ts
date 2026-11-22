@@ -3,10 +3,12 @@
 /**
  * 配色层的测试。
  *
- * 两件事：解析出来的是不是预期的那套配色；七套配色的 CSS 变量集合是否一致，
- * 少写一个变量会让某个主题下的元素透明或继承错误的颜色。
+ * 三件事：解析出来的是不是预期的那套配色；六套配色的语义键集是否完全一致（少写一个变量会让
+ * 某个主题下的元素透明或继承错误的颜色）；`theme.css` 里定义的每个变量在全仓是否真的有人读
+ * （没人读的色彩变量等于一份要一直维护的死配置）。
  */
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { join, relative, sep } from "node:path";
 import { CODE_THEMES, UI_THEMES } from "@facet/protocol";
 import { describe, expect, it } from "vitest";
 import {
@@ -92,4 +94,51 @@ describe("theme.css", () => {
 			expect(variablesIn(`:root[data-theme="${theme}"]`), theme).toEqual(reference);
 		}
 	});
+
+	it("每个色彩变量在全仓都有人读，没有死配置", () => {
+		// 变量名出现在 `:root` 那一份声明里不算被引用：要的是 `var(--x)` 或者脚本里的读名字
+		const readers = sourceFiles().map((file) => readFileSync(file, "utf8"));
+		for (const name of variablesIn(':root,\n:root[data-theme="dark"]')) {
+			const pattern = new RegExp(`${name}(?![\\w-])`);
+			expect(
+				readers.some((source) => pattern.test(source)),
+				`${name} 在 theme.css 之外没有任何引用`,
+			).toBe(true);
+		}
+	});
 });
+
+/** 仓库根：`packages/ui/src/theme.test.ts` 往上四层。 */
+const REPO_ROOT = join(import.meta.dirname, "..", "..", "..");
+
+/**
+ * 全仓的样式与脚本文件，`theme.css` 自己没有算进来。
+ *
+ * 只看源码：构建产物（`out` / `dist`）里留着上一版的样式，算进来等于什么都没检查。
+ */
+function sourceFiles(): string[] {
+	const found: string[] = [];
+	const walk = (directory: string): void => {
+		for (const entry of readdirSync(directory, { withFileTypes: true })) {
+			if (entry.name === "node_modules" || entry.name === "dist" || entry.name === "out") {
+				continue;
+			}
+			const full = join(directory, entry.name);
+			if (entry.isDirectory()) {
+				walk(full);
+				continue;
+			}
+			if (!/\.(?:css|ts|tsx)$/.test(entry.name)) {
+				continue;
+			}
+			const path = relative(REPO_ROOT, full).split(sep).join("/");
+			if (path !== "packages/ui/src/styles/theme.css") {
+				found.push(full);
+			}
+		}
+	};
+	for (const root of ["packages", "apps"]) {
+		walk(join(REPO_ROOT, root));
+	}
+	return found;
+}

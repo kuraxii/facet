@@ -59,28 +59,32 @@ const doubleClickSelection = EditorView.domEventHandlers({
 
 /** 语法着色：只挑几类常用的 token，颜色取自界面的语义色。 */
 const HIGHLIGHT_STYLE = HighlightStyle.define([
-	{ tag: [tags.keyword, tags.modifier], color: "var(--acc)" },
-	{ tag: [tags.string, tags.special(tags.string)], color: "var(--ok)" },
-	{ tag: [tags.number, tags.bool, tags.null], color: "var(--warn)" },
-	{ tag: [tags.comment, tags.lineComment, tags.blockComment], color: "var(--t3)", fontStyle: "italic" },
-	{ tag: [tags.function(tags.variableName), tags.function(tags.propertyName)], color: "var(--t1)" },
-	{ tag: [tags.typeName, tags.className, tags.namespace], color: "var(--warn)" },
-	{ tag: [tags.tagName, tags.attributeName], color: "var(--acc)" },
-	{ tag: [tags.propertyName, tags.variableName], color: "var(--t2)" },
-	{ tag: [tags.operator, tags.punctuation], color: "var(--t2)" },
-	{ tag: [tags.heading, tags.strong], color: "var(--t1)", fontWeight: "600" },
-	{ tag: tags.link, color: "var(--acc)", textDecoration: "underline" },
-	{ tag: tags.invalid, color: "var(--err)" },
+	{ tag: [tags.keyword, tags.modifier], color: "var(--accent-fg)" },
+	{ tag: [tags.string, tags.special(tags.string)], color: "var(--status-ok-fg)" },
+	{ tag: [tags.number, tags.bool, tags.null], color: "var(--status-warn-fg)" },
+	{
+		tag: [tags.comment, tags.lineComment, tags.blockComment],
+		color: "var(--fg-subtle)",
+		fontStyle: "italic",
+	},
+	{ tag: [tags.function(tags.variableName), tags.function(tags.propertyName)], color: "var(--fg-default)" },
+	{ tag: [tags.typeName, tags.className, tags.namespace], color: "var(--status-warn-fg)" },
+	{ tag: [tags.tagName, tags.attributeName], color: "var(--accent-fg)" },
+	{ tag: [tags.propertyName, tags.variableName], color: "var(--fg-muted)" },
+	{ tag: [tags.operator, tags.punctuation], color: "var(--fg-muted)" },
+	{ tag: [tags.heading, tags.strong], color: "var(--fg-default)", fontWeight: "600" },
+	{ tag: tags.link, color: "var(--accent-fg)", textDecoration: "underline" },
+	{ tag: tags.invalid, color: "var(--status-err-fg)" },
 	// Markdown：让标记符退成底噪，结构本身（行内代码、斜体、引用、链接地址）各自成形。
 	// 标记符一并淡掉是 Markdown 看着像纯文本的主因：`#`、`**`、`>` 与正文同色时整段是灰墙。
-	{ tag: tags.processingInstruction, color: "var(--t3)" },
-	{ tag: tags.monospace, color: "var(--markdown-code-text)" },
+	{ tag: tags.processingInstruction, color: "var(--fg-subtle)" },
+	{ tag: tags.monospace, color: "var(--code-fg)" },
 	{ tag: tags.emphasis, fontStyle: "italic" },
-	{ tag: tags.strikethrough, color: "var(--t3)", textDecoration: "line-through" },
-	{ tag: tags.quote, color: "var(--t3)" },
-	{ tag: tags.url, color: "var(--t3)" },
-	{ tag: tags.labelName, color: "var(--t3)" },
-	{ tag: tags.contentSeparator, color: "var(--t3)" },
+	{ tag: tags.strikethrough, color: "var(--fg-subtle)", textDecoration: "line-through" },
+	{ tag: tags.quote, color: "var(--fg-subtle)" },
+	{ tag: tags.url, color: "var(--fg-subtle)" },
+	{ tag: tags.labelName, color: "var(--fg-subtle)" },
+	{ tag: tags.contentSeparator, color: "var(--fg-subtle)" },
 ]);
 
 /**

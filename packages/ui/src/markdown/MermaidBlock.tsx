@@ -65,12 +65,12 @@ function themeCss(palette: Record<string, string>): string {
 function readThemeVariables(): Record<string, string> {
 	const css = getComputedStyle(document.documentElement);
 	const read = (name: string, fallback: string): string => css.getPropertyValue(name).trim() || fallback;
-	const card = read("--card", "#1b1b1f");
-	const surface = read("--surface2", "#232327");
+	const card = read("--bg-surface", "#1b1b1f");
+	const surface = read("--bg-elevated", "#232327");
 	// 边框与线条要比底色亮一档，否则深色底上几乎看不见
-	const border = read("--t3", "#71717a");
-	const text = read("--t1", "#fafafa");
-	const muted = read("--t2", "#a1a1aa");
+	const border = read("--fg-subtle", "#71717a");
+	const text = read("--fg-default", "#fafafa");
+	const muted = read("--fg-muted", "#a1a1aa");
 	const font = read("--font-sans", "sans-serif");
 	return {
 		background: card,

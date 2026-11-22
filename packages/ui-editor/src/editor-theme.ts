@@ -39,12 +39,12 @@ export interface EditorPalette {
 /** 现读一份令牌。 */
 export function readEditorPalette(): EditorPalette {
 	return {
-		background: readVar("--bg", "#18181b"),
-		foreground: readVar("--t1", "#fafafa"),
-		muted: readVar("--t3", "#71717a"),
-		accent: readVar("--acc", "#fafafa"),
-		selection: readVar("--surface3", "#3f3f46"),
-		raised: readVar("--surface2", "#27272a"),
+		background: readVar("--bg-canvas", "#18181b"),
+		foreground: readVar("--fg-default", "#fafafa"),
+		muted: readVar("--fg-subtle", "#71717a"),
+		accent: readVar("--accent-fg", "#fafafa"),
+		selection: readVar("--bg-active", "#3f3f46"),
+		raised: readVar("--bg-elevated", "#27272a"),
 		headGap: readVar("--editor-head-gap", `${VISUAL_PX.editorHeadGap}px`),
 		monoFont: readVar("--font-editor", readVar("--font-mono", "ui-monospace, monospace")),
 		fontSize: readVar("--editor-size", "13px"),

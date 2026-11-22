@@ -15,14 +15,14 @@
 	gap: var(--changes-icon-gap);
 	flex: none;
 	padding: 8px var(--changes-trailing) 6px;
-	border-bottom: 1px solid var(--line);
+	border-bottom: 1px solid var(--border-subtle);
 }
 
 .branch {
 	flex: 1;
 	min-width: 0;
 	overflow: hidden;
-	color: var(--t2);
+	color: var(--fg-muted);
 	font-size: 12px;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -36,7 +36,7 @@
 
 .upstream {
 	margin-left: 6px;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font-size: 11px;
 }
 
@@ -49,12 +49,12 @@
 }
 
 .add {
-	color: var(--add);
+	color: var(--diff-add-fg);
 	font-weight: 400;
 }
 
 .del {
-	color: var(--del);
+	color: var(--diff-del-fg);
 	font-weight: 400;
 }
 
@@ -68,17 +68,17 @@
 	border: 0;
 	border-radius: 5px;
 	background: transparent;
-	color: var(--t3);
+	color: var(--fg-subtle);
 }
 
 .iconButton:hover:not(:disabled),
 .iconButton[data-on="true"] {
-	background: var(--surface2);
-	color: var(--t1);
+	background: var(--bg-active);
+	color: var(--fg-default);
 }
 
 .iconButton:disabled {
-	color: var(--t3);
+	color: var(--fg-subtle);
 	opacity: 0.4;
 }
 
@@ -107,26 +107,26 @@
 	padding-left: calc(var(--changes-row-padding-x) + var(--changes-depth, 0) * var(--changes-tree-indent));
 	border: 0;
 	background: transparent;
-	color: var(--t2);
+	color: var(--fg-muted);
 	font-size: 13px;
 	text-align: left;
 }
 
 .row:hover {
-	background: var(--sb-row-hover);
-	color: var(--t1);
+	background: var(--bg-hover);
+	color: var(--fg-default);
 }
 
 .row[data-selected="true"] {
-	background: var(--sb-row-selected);
-	color: var(--t1);
+	background: var(--bg-active);
+	color: var(--fg-default);
 }
 
 .chevron {
 	flex: none;
 	width: var(--changes-icon-size);
 	height: var(--changes-icon-size);
-	color: var(--t3);
+	color: var(--fg-subtle);
 	transition: transform var(--dur-fast) var(--ease-standard);
 }
 
@@ -138,7 +138,7 @@
 	flex: none;
 	width: var(--changes-icon-size);
 	height: var(--changes-icon-size);
-	color: var(--t3);
+	color: var(--fg-subtle);
 }
 
 .name {
@@ -167,7 +167,7 @@
 .binary {
 	flex: none;
 	margin-left: auto;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font-size: 11px;
 }
 
@@ -181,28 +181,28 @@
 
 .change[data-status="added"],
 .change[data-status="untracked"] {
-	color: var(--ok);
+	color: var(--status-ok-fg);
 }
 
 .change[data-status="deleted"],
 .change[data-status="conflicted"] {
-	color: var(--err);
+	color: var(--status-err-fg);
 }
 
 .change[data-status="modified"],
 .change[data-status="renamed"] {
-	color: var(--warn);
+	color: var(--status-warn-fg);
 }
 
 .note {
 	margin: 10px 12px;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font-size: 12px;
 	line-height: 1.6;
 }
 
 .noteError {
-	color: var(--err);
+	color: var(--status-err-fg);
 }
 
 .retry {
@@ -210,7 +210,7 @@
 	padding: 0;
 	border: 0;
 	background: transparent;
-	color: var(--acc);
+	color: var(--accent-fg);
 	font-size: 12px;
 }
 
@@ -232,7 +232,7 @@
  * 视口外的段时逐帧重新渲染，主线程被占住，选区跟不上指针。
  */
 .section {
-	border-bottom: 1px solid var(--line);
+	border-bottom: 1px solid var(--border-subtle);
 }
 
 .fileHeader {
@@ -240,8 +240,8 @@
 	top: 0;
 	z-index: var(--z-content-local);
 	height: var(--changes-header-height);
-	border-bottom: 1px solid var(--line);
-	background: var(--bg);
+	border-bottom: 1px solid var(--border-subtle);
+	background: var(--bg-canvas);
 }
 
 .fileHeaderButton {
@@ -253,17 +253,17 @@
 	padding: 0 12px 0 8px;
 	border: 0;
 	background: transparent;
-	color: var(--t1);
+	color: var(--fg-default);
 	font-size: 13px;
 	text-align: left;
 }
 
 .fileHeaderButton:hover {
-	background: var(--sb-row-hover);
+	background: var(--bg-hover);
 }
 
 .section[data-focused="true"] .fileHeader {
-	background: var(--surface2);
+	background: var(--bg-hover);
 }
 
 .fileName {
@@ -278,21 +278,21 @@
 	flex: 1;
 	min-width: 0;
 	overflow: hidden;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font-size: 12px;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
 .fileBody {
-	background: var(--bg);
+	background: var(--bg-canvas);
 }
 
 .loading {
 	height: 40px;
 	margin: 8px 12px;
 	border-radius: 6px;
-	background: var(--surface2);
+	background: var(--bg-elevated);
 	animation: changes-loading 1.2s var(--ease-standard) infinite alternate;
 }
 
@@ -327,7 +327,7 @@
 /* 短哈希与复制是一颗按钮：点哈希或者点后面的图标都复制完整哈希 */
 
 .commitTipHash:hover {
-	color: var(--t1);
+	color: var(--fg-default);
 }
 
 .commitTipLink:hover {

@@ -4,10 +4,10 @@
 	display: grid;
 	gap: var(--extension-card-gap);
 	padding: var(--extension-card-padding);
-	border: var(--extension-border-width) solid var(--line);
+	border: var(--extension-border-width) solid var(--border-subtle);
 	border-radius: var(--extension-card-radius);
-	background: var(--card);
-	color: var(--t1);
+	background: var(--bg-surface);
+	color: var(--fg-default);
 	outline: none;
 }
 
@@ -30,7 +30,7 @@
 	user-select: text;
 	cursor: text;
 	margin: 0;
-	color: var(--t1);
+	color: var(--fg-default);
 	line-height: 1.6;
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
@@ -39,9 +39,9 @@
 .extension-chip {
 	justify-self: start;
 	padding: 2px 8px;
-	border: var(--extension-border-width) solid var(--line2);
+	border: var(--extension-border-width) solid var(--border-default);
 	border-radius: 999px;
-	color: var(--t2);
+	color: var(--fg-muted);
 	font-size: 11px;
 	line-height: 1.5;
 }
@@ -52,10 +52,10 @@
 	max-height: calc(var(--extension-editor-height) * 1.2);
 	margin: 0;
 	padding: var(--extension-input-inset);
-	border: var(--extension-border-width) solid var(--line2);
+	border: var(--extension-border-width) solid var(--border-default);
 	border-radius: var(--extension-input-radius);
-	background: var(--card2);
-	color: var(--t2);
+	background: var(--bg-elevated);
+	color: var(--fg-muted);
 	font-family: var(--font-mono);
 	font-size: 12px;
 	line-height: 1.5;
@@ -68,10 +68,10 @@
 	max-height: calc(var(--extension-editor-height) * 2);
 	margin: 0;
 	padding: var(--extension-input-inset);
-	border: var(--extension-border-width) solid var(--line2);
+	border: var(--extension-border-width) solid var(--border-default);
 	border-radius: var(--extension-input-radius);
-	background: var(--card2);
-	color: var(--t2);
+	background: var(--bg-elevated);
+	color: var(--fg-muted);
 	font-family: var(--font-mono);
 	white-space: pre-wrap;
 }
@@ -90,18 +90,18 @@
 	border: 0;
 	border-radius: var(--extension-option-radius);
 	background: transparent;
-	color: var(--t1);
+	color: var(--fg-default);
 	font: inherit;
 	text-align: left;
 }
 
 .extension-option:hover,
 .extension-option:has(.extension-radio-input:checked) {
-	background: var(--surface2);
+	background: var(--bg-active);
 }
 
 .extension-option:has(.extension-radio-input:focus-visible) {
-	box-shadow: inset 0 0 0 2px var(--acc);
+	box-shadow: inset 0 0 0 2px var(--border-focus);
 }
 
 .extension-option:has(.extension-radio-input:disabled) {
@@ -128,7 +128,7 @@
 	width: var(--extension-radio-size);
 	height: var(--extension-radio-size);
 	margin-top: 2px;
-	border: var(--extension-radio-border) solid var(--t3);
+	border: var(--extension-radio-border) solid var(--fg-subtle);
 	border-radius: 999px;
 }
 
@@ -137,14 +137,14 @@
 }
 
 .extension-option:has(.extension-radio-input:checked) .extension-radio {
-	border-color: var(--acc);
+	border-color: var(--accent-fg);
 }
 
 .extension-radio-dot {
 	width: var(--extension-radio-dot);
 	height: var(--extension-radio-dot);
 	border-radius: 999px;
-	background: var(--acc);
+	background: var(--accent-fg);
 }
 
 .extension-option-text {
@@ -157,7 +157,7 @@
 }
 
 .extension-option-label.is-placeholder {
-	color: var(--t3);
+	color: var(--fg-subtle);
 }
 
 .extension-option.is-custom {
@@ -165,7 +165,7 @@
 }
 
 .extension-option.is-custom.is-editing {
-	background: var(--surface2);
+	background: var(--bg-active);
 }
 
 .extension-custom-input {
@@ -175,18 +175,18 @@
 	border: 0;
 	outline: none;
 	background: transparent;
-	color: var(--t1);
+	color: var(--fg-default);
 	font: inherit;
 }
 
 .extension-custom-input::placeholder {
-	color: var(--t3);
+	color: var(--fg-subtle);
 }
 
 .extension-option-note {
 	user-select: text;
 	cursor: text;
-	color: var(--t2);
+	color: var(--fg-muted);
 	font-size: 12px;
 	overflow-wrap: anywhere;
 }
@@ -196,8 +196,8 @@
 }
 
 .extension-option:has(.extension-radio-input:checked) .extension-radio.is-square {
-	background: var(--acc);
-	color: var(--on-acc);
+	background: var(--accent-fg);
+	color: var(--accent-on-fill);
 }
 
 .extension-tabs {
@@ -216,33 +216,33 @@
 	border: var(--extension-border-width) solid transparent;
 	border-radius: var(--extension-tab-radius);
 	background: transparent;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font: inherit;
 	font-size: 12px;
 }
 
 .extension-tab:hover {
-	background: var(--surface2);
-	color: var(--t1);
+	background: var(--bg-hover);
+	color: var(--fg-default);
 }
 
 .extension-tab.is-active {
-	border-color: var(--line2);
-	background: var(--surface2);
-	color: var(--t1);
+	border-color: var(--border-default);
+	background: var(--bg-active);
+	color: var(--fg-default);
 }
 
 .extension-tab-mark {
 	display: grid;
 	place-items: center;
 	width: 12px;
-	color: var(--acc);
+	color: var(--accent-fg);
 }
 
 .extension-tab-dot {
 	width: 6px;
 	height: 6px;
-	border: var(--extension-border-width) solid var(--t3);
+	border: var(--extension-border-width) solid var(--fg-subtle);
 	border-radius: 999px;
 	opacity: 0.5;
 }
@@ -264,10 +264,10 @@
 	width: 100%;
 	min-width: 0;
 	padding: var(--extension-input-inset);
-	border: var(--extension-border-width) solid var(--line2);
+	border: var(--extension-border-width) solid var(--border-default);
 	border-radius: var(--extension-input-radius);
-	background: var(--card2);
-	color: var(--t1);
+	background: var(--bg-elevated);
+	color: var(--fg-default);
 	font: inherit;
 }
 
@@ -278,7 +278,7 @@
 
 .extension-card-error {
 	margin: 0;
-	color: var(--err);
+	color: var(--status-err-fg);
 	font-size: 13px;
 }
 
@@ -300,17 +300,17 @@
 	gap: 6px;
 	height: var(--extension-action-height);
 	padding: 0 var(--extension-action-padding-x);
-	border: var(--extension-border-width) solid var(--line2);
+	border: var(--extension-border-width) solid var(--border-default);
 	border-radius: var(--extension-action-radius);
 	background: transparent;
-	color: var(--t2);
+	color: var(--fg-muted);
 	font: inherit;
 	font-size: 13px;
 }
 
 .extension-action:hover:not(:disabled) {
-	background: var(--surface2);
-	color: var(--t1);
+	background: var(--bg-hover);
+	color: var(--fg-default);
 }
 
 .extension-action:disabled {
@@ -320,10 +320,22 @@
 
 .extension-action.is-primary {
 	border-color: transparent;
-	background: var(--acc-fill);
-	color: var(--on-acc);
+	background: var(--accent-fill);
+	color: var(--accent-on-fill);
+}
+
+/* 主按钮的悬停与按下走强调色自己那两档，不再被通用的灰色悬停抢去 */
+.extension-action.is-primary:hover:not(:disabled) {
+	background: var(--accent-fill-hover);
+	color: var(--accent-on-fill);
+}
+
+.extension-action.is-primary:active:not(:disabled) {
+	background: var(--accent-fill-active);
+	color: var(--accent-on-fill);
 }
 
 .extension-action.is-primary:disabled {
-	opacity: 0.5;
+	background: var(--bg-active);
+	color: var(--fg-subtle);
 }

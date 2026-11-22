@@ -141,8 +141,8 @@ const DEBT_PROPS: readonly (readonly [DebtKind, RegExp])[] = [
 /**
  * 棘轮基线：按文件记下当前的存量，只许降不许升。
  *
- * 数值是 Phase 1 落地刻度时各文件的实际条数，不是目标值。每迁完一个文件就把它那一行改小；
- * 一个文件归零之后，这一行就是 0 且不会再长回去。
+ * 数值是各文件当前的实际条数，不是目标值。每迁完一个文件就把它那一行改小；一个文件归零之后，
+ * 这一行就是 0 且不会再长回去——阴影与过渡已经全仓归零，只剩字号、圆角、间距与内边距。
  */
 const VISUAL_DEBT_BASELINE: Readonly<Record<string, DebtCount>> = {
 	"ui-terminal/src/terminal.css": { fontSize: 5, radius: 3, gap: 5, padding: 8, shadow: 0, transition: 0 },
@@ -165,18 +165,18 @@ const VISUAL_DEBT_BASELINE: Readonly<Record<string, DebtCount>> = {
 	},
 	"ui/src/styles/base.css": { fontSize: 0, radius: 1, gap: 0, padding: 0, shadow: 0, transition: 0 },
 	"ui/src/styles/changes.css": { fontSize: 10, radius: 2, gap: 5, padding: 5, shadow: 0, transition: 0 },
-	"ui/src/styles/chat.css": { fontSize: 22, radius: 19, gap: 21, padding: 22, shadow: 1, transition: 2 },
-	"ui/src/styles/chrome.css": { fontSize: 7, radius: 5, gap: 4, padding: 7, shadow: 1, transition: 0 },
-	"ui/src/styles/composer.css": { fontSize: 12, radius: 14, gap: 10, padding: 14, shadow: 3, transition: 0 },
+	"ui/src/styles/chat.css": { fontSize: 22, radius: 19, gap: 21, padding: 22, shadow: 0, transition: 0 },
+	"ui/src/styles/chrome.css": { fontSize: 7, radius: 5, gap: 4, padding: 7, shadow: 0, transition: 0 },
+	"ui/src/styles/composer.css": { fontSize: 12, radius: 14, gap: 10, padding: 14, shadow: 0, transition: 0 },
 	"ui/src/styles/fonts.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
 	"ui/src/styles/git-graph.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
 	"ui/src/styles/index.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
-	"ui/src/styles/markdown.css": { fontSize: 9, radius: 4, gap: 1, padding: 10, shadow: 1, transition: 1 },
+	"ui/src/styles/markdown.css": { fontSize: 9, radius: 4, gap: 1, padding: 10, shadow: 0, transition: 0 },
 	"ui/src/styles/motion.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
-	"ui/src/styles/overlays.css": { fontSize: 23, radius: 17, gap: 14, padding: 22, shadow: 5, transition: 2 },
-	"ui/src/styles/panel.css": { fontSize: 13, radius: 12, gap: 8, padding: 23, shadow: 2, transition: 0 },
-	"ui/src/styles/settings.css": { fontSize: 33, radius: 20, gap: 34, padding: 27, shadow: 2, transition: 0 },
-	"ui/src/styles/sidebar.css": { fontSize: 28, radius: 18, gap: 19, padding: 23, shadow: 3, transition: 0 },
+	"ui/src/styles/overlays.css": { fontSize: 23, radius: 17, gap: 14, padding: 22, shadow: 0, transition: 0 },
+	"ui/src/styles/panel.css": { fontSize: 13, radius: 12, gap: 8, padding: 23, shadow: 0, transition: 0 },
+	"ui/src/styles/settings.css": { fontSize: 33, radius: 20, gap: 34, padding: 27, shadow: 0, transition: 0 },
+	"ui/src/styles/sidebar.css": { fontSize: 28, radius: 18, gap: 19, padding: 23, shadow: 0, transition: 0 },
 	"ui/src/styles/theme.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
 };
 
@@ -274,6 +274,44 @@ describe("视觉刻度与 visual-contract 一致", () => {
 	});
 });
 
+/**
+ * 由脚本在运行期写到元素上、CSS 里不该出现定义的变量。
+ *
+ * 每一条都要指得出写入方；新增一个这样的名字必须同时在这里登记，否则"引用了变量却没人定义"
+ * 会悄悄变成一条透明或失效的声明。
+ */
+const RUNTIME_SET_VARS: readonly string[] = [
+	// 目录树的层级：行内 style 写在每个 `tree-row` 上（`files-pane.tsx` / `changes-pane.tsx`）
+	"--files-depth",
+	"--changes-depth",
+	// 滚动容器：`ScrollArea` 关掉沟槽时写 `auto`，行自己给横向留白（`scroll-area.tsx`）
+	"--scroll-gutter",
+	"--scroll-inset",
+	// 工作区索引栏的偏好宽：`useWorkspacePanels` 写在根节点上
+	"--workspace-list-width",
+];
+
+describe("变量都有定义", () => {
+	it("样式里引用的每个变量都有人定义，或在运行期写入", () => {
+		const defined = new Set<string>();
+		for (const file of CSS_FILES) {
+			for (const match of read(file).matchAll(/(--[a-zA-Z0-9-]+)\s*:/g)) {
+				defined.add(match[1] ?? "");
+			}
+		}
+		const missing: string[] = [];
+		for (const file of CSS_FILES) {
+			for (const match of read(file).matchAll(/var\((--[a-zA-Z0-9-]+)/g)) {
+				const name = match[1] ?? "";
+				if (!defined.has(name) && !RUNTIME_SET_VARS.includes(name)) {
+					missing.push(`${file}: ${name}`);
+				}
+			}
+		}
+		expect([...new Set(missing)]).toEqual([]);
+	});
+});
+
 describe("全仓样式纪律", () => {
 	it("没有 `!important`", () => {
 		for (const file of CSS_FILES) {
@@ -298,10 +336,82 @@ describe("全仓样式纪律", () => {
 	});
 });
 
+/**
+ * 允许写裸颜色字面量的位置：都是"不是主题色"的两类东西。
+ *
+ * 除了这两类，任何颜色都必须来自 `theme.css`（组件读变量）；新写一个字面量会让下面那条用例红。
+ */
+const COLOR_LITERAL_EXEMPT_FILES: readonly string[] = [
+	// 泳道色不属于语义色板：六个提交列的颜色是按列循环的图形，不与主题联动
+	"ui/src/styles/git-graph.css",
+	// 配色真值本身
+	"ui/src/styles/theme.css",
+];
+
+/**
+ * 逐行豁免的颜色字面量：遮罩与"跟随系统"色片的预览。
+ *
+ * 遮罩只取 alpha 通道，写什么颜色都一样；色片预览要让深浅两半同时出现，天然是两个字面色。
+ */
+const COLOR_LITERAL_ALLOWLIST: readonly string[] = [
+	// 两条遮罩只取 alpha 通道，颜色本身不参与成像
+	"mask-image: linear-gradient(to bottom, transparent 0, #000 6px, #000 100%);",
+	"mask-image: linear-gradient(to right, #000 0, #000 calc(100% - var(--sb-title-fade)), transparent 100%);",
+	// 「跟随系统」色片：深浅两半同时出现，天然是两个字面色
+	"background: linear-gradient(135deg, #f4f4f5 0 50%, #272a29 50% 100%);",
+	// 贴在图片上的移除按钮：底图可能是任意亮度的照片，底色必须一直是深色，不跟主题走
+	"background: rgb(0 0 0 / 55%);",
+	"background: rgb(0 0 0 / 75%);",
+];
+
+describe("颜色只从主题来", () => {
+	/** 一条声明里的颜色字面量：十六进制、`rgb()`、`hsl()`。 */
+	const COLOR_LITERAL = /#[0-9a-fA-F]{3,8}\b|\brgba?\(|\bhsla?\(/;
+
+	/** 收一份样式里所有带颜色字面量的行（去注释、去空白）。 */
+	function literalLines(source: string): string[] {
+		return stripComments(source)
+			.split("\n")
+			.map((line) => line.trim())
+			.filter((line) => COLOR_LITERAL.test(line));
+	}
+
+	it("`theme.css` 与泳道色之外没有裸颜色字面量", () => {
+		const offenders: string[] = [];
+		for (const file of CSS_FILES) {
+			if (COLOR_LITERAL_EXEMPT_FILES.includes(file)) {
+				continue;
+			}
+			for (const line of literalLines(read(file))) {
+				if (!COLOR_LITERAL_ALLOWLIST.includes(line)) {
+					offenders.push(`${file}: ${line}`);
+				}
+			}
+		}
+		expect(offenders).toEqual([]);
+	});
+
+	it("豁免清单里的每一条都还在，不留过期项", () => {
+		const sources = CSS_FILES.filter((file) => !COLOR_LITERAL_EXEMPT_FILES.includes(file)).map(read);
+		const present = sources.flatMap(literalLines);
+		for (const line of COLOR_LITERAL_ALLOWLIST) {
+			expect(present, line).toContain(line);
+		}
+	});
+});
+
 describe("写死数值的棘轮只许往下走", () => {
 	it("每个样式文件都登记了基线", () => {
 		// 新增文件必须先进基线再写样式，不然它从第一天起就可以随便写死数值
 		expect(CSS_FILES).toEqual(Object.keys(VISUAL_DEBT_BASELINE).sort());
+	});
+
+	it("阴影与过渡没有存量：全部走变量", () => {
+		for (const file of CSS_FILES) {
+			const actual = countDebt(read(file));
+			expect(actual.shadow, `${file} 的 box-shadow`).toBe(0);
+			expect(actual.transition, `${file} 的 transition`).toBe(0);
+		}
 	});
 
 	it("各文件的存量不超过基线", () => {

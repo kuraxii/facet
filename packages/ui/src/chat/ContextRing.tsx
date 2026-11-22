@@ -69,9 +69,9 @@ export function usageLevel(percent: number | null): UsageLevel {
 
 /** 圆弧颜色，跟着界面令牌走。 */
 const RING_STROKE: Record<UsageLevel, string> = {
-	normal: "var(--t2)",
-	warn: "var(--warn)",
-	danger: "var(--err)",
+	normal: "var(--fg-muted)",
+	warn: "var(--status-warn-fg)",
+	danger: "var(--status-err-fg)",
 };
 
 export interface ContextRingProps {
@@ -102,7 +102,7 @@ export function ContextRing({ usage, size = 16, strokeWidth = 2 }: ContextRingPr
 					cy={center}
 					r={radius}
 					fill="none"
-					stroke="var(--surface3)"
+					stroke="var(--bg-active)"
 					strokeWidth={strokeWidth}
 				/>
 				{percent === null || percent <= 0 ? null : (

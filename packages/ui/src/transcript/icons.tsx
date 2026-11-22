@@ -52,7 +52,7 @@ export function ArrowDownIcon({ size, ...rest }: IconProps) {
 export function StopIcon({ size, ...rest }: IconProps) {
 	return (
 		<Icon size={size} {...rest}>
-			<rect x="4" y="4" width="16" height="16" rx="3" fill="var(--err)" stroke="none" />
+			<rect x="4" y="4" width="16" height="16" rx="3" fill="var(--status-err-fg)" stroke="none" />
 		</Icon>
 	);
 }

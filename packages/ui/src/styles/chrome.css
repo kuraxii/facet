@@ -109,8 +109,8 @@
 
 /* 展开时把正文那条分界线与底色续到顶带里，两边在同一个 x 上 */
 .chrome-slot.is-sidebar.is-open {
-	border-right: 1px solid var(--line);
-	background: var(--sb);
+	border-right: 1px solid var(--border-subtle);
+	background: var(--bg-subtle);
 }
 
 /* 主区那一格：占中列，左栏开关贴在它的左边；右栏收起时开关与分页也落在它的右端 */
@@ -161,7 +161,7 @@
 }
 
 .chrome-slot.is-panel.is-open {
-	border-left: 1px solid var(--line);
+	border-left: 1px solid var(--border-subtle);
 }
 
 .chrome-spacer {
@@ -173,7 +173,7 @@
 	flex: 0 1 auto;
 	min-width: 0;
 	overflow: hidden;
-	color: var(--t2);
+	color: var(--fg-muted);
 	font-size: 12.5px;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -189,18 +189,18 @@
 	border: 0;
 	border-radius: 6px;
 	background: transparent;
-	color: var(--t2);
+	color: var(--fg-muted);
 	-webkit-app-region: no-drag;
 }
 
 .chrome-toggle:hover {
-	background: var(--surface2);
-	color: var(--t1);
+	background: var(--bg-hover);
+	color: var(--fg-default);
 }
 
 /* 双态开关按住时只换颜色：宽展开是否生效由它自己看得出来 */
 .chrome-toggle[aria-pressed="true"] {
-	color: var(--acc);
+	color: var(--accent-fg);
 }
 
 /* 右栏开关上的计数：收起时提示还有多少改动没看，展开之后由标签上的计数接手 */
@@ -215,8 +215,8 @@
 	min-width: 13px;
 	padding: 0 3px;
 	border-radius: 999px;
-	background: var(--acc);
-	color: var(--bg);
+	background: var(--accent-fg);
+	color: var(--bg-canvas);
 	font-family: var(--font-mono);
 	font-size: 9.5px;
 	line-height: 12px;
@@ -250,17 +250,17 @@
 	height: var(--chrome-height);
 	border: 0;
 	background: transparent;
-	color: var(--t3);
+	color: var(--fg-subtle);
 }
 
 .window-btn:hover {
-	background: var(--surface2);
-	color: var(--t1);
+	background: var(--bg-hover);
+	color: var(--fg-default);
 }
 
 .window-btn.is-close:hover {
-	background: var(--errbg);
-	color: var(--err);
+	background: var(--status-err-bg);
+	color: var(--status-err-fg);
 }
 
 /*
@@ -274,7 +274,7 @@
 	inset: 0;
 	z-index: var(--z-drawer-scrim);
 	border: 0;
-	background: rgb(0 0 0 / 45%);
+	background: var(--scrim-bg);
 	cursor: pointer;
 }
 
@@ -305,20 +305,20 @@
 
 .boot-host {
 	padding: 5px 10px;
-	border: 1px solid var(--line2);
+	border: 1px solid var(--border-default);
 	border-radius: 7px;
 	background: transparent;
-	color: var(--t2);
+	color: var(--fg-muted);
 	font-size: 12px;
 }
 
 .boot-host:hover:not(:disabled) {
-	border-color: var(--acc);
-	color: var(--t1);
+	border-color: var(--accent-fg);
+	color: var(--fg-default);
 }
 
 .boot-host:disabled {
-	color: var(--t3);
+	color: var(--fg-subtle);
 	cursor: default;
 }
 
@@ -341,7 +341,7 @@
 
 .boot p {
 	margin: 0;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font-size: 12.5px;
 	font-family: var(--font-mono);
 }
@@ -350,15 +350,15 @@
 	margin-top: 6px;
 	height: 30px;
 	padding: 0 16px;
-	border: 1px solid var(--line2);
+	border: 1px solid var(--border-default);
 	border-radius: 7px;
-	background: var(--surface2);
-	color: var(--t1);
+	background: var(--bg-elevated);
+	color: var(--fg-default);
 	font-size: 12.5px;
 }
 
 .boot-retry:hover {
-	background: var(--surface3);
+	background: var(--bg-active);
 }
 
 /* 缩放反馈 */
@@ -368,11 +368,11 @@
 	right: 16px;
 	z-index: var(--z-toast);
 	padding: 6px 10px;
-	border: 1px solid var(--line2);
+	border: 1px solid var(--border-default);
 	border-radius: 8px;
-	background: var(--card);
-	color: var(--t1);
-	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+	background: var(--bg-surface);
+	color: var(--fg-default);
+	box-shadow: var(--shadow-popover);
 	font-family: var(--font-mono);
 	font-size: 12px;
 	pointer-events: none;

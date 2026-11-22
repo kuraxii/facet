@@ -1382,6 +1382,16 @@ describe("已发消息的历史回溯", () => {
 		rendered.unmount();
 	});
 
+	it("打进去的星号、反引号与下划线原样回传，不补反斜杠", async () => {
+		const rendered = await renderEditor("", false);
+		await focusEditor(rendered.editorElement);
+		// 末尾不带会触发快捷输入的写法，这里考的是草稿导出，不是 Markdown 快捷输入
+		await typeText(rendered.editor, "通配 *.ts 与 snake_case 与 prefers-* 与 `a b`");
+		expect(rendered.draft()).toBe("通配 *.ts 与 snake_case 与 prefers-* 与 `a b`");
+		expect(rendered.draft()).not.toContain("\\");
+		rendered.unmount();
+	});
+
 	it("候选浮层开着时方向键归浮层,不翻历史", async () => {
 		const commands: SlashCommand[] = [
 			{ name: "compact", description: "压缩上下文", source: "builtin", handler: "facet" },

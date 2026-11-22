@@ -1,4 +1,15 @@
-import { $createParagraphNode, $getRoot, createEditor, type LexicalEditor } from "lexical";
+import { $createCodeNode } from "@lexical/code";
+import { $createLinkNode } from "@lexical/link";
+import { $createListItemNode, $createListNode } from "@lexical/list";
+import { $createQuoteNode } from "@lexical/rich-text";
+import {
+	$createParagraphNode,
+	$createTextNode,
+	$getRoot,
+	createEditor,
+	type ElementNode,
+	type LexicalEditor,
+} from "lexical";
 import { describe, expect, it } from "vitest";
 import { $createFileMentionNode, $isFileMentionNode } from "./file-mention-node.ts";
 import {
@@ -27,6 +38,41 @@ function roundTrip(markdown: string, files: readonly string[] = [], known: reado
 	editor.update(
 		() => {
 			$importComposerMarkdown(markdown, new Set(files), new Set(known));
+			exported = $exportComposerMarkdown();
+		},
+		{ discrete: true },
+	);
+	return exported;
+}
+
+/**
+ * 把一段原文当成纯文本粘进输入区再导出。
+ *
+ * 不走 Markdown 解析：粘贴的是纯文本时落进段落的就是一个文本节点，`#`、`*`、反引号都是
+ * 普通字符，导出必须一字不差地吐回来。
+ */
+function pastedPlainText(text: string): string {
+	const editor = testEditor();
+	let exported = "";
+	editor.update(
+		() => {
+			$getRoot().clear();
+			$getRoot().append($createParagraphNode().append($createTextNode(text)));
+			exported = $exportComposerMarkdown();
+		},
+		{ discrete: true },
+	);
+	return exported;
+}
+
+/** 手工搭一份文档再导出：覆盖「手敲出来的富文本」这条路径。 */
+function exportedDocument(build: (root: ElementNode) => void): string {
+	const editor = testEditor();
+	let exported = "";
+	editor.update(
+		() => {
+			$getRoot().clear();
+			build($getRoot());
 			exported = $exportComposerMarkdown();
 		},
 		{ discrete: true },
@@ -227,5 +273,181 @@ describe("`/命令` 胶囊", () => {
 	it("行内代码与代码块里的 `/名字` 不还原成胶囊", () => {
 		expect(commandsOf("`/review`", KNOWN)).toEqual([]);
 		expect(commandsOf("```\n/review\n```", KNOWN)).toEqual([]);
+	});
+});
+
+describe("粘进来的原文不转义", () => {
+	/** 一段典型的手写提示词：标题、列表、行内代码、通配符都在里面 */
+	const RAW = ["## 标题", "1. **加粗**", "`layout-contract.ts`", "`prefers-*`", "通配符 *.ts"].join("\n");
+
+	it("整段原文导出逐字符一致", () => {
+		expect(pastedPlainText(RAW)).toBe(RAW);
+	});
+
+	it("一个反斜杠都不补", () => {
+		expect(pastedPlainText(RAW)).not.toContain("\\");
+	});
+
+	it("星号、反引号、下划线、波浪线与方括号都原样输出", () => {
+		const text = "a*b_c`d~e[f]g#h @x/y.ts - 甲 1. 乙";
+		expect(pastedPlainText(text)).toBe(text);
+	});
+
+	it("原文里的空行与行尾空白照实保留", () => {
+		const text = "甲\n\n乙\n";
+		expect(pastedPlainText(text)).toBe(text);
+	});
+
+	it("只粘通配符与连字符时也不会被当成标记", () => {
+		expect(pastedPlainText("*.ts")).toBe("*.ts");
+		expect(pastedPlainText("prefers-*")).toBe("prefers-*");
+		expect(pastedPlainText("-*-")).toBe("-*-");
+	});
+});
+
+describe("手敲出来的富文本导出", () => {
+	it("加粗、斜体、粗斜体与行内代码各包一层", () => {
+		const out = exportedDocument((root) => {
+			root.append(
+				$createParagraphNode().append(
+					$createTextNode("粗").toggleFormat("bold"),
+					$createTextNode("与"),
+					$createTextNode("斜").toggleFormat("italic"),
+					$createTextNode("与"),
+					$createTextNode("粗斜").toggleFormat("bold").toggleFormat("italic"),
+					$createTextNode("与"),
+					$createTextNode("行内").toggleFormat("code"),
+				),
+			);
+		});
+		expect(out).toBe("**粗**与*斜*与***粗斜***与`行内`");
+	});
+
+	it("两端带空白的加粗把空白挪到标记外面", () => {
+		const out = exportedDocument((root) => {
+			root.append(
+				$createParagraphNode().append(
+					$createTextNode("甲 "),
+					$createTextNode(" 加粗 ").toggleFormat("bold"),
+					$createTextNode(" 乙"),
+				),
+			);
+		});
+		expect(out).toBe("甲  **加粗**  乙");
+	});
+
+	it("同一段粗体被拆成多个文本节点时只包一层", () => {
+		const out = exportedDocument((root) => {
+			root.append(
+				$createParagraphNode().append(
+					$createTextNode("前").toggleFormat("bold"),
+					$createTextNode("后").toggleFormat("bold"),
+				),
+			);
+		});
+		expect(out).toBe("**前后**");
+	});
+
+	it("行内代码里含反引号时围栏加长并补空格", () => {
+		expect(
+			exportedDocument((root) => {
+				root.append($createParagraphNode().append($createTextNode("a`b").toggleFormat("code")));
+			}),
+		).toBe("`` a`b ``");
+	});
+
+	it("代码块带语言，内容原样", () => {
+		const out = exportedDocument((root) => {
+			root.append($createCodeNode("ts").append($createTextNode("const a = 1;")));
+		});
+		expect(out).toBe("```ts\nconst a = 1;\n```");
+	});
+
+	it("引用块每一行都带前缀", () => {
+		const out = exportedDocument((root) => {
+			const quote = $createQuoteNode();
+			quote.append($createTextNode("一"), $createTextNode("\n"), $createTextNode("二"));
+			root.append(quote);
+		});
+		expect(out).toBe("> 一\n> 二");
+	});
+
+	it("无序列表的嵌套按父项标记宽度缩进两格", () => {
+		const out = exportedDocument((root) => {
+			const inner = $createListNode("bullet");
+			inner.append($createListItemNode().append($createTextNode("甲一")));
+			const outer = $createListNode("bullet");
+			const item = $createListItemNode().append($createTextNode("甲"));
+			item.append(inner);
+			outer.append(item, $createListItemNode().append($createTextNode("乙")));
+			root.append(outer);
+		});
+		expect(out).toBe("- 甲\n  - 甲一\n- 乙");
+		expect(roundTrip(out)).toBe(out);
+	});
+
+	it("三层嵌套与混排都按各层标记宽度累加", () => {
+		const out = exportedDocument((root) => {
+			const third = $createListNode("number");
+			third.append($createListItemNode().append($createTextNode("丙")));
+			const second = $createListNode("bullet");
+			const secondItem = $createListItemNode().append($createTextNode("乙"));
+			secondItem.append(third);
+			second.append(secondItem);
+			const first = $createListNode("bullet");
+			const firstItem = $createListItemNode().append($createTextNode("甲"));
+			firstItem.append(second);
+			first.append(firstItem);
+			root.append(first);
+		});
+		// 第一层 `- ` 两格，第二层再让出 `- ` 两格，第三层的 `1. ` 落在四格上
+		expect(out).toBe("- 甲\n  - 乙\n    1. 丙");
+		// 缩进恰好落在上一层的起始列上，读回来还是同一棵树
+		expect(roundTrip(out)).toBe(out);
+	});
+
+	it("有序列表按 list.getStart() 递增，嵌套跟着标记宽度缩进三格", () => {
+		const out = exportedDocument((root) => {
+			const inner = $createListNode("number");
+			inner.append($createListItemNode().append($createTextNode("乙")));
+			const outer = $createListNode("number");
+			const item = $createListItemNode().append($createTextNode("甲"));
+			item.append(inner);
+			outer.append(item);
+			root.append(outer);
+		});
+		expect(out).toBe("1. 甲\n   1. 乙");
+		expect(roundTrip(out)).toBe(out);
+	});
+
+	it("文件胶囊与命令胶囊导出成 `@路径` 与 `/名字`", () => {
+		const out = exportedDocument((root) => {
+			root.append(
+				$createParagraphNode().append(
+					$createTextNode("看 "),
+					$createFileMentionNode("src/a.ts"),
+					$createTextNode(" 再 "),
+					$createSlashCommandNode("review"),
+				),
+			);
+		});
+		expect(out).toBe("看 @src/a.ts 再 /review");
+	});
+
+	it("链接的文本与地址相同时只写地址，否则写成行内链接", () => {
+		const same = exportedDocument((root) => {
+			root.append(
+				$createParagraphNode().append(
+					$createLinkNode("https://a.dev").append($createTextNode("https://a.dev")),
+				),
+			);
+		});
+		expect(same).toBe("https://a.dev");
+		const labelled = exportedDocument((root) => {
+			root.append(
+				$createParagraphNode().append($createLinkNode("https://a.dev").append($createTextNode("地址"))),
+			);
+		});
+		expect(labelled).toBe("[地址](https://a.dev)");
 	});
 });

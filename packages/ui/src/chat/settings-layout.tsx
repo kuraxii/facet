@@ -5,7 +5,6 @@
  * 控件宽度不一，所以右侧那一列可以放开关、下拉、按钮或一整排色块。
  */
 import type { ReactNode } from "react";
-import { ListRow } from "../common/ListRow.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 
 export interface SettingsGroupProps {
@@ -35,12 +34,12 @@ export interface SettingsRowProps {
 
 export function SettingsRow({ title, children, isStacked = false }: SettingsRowProps): React.JSX.Element {
 	return (
-		<ListRow interactive={false} className={isStacked ? "set-item is-stacked" : "set-item"}>
+		<div className={isStacked ? "set-item is-stacked" : "set-item"}>
 			<div className="set-item-text">
 				<span className="set-item-title">{title}</span>
 			</div>
 			{children === undefined ? null : <div className="set-item-control">{children}</div>}
-		</ListRow>
+		</div>
 	);
 }
 

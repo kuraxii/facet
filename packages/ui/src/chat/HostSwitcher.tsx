@@ -266,16 +266,16 @@ export function HostSwitcher({
 								<Button type="submit" variant="primary" size="md">
 									{t("host.add")}
 								</Button>
-								<button
-									type="button"
-									className="set-reset"
+								<Button
+									variant="ghost"
+									size="md"
 									onClick={() => {
 										setIsAdding(false);
 										setError(undefined);
 									}}
 								>
 									{t("host.cancel")}
-								</button>
+								</Button>
 							</div>
 						</form>
 					) : (

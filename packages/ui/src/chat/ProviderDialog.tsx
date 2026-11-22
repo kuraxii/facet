@@ -373,9 +373,10 @@ export function ProviderDialog({
 								{...(isCustom ? {} : { "data-autofocus": true })}
 							/>
 							{hasCredential ? (
-								<button
-									type="button"
-									className={isDeletingKey ? "prov-btn is-danger is-armed" : "prov-btn is-danger"}
+								<Button
+									variant="danger"
+									size="sm"
+									armed={isDeletingKey}
 									aria-pressed={isDeletingKey}
 									onClick={() => {
 										setKey("");
@@ -383,7 +384,7 @@ export function ProviderDialog({
 									}}
 								>
 									{isDeletingKey ? t("providers.cancelDeleteCredential") : t("providers.deleteCredential")}
-								</button>
+								</Button>
 							) : null}
 						</div>
 					)}

@@ -126,8 +126,9 @@ function CopyButton({ text, onCopy }: { text: string; onCopy: (text: string) => 
 		return () => clearTimeout(timer);
 	}, [isDone]);
 	return (
-		<button
-			type="button"
+		<IconButton
+			variant="ghost"
+			size="sm"
 			className={isDone ? "copy-btn is-done" : "copy-btn"}
 			aria-label={isDone ? t("transcript.copied") : t("transcript.copy")}
 			onClick={() => {
@@ -136,7 +137,7 @@ function CopyButton({ text, onCopy }: { text: string; onCopy: (text: string) => 
 			}}
 		>
 			{isDone ? <Check size={ICON_SIZE.md} /> : <Copy size={ICON_SIZE.md} />}
-		</button>
+		</IconButton>
 	);
 }
 
@@ -548,12 +549,12 @@ const RowView = memo(function RowView({
 						{canRevertThis ? (
 							<IconButton
 								variant="ghost"
-								size="xs"
+								size="sm"
 								className="revert-btn"
 								aria-label={t("transcript.revert")}
 								onClick={() => onRevert(entryId, text)}
 							>
-								<Undo2 size={ICON_SIZE.sm} />
+								<Undo2 size={ICON_SIZE.md} />
 							</IconButton>
 						) : null}
 					</div>

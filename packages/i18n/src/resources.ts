@@ -319,6 +319,7 @@ export const en = {
 		modelNameLabel: "Model {{index}} display name",
 		modelContextLabel: "Model {{index}} context window",
 		modelOutputLabel: "Model {{index}} max output",
+		thinkingLevelsLabel: "Model {{index}} thinking levels",
 	},
 	picker: {
 		title: "Add provider",
@@ -850,6 +851,7 @@ export const zhCN = {
 		modelNameLabel: "模型 {{index}} 展示名",
 		modelContextLabel: "模型 {{index}} 上下文窗口",
 		modelOutputLabel: "模型 {{index}} 最大输出",
+		thinkingLevelsLabel: "模型 {{index}} 的思考档位",
 	},
 	picker: {
 		title: "添加提供商",

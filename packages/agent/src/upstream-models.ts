@@ -11,6 +11,7 @@
  */
 import type { UpstreamModel } from "@facet/protocol";
 import { type ModelInfo, type ModelInfoProvider, modelCatalog } from "./model-catalog.ts";
+import { hasThinking, levelsFromCatalog } from "./thinking-levels.ts";
 
 /** 请求超时：上游不通时不让弹窗一直转。 */
 const UPSTREAM_TIMEOUT_MS = 10_000;
@@ -224,12 +225,17 @@ export function enrichUpstreamModels(raw: readonly UpstreamModel[], index: Catal
 		const { model: meta } = hit;
 		const contextWindow = meta.limit?.context;
 		const maxTokens = meta.limit?.output;
+		// 信息库写明了档位就照它填；只说了「会思考」而没说档位时（例如只有 token 预算的那类），
+		// 档位留空让用户自己勾，免得凭空造出一组上游并不认的取值
+		const levels = levelsFromCatalog(meta.reasoning_options);
+		const thinking = levels === undefined ? meta.reasoning : hasThinking(levels);
 		return {
 			...model,
 			...(model.name === undefined && meta.name !== undefined ? { name: meta.name } : {}),
 			...(contextWindow !== undefined && contextWindow > 0 ? { contextWindow } : {}),
 			...(maxTokens !== undefined && maxTokens > 0 ? { maxTokens } : {}),
-			...(meta.reasoning ? { reasoning: true } : {}),
+			...(thinking ? { reasoning: true } : {}),
+			...(levels !== undefined ? { thinkingLevels: levels } : {}),
 		};
 	});
 }

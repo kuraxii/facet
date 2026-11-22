@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ModelInfo, ModelInfoProvider } from "./model-catalog.ts";
+import type { ModelInfo, ModelInfoProvider, ModelInfoReasoningOption } from "./model-catalog.ts";
 import {
 	buildCatalogIndex,
 	catalogLookupKeys,
@@ -36,7 +36,10 @@ function fakeFetch(handler: (url: string) => unknown) {
 function catalog(
 	entries: {
 		provider: string;
-		models: Record<string, Partial<ModelInfo> & { canonical?: string }>;
+		models: Record<
+			string,
+			Partial<ModelInfo> & { canonical?: string; reasoningOptions?: ModelInfoReasoningOption[] }
+		>;
 	}[],
 ): Record<string, ModelInfoProvider> {
 	const providers: Record<string, ModelInfoProvider> = {};
@@ -57,6 +60,7 @@ function catalog(
 						modalities: { input: ["text"], output: ["text"] },
 						limit: { context: model.limit?.context ?? 0, output: model.limit?.output ?? 0 },
 						...(model.canonical === undefined ? {} : { canonical_model_id: model.canonical }),
+						...(model.reasoningOptions === undefined ? {} : { reasoning_options: model.reasoningOptions }),
 					} satisfies ModelInfo,
 				]),
 			),
@@ -141,6 +145,36 @@ describe("目录补能力", () => {
 				reasoning: true,
 			},
 			{ id: "unknown-9" },
+		]);
+	});
+
+	it("信息库写了思考档位就一起补上", () => {
+		const index = buildCatalogIndex(
+			catalog([
+				{
+					provider: "deepseek",
+					models: {
+						"deepseek-flash": {
+							name: "DeepSeek V4.1 Flash",
+							reasoning: true,
+							reasoningOptions: [{ type: "toggle" }, { type: "effort", values: ["low", "high", "max"] }],
+							limit: { context: 1048576, output: 393216 },
+						},
+						"deepseek-plain": { name: "DeepSeek Plain", limit: { context: 128000, output: 8192 } },
+					},
+				},
+			]),
+		);
+		expect(enrichUpstreamModels([{ id: "deepseek-flash" }, { id: "deepseek-plain" }], index)).toEqual([
+			{
+				id: "deepseek-flash",
+				name: "DeepSeek V4.1 Flash",
+				contextWindow: 1048576,
+				maxTokens: 393216,
+				reasoning: true,
+				thinkingLevels: ["off", "low", "high", "max"],
+			},
+			{ id: "deepseek-plain", name: "DeepSeek Plain", contextWindow: 128000, maxTokens: 8192 },
 		]);
 	});
 

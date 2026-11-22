@@ -4,8 +4,11 @@
  * 只读写 `models.json` 里 `providers` 那一层的地址字段，其余内容原样保留：这个文件由 pi 与
  * 用户共同维护，facet 只负责其中的网关地址覆写。写入走临时文件加改名，读改写排队进行。
  */
+
 import { readFile, rename } from "node:fs/promises";
+import type { ThinkingLevel } from "@facet/protocol";
 import { writeFileAtomic } from "./atomic-write.ts";
+import { hasThinking, levelsFromMap, levelsToMap, type ThinkingLevelMap } from "./thinking-levels.ts";
 
 /**
  * 一个模型写进配置时的形状。
@@ -17,11 +20,17 @@ import { writeFileAtomic } from "./atomic-write.ts";
 function modelEntry(model: CustomModelEntry): CustomModelEntry {
 	const name = model.name?.trim();
 	const api = model.api?.trim();
+	// 思考看档位：会思考就写 reasoning 与逐档映射，不会思考只写 reasoning: false，
+	// 映射不写——pi 那边「没写」就是缺省可用，所以「不支持」必须逐档写 null 才说得清
+	const thinking = model.thinkingLevels !== undefined;
+	const map = thinking ? levelsToMap(model.thinkingLevels ?? []) : model.thinkingLevelMap;
+	const reasoning = thinking ? hasThinking(model.thinkingLevels ?? []) : model.reasoning;
 	return {
 		id: model.id,
 		...(name !== undefined && name.length > 0 ? { name } : {}),
 		...(api !== undefined && api.length > 0 ? { api } : {}),
-		...(model.reasoning === undefined ? {} : { reasoning: model.reasoning }),
+		...(reasoning === undefined ? {} : { reasoning }),
+		...(map !== undefined && Object.keys(map).length > 0 ? { thinkingLevelMap: map } : {}),
 		...(model.contextWindow !== undefined && model.contextWindow > 0
 			? { contextWindow: model.contextWindow }
 			: {}),
@@ -37,12 +46,34 @@ export interface CustomModelEntry {
 	name?: string;
 	/** 接口协议，缺省沿用提供方的 */
 	api?: string;
-	/** 是否支持思考 */
+	/** 是否支持思考；给了 `thinkingLevels` 时由档位算出来，这一项就不看 */
 	reasoning?: boolean;
+	/** 支持的思考档位，按从低到高；不给时沿用 `thinkingLevelMap` / `reasoning` 的原样 */
+	thinkingLevels?: ThinkingLevel[];
+	/** 原样的逐档映射，只在没有给 `thinkingLevels` 时透传 */
+	thinkingLevelMap?: ThinkingLevelMap;
 	/** 上下文窗口 */
 	contextWindow?: number;
 	/** 单次最大输出 token */
 	maxTokens?: number;
+}
+
+/**
+ * 配置里的一条模型读成界面用的形状。
+ *
+ * 文件里的 `thinkingLevelMap` 读成「支持哪几档」再交给界面，写回时按同一套规则重算；其余字段
+ * 原样带过去，没写的就不占位——空值写回线上会让契约里的可选字段变成「给了个 undefined」。
+ */
+function readModelEntry(model: CustomModelEntry): CustomModelEntry {
+	const thinkingLevels = levelsFromMap(model.thinkingLevelMap, model.reasoning);
+	return {
+		id: model.id,
+		...(model.name === undefined ? {} : { name: model.name }),
+		...(model.api === undefined ? {} : { api: model.api }),
+		...(thinkingLevels.length === 0 ? {} : { thinkingLevels }),
+		...(model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow }),
+		...(model.maxTokens === undefined ? {} : { maxTokens: model.maxTokens }),
+	};
 }
 
 /** 一个提供方在配置里的形状，只描述这里会碰到的字段。 */
@@ -173,13 +204,15 @@ export class ModelConfigStore {
 				name: entry.name ?? id,
 				baseUrl: entry.baseUrl ?? "",
 				api: entry.api ?? "openai-completions",
-				models: entry.models.filter(
-					(model): model is CustomModelEntry =>
-						typeof model === "object" &&
-						model !== null &&
-						typeof model.id === "string" &&
-						model.id.length > 0,
-				),
+				models: entry.models
+					.filter(
+						(model): model is CustomModelEntry =>
+							typeof model === "object" &&
+							model !== null &&
+							typeof model.id === "string" &&
+							model.id.length > 0,
+					)
+					.map(readModelEntry),
 			});
 		}
 		return entries;

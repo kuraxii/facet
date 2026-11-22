@@ -22,6 +22,7 @@ import {
 } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { LAYOUT_PX } from "../layout/layout-contract.ts";
+import { ICON_SIZE } from "../styles/visual-contract.ts";
 import { useHoverTip } from "../tip.tsx";
 import type { RightPanelTab } from "./panel-state.ts";
 
@@ -277,7 +278,7 @@ export function WorkspaceTabBar({
 								tabIndex={-1}
 								onClick={() => onClose(item.id)}
 							>
-								<X size={11} strokeWidth={2} />
+								<X size={ICON_SIZE.sm} />
 							</button>
 						)}
 					</div>

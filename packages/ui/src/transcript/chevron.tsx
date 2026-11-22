@@ -5,10 +5,11 @@
  * 长度都跟界面其它图标一致。
  */
 import { ChevronDown, ChevronRight, ChevronUp } from "lucide-react";
+import { ICON_SIZE } from "../styles/visual-contract.ts";
 
 /** 展开箭头。 */
-export function ChevronIcon({ isOpen, size = 12 }: { isOpen: boolean; size?: number }) {
-	return isOpen ? <ChevronUp size={size} strokeWidth={1.5} /> : <ChevronDown size={size} strokeWidth={1.5} />;
+export function ChevronIcon({ isOpen, size = ICON_SIZE.sm }: { isOpen: boolean; size?: number }) {
+	return isOpen ? <ChevronUp size={size} /> : <ChevronDown size={size} />;
 }
 
 /**
@@ -17,10 +18,6 @@ export function ChevronIcon({ isOpen, size = 12 }: { isOpen: boolean; size?: num
  * 收起朝右、展开朝下，与文件树、目录树的一般习惯一致；卡片那种「收起就是往上折」的地方用
  * 上面的 `ChevronIcon`。
  */
-export function TreeChevron({ isOpen, size = 12 }: { isOpen: boolean; size?: number }) {
-	return isOpen ? (
-		<ChevronDown size={size} strokeWidth={1.5} />
-	) : (
-		<ChevronRight size={size} strokeWidth={1.5} />
-	);
+export function TreeChevron({ isOpen, size = ICON_SIZE.sm }: { isOpen: boolean; size?: number }) {
+	return isOpen ? <ChevronDown size={size} /> : <ChevronRight size={size} />;
 }

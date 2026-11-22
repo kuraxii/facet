@@ -6,6 +6,7 @@
 import type { QueuedInput } from "@facet/protocol";
 import { X } from "lucide-react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { ICON_SIZE } from "../styles/visual-contract.ts";
 import { useHoverTip } from "../tip.tsx";
 
 /** 排队条参数。 */
@@ -45,7 +46,7 @@ export function QueueStrip({ queued, onClear }: QueueStripProps) {
 				</span>
 			))}
 			<button type="button" className="queue-clear" onClick={onClear}>
-				<X size={11} strokeWidth={1.5} />
+				<X size={ICON_SIZE.sm} />
 				{t("queue.withdraw")}
 			</button>
 			{tip.render()}

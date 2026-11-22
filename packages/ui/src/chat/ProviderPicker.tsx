@@ -8,6 +8,7 @@ import { Plus, Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { Modal } from "../modal.tsx";
+import { ICON_SIZE } from "../styles/visual-contract.ts";
 import type { ProviderRow } from "./provider-rows.ts";
 
 /** 挑选弹窗参数。 */
@@ -47,12 +48,12 @@ export function ProviderPicker({ rows, onPick, onCreateCustom, onClose }: Provid
 			<div className="dialog-head">
 				<h2 className="dialog-title">{t("picker.title")}</h2>
 				<button type="button" className="dialog-close" aria-label={t("common.close")} onClick={onClose}>
-					<X size={18} strokeWidth={1.5} />
+					<X size={ICON_SIZE.lg} />
 				</button>
 			</div>
 
 			<label className="picker-search">
-				<Search size={14} strokeWidth={1.6} aria-hidden="true" />
+				<Search size={ICON_SIZE.md} aria-hidden="true" />
 				<input
 					data-autofocus
 					className="picker-search-input"
@@ -87,7 +88,7 @@ export function ProviderPicker({ rows, onPick, onCreateCustom, onClose }: Provid
 
 			<div className="dialog-actions">
 				<button type="button" className="prov-btn is-ghost" onClick={onCreateCustom}>
-					<Plus size={13} strokeWidth={2.2} aria-hidden="true" />
+					<Plus size={ICON_SIZE.md} aria-hidden="true" />
 					{t("picker.addCustom")}
 				</button>
 				<button type="button" className="set-save" onClick={onClose}>

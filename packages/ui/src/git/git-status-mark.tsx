@@ -8,6 +8,7 @@
 import type { GitFileStatus } from "@facet/protocol";
 import { SquareDot, SquareMinus, SquarePen, SquarePlus, TriangleExclamationPoint } from "lucide-react";
 import type { ReactNode } from "react";
+import { ICON_SIZE } from "../styles/visual-contract.ts";
 
 /** 状态对应的 lucide 图标。 */
 const STATUS_ICONS: Record<GitFileStatus, typeof SquareDot> = {
@@ -54,7 +55,7 @@ export interface ChangeMarkProps {
 }
 
 /** 文件状态图标；颜色由外层按 `data-status` 给出。 */
-export function ChangeMark({ status, size = 14 }: ChangeMarkProps): ReactNode {
+export function ChangeMark({ status, size = ICON_SIZE.md }: ChangeMarkProps): ReactNode {
 	const Icon = STATUS_ICONS[status];
-	return <Icon size={size} strokeWidth={1.5} aria-hidden />;
+	return <Icon size={size} aria-hidden />;
 }

@@ -18,6 +18,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { Select } from "../common/select.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { Modal } from "../modal.tsx";
+import { ICON_SIZE } from "../styles/visual-contract.ts";
 import { API_OPTIONS, apiOptionLabel } from "./provider-api.ts";
 import { providerDraftIssue } from "./provider-draft.ts";
 import type { ProviderRow } from "./provider-rows.ts";
@@ -245,7 +246,7 @@ export function ProviderDialog({
 			<header className="prov-head">
 				<h2 className="dialog-title">{title}</h2>
 				<button type="button" className="dialog-close" aria-label={t("common.close")} onClick={onClose}>
-					<X size={18} strokeWidth={1.5} />
+					<X size={ICON_SIZE.lg} />
 				</button>
 			</header>
 
@@ -399,7 +400,7 @@ export function ProviderDialog({
 									className="prov-btn is-ghost"
 									onClick={() => setRows((current) => [...current, modelRow()])}
 								>
-									<Plus size={13} strokeWidth={2} aria-hidden="true" />
+									<Plus size={ICON_SIZE.md} aria-hidden="true" />
 									{t("providerForm.addModel")}
 								</button>
 							</span>
@@ -470,7 +471,7 @@ export function ProviderDialog({
 											disabled={rows.length <= 1}
 											onClick={() => setRows((current) => current.filter((item) => item.key !== row_.key))}
 										>
-											<X size={15} strokeWidth={1.6} aria-hidden="true" />
+											<X size={ICON_SIZE.lg} aria-hidden="true" />
 										</button>
 									</li>
 								);

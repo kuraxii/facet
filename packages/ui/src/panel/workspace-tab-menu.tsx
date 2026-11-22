@@ -22,7 +22,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useI18n } from "../i18n/I18nProvider.tsx";
-import { VISUAL_PX } from "../styles/visual-contract.ts";
+import { ICON_SIZE, VISUAL_PX } from "../styles/visual-contract.ts";
 import type { WorkspaceTabId, WorkspaceTabItem } from "./workspace-tab-bar.tsx";
 
 /** `+` 菜单的参数。 */
@@ -187,7 +187,7 @@ export function WorkspaceTabMenu({
 					setIsOpen(true);
 				}}
 			>
-				<Plus size={15} strokeWidth={1.5} />
+				<Plus size={ICON_SIZE.lg} />
 			</button>
 			{!isOpen
 				? null

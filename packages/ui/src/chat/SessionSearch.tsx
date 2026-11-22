@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { isComposingKey } from "../keys.ts";
 import { Modal } from "../modal.tsx";
+import { ICON_SIZE } from "../styles/visual-contract.ts";
 import { SessionStatusMark } from "./session-status-mark.tsx";
 import { type SidebarSession, searchSessions } from "./sidebar-model.ts";
 
@@ -90,7 +91,7 @@ export function SessionSearch({
 	return (
 		<Modal open onClose={onClose} label={t("search.title")} className="search-panel">
 			<label className="search-field">
-				<Search size={16} strokeWidth={1.5} />
+				<Search size={ICON_SIZE.lg} />
 				<input
 					data-autofocus
 					value={keyword}

@@ -23,6 +23,7 @@ import {
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { Markdown } from "../markdown/Markdown.tsx";
+import { ICON_SIZE } from "../styles/visual-contract.ts";
 import { useHoverTip } from "../tip.tsx";
 import { ChevronIcon, TreeChevron } from "./chevron.tsx";
 import {
@@ -133,7 +134,7 @@ function CopyButton({ text, onCopy }: { text: string; onCopy: (text: string) => 
 				setIsDone(true);
 			}}
 		>
-			{isDone ? <Check size={13} strokeWidth={1.5} /> : <Copy size={13} strokeWidth={1.5} />}
+			{isDone ? <Check size={ICON_SIZE.md} /> : <Copy size={ICON_SIZE.md} />}
 		</button>
 	);
 }
@@ -142,15 +143,15 @@ function CopyButton({ text, onCopy }: { text: string; onCopy: (text: string) => 
 function categoryIcon(category: ToolCategory): ReactNode {
 	switch (category) {
 		case "command":
-			return <Terminal size={14} strokeWidth={1.5} />;
+			return <Terminal size={ICON_SIZE.md} />;
 		case "read":
-			return <FileText size={14} strokeWidth={1.5} />;
+			return <FileText size={ICON_SIZE.md} />;
 		case "edit":
-			return <Edit3 size={14} strokeWidth={1.5} />;
+			return <Edit3 size={ICON_SIZE.md} />;
 		case "search":
-			return <Search size={14} strokeWidth={1.5} />;
+			return <Search size={ICON_SIZE.md} />;
 		default:
-			return <Wrench size={14} strokeWidth={1.5} />;
+			return <Wrench size={ICON_SIZE.md} />;
 	}
 }
 
@@ -278,7 +279,7 @@ function ThinkingRow({ text }: { text: string }) {
 		<div className="tr is-think">
 			<button type="button" className="tr-head" onClick={() => setOpen(!isOpen)} aria-expanded={isOpen}>
 				<span className="tr-icon">
-					<Brain size={14} strokeWidth={1.5} />
+					<Brain size={ICON_SIZE.md} />
 				</span>
 				<span className="tr-name">Thinking</span>
 			</button>
@@ -454,7 +455,7 @@ const RowView = memo(function RowView({
 							disabled={fork.needsSettle && !canFork}
 							onClick={() => onFork(fork.beforeEntryId)}
 						>
-							<Split size={14} strokeWidth={1.5} />
+							<Split size={ICON_SIZE.md} />
 						</button>
 					</div>
 					{turnDurationText(row, now, t).length === 0 ? null : (
@@ -477,7 +478,7 @@ const RowView = memo(function RowView({
 				<details className="context-summary">
 					<summary className="divider">
 						<span className="line" />
-						<ListCollapse size={14} strokeWidth={1.5} aria-hidden="true" />
+						<ListCollapse size={ICON_SIZE.md} aria-hidden="true" />
 						<span>{label}</span>
 						<span className="context-summary-chevron" aria-hidden="true">
 							<ChevronIcon isOpen={false} />
@@ -501,7 +502,7 @@ const RowView = memo(function RowView({
 		return (
 			<Shell className="is-error">
 				<div className="error-line" role="alert">
-					<CircleAlert className="error-mark" size={16} strokeWidth={1.5} />
+					<CircleAlert className="error-mark" size={ICON_SIZE.lg} />
 					<div className="error-body">
 						<div className="error-text">{message}</div>
 						{!canRetry && onCopyDetails === undefined ? null : (
@@ -549,7 +550,7 @@ const RowView = memo(function RowView({
 								aria-label={t("transcript.revert")}
 								onClick={() => onRevert(entryId, text)}
 							>
-								<Undo2 size={12} strokeWidth={1.5} />
+								<Undo2 size={ICON_SIZE.sm} />
 							</button>
 						) : null}
 					</div>
@@ -571,7 +572,7 @@ const RowView = memo(function RowView({
 						aria-label={t("transcript.process")}
 					>
 						<span className="group-icon">
-							{isCollapsed ? <Wrench size={14} strokeWidth={1.5} /> : <TreeChevron isOpen />}
+							{isCollapsed ? <Wrench size={ICON_SIZE.md} /> : <TreeChevron isOpen />}
 						</span>
 						<span className={row.isStreaming ? "group-label is-live" : "group-label"}>
 							{groupLabel(row, t)}
@@ -741,7 +742,7 @@ export function ChatTranscript({
 				<Shell className="is-divider">
 					<div className="divider" role="status" aria-live="polite" aria-busy="true">
 						<span className="line" />
-						<ListCollapse size={14} strokeWidth={1.5} aria-hidden="true" />
+						<ListCollapse size={ICON_SIZE.md} aria-hidden="true" />
 						<span className="group-label is-live">{t("transcript.compactionSummary")}</span>
 						<span className="line" />
 					</div>

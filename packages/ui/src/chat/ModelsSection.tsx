@@ -17,6 +17,7 @@ import { Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Select, type SelectOption } from "../common/select.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { ICON_SIZE } from "../styles/visual-contract.ts";
 import { ProviderDialog } from "./ProviderDialog.tsx";
 import { ProviderPicker } from "./ProviderPicker.tsx";
 import { type ProviderRow, providerRows } from "./provider-rows.ts";
@@ -212,7 +213,7 @@ export function ModelsSection({
 			<header className="set-models-head">
 				<h2 className="set-section-title">{t("settings.models")}</h2>
 				<button type="button" className="set-models-add" onClick={() => setIsPickerOpen(true)}>
-					<Plus size={14} strokeWidth={2.2} aria-hidden="true" />
+					<Plus size={ICON_SIZE.md} aria-hidden="true" />
 					{t("providers.addProvider")}
 				</button>
 			</header>

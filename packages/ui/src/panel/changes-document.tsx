@@ -11,6 +11,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import { GitPatch } from "../git/git-patch.tsx";
 import { ChangeMark, changeStatusLabelKey } from "../git/git-status-mark.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { ICON_SIZE } from "../styles/visual-contract.ts";
 import styles from "./changes.module.css";
 
 export interface ChangesDocumentProps {
@@ -205,7 +206,7 @@ function ChangesFileSection({
 					aria-expanded={!isCollapsed}
 					onClick={toggle}
 				>
-					<ChevronRight className={styles.chevron} size={14} strokeWidth={1.5} data-open={!isCollapsed} />
+					<ChevronRight className={styles.chevron} size={ICON_SIZE.md} data-open={!isCollapsed} />
 					<span className={styles.fileName}>{fileName(file.path)}</span>
 					<span className={styles.fileDir}>{directoryName(file.path)}</span>
 					{file.binary ? (
@@ -351,11 +352,7 @@ export function ChangesDocument({
 						aria-label={allCollapsed ? t("panel.expandAllFiles") : t("panel.collapseAllFiles")}
 						onClick={toggleAll}
 					>
-						{allCollapsed ? (
-							<ChevronsUpDown size={14} strokeWidth={1.5} />
-						) : (
-							<ChevronsDownUp size={14} strokeWidth={1.5} />
-						)}
+						{allCollapsed ? <ChevronsUpDown size={ICON_SIZE.md} /> : <ChevronsDownUp size={ICON_SIZE.md} />}
 					</button>
 					<button
 						type="button"
@@ -364,7 +361,7 @@ export function ChangesDocument({
 						aria-label={wrapLines ? t("panel.scrollLongLines") : t("panel.wrapLongLines")}
 						onClick={() => setWrapLines((current) => !current)}
 					>
-						<TextWrap size={14} strokeWidth={1.5} />
+						<TextWrap size={ICON_SIZE.md} />
 					</button>
 				</>
 			)}

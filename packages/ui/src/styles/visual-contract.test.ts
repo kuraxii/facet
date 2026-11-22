@@ -21,7 +21,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
-import { VISUAL_PX, VISUAL_SCALE } from "./visual-contract.ts";
+import { ICON_SIZE, ICON_STROKE_WIDTH, VISUAL_PX, VISUAL_SCALE } from "./visual-contract.ts";
 
 /** `packages/` 目录：`packages/ui/src/styles` 往上三层。 */
 const PACKAGES = join(import.meta.dirname, "..", "..", "..");
@@ -51,6 +51,35 @@ function collectCss(directory: string): string[] {
 }
 
 const CSS_FILES = collectCss(PACKAGES).sort();
+
+/** 收全仓的 TSX，路径相对 `packages/`；`apps/` 也在这里，因为外壳组件同样受图标真值约束。 */
+function collectTsx(directory: string): string[] {
+	const found: string[] = [];
+	for (const entry of readdirSync(directory, { withFileTypes: true })) {
+		if (entry.name === "node_modules" || entry.name === "dist" || entry.name === "out") {
+			continue;
+		}
+		const full = join(directory, entry.name);
+		if (entry.isDirectory()) {
+			found.push(...collectTsx(full));
+			continue;
+		}
+		if (entry.name.endsWith(".tsx")) {
+			found.push(relative(PACKAGES, full).split(sep).join("/"));
+		}
+	}
+	return found;
+}
+
+const TSX_FILES = [...collectTsx(PACKAGES), ...collectTsx(join(PACKAGES, "..", "apps"))].sort();
+
+/** 读一份 `packages/` 之外的源码：`apps/` 下的路径以 `../apps/` 开头。 */
+function readAny(relativePath: string): string {
+	const path = relativePath.startsWith("../apps/")
+		? join(PACKAGES, relativePath)
+		: join(PACKAGES, relativePath);
+	return readFileSync(path, "utf8");
+}
 
 const base = read("ui/src/styles/base.css");
 
@@ -104,6 +133,8 @@ const SCALE_DECLARATIONS: readonly (readonly [string, string])[] = [
 	["--dur-fast", `${VISUAL_SCALE.motion.fastMs}ms`],
 	["--dur-slow", `${VISUAL_SCALE.motion.slowMs}ms`],
 	["--ease-standard", VISUAL_SCALE.motion.ease],
+	// 图标描边：界面图标（lucide 与自绘 `.ui-icon`）的唯一宽度
+	["--icon-stroke-width", `${ICON_STROKE_WIDTH}px`],
 ];
 
 /**
@@ -145,38 +176,39 @@ const DEBT_PROPS: readonly (readonly [DebtKind, RegExp])[] = [
  * 这一行就是 0 且不会再长回去——阴影与过渡已经全仓归零，只剩字号、圆角、间距与内边距。
  */
 const VISUAL_DEBT_BASELINE: Readonly<Record<string, DebtCount>> = {
-	"ui-terminal/src/terminal.css": { fontSize: 5, radius: 3, gap: 5, padding: 8, shadow: 0, transition: 0 },
+	"ui-terminal/src/terminal.css": { fontSize: 4, radius: 3, gap: 5, padding: 8, shadow: 0, transition: 0 },
 	"ui/src/chat/ExtensionPromptCard.module.css": {
 		fontSize: 7,
 		radius: 5,
 		gap: 3,
-		padding: 2,
+		padding: 1,
 		shadow: 0,
 		transition: 0,
 	},
-	"ui/src/git/git.module.css": { fontSize: 10, radius: 2, gap: 2, padding: 9, shadow: 0, transition: 0 },
+	"ui/src/git/git.module.css": { fontSize: 10, radius: 2, gap: 2, padding: 5, shadow: 0, transition: 0 },
 	"ui/src/panel/changes.module.css": {
 		fontSize: 10,
 		radius: 2,
 		gap: 0,
-		padding: 9,
+		padding: 4,
 		shadow: 0,
 		transition: 0,
 	},
 	"ui/src/styles/base.css": { fontSize: 0, radius: 1, gap: 0, padding: 0, shadow: 0, transition: 0 },
-	"ui/src/styles/changes.css": { fontSize: 10, radius: 2, gap: 5, padding: 5, shadow: 0, transition: 0 },
-	"ui/src/styles/chat.css": { fontSize: 22, radius: 19, gap: 21, padding: 22, shadow: 0, transition: 0 },
-	"ui/src/styles/chrome.css": { fontSize: 7, radius: 5, gap: 4, padding: 7, shadow: 0, transition: 0 },
-	"ui/src/styles/composer.css": { fontSize: 12, radius: 14, gap: 10, padding: 14, shadow: 0, transition: 0 },
+	"ui/src/styles/changes.css": { fontSize: 10, radius: 2, gap: 5, padding: 2, shadow: 0, transition: 0 },
+	"ui/src/styles/chat.css": { fontSize: 22, radius: 19, gap: 21, padding: 15, shadow: 0, transition: 0 },
+	"ui/src/styles/chrome.css": { fontSize: 7, radius: 5, gap: 4, padding: 5, shadow: 0, transition: 0 },
+	"ui/src/styles/composer.css": { fontSize: 12, radius: 14, gap: 10, padding: 10, shadow: 0, transition: 0 },
 	"ui/src/styles/fonts.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
 	"ui/src/styles/git-graph.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
 	"ui/src/styles/index.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
-	"ui/src/styles/markdown.css": { fontSize: 9, radius: 4, gap: 1, padding: 10, shadow: 0, transition: 0 },
+	"ui/src/styles/markdown.css": { fontSize: 8, radius: 4, gap: 1, padding: 9, shadow: 0, transition: 0 },
 	"ui/src/styles/motion.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
-	"ui/src/styles/overlays.css": { fontSize: 23, radius: 17, gap: 14, padding: 22, shadow: 0, transition: 0 },
-	"ui/src/styles/panel.css": { fontSize: 13, radius: 12, gap: 8, padding: 23, shadow: 0, transition: 0 },
-	"ui/src/styles/settings.css": { fontSize: 33, radius: 20, gap: 34, padding: 27, shadow: 0, transition: 0 },
-	"ui/src/styles/sidebar.css": { fontSize: 28, radius: 18, gap: 19, padding: 23, shadow: 0, transition: 0 },
+	"ui/src/styles/overlays.css": { fontSize: 23, radius: 17, gap: 14, padding: 18, shadow: 0, transition: 0 },
+	"ui/src/styles/panel.css": { fontSize: 13, radius: 12, gap: 8, padding: 14, shadow: 0, transition: 0 },
+	"ui/src/styles/primitives.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
+	"ui/src/styles/settings.css": { fontSize: 33, radius: 20, gap: 34, padding: 18, shadow: 0, transition: 0 },
+	"ui/src/styles/sidebar.css": { fontSize: 28, radius: 18, gap: 19, padding: 18, shadow: 0, transition: 0 },
 	"ui/src/styles/theme.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
 };
 
@@ -240,7 +272,8 @@ function countDebt(source: string): DebtCount {
 				}
 				continue;
 			}
-			if (!value.includes("var(")) {
+			// `padding: 0` 这类全零复位不是"写死的数值"，不计入
+			if (!value.includes("var(") && /[1-9]/.test(value)) {
 				counts[kind] += 1;
 			}
 		}
@@ -312,10 +345,59 @@ describe("变量都有定义", () => {
 	});
 });
 
+describe("图标只有一份真值", () => {
+	it("全局 `svg` 规则不再写死描边宽度", () => {
+		// 以前那条 `svg { stroke-width: 1.8 }` 压过了 lucide 组件上的七十多处 strokeWidth，
+		// 那些属性一个都没生效；宽度改由 `.lucide` / `.ui-icon` 上的变量给
+		for (const file of CSS_FILES) {
+			const source = stripComments(read(file));
+			for (const match of source.matchAll(/(?:^|\n)svg[ \t]*\{([^}]*)\}/g)) {
+				expect(match[1] ?? "", file).not.toContain("stroke-width");
+			}
+		}
+	});
+
+	it("描边宽度只落在 `.lucide` 与自绘的 `.ui-icon` 上", () => {
+		const source = stripComments(base);
+		expect(source).toContain(".lucide,\n.ui-icon {\n\tstroke-width: var(--icon-stroke-width);\n}");
+	});
+
+	it("TSX 里不再给 lucide 图标写 strokeWidth", () => {
+		const offenders = TSX_FILES.filter((file) => {
+			const source = readAny(file);
+			return source.includes("lucide-react") && /strokeWidth=/.test(source);
+		});
+		expect(offenders).toEqual([]);
+	});
+
+	it("图标尺寸只挑三档，且从 `ICON_SIZE` 取", () => {
+		const offenders: string[] = [];
+		for (const file of TSX_FILES) {
+			const source = readAny(file);
+			// `size={12}` 这类裸数字一律不许：要么 ICON_SIZE.*，要么由调用方传进来的变量
+			for (const match of source.matchAll(/\bsize=\{(\d+)\}/g)) {
+				offenders.push(`${file}: size={${match[1]}}`);
+			}
+		}
+		expect(offenders).toEqual([]);
+	});
+
+	it("三档尺寸与契约一致", () => {
+		expect(ICON_SIZE).toEqual(VISUAL_SCALE.icon);
+		expect([ICON_SIZE.sm, ICON_SIZE.md, ICON_SIZE.lg]).toEqual([12, 14, 16]);
+	});
+
+	it("TSX 里没有绕开样式表的内联字号", () => {
+		const offenders = TSX_FILES.filter((file) => /fontSize:\s*["'\d]/.test(readAny(file)));
+		expect(offenders).toEqual([]);
+	});
+});
+
 describe("全仓样式纪律", () => {
 	it("没有 `!important`", () => {
+		// 只看真声明：注释里解释"不需要 !important"是正常的
 		for (const file of CSS_FILES) {
-			expect(read(file), file).not.toContain("!important");
+			expect(stripComments(read(file)), file).not.toContain("!important");
 		}
 	});
 

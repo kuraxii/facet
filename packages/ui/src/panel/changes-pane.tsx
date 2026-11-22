@@ -13,6 +13,7 @@ import { ChevronRight, FileText, PanelRightClose } from "lucide-react";
 import { type CSSProperties, type ReactNode, useCallback, useMemo, useState } from "react";
 import { ChangeMark, changeStatusLabelKey } from "../git/git-status-mark.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { ICON_SIZE } from "../styles/visual-contract.ts";
 import { useHoverTip } from "../tip.tsx";
 import styles from "./changes.module.css";
 import { buildChangesTree, type ChangesTreeRow, flattenChangesTree } from "./changes-tree.ts";
@@ -53,7 +54,7 @@ function FolderRow({
 				aria-expanded={!row.collapsed}
 				onClick={() => onToggle(row.path)}
 			>
-				<ChevronRight className={styles.chevron} size={14} strokeWidth={1.5} data-open={!row.collapsed} />
+				<ChevronRight className={styles.chevron} size={ICON_SIZE.md} data-open={!row.collapsed} />
 				<span className={styles.name}>{row.name}</span>
 			</button>
 		</li>
@@ -92,7 +93,7 @@ function FileRow({
 				{...tip.handlers(file.path)}
 				onClick={open}
 			>
-				<FileText className={styles.fileIcon} size={14} strokeWidth={1.5} />
+				<FileText className={styles.fileIcon} size={ICON_SIZE.md} />
 				<span className={styles.name}>{name}</span>
 				{file.binary ? (
 					<span className={styles.binary}>{t("panel.binary")}</span>
@@ -153,7 +154,7 @@ export function ChangesPane({
 					aria-label={t("panel.collapseChanges")}
 					onClick={onCollapse}
 				>
-					<PanelRightClose size={14} strokeWidth={1.5} />
+					<PanelRightClose size={ICON_SIZE.md} />
 				</button>
 			)}
 			<span className={styles.branch}>

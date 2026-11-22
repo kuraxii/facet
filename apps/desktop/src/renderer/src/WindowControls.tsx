@@ -5,7 +5,7 @@
  * 透明的 `.app-drag` 与侧栏头部承担。双击拖动区切换最大化由 Chromium 处理。浏览器里跑同一份
  * 界面时桥上没有这些方法，这组按钮不渲染。
  */
-import { useHoverTip, useI18n } from "@facet/ui";
+import { ICON_SIZE, useHoverTip, useI18n } from "@facet/ui";
 import { Copy, Minus, Square, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -54,7 +54,7 @@ export function WindowControls({ controls }: { controls: WindowControls }) {
 					{...tip.handlers(t("window.minimize"))}
 					onClick={() => controls.minimize()}
 				>
-					<Minus size={14} strokeWidth={1.6} />
+					<Minus size={ICON_SIZE.md} />
 				</button>
 				<button
 					type="button"
@@ -63,7 +63,7 @@ export function WindowControls({ controls }: { controls: WindowControls }) {
 					{...tip.handlers(isMaximized ? t("window.restore") : t("window.maximize"))}
 					onClick={() => controls.toggleMaximize()}
 				>
-					{isMaximized ? <Copy size={13} strokeWidth={1.6} /> : <Square size={12} strokeWidth={1.6} />}
+					{isMaximized ? <Copy size={ICON_SIZE.md} /> : <Square size={ICON_SIZE.sm} />}
 				</button>
 				<button
 					type="button"
@@ -72,7 +72,7 @@ export function WindowControls({ controls }: { controls: WindowControls }) {
 					{...tip.handlers(t("window.close"))}
 					onClick={() => controls.close()}
 				>
-					<X size={15} strokeWidth={1.6} />
+					<X size={ICON_SIZE.lg} />
 				</button>
 			</div>
 			{tip.render()}

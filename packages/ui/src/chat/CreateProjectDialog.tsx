@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { isComposingKey } from "../keys.ts";
 import { Modal } from "../modal.tsx";
+import { ICON_SIZE } from "../styles/visual-contract.ts";
 import { ChevronIcon } from "../transcript/chevron.tsx";
 import { FolderIcon } from "../transcript/icons.tsx";
 import { RequestEpoch } from "./request-epoch.ts";
@@ -116,12 +117,12 @@ export function CreateProjectDialog({ isOpen, onPickFolder, onCreate, onClose }:
 			<div className="dialog-head">
 				<h2 className="dialog-title">{t("projectDialog.title")}</h2>
 				<button type="button" className="dialog-close" aria-label={t("common.close")} onClick={close}>
-					<X size={18} strokeWidth={1.5} />
+					<X size={ICON_SIZE.lg} />
 				</button>
 			</div>
 
 			<label className={isNameFocused ? "project-field is-focused" : "project-field"}>
-				<FolderIcon size={18} />
+				<FolderIcon size={ICON_SIZE.lg} />
 				<span className="name-divider" />
 				<input
 					ref={nameRef}
@@ -152,7 +153,7 @@ export function CreateProjectDialog({ isOpen, onPickFolder, onCreate, onClose }:
 					<span className="source-path mono">{cwd}</span>
 				)}
 				<button type="button" className="source-add" onClick={() => void pickFolder()} disabled={isPicking}>
-					<FolderPlus size={14} strokeWidth={1.5} />
+					<FolderPlus size={ICON_SIZE.md} />
 					{isPicking ? t("projectDialog.picking") : t("projectDialog.add")}
 				</button>
 			</div>

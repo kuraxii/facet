@@ -9,6 +9,7 @@ import { Check, Pencil, Plus, Power, Server, Settings2, X } from "lucide-react";
 import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { isComposingKey } from "../keys.ts";
+import { ICON_SIZE } from "../styles/visual-contract.ts";
 import { useHoverTip } from "../tip.tsx";
 import { endpointLabel, type SavedHost } from "./host-list.ts";
 
@@ -134,7 +135,7 @@ export function HostSwitcher({
 					setIsAdding(false);
 				}}
 			>
-				<Server size={14} strokeWidth={1.5} />
+				<Server size={ICON_SIZE.md} />
 			</button>
 			{isOpen ? (
 				// biome-ignore lint/a11y/useSemanticElements: 浮层里是一份主机清单，用不到 fieldset 的表单语义
@@ -180,7 +181,7 @@ export function HostSwitcher({
 											setRenaming(undefined);
 										}}
 									>
-										<Check size={12} strokeWidth={1.5} />
+										<Check size={ICON_SIZE.sm} />
 									</button>
 									<button
 										type="button"
@@ -189,7 +190,7 @@ export function HostSwitcher({
 										{...tip.handlers(t("common.cancel"))}
 										onClick={() => setRenaming(undefined)}
 									>
-										<X size={12} strokeWidth={1.5} />
+										<X size={ICON_SIZE.sm} />
 									</button>
 								</li>
 							) : (
@@ -214,7 +215,7 @@ export function HostSwitcher({
 											{...tip.handlers(t("host.disconnect"))}
 											onClick={() => onDisconnect(host.endpoint)}
 										>
-											<Power size={12} strokeWidth={1.5} />
+											<Power size={ICON_SIZE.sm} />
 										</button>
 									) : null}
 									<button
@@ -224,7 +225,7 @@ export function HostSwitcher({
 										{...tip.handlers(t("host.rename"))}
 										onClick={() => setRenaming({ id: host.id, draft: host.name })}
 									>
-										<Pencil size={12} strokeWidth={1.5} />
+										<Pencil size={ICON_SIZE.sm} />
 									</button>
 									<button
 										type="button"
@@ -233,7 +234,7 @@ export function HostSwitcher({
 										{...tip.handlers(t("host.remove"))}
 										onClick={() => onRemoveHost(host.id)}
 									>
-										<Settings2 size={12} strokeWidth={1.5} />
+										<Settings2 size={ICON_SIZE.sm} />
 									</button>
 								</li>
 							),
@@ -282,7 +283,7 @@ export function HostSwitcher({
 								setError(undefined);
 							}}
 						>
-							<Plus size={13} strokeWidth={1.5} />
+							<Plus size={ICON_SIZE.md} />
 							{t("host.addHost")}
 						</button>
 					)}

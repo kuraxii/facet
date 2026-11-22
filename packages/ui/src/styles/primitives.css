@@ -1,0 +1,396 @@
+/*
+ * 控件原语：按钮、图标按钮、输入框、列表行、徽标。
+ *
+ * 这一份在 `index.css` 里紧跟 `base.css`、排在所有业务样式表之前：业务层用同优先级的类
+ * 覆盖外边距与定位即可（排在后面就赢），不需要 `!important`。
+ *
+ * 规矩：几何与颜色**只许读刻度变量**——字号 `--text-*`、行高 `--leading-*`、间距 `--space-*`、
+ * 高度 `--control-*`、圆角 `--radius-*`、颜色 `--bg-*` / `--fg-*` / `--border-*` / `--accent-*`
+ * / `--status-*`。这里不出现裸的 px 数值，也不出现裸颜色：新档位要先在 `:root` 与
+ * `visual-contract.ts` 里同时登记，再回来引用。
+ *
+ * 变体与档位都写成 `data-*` 属性而不是堆类名：一个控件只有"哪一种"与"多大"两个维度，
+ * 属性让业务代码读起来是一件东西，而不是一串布尔类。
+ */
+
+/* ============================ 按钮 ============================ */
+
+/**
+ * 文本按钮。
+ *
+ * 高度由刻度推出来：行高 `--leading-ui`（20px）加纵向留白落在 `--control-sm/md/lg` 上，
+ * 所以字与边框永远同心，不需要为每一处按钮单独排版。
+ */
+.ui-btn {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	gap: var(--space-3);
+	border: 1px solid transparent;
+	background: transparent;
+	color: var(--fg-default);
+	font-family: var(--font-sans);
+	font-weight: 400;
+	line-height: var(--leading-ui);
+	white-space: nowrap;
+	transition:
+		background-color var(--dur-fast) var(--ease-standard),
+		border-color var(--dur-fast) var(--ease-standard),
+		color var(--dur-fast) var(--ease-standard);
+}
+
+/* 档位：高度 + 横向内边距 + 字号，三样一起给，免得有人只改其中一样 */
+.ui-btn[data-size="sm"] {
+	height: var(--control-sm);
+	padding-inline: var(--space-5);
+	border-radius: var(--radius-md);
+	font-size: var(--text-ui);
+}
+
+.ui-btn[data-size="md"] {
+	height: var(--control-md);
+	padding-inline: var(--space-6);
+	border-radius: var(--radius-md);
+	font-size: var(--text-ui);
+}
+
+.ui-btn[data-size="lg"] {
+	height: var(--control-lg);
+	padding-inline: var(--space-8);
+	border-radius: var(--radius-lg);
+	font-size: var(--text-body);
+}
+
+/* 主按钮：全仓唯一的强调填充，悬停与按下走主题自己的两档 */
+.ui-btn[data-variant="primary"] {
+	background: var(--accent-fill);
+	color: var(--accent-on-fill);
+	font-weight: 500;
+}
+
+.ui-btn[data-variant="primary"]:hover:not(:disabled) {
+	background: var(--accent-fill-hover);
+}
+
+.ui-btn[data-variant="primary"]:active:not(:disabled) {
+	background: var(--accent-fill-active);
+}
+
+/* 次按钮：描边 + 悬停浅底 */
+.ui-btn[data-variant="secondary"] {
+	border-color: var(--border-default);
+	color: var(--fg-default);
+}
+
+.ui-btn[data-variant="secondary"]:hover:not(:disabled) {
+	border-color: var(--border-default);
+	background: var(--bg-hover);
+}
+
+.ui-btn[data-variant="secondary"]:active:not(:disabled) {
+	background: var(--bg-active);
+}
+
+/* 幽灵按钮：无边框，用在已经有一层底的容器里（页脚、对话框操作栏、卡片内） */
+.ui-btn[data-variant="ghost"] {
+	color: var(--fg-muted);
+}
+
+.ui-btn[data-variant="ghost"]:hover:not(:disabled) {
+	background: var(--bg-hover);
+	color: var(--fg-default);
+}
+
+.ui-btn[data-variant="ghost"]:active:not(:disabled) {
+	background: var(--bg-active);
+	color: var(--fg-default);
+}
+
+/* 危险操作：文字取错误色，底纹只在悬停与确认态出现 */
+.ui-btn[data-variant="danger"] {
+	border-color: color-mix(in srgb, var(--status-err-fg) 40%, transparent);
+	color: var(--status-err-fg);
+}
+
+.ui-btn[data-variant="danger"]:hover:not(:disabled) {
+	border-color: var(--status-err-fg);
+	background: var(--status-err-bg);
+}
+
+.ui-btn[data-variant="danger"]:active:not(:disabled) {
+	background: color-mix(in srgb, var(--status-err-fg) 24%, transparent);
+}
+
+/* 两步确认的"已经按过一次"：整块染成错误底色，再按一次才真的执行 */
+.ui-btn[data-armed="true"] {
+	border-color: var(--status-err-fg);
+	background: var(--status-err-bg);
+	color: var(--status-err-fg);
+}
+
+/* 禁用：底色收成中性填充、文字压暗，且不再有任何悬停反馈 */
+.ui-btn:disabled {
+	background: var(--bg-active);
+	color: var(--fg-subtle);
+	cursor: default;
+}
+
+/* 幽灵按钮没有底色可收，禁用时保持透明，只压暗文字 */
+.ui-btn[data-variant="ghost"]:disabled {
+	background: transparent;
+}
+
+/* ============================ 图标按钮 ============================ */
+
+/**
+ * 只放一枚图标的按钮。
+ *
+ * 边长与高度同值，图标在正中；`flex: none` 让它在行里不被压扁（工具条与列表行都要这一条）。
+ */
+.ui-icon-btn {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	padding: 0;
+	border: 1px solid transparent;
+	background: transparent;
+	color: var(--fg-subtle);
+	transition:
+		background-color var(--dur-fast) var(--ease-standard),
+		border-color var(--dur-fast) var(--ease-standard),
+		color var(--dur-fast) var(--ease-standard);
+}
+
+.ui-icon-btn[data-size="xs"] {
+	width: var(--control-xs);
+	height: var(--control-xs);
+	border-radius: var(--radius-md);
+}
+
+.ui-icon-btn[data-size="sm"] {
+	width: var(--control-sm);
+	height: var(--control-sm);
+	border-radius: var(--radius-md);
+}
+
+.ui-icon-btn[data-size="md"] {
+	width: var(--control-md);
+	height: var(--control-md);
+	border-radius: var(--radius-md);
+}
+
+/* 圆角可以单独放宽一档：输入区那种 32px 的主图标按钮要跟外框的圆角对得上 */
+.ui-icon-btn[data-radius="lg"] {
+	border-radius: var(--radius-xl);
+}
+
+.ui-icon-btn[data-variant="outline"] {
+	border-color: var(--border-subtle);
+	color: var(--fg-subtle);
+}
+
+.ui-icon-btn[data-variant="primary"] {
+	background: var(--accent-fill);
+	color: var(--accent-on-fill);
+}
+
+.ui-icon-btn[data-variant="primary"]:hover:not(:disabled) {
+	background: var(--accent-fill-hover);
+}
+
+.ui-icon-btn[data-variant="primary"]:active:not(:disabled) {
+	background: var(--accent-fill-active);
+}
+
+/* 悬停与选中：这两个态对所有变体一视同仁（主按钮除外，它有自己那两档强调色） */
+.ui-icon-btn[data-variant="ghost"]:hover:not(:disabled),
+.ui-icon-btn[data-variant="outline"]:hover:not(:disabled) {
+	background: var(--bg-hover);
+	color: var(--fg-default);
+}
+
+.ui-icon-btn[data-active="true"] {
+	background: var(--bg-active);
+	color: var(--fg-default);
+}
+
+.ui-icon-btn:disabled {
+	color: var(--fg-subtle);
+	cursor: default;
+	opacity: 0.5;
+}
+
+/* ============================ 输入框 ============================ */
+
+/**
+ * 单行输入框。
+ *
+ * 配置界面里的字段一律用界面字体：等宽留给代码、路径、时间与只读展示；同一张表单里混着
+ * 两种字体，看着像是两种控件。
+ */
+.ui-input {
+	min-width: 0;
+	border: 1px solid var(--border-default);
+	background: var(--bg-elevated);
+	color: var(--fg-default);
+	font-family: var(--font-sans);
+	line-height: var(--leading-ui);
+}
+
+.ui-input[data-size="sm"] {
+	height: var(--control-sm);
+	padding-inline: var(--space-4);
+	border-radius: var(--radius-md);
+	font-size: var(--text-ui);
+}
+
+.ui-input[data-size="md"] {
+	height: var(--control-md);
+	padding-inline: var(--space-5);
+	border-radius: var(--radius-md);
+	font-size: var(--text-ui);
+}
+
+.ui-input[data-size="lg"] {
+	height: var(--control-lg);
+	padding-inline: var(--space-6);
+	border-radius: var(--radius-lg);
+	font-size: var(--text-body);
+}
+
+.ui-input:focus-visible {
+	border-color: var(--border-focus);
+}
+
+.ui-input:disabled {
+	color: var(--fg-subtle);
+}
+
+.ui-input[data-invalid="true"] {
+	border-color: var(--status-err-fg);
+}
+
+/* 幽灵输入框：已经嵌在带框的容器里（搜索栏、下拉触发器），自己不再画第二道边 */
+.ui-input[data-variant="ghost"] {
+	border-color: transparent;
+	background: transparent;
+}
+
+/* ============================ 列表行 ============================ */
+
+/**
+ * 列表、菜单与树的行。
+ *
+ * 只管排布与两个交互底色，不锁死内部结构：左边可以放状态点、中间可以放标题与副标题、
+ * 右边可以挂悬浮才出现的操作区。缩进一类的领域几何由业务样式表在行上覆盖 padding。
+ */
+.ui-row {
+	display: flex;
+	align-items: center;
+	gap: var(--space-4);
+	width: 100%;
+	min-width: 0;
+	border: 0;
+	border-radius: var(--radius-md);
+	background: transparent;
+	color: var(--fg-muted);
+	font-family: var(--font-sans);
+	font-size: var(--text-ui);
+	line-height: var(--leading-ui);
+	text-align: left;
+	transition:
+		background-color var(--dur-fast) var(--ease-standard),
+		color var(--dur-fast) var(--ease-standard);
+}
+
+.ui-row[data-size="xs"] {
+	gap: var(--space-3);
+	height: var(--control-xs);
+	padding-inline: var(--space-4);
+}
+
+.ui-row[data-size="sm"] {
+	height: var(--control-sm);
+	padding-inline: var(--space-4);
+}
+
+.ui-row[data-size="md"] {
+	height: var(--control-md);
+	padding-inline: var(--space-6);
+}
+
+/* 菜单项比列表行收一档圆角：菜单容器本身已经有内边距，行再圆就显得鼓 */
+.ui-row[data-variant="menu"] {
+	border-radius: var(--radius-sm);
+}
+
+.ui-row[data-interactive="true"]:hover:not(:disabled) {
+	background: var(--bg-hover);
+	color: var(--fg-default);
+}
+
+.ui-row[data-selected="true"],
+.ui-row[data-active="true"] {
+	background: var(--bg-active);
+	color: var(--fg-default);
+}
+
+.ui-row:disabled {
+	color: var(--fg-subtle);
+	cursor: default;
+}
+
+/* ============================ 徽标 ============================ */
+
+/**
+ * 计数与状态徽标。
+ *
+ * 字号一律 `--text-xs`（12px）：更小的字号在 1x 屏上会糊成一团，宁可把胶囊做高一点。
+ * 数字用等宽 + `tabular-nums`，计数变化时宽度不跳。
+ */
+.ui-badge {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	min-height: var(--leading-ui);
+	padding-inline: var(--space-3);
+	border: 0;
+	border-radius: var(--radius-pill);
+	background: var(--bg-active);
+	color: var(--fg-muted);
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	font-weight: 500;
+	font-variant-numeric: tabular-nums;
+	line-height: var(--leading-tight);
+	white-space: nowrap;
+}
+
+.ui-badge[data-variant="accent"] {
+	background: var(--accent-fill);
+	color: var(--accent-on-fill);
+}
+
+.ui-badge[data-variant="ok"] {
+	background: color-mix(in srgb, var(--status-ok-fg) 16%, transparent);
+	color: var(--status-ok-fg);
+}
+
+.ui-badge[data-variant="warn"] {
+	background: var(--status-warn-bg);
+	color: var(--status-warn-fg);
+}
+
+.ui-badge[data-variant="err"] {
+	background: var(--status-err-bg);
+	color: var(--status-err-fg);
+}
+
+/* 标签形：方角加一道描边，用来标"自定义"这类分类，不与计数胶囊混同 */
+.ui-badge[data-shape="tag"] {
+	border: 1px solid var(--border-default);
+	border-radius: var(--radius-sm);
+}

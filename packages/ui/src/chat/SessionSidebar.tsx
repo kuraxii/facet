@@ -15,6 +15,7 @@ import { ScrollArea } from "../common/scroll-area.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { SHELL_DATA_ATTRS } from "../layout/layout-contract.ts";
 import { PaneResizer } from "../panel/pane-resizer.tsx";
+import { ICON_SIZE } from "../styles/visual-contract.ts";
 import { useHoverTip } from "../tip.tsx";
 import { ProjectFilter } from "./ProjectFilter.tsx";
 import { SessionGroup } from "./SessionGroup.tsx";
@@ -262,7 +263,7 @@ export const SessionSidebar = memo(function SessionSidebar({
 					newSessionCwd.length === 0 ? t("common.addProject") : t("sidebar.newIn", { cwd: newSessionCwd }),
 				)}
 			>
-				<Plus size={14} strokeWidth={1.5} />
+				<Plus size={ICON_SIZE.md} />
 				{t("common.newSession")}
 			</button>
 
@@ -347,7 +348,7 @@ export const SessionSidebar = memo(function SessionSidebar({
 					aria-pressed={isSettingsOpen}
 					onClick={() => onOpenSettings?.()}
 				>
-					<Settings size={14} strokeWidth={1.5} />
+					<Settings size={ICON_SIZE.md} />
 				</button>
 			</footer>
 			{tip.render()}

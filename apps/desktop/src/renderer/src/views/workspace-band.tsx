@@ -10,7 +10,7 @@
  */
 
 import type { WorkspaceTabId, WorkspaceTabItem } from "@facet/ui";
-import { useI18n, WorkspaceTabBar, WorkspaceTabMenu } from "@facet/ui";
+import { ICON_SIZE, useI18n, WorkspaceTabBar, WorkspaceTabMenu } from "@facet/ui";
 import { Maximize2, Minimize2, PanelRightClose } from "lucide-react";
 import type { ReactNode } from "react";
 import type { WorkspaceShell } from "../hooks/useWorkspaceShell.ts";
@@ -78,7 +78,7 @@ export function WorkspacePanelControls({
 					aria-pressed={shell.isPanelExpanded}
 					onClick={shell.togglePanelExpanded}
 				>
-					<ExpandIcon size={14} strokeWidth={1.5} />
+					<ExpandIcon size={ICON_SIZE.md} />
 				</button>
 			) : null}
 			<button
@@ -87,7 +87,7 @@ export function WorkspacePanelControls({
 				aria-label={t("panel.collapsePanel")}
 				onClick={shell.isPanelDrawerOpen ? shell.closePanelDrawer : shell.togglePanel}
 			>
-				<PanelRightClose size={14} strokeWidth={1.5} />
+				<PanelRightClose size={ICON_SIZE.md} />
 			</button>
 		</>
 	);

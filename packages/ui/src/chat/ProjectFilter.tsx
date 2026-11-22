@@ -10,6 +10,7 @@
 import { Plus, Search } from "lucide-react";
 import { type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { ICON_SIZE } from "../styles/visual-contract.ts";
 import type { HoverTip } from "../tip.tsx";
 import { ChevronIcon } from "../transcript/chevron.tsx";
 import { FolderIcon } from "../transcript/icons.tsx";
@@ -169,7 +170,7 @@ export function ProjectFilter({
 					onRefresh();
 				}}
 			>
-				<FolderIcon size={14} />
+				<FolderIcon size={ICON_SIZE.md} />
 				<span className="sb-filter-name ell">{scopeLabel(projects, scopeCwd, t("sidebar.allProjects"))}</span>
 				<ChevronIcon isOpen={isOpen} />
 			</button>
@@ -184,7 +185,7 @@ export function ProjectFilter({
 					onKeyDown={trapFocus}
 				>
 					<label className="sb-search">
-						<Search size={13} strokeWidth={1.5} />
+						<Search size={ICON_SIZE.md} />
 						<input
 							ref={searchRef}
 							value={keyword}
@@ -229,7 +230,7 @@ export function ProjectFilter({
 											});
 										}}
 									>
-										<FolderIcon size={13} />
+										<FolderIcon size={ICON_SIZE.md} />
 										<span className="sb-opt-name ell">{project.name}</span>
 									</button>
 								</div>
@@ -254,7 +255,7 @@ export function ProjectFilter({
 							onAddProject();
 						}}
 					>
-						<Plus size={13} strokeWidth={1.5} />
+						<Plus size={ICON_SIZE.md} />
 						<span className="sb-opt-name">{t("common.addProject")}</span>
 					</button>
 				</div>

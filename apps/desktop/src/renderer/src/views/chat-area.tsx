@@ -108,29 +108,37 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 	return (
 		<>
 			<ChatOutline items={transcript.items} container={transcript.scrollElement} />
-			<section className="scroll" ref={transcript.scrollRef}>
-				{/* 正文打上标记：它里面的文字右键多一项「引用」 */}
-				<div className="column" data-quote-source>
-					<ChatTranscript
-						items={transcript.items}
-						canFork={canFork}
-						onFork={(beforeEntryId) =>
-							session.withTrust(sessionCwd, () => {
-								void session.runSessionAction(async () => (await client.fork(beforeEntryId)).file);
-							})
-						}
-						canRevert={canFork}
-						onRevert={composer.revertTo}
-						maintenance={sessionView.state.maintenance}
-						isRunning={activity !== "idle"}
-						onRetryTurn={composer.retryTurn}
-						onCopyDetails={copyText}
-						onCopyText={copyText}
-						renames={chat?.renames}
-						emptyHint={t("app.emptyHint")}
-					/>
-				</div>
-			</section>
+			<div
+				className="chat-viewport"
+				data-can-scroll-top={transcript.edges.top ? "true" : "false"}
+				data-can-scroll-bottom={transcript.edges.bottom ? "true" : "false"}
+			>
+				<section className="scroll" ref={transcript.scrollRef}>
+					{/* 正文打上标记：它里面的文字右键多一项「引用」 */}
+					<div className="column" data-quote-source>
+						<ChatTranscript
+							items={transcript.items}
+							canFork={canFork}
+							onFork={(beforeEntryId) =>
+								session.withTrust(sessionCwd, () => {
+									void session.runSessionAction(async () => (await client.fork(beforeEntryId)).file);
+								})
+							}
+							canRevert={canFork}
+							onRevert={composer.revertTo}
+							maintenance={sessionView.state.maintenance}
+							isRunning={activity !== "idle"}
+							onRetryTurn={composer.retryTurn}
+							onCopyDetails={copyText}
+							onCopyText={copyText}
+							renames={chat?.renames}
+							emptyHint={t("app.emptyHint")}
+						/>
+					</div>
+				</section>
+				<div className="chat-fade is-top" aria-hidden="true" />
+				<div className="chat-fade is-bottom" aria-hidden="true" />
+			</div>
 
 			<div className="footer">
 				{transcript.isPinned ? null : (

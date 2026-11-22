@@ -102,6 +102,32 @@ function dragTo(handle: HTMLElement, targetWidth: number): void {
 	pointer(handle, "pointermove", 400 - (272 - targetWidth));
 }
 
+describe("拖动期间冻结过渡", () => {
+	it("按下挂上标记，松手摘掉", () => {
+		const { handle } = mount();
+		expect(document.documentElement.hasAttribute("data-window-resizing")).toBe(false);
+
+		pointer(handle, "pointerdown", 400);
+		expect(document.documentElement.getAttribute("data-window-resizing")).toBe("");
+
+		pointer(handle, "pointerup", 400);
+		expect(document.documentElement.hasAttribute("data-window-resizing")).toBe(false);
+	});
+
+	it("中途取消与卸载都不会把标记留在页面上", () => {
+		const cancelled = mount();
+		pointer(cancelled.handle, "pointerdown", 400);
+		pointer(cancelled.handle, "pointercancel", 400);
+		expect(document.documentElement.hasAttribute("data-window-resizing")).toBe(false);
+		act(() => cancelled.unmount());
+
+		const dropped = mount();
+		pointer(dropped.handle, "pointerdown", 400);
+		act(() => dropped.unmount());
+		expect(document.documentElement.hasAttribute("data-window-resizing")).toBe(false);
+	});
+});
+
 describe("分隔条的拖收关闭", () => {
 	it("缩进阈值内实时挂上折叠预览，显示宽度停在 min", () => {
 		const { app, handle } = mount();

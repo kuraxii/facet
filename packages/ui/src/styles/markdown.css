@@ -104,7 +104,9 @@
 	padding: var(--space-8);
 	font-family: var(--font-mono);
 	font-size: var(--text-xs);
-	line-height: var(--leading-ui);
+	line-height: var(--leading-code-block);
+	/* 代码里的缩进按四个空格对齐，与编辑器和补丁视图一致 */
+	tab-size: 4;
 	color: var(--code-fg);
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
@@ -171,7 +173,8 @@
 	color: var(--fg-muted);
 	font-family: var(--font-mono);
 	font-size: var(--text-xs);
-	line-height: var(--leading-ui);
+	line-height: var(--leading-code-block);
+	tab-size: 4;
 	white-space: pre-wrap;
 	word-break: break-word;
 }
@@ -227,7 +230,7 @@
 	background: var(--bg-elevated);
 	color: var(--code-fg);
 	font-family: var(--font-mono);
-	font-size: 0.8em;
+	font-size: var(--text-code-inline);
 }
 
 .md a {

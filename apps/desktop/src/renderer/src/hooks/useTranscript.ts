@@ -6,7 +6,7 @@
  */
 import type { SessionClient } from "@facet/client-core";
 import { createTranscriptCache, toTranscript } from "@facet/client-core";
-import type { ScrollRestore } from "@facet/ui";
+import type { ScrollEdges, ScrollRestore } from "@facet/ui";
 import { useStickToBottom } from "@facet/ui";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
@@ -29,6 +29,8 @@ export interface Transcript {
 	scrollElement: HTMLDivElement | null;
 	/** 是否贴着底部 */
 	isPinned: boolean;
+	/** 两侧是否还有可滚内容：对话视口据此淡入边缘渐隐 */
+	edges: ScrollEdges;
 	/** 滚到底部 */
 	scrollToBottom: (behavior?: ScrollBehavior) => void;
 	/** 忘掉某个会话的滚动位置 */
@@ -53,6 +55,7 @@ export function useTranscript(options: TranscriptOptions): Transcript {
 		scrollRef,
 		element: scrollElement,
 		isPinned,
+		edges,
 		scrollToBottom,
 	} = useStickToBottom(items, activeFile, {
 		restore: restoreScroll,
@@ -112,7 +115,7 @@ export function useTranscript(options: TranscriptOptions): Transcript {
 		scrollPositions.current.delete(file);
 	}, []);
 
-	return { items, scrollRef, scrollElement, isPinned, scrollToBottom, forgetScroll };
+	return { items, scrollRef, scrollElement, isPinned, edges, scrollToBottom, forgetScroll };
 }
 
 export interface ReadMarkerOptions {

@@ -105,13 +105,68 @@
 	overflow: hidden;
 }
 
+/*
+ * 对话视口：滚动区加两层边缘渐隐。
+ *
+ * 渐隐层压在滚动区上、不接指针，只在对应方向还有内容时淡入（由 `data-can-scroll-top` /
+ * `data-can-scroll-bottom` 控制）。`isolation` 把这两层与行内的浮层隔开：渐隐用
+ * `--z-content`，行里的悬浮提示、菜单仍按各自的层级盖在它上面。
+ */
+.chat-viewport {
+	position: relative;
+	display: flex;
+	flex: 1;
+	min-height: 0;
+	isolation: isolate;
+}
+
 .scroll {
 	flex: 1;
 	min-height: 0;
 	overflow-y: auto;
 	scrollbar-gutter: stable;
+	/* 交给原生惯性；吸底由脚本按 scrollTop 管，不让浏览器自己锚定 */
+	scroll-behavior: auto;
+	overflow-anchor: none;
 	/* 右侧扣掉滚动条沟槽，内容盒与 .footer 对齐 */
 	padding: 24px calc(var(--chat-gutter-x) - var(--scrollbar-width)) 14px var(--chat-gutter-x);
+	/*
+	 * 底部留白与渐隐层等高再多一档：滚到最后一条消息时，它与渐隐区之间留出呼吸区，
+	 * 回到底部（`scrollToBottom`）也不会把最后一行压在渐隐里。
+	 */
+	scroll-padding-bottom: var(--control-lg);
+}
+
+/*
+ * 边缘渐隐：一档高度，从画布色淡到透明。
+ *
+ * 只在那一侧真的有内容时淡入，滚动到头就收掉——否则静止状态下顶部会凭空压暗一条。
+ * `opacity` 走 `--dur-slow` 配 `--ease-out`：出现快、落点稳，收掉时不抢注意力。
+ */
+.chat-fade {
+	position: absolute;
+	right: 0;
+	left: 0;
+	z-index: var(--z-content);
+	height: var(--control-lg);
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity var(--dur-slow) var(--ease-out);
+}
+
+.chat-fade.is-top {
+	top: 0;
+	background: linear-gradient(to bottom, var(--bg-canvas), transparent);
+}
+
+.chat-fade.is-bottom {
+	bottom: 0;
+	background: linear-gradient(to top, var(--bg-canvas), transparent);
+}
+
+.chat-viewport[data-can-scroll-top="true"] .chat-fade.is-top,
+.chat-viewport[data-can-scroll-bottom="true"] .chat-fade.is-bottom {
+	opacity: 1;
 }
 
 .column {

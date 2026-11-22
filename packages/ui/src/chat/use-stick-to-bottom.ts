@@ -19,6 +19,14 @@ export interface ScrollRestore {
 	readonly atBottom: boolean;
 }
 
+/** 滚动区两侧还有没有可滚的内容。 */
+export interface ScrollEdges {
+	/** 顶部还能往上滚 */
+	readonly top: boolean;
+	/** 底部还能往下滚 */
+	readonly bottom: boolean;
+}
+
 /** 滚动跟随的句柄。 */
 export interface StickToBottom {
 	/** 挂到滚动容器上 */
@@ -27,6 +35,8 @@ export interface StickToBottom {
 	element: HTMLDivElement | null;
 	/** 当前是否贴底 */
 	isPinned: boolean;
+	/** 两侧是否还有可滚内容：对话视口据此决定边缘渐隐要不要淡入 */
+	edges: ScrollEdges;
 	/** 回到底部并恢复跟随 */
 	scrollToBottom: (behavior?: ScrollBehavior) => void;
 }
@@ -48,6 +58,16 @@ export function useStickToBottom(
 	const pinnedRef = useRef(true);
 	const animatingRef = useRef(false);
 	const [isPinned, setIsPinned] = useState(true);
+	/** 边缘状态：只在真的翻面时 setState，滚动过程中不产生无谓渲染 */
+	const edgesRef = useRef<ScrollEdges>({ top: false, bottom: false });
+	const [edges, setEdges] = useState<ScrollEdges>(edgesRef.current);
+	const applyEdges = useCallback((next: ScrollEdges) => {
+		if (edgesRef.current.top === next.top && edgesRef.current.bottom === next.bottom) {
+			return;
+		}
+		edgesRef.current = next;
+		setEdges(next);
+	}, []);
 
 	const scrollRef = useCallback((node: HTMLDivElement | null) => {
 		setElement(node);
@@ -109,7 +129,13 @@ export function useStickToBottom(
 		if (!element) {
 			return;
 		}
+		const measureEdges = (): void => {
+			const distance = element.scrollHeight - element.scrollTop - element.clientHeight;
+			applyEdges({ top: element.scrollTop > PIN_THRESHOLD, bottom: distance > PIN_THRESHOLD });
+		};
 		const onScroll = () => {
+			// 边缘状态与跟随状态无关：平滑回底期间也要更新，否则渐隐会停在上一态
+			measureEdges();
 			if (animatingRef.current) {
 				return;
 			}
@@ -122,15 +148,17 @@ export function useStickToBottom(
 			if (pinnedRef.current) {
 				jumpToBottom();
 			}
+			measureEdges();
 		});
 		if (content) {
 			observer.observe(content);
 		}
+		measureEdges();
 		return () => {
 			element.removeEventListener("scroll", onScroll);
 			observer.disconnect();
 		};
-	}, [element, applyPinned, jumpToBottom]);
+	}, [element, applyEdges, applyPinned, jumpToBottom]);
 
-	return { scrollRef, element, isPinned, scrollToBottom };
+	return { scrollRef, element, isPinned, edges, scrollToBottom };
 }

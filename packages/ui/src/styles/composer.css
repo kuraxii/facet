@@ -6,6 +6,38 @@
 	position: relative;
 	flex: none;
 	padding: 0 var(--chat-gutter-x) 18px;
+	isolation: isolate;
+}
+
+/*
+ * 输入区上方的过渡带。
+ *
+ * 消息滚到输入区边缘时以前是一条硬切线，现在铺一层从画布色到透明的多阶渐变：六个停靠点全部
+ * 由 `color-mix` 从 `--bg-canvas` 派生，换主题自动跟着走，也不写裸颜色。不用 `backdrop-filter`
+ * ——它每帧要把底下整片内容重新采样，滚动时开销明显。
+ *
+ * 停靠点按二次曲线排：越靠近输入区越不透明，前 40% 就走完大半透明度，所以看上去是一条柔和的
+ * 落影而不是阶梯。层叠靠绘制顺序：它是 `.footer` 的第一个子层，`回底` 按钮与输入区都排在它
+ * 之后，天然压在它上面，这里不需要再抬 `z-index`。
+ */
+.footer::before {
+	position: absolute;
+	top: 0;
+	right: 0;
+	left: 0;
+	height: var(--control-lg);
+	background: linear-gradient(
+		to top,
+		var(--bg-canvas) 0%,
+		color-mix(in srgb, var(--bg-canvas) 92%, transparent) 20%,
+		color-mix(in srgb, var(--bg-canvas) 74%, transparent) 40%,
+		color-mix(in srgb, var(--bg-canvas) 48%, transparent) 60%,
+		color-mix(in srgb, var(--bg-canvas) 24%, transparent) 80%,
+		transparent 100%
+	);
+	content: "";
+	pointer-events: none;
+	transform: translateY(-100%);
 }
 
 .to-bottom {
@@ -132,9 +164,10 @@
 .composer-code-block {
 	display: block;
 	font-family: var(--font-mono);
-	font-size: calc(var(--composer-font-size) - 1px);
+	font-size: var(--text-code-inline);
+	line-height: var(--leading-code-block);
 	color: var(--fg-muted);
-	tab-size: 2;
+	tab-size: 4;
 }
 
 .composer-inline-code {
@@ -143,7 +176,8 @@
 	background: var(--bg-elevated);
 	color: var(--fg-muted);
 	font-family: var(--font-mono);
-	font-size: calc(var(--composer-font-size) - 1.5px);
+	/* 与 Markdown 里的行内代码同一份缩放比例（相对输入域字号，13px 那档） */
+	font-size: var(--text-code-inline);
 }
 
 .composer-link {

@@ -86,7 +86,7 @@ export {
 	stepUiScale,
 	UI_SCALE_STEPS,
 } from "./chat/ui-scale.ts";
-export type { ScrollRestore, StickToBottom } from "./chat/use-stick-to-bottom.ts";
+export type { ScrollEdges, ScrollRestore, StickToBottom } from "./chat/use-stick-to-bottom.ts";
 export { useStickToBottom } from "./chat/use-stick-to-bottom.ts";
 export type { BadgeProps, BadgeShape, BadgeVariant } from "./common/Badge.tsx";
 export { Badge } from "./common/Badge.tsx";

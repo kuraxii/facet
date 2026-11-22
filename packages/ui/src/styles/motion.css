@@ -2,8 +2,8 @@
  * 减少动效。
  *
  * 两个信号：系统的 `prefers-reduced-motion` 与设置里的开关（`data-motion="reduced"`），任一成立
- * 就停下同一组东西。时长清零管住所有过渡——全仓过渡只读 `--dur-fast` / `--dur-slow`，清零之后
- * 一律是瞬变；`animation` 另关，因为循环动效不吃时长变量。
+ * 就停下同一组东西。时长清零管住所有过渡——全仓过渡只读 `--dur-*` 这四档，清零之后一律是
+ * 瞬变，弹层也不再从 `translateY` 里滑进来；`animation` 另关，因为循环动效不吃时长变量。
  *
  * 两条信号用的选择器是同一组：加一个循环动效时两处一起加。
  */
@@ -12,6 +12,8 @@
 :root[data-motion="reduced"] {
 	--dur-fast: 0ms;
 	--dur-slow: 0ms;
+	--dur-enter: 0ms;
+	--dur-structural: 0ms;
 }
 
 /* 系统要求减少动效：同一组时长归一，过渡退化成瞬变 */
@@ -19,7 +21,26 @@
 	:root {
 		--dur-fast: 0ms;
 		--dur-slow: 0ms;
+		--dur-enter: 0ms;
+		--dur-structural: 0ms;
 	}
+}
+
+/*
+ * 窗口缩放与分栏拖拽期间冻结过渡。
+ *
+ * 拖拽时每一帧都在改列宽或视口尺寸，过渡会把这一连串变化叠成一条追赶动画，观感就是拖影与
+ * 发糊。冻结走的是同一套时长变量：四档归零，全仓所有过渡与 `@starting-style` 当场变成瞬变，
+ * 不需要一条 `!important`，也不用遍历 DOM 逐个加类。
+ *
+ * 属性由外壳在窗口 `resize` 期间（约 150ms 防抖后摘掉）与 `PaneResizer` 拖动期间挂在
+ * `documentElement` 上。
+ */
+html[data-window-resizing] {
+	--dur-fast: 0ms;
+	--dur-slow: 0ms;
+	--dur-enter: 0ms;
+	--dur-structural: 0ms;
 }
 
 /* 运行中文字的呼吸与扫光：停在最终形态，不再循环 */

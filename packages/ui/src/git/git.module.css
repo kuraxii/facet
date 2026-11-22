@@ -27,7 +27,8 @@
 .diffBody {
 	font-family: var(--font-mono);
 	font-size: var(--text-xs);
-	line-height: var(--changes-line-height);
+	line-height: var(--leading-code-block);
+	tab-size: 4;
 	/* 补丁是要被拷走的东西：全局在 body 上关了选择，这里放开（行号在下面单独关回去） */
 	user-select: text;
 	cursor: text;

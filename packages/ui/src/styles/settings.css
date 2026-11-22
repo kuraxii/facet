@@ -94,9 +94,18 @@ dialog.set-page::backdrop {
 	background: var(--bg-surface);
 }
 
-/* 设置行：排布交给 `common/ListRow.tsx`，这里只把控件那一列推到右端 */
+/*
+ * 设置行：左名字、右控件的一对。
+ *
+ * 高度由内容决定，不走 `common/ListRow.tsx` 的固定档位——一行里可能塞着会换行的色板、
+ * 下拉与开关，锁死 28px 会把下一行顶上来。
+ */
 .set-item {
+	display: flex;
+	align-items: center;
 	justify-content: space-between;
+	gap: var(--space-6);
+	min-height: var(--control-sm);
 }
 
 .set-item.is-stacked {

@@ -453,6 +453,93 @@ describe("颜色只从主题来", () => {
 	});
 });
 
+/**
+ * 原生 `<button>` 的样式底：要么套了原语（`ui-` 前缀的类），要么它自己那组类在样式表里带着
+ * 尺寸或底色。两样都不占，它就会以浏览器默认的灰方块出现——按钮的几何从样式表里删了、元素却
+ * 没换成原语时，屏幕上长的就是这个样子。
+ */
+describe("原生按钮必须自带样式底", () => {
+	/** 从 `from` 开始取一段配平的 `{...}`，含两侧花括号；取不到时返回 `undefined`。 */
+	function braced(source: string, from: number): string | undefined {
+		if (source[from] !== "{") {
+			return undefined;
+		}
+		let depth = 0;
+		for (let index = from; index < source.length; index += 1) {
+			const char = source[index];
+			if (char === "{") {
+				depth += 1;
+			} else if (char === "}") {
+				depth -= 1;
+				if (depth === 0) {
+					return source.slice(from, index + 1);
+				}
+			}
+		}
+		return undefined;
+	}
+
+	/** 取 `<button>` 标签里 `className` 那一串：静态字符串，或者 `{...}` 里的表达式。 */
+	function classNameOf(tag: string): string | undefined {
+		const at = tag.indexOf("className=");
+		if (at < 0) {
+			return undefined;
+		}
+		const after = at + "className=".length;
+		if (tag[after] === '"') {
+			const close = tag.indexOf('"', after + 1);
+			return close < 0 ? undefined : tag.slice(after, close + 1);
+		}
+		return tag[after] === "{" ? braced(tag, after) : undefined;
+	}
+
+	it("每个 `<button>` 要么用原语，要么它的类名在样式表里有几何", () => {
+		const css = CSS_FILES.map(read).join("\n");
+		const styled = (name: string): boolean => {
+			if (name.startsWith("ui-")) {
+				return true;
+			}
+			// 只认顶层规则块：`border: 0` 这类复位不算几何，宽度 / 高度 / 底色 / 圆角才算
+			const rule = new RegExp(`^[^\\n{}]*\\.${name}(?![\\w-])[^\\n{}]*\\{([^}]*)\\}`, "gm");
+			for (const match of css.matchAll(rule)) {
+				if (/(?:^|\s)(?:width|height|min-height|background|border-radius)\s*:/.test(match[1] ?? "")) {
+					return true;
+				}
+			}
+			return false;
+		};
+		const offenders: string[] = [];
+		for (const file of TSX_FILES) {
+			// 原语自己那几份是样式来源，按钮元素在里面本来就不写 className；用例与常量文件不渲染界面
+			if (file.includes(".test.") || file.includes("ui/src/common/")) {
+				continue;
+			}
+			const source = readAny(file);
+			for (const match of source.matchAll(/<button\b/g)) {
+				const head = source.slice(match.index, match.index + 4000);
+				const tagEnd = head.search(/(?<!=)>/);
+				const tag = tagEnd < 0 ? head : head.slice(0, tagEnd + 1);
+				const className = classNameOf(tag);
+				if (className === undefined) {
+					offenders.push(`${file}: <button> 没有可识别的 className`);
+					continue;
+				}
+				// 表达式里只认静态字符串那几段；`className={classes}` 这种拼出来的没法静态判断
+				const tokens = [...className.matchAll(/"([^"]*)"/g)].flatMap((part) =>
+					(part[1] ?? "").split(/\s+/).filter((token) => token.length > 0),
+				);
+				if (tokens.length === 0) {
+					continue;
+				}
+				if (!tokens.some(styled)) {
+					offenders.push(`${file}: <button className=${className}>`);
+				}
+			}
+		}
+		expect(offenders).toEqual([]);
+	});
+});
+
 describe("写死数值的零债门禁", () => {
 	it("全仓样式表没有写死的字号、圆角、间距、内边距、阴影与过渡", () => {
 		for (const file of CSS_FILES) {

@@ -476,6 +476,8 @@
 	.scroll-y,
 	.scroll-x,
 	.scroll-both,
+	/* 对话正文那一层：类名就叫 `scroll`，由 `chat-area.tsx` 挂在滚动容器上 */
+	.scroll,
 	.sb-opts,
 	.panel-body,
 	.set-content,

@@ -22,6 +22,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Badge } from "../common/Badge.tsx";
+import { IconButton } from "../common/IconButton.tsx";
 import { ListRow } from "../common/ListRow.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { ICON_SIZE, VISUAL_PX } from "../styles/visual-contract.ts";
@@ -173,9 +174,10 @@ export function WorkspaceTabMenu({
 
 	return (
 		<>
-			<button
+			<IconButton
 				ref={anchorRef}
-				type="button"
+				variant="ghost"
+				size="sm"
 				className={classes}
 				aria-haspopup="menu"
 				aria-expanded={isOpen}
@@ -190,7 +192,7 @@ export function WorkspaceTabMenu({
 				}}
 			>
 				<Plus size={ICON_SIZE.lg} />
-			</button>
+			</IconButton>
 			{!isOpen
 				? null
 				: createPortal(

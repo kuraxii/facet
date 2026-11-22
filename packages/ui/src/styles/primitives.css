@@ -5,9 +5,14 @@
  * 覆盖外边距与定位即可（排在后面就赢），不需要 `!important`。
  *
  * 规矩：几何与颜色**只许读刻度变量**——字号 `--text-*`、行高 `--leading-*`、间距 `--space-*`、
- * 高度 `--control-*`、圆角 `--radius-*`、颜色 `--bg-*` / `--fg-*` / `--border-*` / `--accent-*`
- * / `--status-*`。这里不出现裸的 px 数值，也不出现裸颜色：新档位要先在 `:root` 与
- * `visual-contract.ts` 里同时登记，再回来引用。
+ * 高度 `--control-*`、圆角 `--radius-*`、颜色 `--bg-*` / `--fg-*` / `--border-*` /
+ * `--accent-*` / `--status-*`。这里不出现裸的 px 数值，也不出现裸颜色：新档位要先在 `:root`
+ * 与 `visual-contract.ts` 里同时登记，再回来引用。
+ *
+ * 属性选择器一律包在 `:where()` 里：原语只该定"没被业务样式表改过"的那部分。包起来之后
+ * `.prov-tone-accent` 这类单类名规则（0,1,0）压得过 `.ui-btn:where([data-variant="ghost"])`，
+ * 领域配色与 `.fork-btn:hover` 这类交互态样式才盖得住原语的默认值——这正是"业务样式表排在后面
+ * 就自然赢"的前提。不包的话，属性选择器自带一格权重，业务规则明明写在后面却输了。
  *
  * 变体与档位都写成 `data-*` 属性而不是堆类名：一个控件只有"哪一种"与"多大"两个维度，
  * 属性让业务代码读起来是一件东西，而不是一串布尔类。
@@ -41,21 +46,21 @@
 }
 
 /* 档位：高度 + 横向内边距 + 字号，三样一起给，免得有人只改其中一样 */
-.ui-btn[data-size="sm"] {
+.ui-btn:where([data-size="sm"]) {
 	height: var(--control-sm);
 	padding-inline: var(--space-5);
 	border-radius: var(--radius-md);
 	font-size: var(--text-ui);
 }
 
-.ui-btn[data-size="md"] {
+.ui-btn:where([data-size="md"]) {
 	height: var(--control-md);
 	padding-inline: var(--space-6);
 	border-radius: var(--radius-md);
 	font-size: var(--text-ui);
 }
 
-.ui-btn[data-size="lg"] {
+.ui-btn:where([data-size="lg"]) {
 	height: var(--control-lg);
 	padding-inline: var(--space-8);
 	border-radius: var(--radius-lg);
@@ -63,67 +68,67 @@
 }
 
 /* 主按钮：全仓唯一的强调填充，悬停与按下走主题自己的两档 */
-.ui-btn[data-variant="primary"] {
+.ui-btn:where([data-variant="primary"]) {
 	background: var(--accent-fill);
 	color: var(--accent-on-fill);
 	font-weight: 500;
 }
 
-.ui-btn[data-variant="primary"]:hover:not(:disabled) {
+.ui-btn:where([data-variant="primary"]):hover:not(:disabled) {
 	background: var(--accent-fill-hover);
 }
 
-.ui-btn[data-variant="primary"]:active:not(:disabled) {
+.ui-btn:where([data-variant="primary"]):active:not(:disabled) {
 	background: var(--accent-fill-active);
 }
 
 /* 次按钮：描边 + 悬停浅底 */
-.ui-btn[data-variant="secondary"] {
+.ui-btn:where([data-variant="secondary"]) {
 	border-color: var(--border-default);
 	color: var(--fg-default);
 }
 
-.ui-btn[data-variant="secondary"]:hover:not(:disabled) {
+.ui-btn:where([data-variant="secondary"]):hover:not(:disabled) {
 	border-color: var(--border-default);
 	background: var(--bg-hover);
 }
 
-.ui-btn[data-variant="secondary"]:active:not(:disabled) {
+.ui-btn:where([data-variant="secondary"]):active:not(:disabled) {
 	background: var(--bg-active);
 }
 
 /* 幽灵按钮：无边框，用在已经有一层底的容器里（页脚、对话框操作栏、卡片内） */
-.ui-btn[data-variant="ghost"] {
+.ui-btn:where([data-variant="ghost"]) {
 	color: var(--fg-muted);
 }
 
-.ui-btn[data-variant="ghost"]:hover:not(:disabled) {
+.ui-btn:where([data-variant="ghost"]):hover:not(:disabled) {
 	background: var(--bg-hover);
 	color: var(--fg-default);
 }
 
-.ui-btn[data-variant="ghost"]:active:not(:disabled) {
+.ui-btn:where([data-variant="ghost"]):active:not(:disabled) {
 	background: var(--bg-active);
 	color: var(--fg-default);
 }
 
 /* 危险操作：文字取错误色，底纹只在悬停与确认态出现 */
-.ui-btn[data-variant="danger"] {
+.ui-btn:where([data-variant="danger"]) {
 	border-color: color-mix(in srgb, var(--status-err-fg) 40%, transparent);
 	color: var(--status-err-fg);
 }
 
-.ui-btn[data-variant="danger"]:hover:not(:disabled) {
+.ui-btn:where([data-variant="danger"]):hover:not(:disabled) {
 	border-color: var(--status-err-fg);
 	background: var(--status-err-bg);
 }
 
-.ui-btn[data-variant="danger"]:active:not(:disabled) {
+.ui-btn:where([data-variant="danger"]):active:not(:disabled) {
 	background: color-mix(in srgb, var(--status-err-fg) 24%, transparent);
 }
 
 /* 两步确认的"已经按过一次"：整块染成错误底色，再按一次才真的执行 */
-.ui-btn[data-armed="true"] {
+.ui-btn:where([data-armed="true"]) {
 	border-color: var(--status-err-fg);
 	background: var(--status-err-bg);
 	color: var(--status-err-fg);
@@ -137,7 +142,7 @@
 }
 
 /* 幽灵按钮没有底色可收，禁用时保持透明，只压暗文字 */
-.ui-btn[data-variant="ghost"]:disabled {
+.ui-btn:where([data-variant="ghost"]):disabled {
 	background: transparent;
 }
 
@@ -163,55 +168,55 @@
 		color var(--dur-fast) var(--ease-standard);
 }
 
-.ui-icon-btn[data-size="xs"] {
+.ui-icon-btn:where([data-size="xs"]) {
 	width: var(--control-xs);
 	height: var(--control-xs);
 	border-radius: var(--radius-md);
 }
 
-.ui-icon-btn[data-size="sm"] {
+.ui-icon-btn:where([data-size="sm"]) {
 	width: var(--control-sm);
 	height: var(--control-sm);
 	border-radius: var(--radius-md);
 }
 
-.ui-icon-btn[data-size="md"] {
+.ui-icon-btn:where([data-size="md"]) {
 	width: var(--control-md);
 	height: var(--control-md);
 	border-radius: var(--radius-md);
 }
 
 /* 圆角可以单独放宽一档：输入区那种 32px 的主图标按钮要跟外框的圆角对得上 */
-.ui-icon-btn[data-radius="lg"] {
+.ui-icon-btn:where([data-radius="lg"]) {
 	border-radius: var(--radius-xl);
 }
 
-.ui-icon-btn[data-variant="outline"] {
+.ui-icon-btn:where([data-variant="outline"]) {
 	border-color: var(--border-subtle);
 	color: var(--fg-subtle);
 }
 
-.ui-icon-btn[data-variant="primary"] {
+.ui-icon-btn:where([data-variant="primary"]) {
 	background: var(--accent-fill);
 	color: var(--accent-on-fill);
 }
 
-.ui-icon-btn[data-variant="primary"]:hover:not(:disabled) {
+.ui-icon-btn:where([data-variant="primary"]):hover:not(:disabled) {
 	background: var(--accent-fill-hover);
 }
 
-.ui-icon-btn[data-variant="primary"]:active:not(:disabled) {
+.ui-icon-btn:where([data-variant="primary"]):active:not(:disabled) {
 	background: var(--accent-fill-active);
 }
 
 /* 悬停与选中：这两个态对所有变体一视同仁（主按钮除外，它有自己那两档强调色） */
-.ui-icon-btn[data-variant="ghost"]:hover:not(:disabled),
-.ui-icon-btn[data-variant="outline"]:hover:not(:disabled) {
+.ui-icon-btn:where([data-variant="ghost"]):hover:not(:disabled),
+.ui-icon-btn:where([data-variant="outline"]):hover:not(:disabled) {
 	background: var(--bg-hover);
 	color: var(--fg-default);
 }
 
-.ui-icon-btn[data-active="true"] {
+.ui-icon-btn:where([data-active="true"]) {
 	background: var(--bg-active);
 	color: var(--fg-default);
 }
@@ -239,21 +244,21 @@
 	line-height: var(--leading-ui);
 }
 
-.ui-input[data-size="sm"] {
+.ui-input:where([data-size="sm"]) {
 	height: var(--control-sm);
 	padding-inline: var(--space-4);
 	border-radius: var(--radius-md);
 	font-size: var(--text-ui);
 }
 
-.ui-input[data-size="md"] {
+.ui-input:where([data-size="md"]) {
 	height: var(--control-md);
 	padding-inline: var(--space-5);
 	border-radius: var(--radius-md);
 	font-size: var(--text-ui);
 }
 
-.ui-input[data-size="lg"] {
+.ui-input:where([data-size="lg"]) {
 	height: var(--control-lg);
 	padding-inline: var(--space-6);
 	border-radius: var(--radius-lg);
@@ -268,12 +273,12 @@
 	color: var(--fg-subtle);
 }
 
-.ui-input[data-invalid="true"] {
+.ui-input:where([data-invalid="true"]) {
 	border-color: var(--status-err-fg);
 }
 
 /* 幽灵输入框：已经嵌在带框的容器里（搜索栏、下拉触发器），自己不再画第二道边 */
-.ui-input[data-variant="ghost"] {
+.ui-input:where([data-variant="ghost"]) {
 	border-color: transparent;
 	background: transparent;
 }
@@ -305,34 +310,34 @@
 		color var(--dur-fast) var(--ease-standard);
 }
 
-.ui-row[data-size="xs"] {
+.ui-row:where([data-size="xs"]) {
 	gap: var(--space-3);
 	height: var(--control-xs);
 	padding-inline: var(--space-4);
 }
 
-.ui-row[data-size="sm"] {
+.ui-row:where([data-size="sm"]) {
 	height: var(--control-sm);
 	padding-inline: var(--space-4);
 }
 
-.ui-row[data-size="md"] {
+.ui-row:where([data-size="md"]) {
 	height: var(--control-md);
 	padding-inline: var(--space-6);
 }
 
 /* 菜单项比列表行收一档圆角：菜单容器本身已经有内边距，行再圆就显得鼓 */
-.ui-row[data-variant="menu"] {
+.ui-row:where([data-variant="menu"]) {
 	border-radius: var(--radius-sm);
 }
 
-.ui-row[data-interactive="true"]:hover:not(:disabled) {
+.ui-row:where([data-interactive="true"]):hover:not(:disabled) {
 	background: var(--bg-hover);
 	color: var(--fg-default);
 }
 
-.ui-row[data-selected="true"],
-.ui-row[data-active="true"] {
+.ui-row:where([data-selected="true"]),
+.ui-row:where([data-active="true"]) {
 	background: var(--bg-active);
 	color: var(--fg-default);
 }
@@ -369,28 +374,28 @@
 	white-space: nowrap;
 }
 
-.ui-badge[data-variant="accent"] {
+.ui-badge:where([data-variant="accent"]) {
 	background: var(--accent-fill);
 	color: var(--accent-on-fill);
 }
 
-.ui-badge[data-variant="ok"] {
+.ui-badge:where([data-variant="ok"]) {
 	background: color-mix(in srgb, var(--status-ok-fg) 16%, transparent);
 	color: var(--status-ok-fg);
 }
 
-.ui-badge[data-variant="warn"] {
+.ui-badge:where([data-variant="warn"]) {
 	background: var(--status-warn-bg);
 	color: var(--status-warn-fg);
 }
 
-.ui-badge[data-variant="err"] {
+.ui-badge:where([data-variant="err"]) {
 	background: var(--status-err-bg);
 	color: var(--status-err-fg);
 }
 
 /* 标签形：方角加一道描边，用来标"自定义"这类分类，不与计数胶囊混同 */
-.ui-badge[data-shape="tag"] {
+.ui-badge:where([data-shape="tag"]) {
 	border: 1px solid var(--border-default);
 	border-radius: var(--radius-sm);
 }

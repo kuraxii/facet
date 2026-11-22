@@ -9,11 +9,10 @@
  * 标题被刻意排除：`#` 在聊天里更常是行首编号（`#12` 这类引用），自动变成标题会把原意改坏。
  */
 import { $isCodeNode, CodeHighlightNode, CodeNode } from "@lexical/code";
-import { LinkNode } from "@lexical/link";
-import { ListItemNode, ListNode } from "@lexical/list";
+import { $isLinkNode, LinkNode } from "@lexical/link";
+import { $isListItemNode, $isListNode, ListItemNode, ListNode } from "@lexical/list";
 import {
 	$convertFromMarkdownString,
-	$convertToMarkdownString,
 	BOLD_ITALIC_STAR,
 	BOLD_STAR,
 	CODE,
@@ -24,23 +23,27 @@ import {
 	type Transformer,
 	UNORDERED_LIST,
 } from "@lexical/markdown";
-import { QuoteNode } from "@lexical/rich-text";
+import { $isQuoteNode, QuoteNode } from "@lexical/rich-text";
 import {
 	$createParagraphNode,
 	$createTextNode,
 	$getRoot,
+	$isLineBreakNode,
 	$isParagraphNode,
 	$isTextNode,
 	type EditorState,
 	type EditorThemeClasses,
 	type ElementNode,
 	HISTORIC_TAG,
+	IS_BOLD,
+	IS_CODE,
+	IS_ITALIC,
 	type LexicalEditor,
 	type LexicalNode,
 	type TextNode,
 } from "lexical";
 import { $createFileMentionNode, $isFileMentionNode, FileMentionNode } from "./file-mention-node.ts";
-import { $createSlashCommandNode, SlashCommandNode } from "./slash-command-node.ts";
+import { $createSlashCommandNode, $isSlashCommandNode, SlashCommandNode } from "./slash-command-node.ts";
 
 /**
  * 编辑器要注册的节点。
@@ -247,11 +250,185 @@ export function $restoreSlashCommands(known: ReadonlySet<string>): void {
 }
 
 /**
+ * 把一段文字包成行内代码。
+ *
+ * 围栏比内容里最长的一串反引号再长一个：内容里有 `` ` `` 时单反引号会被它提前闭合。含反引号
+ * 或两端本来就是空白时按 CommonMark 补一对空格，读回来才还是原来那串字面量。
+ */
+function codeSpan(text: string): string {
+	const runs = text.match(/`+/g) ?? [];
+	const longest = runs.reduce((length, run) => Math.max(length, run.length), 0);
+	const fence = "`".repeat(longest + 1);
+	const needsPadding = text.length === 0 || text.includes("`") || (/^\s/.test(text) && /\s$/.test(text));
+	return needsPadding ? `${fence} ${text} ${fence}` : `${fence}${text}${fence}`;
+}
+
+/**
+ * 按格式位把一段文字包成行内 Markdown。
+ *
+ * 两端空白放在标记外面（`** 粗 **` 不是强调语法，读回来会是一堆星号）；整段都是空白时不加
+ * 标记——加了也没有可包的内容。
+ */
+function formattedText(text: string, format: number): string {
+	const bold = (format & IS_BOLD) !== 0;
+	const italic = (format & IS_ITALIC) !== 0;
+	const marker = bold && italic ? "***" : bold ? "**" : "*";
+	// 行内代码里的空白与反引号都是内容，整段塞进围栏，不往外挪
+	if ((format & IS_CODE) !== 0) {
+		return bold || italic ? `${marker}${codeSpan(text)}${marker}` : codeSpan(text);
+	}
+	if (!bold && !italic) {
+		return text;
+	}
+	const leading = /^\s*/.exec(text)?.[0] ?? "";
+	const rest = text.slice(leading.length);
+	const trailing = /\s*$/.exec(rest)?.[0] ?? "";
+	const core = rest.slice(0, rest.length - trailing.length);
+	// 整段都是空白：没有可包的内容，加标记只会写出 `** **`
+	if (core.length === 0) {
+		return text;
+	}
+	return `${leading}${marker}${core}${marker}${trailing}`;
+}
+
+/**
+ * 一段行内内容（段落、列表项、引用的直接子节点）。
+ *
+ * 相邻且格式完全相同的文字节点拼成一段：编辑器改动常常把同一段粗体拆成好几个文本节点，
+ * 逐个包标记会写出 `**甲****乙**` 这种读回来不确定的写法。
+ */
+function $inlineText(parent: ElementNode): string {
+	let out = "";
+	/** 还没收尾的一段同格式文字 */
+	let run: { format: number; text: string } | null = null;
+	const flush = (): void => {
+		if (run !== null) {
+			out += formattedText(run.text, run.format);
+			run = null;
+		}
+	};
+	for (const child of parent.getChildren()) {
+		if ($isLineBreakNode(child)) {
+			flush();
+			out += "\n";
+		} else if ($isFileMentionNode(child)) {
+			flush();
+			out += `@${child.getFilePath()}`;
+		} else if ($isSlashCommandNode(child)) {
+			flush();
+			out += `/${child.getCommandName()}`;
+		} else if ($isLinkNode(child)) {
+			flush();
+			const text = child.getTextContent();
+			const url = child.getURL();
+			out += text === url ? url : `[${text}](${url})`;
+		} else if ($isTextNode(child)) {
+			const format = child.getFormat();
+			if (run !== null && run.format === format) {
+				run.text += child.getTextContent();
+			} else {
+				flush();
+				run = { format, text: child.getTextContent() };
+			}
+		} else if (!$isListNode(child)) {
+			// 嵌套列表由外层列表单独铺成续行，不混进这一行的文字里
+			flush();
+			out += child.getTextContent();
+		}
+	}
+	flush();
+	return out;
+}
+
+/**
+ * 一个有序/无序列表。
+ *
+ * 缩进宽度取父项标记自身的宽度（`- ` 是 2、`1. ` 是 3、`10. ` 是 4）：导入侧按"缩进是否
+ * 到达上一层内容的起始列"判断嵌套，固定 2 空格在 `1. ` 下面反而不算一层，读回来会拍平。
+ */
+function $listMarkdown(list: ListNode, indent: string): string {
+	const ordered = list.getListType() === "number";
+	const start = list.getStart();
+	const lines: string[] = [];
+	let index = 0;
+	for (const item of list.getChildren()) {
+		if (!$isListItemNode(item)) {
+			continue;
+		}
+		const marker = ordered ? `${start + index}. ` : "- ";
+		const nested = item.getChildren().filter((child) => $isListNode(child));
+		// 只装着一层子列表的条目是导入器留下的壳（`- 甲` 下面那层缩进），自己不占一行
+		const isWrapper = nested.length > 0 && nested.length === item.getChildrenSize();
+		if (!isWrapper) {
+			lines.push(`${indent}${marker}${$inlineText(item)}`);
+			index += 1;
+		}
+		for (const child of nested) {
+			if ($isListNode(child)) {
+				lines.push($listMarkdown(child, `${indent}${" ".repeat(marker.length)}`));
+			}
+		}
+	}
+	return lines.join("\n");
+}
+
+/** 一个引用块：内部每一行都加 `> ` 前缀，与 `quoteBlock` 的写法一致。 */
+function $quoteMarkdown(quote: ElementNode): string {
+	return $inlineText(quote)
+		.split("\n")
+		.map((line) => `> ${line}`)
+		.join("\n");
+}
+
+/** 一个代码块：围栏比内容里最长的一串反引号再长一个，没有内容时不空行。 */
+function $codeMarkdown(code: ElementNode): string {
+	const content = code.getTextContent();
+	const runs = content.match(/`{3,}/g) ?? [];
+	const longest = runs.reduce((length, run) => Math.max(length, run.length), 0);
+	const fence = "`".repeat(Math.max(3, longest + 1));
+	const language = $isCodeNode(code) ? (code.getLanguage() ?? "") : "";
+	if (content.length === 0) {
+		return `${fence}${language}\n${fence}`;
+	}
+	return `${fence}${language}\n${content}\n${fence}`;
+}
+
+/** 序列化一个顶层块。 */
+function $blockMarkdown(node: LexicalNode): string {
+	if ($isParagraphNode(node)) {
+		return $inlineText(node);
+	}
+	if ($isQuoteNode(node)) {
+		return $quoteMarkdown(node);
+	}
+	if ($isListNode(node)) {
+		return $listMarkdown(node, "");
+	}
+	if ($isCodeNode(node)) {
+		return $codeMarkdown(node);
+	}
+	if ($isLineBreakNode(node)) {
+		return "\n";
+	}
+	if ($isTextNode(node)) {
+		return formattedText(node.getTextContent(), node.getFormat());
+	}
+	return node.getTextContent();
+}
+
+/**
  * 从当前编辑状态导出 Markdown。
  *
- * 空编辑态（只剩一个空段落）导出空串：草稿为空时不该往本地保存里写一个换行。
- * 末尾的空行照实导出：用户按下换行却没接着写时，草稿要跟上他的输入，不能在下一趟导入时
- * 悄悄少掉一行。发送时 `useComposer` 本来就会 `trim()`，尾部空白不会进消息。
+ * 自己走一遍树，不用 `@lexical/markdown` 的 `$convertToMarkdownString`：它会给普通文本里的
+ * `*`、`` ` ``、`_`、`~` 一律补反斜杠，用户粘贴进来的原始 Markdown（`*.ts`、`prefers-*`、
+ * `## 标题`）会被写成一堆 `\*`，而且这个行为没有开关。这一段是确定性的序列化：文字原样
+ * 输出，只有真带格式的节点才加标记，同一份内容进去出来必然一字不差。
+ *
+ * 顶层块之间用一个 `\n` 连接：保留单换行的导入会把空行铺成空段落，导出时空段落自己就是
+ * 那一个空行，于是 `甲\n\n乙` 与 `甲\n乙` 各自原样回来。末尾的空行同理照实保留——用户按了
+ * 换行却没接着写时，草稿要跟上他的输入。发送时 `useComposer` 本来就会 `trim()`。
+ *
+ * 空编辑态（只剩空段落）导出空串：草稿为空时不该往本地保存里写一个换行。
  * 必须在一个读取上下文里调用；对外的 `exportComposerMarkdown` 负责这件事。
  */
 export function $exportComposerMarkdown(root: ElementNode = $getRoot()): string {
@@ -259,7 +436,7 @@ export function $exportComposerMarkdown(root: ElementNode = $getRoot()): string 
 	if (root.getTextContent().trim().length === 0) {
 		return "";
 	}
-	return $convertToMarkdownString(CHAT_TRANSFORMERS, root, true);
+	return root.getChildren().map($blockMarkdown).join("\n");
 }
 
 /** 导出 Markdown，供界面与用例共用。读取之外不改动任何状态。 */

@@ -9,6 +9,7 @@ import {
 	activeOutlineIndex,
 	createOutlineHoverIntent,
 	OUTLINE_MAGNIFY_RADIUS,
+	outlineIsActive,
 	outlinePrompts,
 	outlineTickMagnification,
 } from "./chat-outline.ts";

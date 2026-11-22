@@ -14,6 +14,8 @@ import {
 	type ComposerHandle,
 	ExtensionPromptCard,
 	ICON_SIZE,
+	outlineIsActive,
+	outlinePrompts,
 	QueueStrip,
 	useI18n,
 } from "@facet/ui";
@@ -105,6 +107,15 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 	const providerAuth = host.catalog.auth;
 	/** 已发消息按条记忆：流式期间每帧只有末尾那条换新，回溯用的列表不必重算 */
 	const sentHistory = useMemo(() => sentTexts(transcript.items), [transcript.items]);
+	/*
+	 * 导航轨是不是要在：只看有没有可跳的条目，与窗口宽度无关。宽窄由三列网格的右轨兜着，
+	 * 消息列与输入区共用同一个标记，两者的左右边缘因此始终对齐。
+	 */
+	const outlineActive = useMemo(
+		() => outlineIsActive(outlinePrompts(transcript.items, () => "")),
+		[transcript.items],
+	);
+	const outlineAttr = outlineActive ? "true" : "false";
 	return (
 		<>
 			<ChatOutline items={transcript.items} container={transcript.scrollElement} />
@@ -112,10 +123,11 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 				className="chat-viewport"
 				data-can-scroll-top={transcript.edges.top ? "true" : "false"}
 				data-can-scroll-bottom={transcript.edges.bottom ? "true" : "false"}
+				data-outline-active={outlineAttr}
 			>
-				<section className="scroll" ref={transcript.scrollRef}>
+				<section className="scroll scroll-y-hidden" ref={transcript.scrollRef}>
 					{/* 正文打上标记：它里面的文字右键多一项「引用」 */}
-					<div className="column" data-quote-source>
+					<div className="column chat-grid" data-quote-source>
 						<ChatTranscript
 							items={transcript.items}
 							canFork={canFork}
@@ -140,7 +152,7 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 				<div className="chat-fade is-bottom" aria-hidden="true" />
 			</div>
 
-			<div className="footer">
+			<div className="footer" data-outline-active={outlineAttr}>
 				{transcript.isPinned ? null : (
 					<button
 						type="button"
@@ -151,7 +163,7 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 						<ArrowDownIcon size={ICON_SIZE.lg} />
 					</button>
 				)}
-				<div className="footer-column">
+				<div className="footer-column chat-grid">
 					{errorBar}
 					{sessionView.state.initialization.kind === "failed" ? (
 						<p className="dialog-error">{sessionView.state.initialization.message}</p>

@@ -1,46 +1,25 @@
 /**
  * 对话导航的竖轨。
  *
- * 贴在主区域左缘，每条用户消息一根短条。当前轮次加长、颜色提亮；指针附近的几根按距离
- * 放大，悬浮时在旁边给出那一条的开头，点一下跳到那一条。条数太少或主区域太窄时不显示。
+ * 贴在主区右缘，每条用户消息一根短条。当前轮次加长、颜色提亮；指针附近的几根按距离
+ * 放大，悬浮时在左侧给出那一条的开头，点一下跳到那一条。
+ *
+ * 只在"没有可跳的条目"时不画（见 `outlineIsActive`）：位置由三列网格的右轨
+ * （`--outline-slot`）保证，与窗口宽度无关，窄屏也不隐藏、不与正文重叠。
  */
 
 import type { TranscriptItem } from "@facet/client-core";
 import type { CSSProperties } from "react";
-import {
-	type PointerEvent as ReactPointerEvent,
-	useCallback,
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
+import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
-import { VISUAL_PX } from "../styles/visual-contract.ts";
 import {
 	activeOutlineIndex,
 	createOutlineHoverIntent,
 	OUTLINE_MAGNIFY_RADIUS,
+	outlineIsActive,
 	outlinePrompts,
 	outlineTickMagnification,
 } from "./chat-outline.ts";
-
-/**
- * 算出竖轨的最小可用宽度。
- *
- * 正文列居中之后左右各留 (宽 - `readingColumnMax`) / 2，这段留白要放得下竖轨的间距加轨宽，
- * 短条才不会压到正文上。间距是固定值，只有轨宽跟着 `--outline-scale` 放大。
- *
- * 两个数与 `--chat-column-max` / `--outline-inset` / `--outline-rail-width` 是同一份真值，
- * 取自 `VISUAL_PX`，由 `visual-contract.test.ts` 盯着对齐。
- */
-function minHostWidth(): number {
-	const raw = Number.parseFloat(
-		getComputedStyle(document.documentElement).getPropertyValue("--outline-scale"),
-	);
-	const scale = Number.isFinite(raw) && raw > 0 ? raw : 1;
-	return VISUAL_PX.readingColumnMax + 2 * (VISUAL_PX.outlineRail.inset + VISUAL_PX.outlineRail.width * scale);
-}
 
 /** 跳转后这条消息距视口上沿留多少像素，避免贴着顶部。 */
 const JUMP_OFFSET = 12;
@@ -68,8 +47,6 @@ export function ChatOutline({ items, container }: ChatOutlineProps) {
 	);
 	const [activeIndex, setActiveIndex] = useState<number | null>(null);
 	const [attentionIndex, setAttentionIndex] = useState<number | null>(null);
-	const [isNarrow, setIsNarrow] = useState(false);
-	const railRef = useRef<HTMLDivElement>(null);
 
 	/** 取一条消息对应的正文行。 */
 	const anchorOf = useCallback(
@@ -123,19 +100,6 @@ export function ChatOutline({ items, container }: ChatOutlineProps) {
 		};
 	}, [container, measure]);
 
-	// 主区域太窄时不显示：居中正文两侧没有留白，竖轨会压到正文上
-	useEffect(() => {
-		const host = railRef.current?.parentElement;
-		if (host === null || host === undefined) {
-			return;
-		}
-		const measure = (): void => setIsNarrow(host.clientWidth < minHostWidth());
-		const observer = new ResizeObserver(measure);
-		observer.observe(host);
-		measure();
-		return () => observer.disconnect();
-	}, []);
-
 	const hoverIntent = useMemo(
 		() =>
 			createOutlineHoverIntent({
@@ -177,12 +141,13 @@ export function ChatOutline({ items, container }: ChatOutlineProps) {
 		[anchorOf, container],
 	);
 
-	if (prompts.length < 2 || isNarrow) {
+	// 唯一的隐藏条件：没有可跳的条目。宽度由网格兜着，不参与判断
+	if (!outlineIsActive(prompts)) {
 		return null;
 	}
 
 	return (
-		<div className="outline" ref={railRef}>
+		<div className="outline">
 			<div
 				className="outline-rail"
 				role="tablist"

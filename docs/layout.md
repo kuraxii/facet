@@ -43,7 +43,7 @@
    拖动仍然只写偏好宽，实占宽由 CSS 跟着算，**拖动期间不经过 React 渲染**（`PaneResizer` 的既有前提）。
 
 3. **档位与折叠单处判定**：两个纯模块，都不读窗口：
-   - `apps/desktop/src/renderer/src/resolve-layout.ts`：阈值常量（`LAYOUT_BREAKPOINT_PX = 880`、`LAYOUT_WIDE_BREAKPOINT_PX = 1120`、`MAIN_MIN_WIDTH = 420`）、`resolveLayout()`、`paneMaxWidth()` 与 `clampDragMax()`，全程纯函数，单测在 `resolve-layout.test.ts`。
+   - `apps/desktop/src/renderer/src/resolve-layout.ts`：阈值常量（`LAYOUT_BREAKPOINT_PX = 880`、`LAYOUT_WIDE_BREAKPOINT_PX = 1216`、`MAIN_MIN_WIDTH = 520`）、`resolveLayout()`、`paneMaxWidth()` 与 `clampDragMax()`，全程纯函数，单测在 `resolve-layout.test.ts`。
    - `apps/desktop/src/renderer/src/layout-mode.ts`：一个 `matchMedia` 与结果类名（`is-narrow` / `is-wide`），结果写到 `.app` 与根节点上。
 
    样式表**不再写档位 `@media`**；`@media` 只留给与档位无关的细节（滚动条、`prefers-*`、对比度）。`packages/ui-terminal` 不认外壳类名，按自身宽度用容器查询响应。
@@ -103,17 +103,19 @@
 
 | 档 | 视口（CSS px） | 左栏 | 正文 | 右栏 | 判定 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| 宽 | `≥ 1120px` | 平铺，可拖 | 剩余宽度 | 平铺，可拖 | 只看意图位 |
-| 中 | `880–1119px` | 双栏预算折叠：正文 + 至多一个边栏 | 不小于 `--main-min` | 同左 | `resolveLayout()` |
+| 宽 | `≥ 1216px` | 平铺，可拖 | 剩余宽度 | 平铺，可拖 | 只看意图位 |
+| 中 | `880–1215px` | 双栏预算折叠：正文 + 至多一个边栏 | 不小于 `--main-min` | 同左 | `resolveLayout()` |
 | 窄 | `< 880px` | 全高抽屉 | 满宽 | 全高抽屉 | `matchMedia` |
 
-`1120` 是三栏缺省值刚好放得下的那条线：左栏缺省 `272`、正文最小可用宽 `420`、右栏缺省 `420`，`272 + 420 + 420 = 1112`，取整到 `1120` 留一点余量。宽档即使被两栏一起拉满也挤不坏正文——右栏的实占宽另有 `paneMaxWidth()` 收着（约束 2）。
+`1216` 是三栏缺省值刚好放得下的那条线：左栏缺省 `272`、正文最小可用宽 `520`、右栏缺省 `420`，`272 + 520 + 420 = 1212`，取整到 `1216` 留一点余量。宽档即使被两栏一起拉满也挤不坏正文——右栏的实占宽另有 `paneMaxWidth()` 收着（约束 2）。
+
+正文最小宽从 `420` 提到 `520` 是因为聊天区改成了三列网格（`--chat-gutter-min` + 正文 + `--outline-slot`）：正文那列要同时让出两侧轨道，地板因此高一档，这条宽档线也随之从 `1120` 上移到 `1216`——`1120–1215` 的窗口现在按中档处理，先折起一栏。
 
 **中档（预算折叠）**：
 
 - 判据是预算：`sidebarPref + MAIN_MIN_WIDTH + panelPref <= viewportWidth` 时两栏平铺；超了就把优先级低的那一栏折起，保留 `priorityPane` 那一栏。
 - 优先级跟着用户走：手动打开一栏、切它的分页、拖它的分隔条，都把 `priorityPane` 换到这一栏；所以被折起的一栏点一下就换边，而不是把另一栏也关掉。
-- 折叠只改实占宽，不改偏好宽；视口回到 `≥ 1120px` 时按偏好宽与用户意图无感恢复。
+- 折叠只改实占宽，不改偏好宽；视口回到 `≥ 1216px` 时按偏好宽与用户意图无感恢复。
 - 重算时机只有四个：意图位变化、偏好宽提交（`pointerup`）、视口 `resize`、优先级换边。**不用 `ResizeObserver`** 看内部容器（折起会让容器变宽，看容器就是折展死循环）；**拖动期间整段锁定**，否则折起会先卸载分隔条，`lostpointercapture` 那次收尾会把一个没人在看的宽度提交上去。
 - 弃用 `clamp()` 硬挤压：夹紧能吸收的缺口只有两栏上下限之差，而中档低端的缺口比它大得多，实测会整段退化到下限，正文仍不足（见 §5.1）。
 
@@ -156,7 +158,7 @@
 | 变量 | 值 | 含义 |
 | :--- | :--- | :--- |
 | `--chat-column-max` | `780px` | 正文**最佳阅读上限**，窄档退到 `--chat-column-max-narrow`（`760px`） |
-| `--main-min` | `420px` | 正文**最小可用宽**：输入区一行 chip 放得下、气泡不塌。与阅读上限是两回事，不要互相顶替 |
+| `--main-min` | `520px` | 正文**最小可用宽**：输入区一行 chip 放得下、气泡不塌。三列网格下它 = `20px` 左留白 + `52px` 导航轨 + `448px` 正文。与阅读上限是两回事，不要互相顶替 |
 | `--sidebar-width` 范围 | `220–420px`（缺省 `272`） | 偏好宽，落盘 |
 | `--panel-width` 范围 | `≥ 300px`（缺省 `420`，**没有固定上限**） | 界面写下来的宽度：占列时是偏好宽与正文预算取小之后的实占宽（见约束 2）；窄档下就是偏好宽本身，抽屉自己按 `min(宽度, 92vw)` 收 |
 | `--workspace-list-width` | `200–480px`（缺省 `320`） | 两栏态里**索引栏**（右侧列表）的宽度，落盘 `facet.workspace.listWidth`；容器放不下时被 `clamp()` 与 `workspaceListMaxWidth()` 收住，左边永远留 `280px`（`WORKSPACE_DETAIL_KEEP_WIDTH`）给预览 |
@@ -167,7 +169,7 @@
 | 单栏 / 两栏的折点 | `680px`（容器查询，`WORKSPACE_SPLIT_WIDE_WIDTH_PX`） | **变更视图**窄于它时单栏钻取，宽于等于它时解锁两栏 |
 | `--file-tree-width` | `180–420px`（缺省 `240`） | 文件树的宽度，落盘；容器放不下时被 `clamp()` 与 `fileTreeMaxWidth()` 收住，右侧永远留 `120px`（`EDITOR_KEEP_WIDTH`）给编辑器 |
 | 宽展开的宽度 | `calc(100% − var(--col-sidebar))` | 右栏最大化：盖住正文那一列，见 §2「宽展开」 |
-| 档位断点 | `LAYOUT_BREAKPOINT_PX = 880`、`LAYOUT_WIDE_BREAKPOINT_PX = 1120` | 只在 `resolve-layout.ts` 写一次；容器查询里的数字不受这两个约束 |
+| 档位断点 | `LAYOUT_BREAKPOINT_PX = 880`、`LAYOUT_WIDE_BREAKPOINT_PX = 1216` | 只在 `resolve-layout.ts` 写一次；容器查询里的数字不受这两个约束 |
 
 ## 3. 三条工程硬约束
 
@@ -306,7 +308,7 @@ CSS `clamp(min, val, max)` 在 `max < min` 时返回 `min`，实测（正文最�
 
 状态：PR1 到 PR9 均已落地。
 
-配套：`resolveLayout({ viewportWidth, sidebarPref, panelPref, sidebarIntent, panelIntent, isPanelExpanded, priorityPane })` 返回档位、两栏显隐与宽展开位，`paneMaxWidth()` / `clampDragMax()` 给出实占宽与拖动上限；单测在 `apps/desktop/src/renderer/src/resolve-layout.test.ts`，覆盖 `640 / 879 / 880 / 881 / 899 / 900 / 1012 / 1099 / 1112 / 1119 / 1120 / 1400`、宽展开三段（宽 / 中 / 窄档）、意图位保护、非法输入与优先级换边。样式里的 `--col-*` 只是它的渲染兜底。
+配套：`resolveLayout({ viewportWidth, sidebarPref, panelPref, sidebarIntent, panelIntent, isPanelExpanded, priorityPane })` 返回档位、两栏显隐与宽展开位，`paneMaxWidth()` / `clampDragMax()` 给出实占宽与拖动上限；单测在 `apps/desktop/src/renderer/src/resolve-layout.test.ts`，覆盖 `640 / 879 / 880 / 881 / 899 / 900 / 1012 / 1099 / 1112 / 1215 / 1216 / 1400`、宽展开三段（宽 / 中 / 窄档）、意图位保护、非法输入与优先级换边。样式里的 `--col-*` 只是它的渲染兜底。
 
 ## 7. 不在本次范围
 

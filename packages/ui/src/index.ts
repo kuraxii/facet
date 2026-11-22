@@ -13,7 +13,7 @@ export { ContextRing, formatTokens, usageLabel, usageLevel } from "./chat/Contex
 export type { CreateProjectDialogProps } from "./chat/CreateProjectDialog.tsx";
 export { CreateProjectDialog } from "./chat/CreateProjectDialog.tsx";
 export type { OutlinePrompt } from "./chat/chat-outline.ts";
-export { outlinePrompts } from "./chat/chat-outline.ts";
+export { OUTLINE_MIN_ITEMS, outlineIsActive, outlinePrompts } from "./chat/chat-outline.ts";
 export {
 	filterCommands,
 	isFacetCommand,

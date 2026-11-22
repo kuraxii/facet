@@ -178,12 +178,18 @@ export const VISUAL_PX = {
 	/**
 	 * 对话正文列的最大宽度（`--chat-column-max`）。
 	 *
-	 * 竖轨判断主区够不够宽时按它加两侧留白现算，所以它必须与样式表同一个数。
+	 * 聊天区三列网格的中间那一列读它，脚本侧只由契约测试拿着对齐——改样式表不同步这里就红。
 	 */
-	readingColumnMax: 780,
-	/** 对话导航竖轨：到主区左缘的间距与 100% 缩放下的轨宽（实际轨宽再乘 `--outline-scale`）。 */
+	readingColumnMax: 840,
+	/**
+	 * 对话导航竖轨：到主区右缘的间距与 100% 缩放下的轨宽（实际轨宽再乘 `--outline-scale`）。
+	 *
+	 * 脚本已经不再用这两个数算"会不会撞上正文"——那件事现在由三列网格的 `--outline-slot`
+	 * 在样式里算死。它们留在这里是**契约的 TS 侧**：`visual-contract.test.ts` 拿它们盯住
+	 * `--outline-inset` / `--outline-rail-width` 两个 CSS 真值，改样式表不同步这里就会红。
+	 */
 	outlineRail: {
-		/** 竖轨到主区左缘的间距（`--outline-inset`），固定值，不随缩放变 */
+		/** 竖轨到主区右缘的间距（`--outline-inset`），固定值，不随缩放变 */
 		inset: 8,
 		/** 竖轨在 100% 缩放下的宽度（`--outline-rail-width` 的基准），随缩放放大 */
 		width: 36,

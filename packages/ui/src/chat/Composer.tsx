@@ -11,6 +11,7 @@ import type { ContextUsage, ModelInfo, SlashCommand, ThinkingLevel } from "@face
 import { Brain, FileUp, ImagePlus, Plus, X } from "lucide-react";
 import { type Ref, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FACET_FILE_DRAG_MIME } from "../common/file-drag.ts";
+import { IconButton } from "../common/IconButton.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { ICON_SIZE } from "../styles/visual-contract.ts";
 import { useHoverTip } from "../tip.tsx";
@@ -337,8 +338,9 @@ export function Composer({
 			/>
 			<div className="composer-row">
 				<div className="chip-wrap" ref={attachRef}>
-					<button
-						type="button"
+					<IconButton
+						variant="ghost"
+						size="sm"
 						className="ib"
 						aria-label={t("composer.add")}
 						{...tip.handlers(t("composer.addImageOrFile"))}
@@ -346,7 +348,7 @@ export function Composer({
 						onClick={() => setOpenMenu(openMenu === "attach" ? undefined : "attach")}
 					>
 						<Plus size={ICON_SIZE.lg} />
-					</button>
+					</IconButton>
 					{openMenu === "attach" ? (
 						// biome-ignore lint/a11y/useSemanticElements: 浮层里是一组按钮，用不到 fieldset 的表单语义
 						<div className="chip-pop is-attach" role="group" aria-label={t("composer.addContent")}>
@@ -506,27 +508,30 @@ export function Composer({
 					 * 没有内容而这一轮还在跑时是停止。位置与尺寸不变，两者互相替换。
 					 */}
 					{showsStop ? (
-						<button
-							type="button"
-							className="send is-stop"
+						<IconButton
+							variant="primary"
+							size="md"
+							radius="lg"
+							className="is-stop"
 							onClick={onStop}
 							disabled={!canStop || activity === "stopping"}
 							aria-label={activity === "stopping" ? t("composer.stopping") : t("composer.stop")}
 							{...tip.handlers(activity === "stopping" ? t("composer.stopping") : t("composer.stopTurn"))}
 						>
 							<StopIcon size={ICON_SIZE.lg} />
-						</button>
+						</IconButton>
 					) : (
-						<button
-							type="button"
-							className="send"
+						<IconButton
+							variant="primary"
+							size="md"
+							radius="lg"
 							aria-label={isQueuing ? t("composer.queue") : t("composer.send")}
 							{...tip.handlers(isQueuing ? t("composer.insertTurn") : undefined)}
 							onClick={onSend}
 							disabled={!canSend}
 						>
 							<SendIcon size={ICON_SIZE.lg} />
-						</button>
+						</IconButton>
 					)}
 				</span>
 			</div>

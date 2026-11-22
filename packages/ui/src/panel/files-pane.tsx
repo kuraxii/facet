@@ -20,6 +20,7 @@ import {
 	useState,
 } from "react";
 import { FACET_FILE_DRAG_MIME } from "../common/file-drag.ts";
+import { IconButton } from "../common/IconButton.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { ICON_SIZE } from "../styles/visual-contract.ts";
 import { useHoverTip } from "../tip.tsx";
@@ -141,26 +142,28 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath, onCollapse 
 	const header = (
 		<div className="tree-head">
 			{onCollapse === undefined ? null : (
-				<button
-					type="button"
+				<IconButton
+					variant="ghost"
+					size="sm"
 					className="ib workspace-collapse-list"
 					aria-label={t("panel.collapseTree")}
 					onClick={onCollapse}
 				>
 					<PanelRightClose size={ICON_SIZE.md} />
-				</button>
+				</IconButton>
 			)}
 			<span className="tree-root">{t("panel.projectFiles")}</span>
 			<div className="tree-head-actions">
-				<button
-					type="button"
+				<IconButton
+					variant="ghost"
+					size="sm"
 					className="ib"
 					aria-label={t("panel.refreshFiles")}
 					disabled={root?.isLoading === true}
 					onClick={refresh}
 				>
 					<RefreshCw size={ICON_SIZE.md} />
-				</button>
+				</IconButton>
 			</div>
 		</div>
 	);

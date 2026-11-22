@@ -12,6 +12,7 @@ import {
 	ChangesDocument,
 	ChangesPane,
 	ICON_SIZE,
+	IconButton,
 	useHoverTip,
 	useI18n,
 	WorkspaceSplit,
@@ -105,15 +106,16 @@ function BackToListButton({ onBack }: { onBack: () => void }): ReactNode {
 	const tip = useHoverTip();
 	return (
 		<>
-			<button
-				type="button"
+			<IconButton
+				variant="ghost"
+				size="sm"
 				className="workspace-back"
 				aria-label={label}
 				{...tip.handlers(label)}
 				onClick={onBack}
 			>
 				<ArrowLeft size={ICON_SIZE.md} />
-			</button>
+			</IconButton>
 			{tip.render()}
 		</>
 	);
@@ -129,15 +131,16 @@ function RestoreListButton({ label, onShow }: { label: string; onShow: () => voi
 	const tip = useHoverTip();
 	return (
 		<>
-			<button
-				type="button"
+			<IconButton
+				variant="ghost"
+				size="sm"
 				className="workspace-head-action workspace-restore-list"
 				aria-label={label}
 				{...tip.handlers(label)}
 				onClick={onShow}
 			>
 				<PanelRightOpen size={ICON_SIZE.md} />
-			</button>
+			</IconButton>
 			{tip.render()}
 		</>
 	);

@@ -7,6 +7,7 @@
 import type { SessionStatus, SessionSummary } from "@facet/protocol";
 import { Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Input } from "../common/Input.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { isComposingKey } from "../keys.ts";
 import { Modal } from "../modal.tsx";
@@ -92,7 +93,9 @@ export function SessionSearch({
 		<Modal open onClose={onClose} label={t("search.title")} className="search-panel">
 			<label className="search-field">
 				<Search size={ICON_SIZE.lg} />
-				<input
+				<Input
+					variant="ghost"
+					size="lg"
 					data-autofocus
 					value={keyword}
 					onChange={(event) => setKeyword(event.target.value)}

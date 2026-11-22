@@ -120,9 +120,9 @@ async function focusEditor(editor: HTMLElement): Promise<void> {
 	});
 }
 
-/** 发送按钮与停止按钮共用 `.send` 这一个位置。 */
+/** 发送按钮与停止按钮共用输入区右下角这一个位置（`.composer-send`），两者互相替换。 */
 function sendButton(container: HTMLElement): HTMLButtonElement {
-	const button = container.querySelector<HTMLButtonElement>(".send");
+	const button = container.querySelector<HTMLButtonElement>(".composer-send > button");
 	if (button === null) {
 		throw new Error("发送按钮没有渲染出来");
 	}
@@ -153,18 +153,18 @@ describe("输入区", () => {
 	it("发送与停止占同一个按钮", async () => {
 		// 没有内容要发时按钮是停止
 		const running = await renderComposer({ activity: "running", value: "" });
-		expect(running.container.querySelector(".send.is-stop")).not.toBeNull();
+		expect(running.container.querySelector(".composer-send .is-stop")).not.toBeNull();
 		expect(sendButton(running.container).getAttribute("aria-label")).not.toBe("排队");
 		running.unmount();
 
 		// 有内容时同一个位置换回发送，运行中的含义是排队
 		const queued = await renderComposer({ activity: "running", value: "补充一句" });
-		expect(queued.container.querySelector(".send.is-stop")).toBeNull();
+		expect(queued.container.querySelector(".composer-send .is-stop")).toBeNull();
 		queued.unmount();
 
 		// 空闲时不出现停止
 		const idle = await renderComposer({ activity: "idle", value: "" });
-		expect(idle.container.querySelector(".send.is-stop")).toBeNull();
+		expect(idle.container.querySelector(".composer-send .is-stop")).toBeNull();
 		idle.unmount();
 	});
 
@@ -594,7 +594,7 @@ describe("发送受阻", () => {
 				isBlocked: true,
 				canStop,
 			});
-			const stop = container.querySelector<HTMLButtonElement>(".send.is-stop");
+			const stop = container.querySelector<HTMLButtonElement>(".composer-send .is-stop");
 			expect(stop).not.toBeNull();
 			expect(stop?.disabled).toBe(!canStop);
 			unmount();

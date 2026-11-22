@@ -120,8 +120,8 @@ describe("工作区标签栏", () => {
 
 	it("计数作为徽标显示", () => {
 		const { container } = mount();
-		expect(tab(container, "变更").querySelector(".workspace-tab-badge")?.textContent).toBe("3");
-		expect(tab(container, "文件").querySelector(".workspace-tab-badge")).toBeNull();
+		expect(tab(container, "变更").querySelector(".ui-badge")?.textContent).toBe("3");
+		expect(tab(container, "文件").querySelector(".ui-badge")).toBeNull();
 	});
 
 	it("不可用的标签点不动，方向键也跳过它", () => {

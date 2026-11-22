@@ -20,7 +20,7 @@ describe("Select", () => {
 			createElement(Select, { value: "b", options: OPTIONS, onChange: () => {}, ariaLabel: "选一个" }),
 		);
 		expect(html).toContain('<span class="set-select">');
-		expect(html).toContain('class="set-input"');
+		expect(html).toContain('class="ui-input"');
 		expect(html).toContain('aria-label="选一个"');
 		expect(html).toContain('<option value="a">甲</option>');
 		// 当前值那一项由 React 标成 selected

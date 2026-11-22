@@ -6,6 +6,8 @@
 
 import { FolderPlus, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Button } from "../common/Button.tsx";
+import { IconButton } from "../common/IconButton.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { isComposingKey } from "../keys.ts";
 import { Modal } from "../modal.tsx";
@@ -116,9 +118,15 @@ export function CreateProjectDialog({ isOpen, onPickFolder, onCreate, onClose }:
 		<Modal open onClose={close} label={t("projectDialog.title")}>
 			<div className="dialog-head">
 				<h2 className="dialog-title">{t("projectDialog.title")}</h2>
-				<button type="button" className="dialog-close" aria-label={t("common.close")} onClick={close}>
+				<IconButton
+					variant="ghost"
+					size="sm"
+					className="dialog-close"
+					aria-label={t("common.close")}
+					onClick={close}
+				>
 					<X size={ICON_SIZE.lg} />
-				</button>
+				</IconButton>
 			</div>
 
 			<label className={isNameFocused ? "project-field is-focused" : "project-field"}>
@@ -161,17 +169,17 @@ export function CreateProjectDialog({ isOpen, onPickFolder, onCreate, onClose }:
 			{error === undefined ? null : <p className="dialog-error">{error}</p>}
 
 			<div className="dialog-actions">
-				<button type="button" className="dialog-cancel" onClick={close}>
+				<Button variant="ghost" size="md" onClick={close}>
 					{t("common.cancel")}
-				</button>
-				<button
-					type="button"
-					className="dialog-primary"
+				</Button>
+				<Button
+					variant="primary"
+					size="md"
 					onClick={() => void submit()}
 					disabled={cwd === undefined || isSubmitting}
 				>
 					{isSubmitting ? t("projectDialog.creating") : t("projectDialog.create")}
-				</button>
+				</Button>
 			</div>
 		</Modal>
 	);

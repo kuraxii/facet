@@ -6,6 +6,9 @@
  */
 import { Plus, Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
+import { Button } from "../common/Button.tsx";
+import { IconButton } from "../common/IconButton.tsx";
+import { Input } from "../common/Input.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { Modal } from "../modal.tsx";
 import { ICON_SIZE } from "../styles/visual-contract.ts";
@@ -47,16 +50,23 @@ export function ProviderPicker({ rows, onPick, onCreateCustom, onClose }: Provid
 		<Modal open onClose={onClose} label={t("picker.title")} className="is-picker">
 			<div className="dialog-head">
 				<h2 className="dialog-title">{t("picker.title")}</h2>
-				<button type="button" className="dialog-close" aria-label={t("common.close")} onClick={onClose}>
+				<IconButton
+					variant="ghost"
+					size="sm"
+					className="dialog-close"
+					aria-label={t("common.close")}
+					onClick={onClose}
+				>
 					<X size={ICON_SIZE.lg} />
-				</button>
+				</IconButton>
 			</div>
 
 			<label className="picker-search">
 				<Search size={ICON_SIZE.md} aria-hidden="true" />
-				<input
+				<Input
+					variant="ghost"
+					size="md"
 					data-autofocus
-					className="picker-search-input"
 					value={query}
 					onChange={(event) => setQuery(event.target.value)}
 					placeholder={t("picker.search")}
@@ -73,9 +83,9 @@ export function ProviderPicker({ rows, onPick, onCreateCustom, onClose }: Provid
 								{provider.name.slice(0, 1).toUpperCase()}
 							</span>
 							<span className="picker-name ell">{provider.name}</span>
-							<button type="button" className="set-models-action" onClick={() => onPick(provider.id)}>
+							<Button variant="secondary" size="sm" onClick={() => onPick(provider.id)}>
 								{t("picker.add")}
-							</button>
+							</Button>
 						</li>
 					);
 				})}
@@ -87,13 +97,13 @@ export function ProviderPicker({ rows, onPick, onCreateCustom, onClose }: Provid
 			</ul>
 
 			<div className="dialog-actions">
-				<button type="button" className="prov-btn is-ghost" onClick={onCreateCustom}>
+				<Button variant="ghost" size="sm" className="prov-tone-accent" onClick={onCreateCustom}>
 					<Plus size={ICON_SIZE.md} aria-hidden="true" />
 					{t("picker.addCustom")}
-				</button>
-				<button type="button" className="set-save" onClick={onClose}>
+				</Button>
+				<Button variant="primary" size="md" onClick={onClose}>
 					{t("picker.done")}
-				</button>
+				</Button>
 			</div>
 		</Modal>
 	);

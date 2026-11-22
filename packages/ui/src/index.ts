@@ -88,7 +88,25 @@ export {
 } from "./chat/ui-scale.ts";
 export type { ScrollRestore, StickToBottom } from "./chat/use-stick-to-bottom.ts";
 export { useStickToBottom } from "./chat/use-stick-to-bottom.ts";
+export type { BadgeProps, BadgeShape, BadgeVariant } from "./common/Badge.tsx";
+export { Badge } from "./common/Badge.tsx";
+export type { ButtonProps, ButtonSize, ButtonVariant } from "./common/Button.tsx";
+export { Button } from "./common/Button.tsx";
 export { FACET_FILE_DRAG_MIME } from "./common/file-drag.ts";
+export type { IconButtonProps, IconButtonSize, IconButtonVariant } from "./common/IconButton.tsx";
+export { IconButton } from "./common/IconButton.tsx";
+export type { InputProps, InputSize, InputVariant } from "./common/Input.tsx";
+export { Input } from "./common/Input.tsx";
+export type {
+	ListRowAs,
+	ListRowButtonProps,
+	ListRowDivProps,
+	ListRowItemProps,
+	ListRowProps,
+	ListRowSize,
+	ListRowVariant,
+} from "./common/ListRow.tsx";
+export { ListRow } from "./common/ListRow.tsx";
 export type { ScrollAreaProps } from "./common/scroll-area.tsx";
 export { ScrollArea, ScrollRow } from "./common/scroll-area.tsx";
 export type { SelectOption, SelectProps } from "./common/select.tsx";

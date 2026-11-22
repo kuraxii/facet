@@ -7,6 +7,9 @@
  */
 import { Check, Pencil, Plus, Power, Server, Settings2, X } from "lucide-react";
 import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { Button } from "../common/Button.tsx";
+import { IconButton } from "../common/IconButton.tsx";
+import { Input } from "../common/Input.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { isComposingKey } from "../keys.ts";
 import { ICON_SIZE } from "../styles/visual-contract.ts";
@@ -125,9 +128,8 @@ export function HostSwitcher({
 
 	return (
 		<div className="host-switch" ref={wrap}>
-			<button
-				type="button"
-				className="sb-foot-btn is-icon"
+			<IconButton
+				active={isOpen}
 				aria-label={t("host.menu")}
 				aria-expanded={isOpen}
 				onClick={() => {
@@ -136,7 +138,7 @@ export function HostSwitcher({
 				}}
 			>
 				<Server size={ICON_SIZE.md} />
-			</button>
+			</IconButton>
 			{isOpen ? (
 				// biome-ignore lint/a11y/useSemanticElements: 浮层里是一份主机清单，用不到 fieldset 的表单语义
 				<div className="host-pop" role="group" aria-label={t("host.list")}>
@@ -155,8 +157,9 @@ export function HostSwitcher({
 						{hosts.map((host) =>
 							renaming?.id === host.id ? (
 								<li key={host.id} className="host-row is-editing">
-									<input
-										className="set-input host-rename"
+									<Input
+										size="md"
+										className="host-rename"
 										aria-label={t("host.newName")}
 										value={renaming.draft}
 										ref={renameRef}
@@ -242,15 +245,16 @@ export function HostSwitcher({
 					</ul>
 					{isAdding ? (
 						<form className="host-form" onSubmit={submit}>
-							<input
-								className="set-input"
+							<Input
+								size="md"
 								value={name}
 								onChange={(event) => setName(event.target.value)}
 								placeholder={t("host.namePlaceholder")}
 								aria-label={t("host.name")}
 							/>
-							<input
-								className="set-input mono"
+							<Input
+								size="md"
+								className="mono"
 								value={address}
 								onChange={(event) => setAddress(event.target.value)}
 								placeholder={t("host.addressPlaceholder")}
@@ -259,9 +263,9 @@ export function HostSwitcher({
 							/>
 							{error === undefined ? null : <p className="host-error">{error}</p>}
 							<div className="host-form-actions">
-								<button type="submit" className="set-save">
+								<Button type="submit" variant="primary" size="md">
 									{t("host.add")}
-								</button>
+								</Button>
 								<button
 									type="button"
 									className="set-reset"

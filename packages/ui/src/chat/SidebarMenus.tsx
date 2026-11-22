@@ -6,6 +6,7 @@
  * 给（返回 Promise，抛错就把原话显示在菜单里）。
  */
 import { type MouseEvent as ReactMouseEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import { Input } from "../common/Input.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { isComposingKey } from "../keys.ts";
 import type { SidebarProject, SidebarSession } from "./sidebar-model.ts";
@@ -110,9 +111,9 @@ export function ProjectMenu({
 		>
 			{renaming === undefined ? null : (
 				<label className="sb-rename">
-					<input
+					<Input
 						ref={inputRef}
-						className="sb-rename-input"
+						size="sm"
 						value={renaming.value}
 						onChange={(event) => setRenaming({ id: renaming.id, value: event.target.value })}
 						onKeyDown={(event) => {
@@ -260,8 +261,8 @@ export function SessionMenu({
 		>
 			{renameValue === undefined ? null : (
 				<label className="sb-rename">
-					<input
-						className="sb-rename-input"
+					<Input
+						size="sm"
 						value={renameValue}
 						onChange={(event) => setRenameValue(event.target.value)}
 						onKeyDown={(event) => {

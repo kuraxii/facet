@@ -32,15 +32,9 @@ dialog.search-panel::backdrop {
 	color: var(--fg-subtle);
 }
 
+/* 搜索浮窗的输入框：外观来自 `common/Input.tsx` 的 ghost 档，这里只让它吃掉整行 */
 .search-field input {
 	flex: 1;
-	min-width: 0;
-	border: 0;
-	outline: 0;
-	background: transparent;
-	color: var(--fg-default);
-	font: inherit;
-	font-size: 15px;
 }
 
 .search-field input::placeholder {
@@ -148,16 +142,7 @@ dialog.dialog::backdrop {
 }
 
 .dialog-close {
-	display: grid;
-	place-items: center;
-	width: 28px;
-	height: 28px;
-	margin: -4px -6px 0 0;
-	padding: 0;
-	border: 0;
-	border-radius: 6px;
-	background: transparent;
-	color: var(--fg-subtle);
+	margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-3)) 0 0;
 }
 
 .dialog-close:hover {
@@ -287,14 +272,9 @@ dialog.dialog.is-picker[open] {
 	border-color: var(--fg-subtle);
 }
 
+/* 挑选弹窗的搜索框：同上，只负责吃掉整行 */
 .picker-search-input {
 	flex: 1;
-	min-width: 0;
-	border: 0;
-	background: transparent;
-	color: var(--fg-default);
-	font-size: 13px;
-	outline: none;
 }
 
 .picker-list {
@@ -390,46 +370,6 @@ dialog.dialog.is-picker .dialog-actions {
 	margin: 8px 0 0;
 	color: var(--status-err-fg);
 	font-size: 13px;
-}
-
-.dialog-cancel {
-	height: 34px;
-	padding: 0 12px;
-	border: 0;
-	border-radius: 8px;
-	background: transparent;
-	color: var(--fg-muted);
-	font-size: 13px;
-}
-
-.dialog-cancel:hover {
-	background: var(--bg-hover);
-	color: var(--fg-default);
-}
-
-.dialog-primary {
-	height: 34px;
-	padding: 0 16px;
-	border: 0;
-	border-radius: 8px;
-	background: var(--accent-fill);
-	color: var(--accent-on-fill);
-	font-size: 13px;
-	font-weight: 500;
-}
-
-.dialog-primary:hover:not(:disabled) {
-	background: var(--accent-fill-hover);
-}
-
-.dialog-primary:active:not(:disabled) {
-	background: var(--accent-fill-active);
-}
-
-.dialog-primary:disabled {
-	background: var(--bg-active);
-	color: var(--fg-subtle);
-	cursor: default;
 }
 
 /* 选中文字的右键菜单 */

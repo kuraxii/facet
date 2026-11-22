@@ -48,7 +48,7 @@ export function Select({
 	return (
 		<span className={classes}>
 			<select
-				className="set-input"
+				className="ui-input"
 				value={value}
 				disabled={disabled}
 				aria-label={ariaLabel}

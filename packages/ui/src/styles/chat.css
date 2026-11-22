@@ -236,21 +236,8 @@
 
 /* 复制一段原文，与回退同一套尺寸；复制成功后短暂换成对勾 */
 .copy-btn {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 22px;
-	height: 22px;
-	padding: 0;
-	border: 0;
-	border-radius: 6px;
-	background: transparent;
-	color: var(--fg-subtle);
+	cursor: pointer;
 	opacity: 0;
-	transition:
-		opacity var(--dur-fast) var(--ease-standard),
-		color var(--dur-fast) var(--ease-standard),
-		background-color var(--dur-fast) var(--ease-standard);
 }
 
 /* 收尾处的复制默认可见，用户消息上的等整行悬停才出现 */
@@ -272,22 +259,8 @@
 }
 
 .revert-btn {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 22px;
-	height: 22px;
-	padding: 0;
-	border: 0;
-	border-radius: 6px;
-	background: transparent;
-	color: var(--fg-subtle);
-	font-size: 12px;
+	cursor: pointer;
 	opacity: 0;
-	transition:
-		opacity var(--dur-fast) var(--ease-standard),
-		color var(--dur-fast) var(--ease-standard),
-		background-color var(--dur-fast) var(--ease-standard);
 }
 
 .row.is-user:hover .revert-btn,
@@ -337,16 +310,7 @@
 }
 
 .fork-btn {
-	display: grid;
-	place-items: center;
-	width: 26px;
-	height: 26px;
-	padding: 0;
-	border: 0;
-	border-radius: 6px;
-	background: transparent;
-	color: var(--fg-subtle);
-	transition: color var(--dur-fast) var(--ease-standard);
+	cursor: pointer;
 }
 
 .fork-btn:hover:not(:disabled),
@@ -360,17 +324,7 @@
 }
 
 .row-action {
-	display: grid;
-	place-items: center;
-	flex: none;
-	width: 28px;
-	height: 28px;
-	border: 1px solid var(--border-subtle);
-	border-radius: 8px;
-	background: transparent;
-	color: var(--fg-subtle);
 	opacity: 0;
-	transition: opacity var(--dur-fast) var(--ease-standard);
 }
 
 .row:hover .row-action,
@@ -947,53 +901,6 @@
 	margin-top: var(--context-summary-gap);
 }
 
-.btn {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	height: 30px;
-	padding: 0 14px;
-	border: 1px solid var(--border-default);
-	border-radius: 8px;
-	background: transparent;
-	font-size: 13px;
-}
-
-.btn:hover:not(:disabled) {
-	border-color: var(--fg-subtle);
-}
-
-.btn:disabled {
-	color: var(--fg-subtle);
-	cursor: default;
-}
-
-.session-error .btn {
-	height: 24px;
-	padding: 0 10px;
-	color: var(--status-err-fg);
-	border-color: var(--status-err-fg);
-}
-
-/*
- * 主按钮的唯一底色：强调色的填充版配它自己的前景色。
- * 悬停与按下由主题按各自色相混出来，不再用 filter / opacity 临时提亮。
- */
-.btn.pri {
-	border-color: transparent;
-	background: var(--accent-fill);
-	color: var(--accent-on-fill);
-	font-weight: 500;
-}
-
-.btn.pri:hover:not(:disabled) {
-	background: var(--accent-fill-hover);
-}
-
-.btn.pri:active:not(:disabled) {
-	background: var(--accent-fill-active);
-}
-
 /* 空会话与外层占位 */
 .empty-wrap {
 	display: flex;
@@ -1034,52 +941,6 @@
 	display: flex;
 	gap: 8px;
 	margin-top: 6px;
-}
-
-.empty-primary {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	height: 32px;
-	padding: 0 14px;
-	border: 0;
-	border-radius: 8px;
-	background: var(--accent-fill);
-	color: var(--accent-on-fill);
-	font-size: 12.5px;
-	font-weight: 500;
-}
-
-.empty-primary:disabled {
-	background: var(--bg-active);
-	color: var(--fg-subtle);
-	cursor: default;
-}
-
-.empty-primary:hover:not(:disabled) {
-	background: var(--accent-fill-hover);
-}
-
-.empty-primary:active:not(:disabled) {
-	background: var(--accent-fill-active);
-}
-
-.empty-secondary {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	height: 32px;
-	padding: 0 14px;
-	border: 1px solid var(--border-subtle);
-	border-radius: 8px;
-	background: var(--bg-elevated);
-	color: var(--fg-muted);
-	font-size: 12.5px;
-}
-
-.empty-secondary:hover {
-	background: var(--bg-active);
-	color: var(--fg-default);
 }
 
 /* 窄档：正文列与滚动区收边 */

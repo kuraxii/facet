@@ -7,6 +7,8 @@
  */
 import { PanelLeft, PanelRight } from "lucide-react";
 import type { ReactNode } from "react";
+import { Badge } from "../common/Badge.tsx";
+import { IconButton } from "../common/IconButton.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { ICON_SIZE } from "../styles/visual-contract.ts";
 
@@ -15,15 +17,16 @@ export function SidebarToggle({ isOpen, onToggle }: { isOpen: boolean; onToggle:
 	const { t } = useI18n();
 	const label = isOpen ? t("panel.collapseSidebar") : t("panel.expandSidebar");
 	return (
-		<button
-			type="button"
+		<IconButton
+			variant="ghost"
+			size="sm"
 			className="chrome-toggle is-sidebar"
 			aria-label={label}
 			aria-expanded={isOpen}
 			onClick={onToggle}
 		>
 			<PanelLeft size={ICON_SIZE.lg} />
-		</button>
+		</IconButton>
 	);
 }
 
@@ -42,8 +45,9 @@ export function PanelToggle({
 	const label = isOpen ? t("panel.collapsePanel") : t("panel.expandPanel");
 	const showsBadge = badge !== undefined && badge !== 0 && badge !== "";
 	return (
-		<button
-			type="button"
+		<IconButton
+			variant="ghost"
+			size="sm"
 			className="chrome-toggle is-panel"
 			aria-label={label}
 			aria-expanded={isOpen}
@@ -51,10 +55,10 @@ export function PanelToggle({
 		>
 			<PanelRight size={ICON_SIZE.lg} />
 			{showsBadge ? (
-				<span className="chrome-toggle-badge" aria-hidden="true">
+				<Badge variant="accent" className="chrome-toggle-badge" aria-hidden="true">
 					{badge}
-				</span>
+				</Badge>
 			) : null}
-		</button>
+		</IconButton>
 	);
 }

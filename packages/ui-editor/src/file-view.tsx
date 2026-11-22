@@ -10,6 +10,7 @@
 import type { FileContent } from "@facet/protocol";
 import { useI18n } from "@facet/ui/i18n";
 import { Markdown } from "@facet/ui/markdown";
+import { IconButton } from "@facet/ui/primitives";
 import { useHoverTip } from "@facet/ui/tip";
 import { ICON_SIZE } from "@facet/ui/visual-contract";
 import { Check, Code, Eye, Save } from "lucide-react";
@@ -168,8 +169,9 @@ export function FileView({ path, content, onSave, onReload, headerTrailing }: Fi
 					<span className="file-dirty" role="status" aria-label={t("editor.unsavedChanges")} />
 				) : null}
 				{isMarkdown ? (
-					<button
-						type="button"
+					<IconButton
+						variant="ghost"
+						size="sm"
 						className="ib"
 						aria-label={isPreviewing ? t("editor.viewSource") : t("editor.viewPreview")}
 						{...tip.handlers(isPreviewing ? t("editor.viewSource") : t("editor.viewPreview"))}
@@ -178,12 +180,13 @@ export function FileView({ path, content, onSave, onReload, headerTrailing }: Fi
 						}}
 					>
 						{isPreviewing ? <Code size={ICON_SIZE.md} /> : <Eye size={ICON_SIZE.md} />}
-					</button>
+					</IconButton>
 				) : null}
 				{isText ? (
 					// 没有改动时按钮是灰的：能不能点由控件自己说，不另写一句话
-					<button
-						type="button"
+					<IconButton
+						variant="ghost"
+						size="sm"
 						className="ib"
 						aria-label={t("editor.saveShortcut")}
 						disabled={!isDirty || isSaving}
@@ -191,7 +194,7 @@ export function FileView({ path, content, onSave, onReload, headerTrailing }: Fi
 						onClick={() => void save()}
 					>
 						{isSaved ? <Check size={ICON_SIZE.md} /> : <Save size={ICON_SIZE.md} />}
-					</button>
+					</IconButton>
 				) : null}
 				{headerTrailing}
 			</div>

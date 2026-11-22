@@ -41,23 +41,6 @@ dialog.set-page::backdrop {
 	font-weight: 600;
 }
 
-.set-close {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 26px;
-	height: 26px;
-	border: 0;
-	border-radius: 6px;
-	background: transparent;
-	color: var(--fg-subtle);
-}
-
-.set-close:hover {
-	background: var(--bg-hover);
-	color: var(--fg-default);
-}
-
 .set-body {
 	display: flex;
 	flex: 1;
@@ -227,35 +210,15 @@ dialog.set-page::backdrop {
 	font-size: 12px;
 }
 
-.set-input {
-	height: 30px;
-	padding: 0 10px;
-	border: 1px solid var(--border-default);
-	border-radius: 7px;
-	background: var(--bg-elevated);
-	color: var(--fg-default);
-	font-size: 12.5px;
-	/*
-	 * 配置界面里的字段一律用界面字体：等宽留给代码、路径、时间与只读的标识展示，
-	 * 输入框里混着等宽与界面字体时，同一张表单看着像是两种控件。
-	 */
-	font-family: var(--font-sans);
-}
-
-/* 改不了的字段只做展示：压暗文字，底色与普通输入框一致，不再多描一道边 */
-.set-input:disabled {
-	color: var(--fg-subtle);
-}
-
 /*
  * 下拉列表。
  *
- * `appearance: base-select` 把浏览器自己的系统菜单换成界面这一套：触发器沿用 `.set-input`，
+ * `appearance: base-select` 把浏览器自己的系统菜单换成界面这一套：触发器沿用 `.ui-input`，
  * 弹层与右键菜单同款（`--bg-elevated` 底、1px 描边、8px 圆角、一层阴影），当前值用 `--bg-active`
  * 底标出，不画对勾。不支持这个属性的引擎退回系统菜单，触发器样式照旧。
  */
-select.set-input,
-select.set-input::picker(select) {
+select.ui-input,
+select.ui-input::picker(select) {
 	appearance: base-select;
 }
 
@@ -265,7 +228,7 @@ select.set-input::picker(select) {
  * `base-select` 把 `<select>` 铺成一个按钮盒，默认把选中的值排在左边、箭头跟在右边；这里
  * 让内容居中，箭头改成贴右缘的绝对定位，文字才真的落在按钮中间，而不是中间偏左。
  */
-select.set-input {
+select.ui-input {
 	position: relative;
 	display: flex;
 	align-items: center;
@@ -288,7 +251,7 @@ select.set-input {
  * chevron：遮罩只取 alpha，颜色跟着 `--fg-subtle` 走，深浅主题都对得上。位置固定在右缘，不参与
  * 文字排版，也不随展开翻面。
  */
-select.set-input::picker-icon {
+select.ui-input::picker-icon {
 	content: "";
 	position: absolute;
 	right: var(--set-select-icon-inset);
@@ -338,7 +301,7 @@ select.set-input::picker-icon {
 	color: var(--fg-subtle);
 }
 
-select.set-input::picker(select) {
+select.ui-input::picker(select) {
 	/* 与触发器拉开一点距离，不压住边框 */
 	margin-block: 4px;
 	/*
@@ -364,26 +327,26 @@ select.set-input::picker(select) {
 	scrollbar-gutter: auto;
 }
 
-select.set-input option {
+select.ui-input option {
 	padding: 5px 8px;
 	border-radius: 6px;
 	color: var(--fg-muted);
 	font-size: 12.5px;
 }
 
-select.set-input option:hover,
-select.set-input option:focus-visible {
+select.ui-input option:hover,
+select.ui-input option:focus-visible {
 	background: var(--bg-hover);
 	color: var(--fg-default);
 }
 
-select.set-input option:checked {
+select.ui-input option:checked {
 	background: var(--bg-active);
 	color: var(--fg-default);
 }
 
 /* 当前值靠底色区分，与界面里其它菜单一致，不再多画一个对勾 */
-select.set-input option::checkmark {
+select.ui-input option::checkmark {
 	display: none;
 }
 
@@ -480,21 +443,6 @@ select.set-input option::checkmark {
 	font-size: 11.5px;
 }
 
-.set-badge {
-	flex: none;
-	padding: 1px 7px;
-	border: 1px solid var(--border-default);
-	border-radius: 999px;
-	color: var(--fg-subtle);
-	font-size: 11px;
-}
-
-.set-badge.is-custom {
-	border-color: var(--border-default);
-	background: var(--bg-active);
-	color: var(--fg-muted);
-}
-
 .set-note {
 	display: flex;
 	align-items: center;
@@ -529,30 +477,6 @@ select.set-input option::checkmark {
 	margin-top: 4px;
 }
 
-.set-save {
-	height: 30px;
-	padding: 0 16px;
-	border: 0;
-	border-radius: 7px;
-	background: var(--accent-fill);
-	color: var(--accent-on-fill);
-	font-size: 12.5px;
-}
-
-.set-save:hover:not(:disabled) {
-	background: var(--accent-fill-hover);
-}
-
-.set-save:active:not(:disabled) {
-	background: var(--accent-fill-active);
-}
-
-.set-save:disabled {
-	background: var(--bg-active);
-	color: var(--fg-subtle);
-	cursor: default;
-}
-
 /*
  * 模型页：标题行右侧是「添加提供商」，下面依次是默认设置卡片、已配置的提供方与可用模型。
  * 提供方与模型都以卡片列表出现，整组只有一个外框，行与行之间是一条发丝线。
@@ -572,28 +496,6 @@ select.set-input option::checkmark {
 }
 
 /* 「添加提供商」是这一页唯一的主动作，用强调色填充 */
-.set-models-add {
-	display: inline-flex;
-	flex: none;
-	align-items: center;
-	gap: 6px;
-	height: 30px;
-	padding: 0 12px;
-	border: 0;
-	border-radius: 7px;
-	background: var(--accent-fill);
-	color: var(--accent-on-fill);
-	font-size: 12.5px;
-}
-
-.set-models-add:hover {
-	background: var(--accent-fill-hover);
-}
-
-.set-models-add:active {
-	background: var(--accent-fill-active);
-}
-
 .set-models-group {
 	display: flex;
 	flex-direction: column;
@@ -693,27 +595,6 @@ select.set-input option::checkmark {
 	font-size: 11.5px;
 }
 
-.set-models-action {
-	flex: none;
-	height: var(--set-models-action-height);
-	padding: 0 var(--set-models-action-padding-x);
-	border: 1px solid var(--border-default);
-	border-radius: var(--set-models-action-radius);
-	background: transparent;
-	color: var(--fg-muted);
-	font-size: 12px;
-}
-
-.set-models-action:hover:not(:disabled) {
-	background: var(--bg-hover);
-	color: var(--fg-default);
-}
-
-.set-models-action:disabled {
-	color: var(--fg-subtle);
-	cursor: default;
-}
-
 /*
  * 提供方编辑弹窗：头部与底部固定，中间的正文自己滚。用 flex 竖排而不是整层滚动，
  * 保存与取消不会跟着表单滚出视野。
@@ -788,7 +669,7 @@ dialog.dialog.is-provider[open] {
 	background: var(--bg-elevated);
 }
 
-.prov-cred .set-input {
+.prov-cred .ui-input {
 	flex: 1;
 	min-width: 0;
 	border: 0;
@@ -850,65 +731,12 @@ dialog.dialog.is-provider[open] {
 	width: 100%;
 }
 
-.prov-login-field .set-input {
+.prov-login-field .ui-input {
 	flex: 1;
 	min-width: 0;
 }
 
-.prov-btn {
-	display: inline-flex;
-	flex: none;
-	align-items: center;
-	justify-content: center;
-	gap: 6px;
-	height: var(--prov-btn-height);
-	padding: 0 var(--prov-btn-padding-x);
-	border: 1px solid var(--border-default);
-	border-radius: 7px;
-	background: transparent;
-	color: var(--fg-muted);
-	font-size: 12px;
-}
-
-.prov-btn:hover:not(:disabled) {
-	background: var(--bg-hover);
-	color: var(--fg-default);
-}
-
-.prov-btn:disabled {
-	color: var(--fg-subtle);
-	cursor: default;
-}
-
-.prov-btn.is-danger:hover:not(:disabled) {
-	border-color: var(--status-err-fg);
-	color: var(--status-err-fg);
-}
-
 /* 已经按下、还没生效的危险按钮：直接就是错误色，再点一下收回 */
-.prov-btn.is-danger.is-armed {
-	border-color: var(--status-err-fg);
-	background: var(--status-err-bg);
-	color: var(--status-err-fg);
-}
-
-.prov-btn.is-ghost {
-	padding: 0 6px;
-	border-color: transparent;
-	color: var(--accent-fg);
-}
-
-.prov-btn.is-icon {
-	width: var(--prov-btn-height);
-	padding: 0;
-	border-color: transparent;
-	color: var(--fg-subtle);
-}
-
-.prov-btn.is-icon:hover:not(:disabled) {
-	color: var(--fg-default);
-}
-
 /* 模型清单：表头与每行共用同一组列宽，字段上下对齐 */
 .prov-model-head,
 .prov-model {
@@ -928,7 +756,7 @@ dialog.dialog.is-provider[open] {
 	min-width: 0;
 }
 
-.prov-model .set-input {
+.prov-model .ui-input {
 	width: 100%;
 }
 
@@ -1012,4 +840,18 @@ dialog.dialog.is-provider[open] {
 	flex: none;
 	align-items: center;
 	gap: 6px;
+}
+
+/*
+ * 提供方弹窗里的两种文字色调。
+ *
+ * 几何全部来自 `common/Button.tsx` 与 `styles/primitives.css`，这里只改前景色：
+ * `accent` 是"拿去新建/去取"这类引导动作，`danger` 是"删掉/取消登录"这类危险动作。
+ */
+.prov-tone-accent {
+	color: var(--accent-fg);
+}
+
+.prov-tone-danger {
+	color: var(--status-err-fg);
 }

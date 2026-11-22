@@ -5,6 +5,7 @@
  * 主体里，这里只负责开合它。
  */
 import { FolderPlus, PanelLeft, Search } from "lucide-react";
+import { IconButton } from "../common/IconButton.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { ICON_SIZE } from "../styles/visual-contract.ts";
 
@@ -30,33 +31,36 @@ export function SidebarHeader({
 		<div className="sb-head">
 			<span className="sb-title">Facet</span>
 			<span className="sb-tools">
-				<button
-					type="button"
+				<IconButton
+					variant="ghost"
+					size="sm"
 					className="chrome-toggle"
 					aria-label={t("sidebar.searchSessions")}
 					aria-expanded={isSearchOpen}
 					onClick={onToggleSearch}
 				>
 					<Search size={ICON_SIZE.lg} />
-				</button>
-				<button
-					type="button"
+				</IconButton>
+				<IconButton
+					variant="ghost"
+					size="sm"
 					className="chrome-toggle"
 					aria-label={t("common.addProject")}
 					onClick={onAddProject}
 				>
 					<FolderPlus size={ICON_SIZE.lg} />
-				</button>
+				</IconButton>
 				{onCollapse === undefined ? null : (
-					<button
-						type="button"
+					<IconButton
+						variant="ghost"
+						size="sm"
 						className="chrome-toggle"
 						aria-label={t("sidebar.collapse")}
 						aria-expanded={true}
 						onClick={onCollapse}
 					>
 						<PanelLeft size={ICON_SIZE.lg} />
-					</button>
+					</IconButton>
 				)}
 			</span>
 		</div>

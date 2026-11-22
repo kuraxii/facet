@@ -90,36 +90,10 @@
 	gap: 2px;
 }
 
+/* 新建会话：几何来自 `common/Button.tsx`，这里只管它在侧栏里的外边距 */
 .sb-new {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	gap: 6px;
 	width: auto;
-	height: 32px;
-	margin: 0 var(--sidebar-edge) 8px;
-	padding: 0 10px;
-	border: 0;
-	border-radius: 6px;
-	background: var(--accent-fill);
-	color: var(--accent-on-fill);
-	font-size: 13px;
-	font-weight: 500;
-	transition: filter var(--dur-fast) var(--ease-standard);
-}
-
-.sb-new:hover:not(:disabled) {
-	background: var(--accent-fill-hover);
-}
-
-.sb-new:active:not(:disabled) {
-	background: var(--accent-fill-active);
-}
-
-.sb-new:disabled {
-	background: var(--bg-active);
-	color: var(--fg-subtle);
-	cursor: default;
+	margin: 0 var(--sidebar-edge) var(--space-4);
 }
 
 .sb-filter {
@@ -314,16 +288,9 @@
 	gap: 6px;
 }
 
+/* 重命名输入框：几何来自 `common/Input.tsx`，这里只让它吃掉标题那一行的剩余宽度 */
 .sb-rename-input {
 	flex: 1;
-	min-width: 0;
-	height: 24px;
-	padding: 0 8px;
-	border: 1px solid var(--border-default);
-	border-radius: 5px;
-	background: var(--bg-elevated);
-	color: var(--fg-default);
-	font-size: 12px;
 }
 
 .sb-confirm {
@@ -565,34 +532,9 @@
 	font-size: 12px;
 }
 
-.sb-foot-btn.is-on {
-	background: var(--bg-active);
-	color: var(--fg-default);
-}
-
 .sb-foot-btn:disabled {
 	color: var(--fg-subtle);
 	cursor: default;
-}
-
-.sb-foot-btn.is-icon {
-	display: grid;
-	place-items: center;
-	width: var(--icon-button-size);
-	height: var(--icon-button-size);
-	padding: 0;
-	border: 0;
-	border-radius: 6px;
-	background: transparent;
-	color: var(--fg-subtle);
-	transition:
-		background-color var(--dur-fast) var(--ease-standard),
-		color var(--dur-fast) var(--ease-standard);
-}
-
-.sb-foot-btn.is-icon:hover {
-	background: var(--bg-hover);
-	color: var(--fg-default);
 }
 
 /* 页脚右端：连接状态提示贴着设置按钮，靠一个占位把这一组推到右边 */

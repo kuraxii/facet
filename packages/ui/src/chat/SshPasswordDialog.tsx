@@ -7,6 +7,9 @@
 
 import { X } from "lucide-react";
 import { useRef, useState } from "react";
+import { Button } from "../common/Button.tsx";
+import { IconButton } from "../common/IconButton.tsx";
+import { Input } from "../common/Input.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { isComposingKey } from "../keys.ts";
 import { Modal } from "../modal.tsx";
@@ -40,15 +43,22 @@ export function SshPasswordDialog({ host, isRetry, onSubmit, onCancel }: SshPass
 		<Modal open onClose={onCancel} label={t("ssh.title")} className="is-narrow">
 			<div className="dialog-head">
 				<h2 className="dialog-title">{t("ssh.heading", { host })}</h2>
-				<button type="button" className="dialog-close" aria-label={t("common.close")} onClick={onCancel}>
+				<IconButton
+					variant="ghost"
+					size="sm"
+					className="dialog-close"
+					aria-label={t("common.close")}
+					onClick={onCancel}
+				>
 					<X size={ICON_SIZE.lg} />
-				</button>
+				</IconButton>
 			</div>
 
 			<p className="dialog-label">{t("ssh.password")}</p>
-			<input
+			<Input
 				ref={inputRef}
-				className="set-input ssh-password-input"
+				size="md"
+				className="ssh-password-input"
 				type="password"
 				aria-label={t("ssh.label")}
 				autoComplete="current-password"
@@ -63,12 +73,12 @@ export function SshPasswordDialog({ host, isRetry, onSubmit, onCancel }: SshPass
 			{isRetry ? <p className="ssh-password-error">{t("ssh.wrong")}</p> : null}
 
 			<div className="dialog-actions">
-				<button type="button" className="dialog-cancel" onClick={onCancel}>
+				<Button variant="ghost" size="md" onClick={onCancel}>
 					{t("common.cancel")}
-				</button>
-				<button type="button" className="dialog-primary" onClick={submit} disabled={password.length === 0}>
+				</Button>
+				<Button variant="primary" size="md" onClick={submit} disabled={password.length === 0}>
 					{t("ssh.connect")}
-				</button>
+				</Button>
 			</div>
 		</Modal>
 	);

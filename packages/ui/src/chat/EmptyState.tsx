@@ -5,6 +5,7 @@
  */
 
 import { FolderPlus, Plus } from "lucide-react";
+import { Button } from "../common/Button.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { ICON_SIZE } from "../styles/visual-contract.ts";
 
@@ -29,19 +30,14 @@ export function EmptyState({ cwd, canCreate, onCreate, onAddProject }: EmptyStat
 				{cwd === undefined ? t("empty.addProjectHint") : t("empty.createHint", { cwd })}
 			</p>
 			<div className="empty-actions">
-				<button
-					type="button"
-					className="empty-primary"
-					onClick={onCreate}
-					disabled={!canCreate || cwd === undefined}
-				>
+				<Button variant="primary" size="md" onClick={onCreate} disabled={!canCreate || cwd === undefined}>
 					<Plus size={ICON_SIZE.md} />
 					{t("common.newSession")}
-				</button>
-				<button type="button" className="empty-secondary" onClick={onAddProject}>
+				</Button>
+				<Button variant="secondary" size="md" onClick={onAddProject}>
 					<FolderPlus size={ICON_SIZE.md} />
 					{t("common.addProject")}
-				</button>
+				</Button>
 			</div>
 		</div>
 	);

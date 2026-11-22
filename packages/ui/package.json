@@ -7,11 +7,12 @@
 	"types": "./src/index.ts",
 	"exports": {
 		".": "./src/index.ts",
-		"./styles": "./src/styles/index.css",
 		"./i18n": "./src/i18n/I18nProvider.tsx",
+		"./markdown": "./src/markdown/Markdown.tsx",
+		"./primitives": "./src/common/primitives.ts",
+		"./styles": "./src/styles/index.css",
 		"./tip": "./src/tip.tsx",
-		"./visual-contract": "./src/styles/visual-contract.ts",
-		"./markdown": "./src/markdown/Markdown.tsx"
+		"./visual-contract": "./src/styles/visual-contract.ts"
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit",

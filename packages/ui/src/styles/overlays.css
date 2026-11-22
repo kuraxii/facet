@@ -10,7 +10,7 @@ dialog.search-panel[open] {
 	margin-bottom: auto;
 	padding: 0;
 	border: 1px solid var(--border-default);
-	border-radius: 12px;
+	border-radius: var(--radius-xl);
 	background: var(--bg-surface);
 	box-shadow: var(--shadow-modal);
 	overflow: hidden;
@@ -26,8 +26,8 @@ dialog.search-panel::backdrop {
 	display: flex;
 	flex: none;
 	align-items: center;
-	gap: 8px;
-	padding: 12px 14px;
+	gap: var(--space-4);
+	padding: var(--space-6);
 	border-bottom: 1px solid var(--border-subtle);
 	color: var(--fg-subtle);
 }
@@ -44,9 +44,9 @@ dialog.search-panel::backdrop {
 .search-results {
 	display: flex;
 	flex-direction: column;
-	gap: 1px;
+	gap: var(--space-1);
 	overflow-y: auto;
-	padding: 6px;
+	padding: var(--space-3);
 	scrollbar-gutter: stable;
 }
 
@@ -63,13 +63,13 @@ dialog.search-panel::backdrop {
 	flex: 1;
 	min-width: 0;
 	color: var(--fg-subtle);
-	font-size: 12px;
+	font-size: var(--text-xs);
 }
 
 .search-row-time {
 	flex: none;
 	color: var(--fg-subtle);
-	font-size: 12px;
+	font-size: var(--text-xs);
 }
 
 .search-row-time.is-active {
@@ -78,9 +78,9 @@ dialog.search-panel::backdrop {
 
 .search-empty {
 	margin: 0;
-	padding: 16px 10px;
+	padding: var(--space-8) var(--space-5);
 	color: var(--fg-subtle);
-	font-size: 13px;
+	font-size: var(--text-ui);
 	text-align: center;
 }
 
@@ -96,9 +96,9 @@ dialog.dialog {
 	max-width: calc(100vw - 48px);
 	max-height: calc(100vh - 48px);
 	margin: auto;
-	padding: 22px 24px 20px;
+	padding: var(--space-12) var(--space-12) var(--space-10);
 	border: 1px solid var(--border-default);
-	border-radius: 20px;
+	border-radius: var(--radius-xl);
 	background: var(--bg-surface);
 	box-shadow: var(--shadow-modal);
 	overflow: auto;
@@ -115,13 +115,13 @@ dialog.dialog::backdrop {
 	display: flex;
 	align-items: flex-start;
 	justify-content: space-between;
-	gap: 12px;
+	gap: var(--space-6);
 	margin-bottom: 18px;
 }
 
 .dialog-title {
 	margin: 0;
-	font-size: 20px;
+	font-size: var(--text-title-md);
 	font-weight: 600;
 }
 
@@ -137,11 +137,11 @@ dialog.dialog::backdrop {
 .project-field {
 	display: flex;
 	align-items: center;
-	gap: 12px;
+	gap: var(--space-6);
 	height: 48px;
-	padding: 0 14px;
+	padding: 0 var(--space-6);
 	border: 1.5px solid var(--border-default);
-	border-radius: 10px;
+	border-radius: var(--radius-lg);
 	background: var(--bg-elevated);
 	color: var(--fg-muted);
 }
@@ -158,7 +158,7 @@ dialog.dialog::backdrop {
 	background: transparent;
 	color: var(--fg-default);
 	font: inherit;
-	font-size: 14px;
+	font-size: var(--text-body);
 }
 
 .project-name::placeholder {
@@ -175,7 +175,7 @@ dialog.dialog::backdrop {
 .dialog-label {
 	margin: 16px 0 8px;
 	color: var(--fg-muted);
-	font-size: 13px;
+	font-size: var(--text-ui);
 	font-weight: 500;
 }
 
@@ -183,24 +183,24 @@ dialog.dialog::backdrop {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	gap: 10px;
-	padding: 22px 16px;
+	gap: var(--space-5);
+	padding: var(--space-10) var(--space-8);
 	border: 1px solid var(--border-default);
-	border-radius: 12px;
+	border-radius: var(--radius-lg);
 	background: var(--bg-elevated);
 	text-align: center;
 }
 
 .source-hint {
 	color: var(--fg-muted);
-	font-size: 13px;
+	font-size: var(--text-ui);
 }
 
 .source-path {
 	max-width: 100%;
 	overflow: hidden;
 	color: var(--fg-default);
-	font-size: 12.5px;
+	font-size: var(--text-xs);
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
@@ -208,14 +208,14 @@ dialog.dialog::backdrop {
 .source-add {
 	display: inline-flex;
 	align-items: center;
-	gap: 6px;
+	gap: var(--space-3);
 	height: 30px;
-	padding: 0 12px;
+	padding: 0 var(--space-6);
 	border: 0;
-	border-radius: 8px;
+	border-radius: var(--radius-lg);
 	background: var(--border-subtle);
 	color: var(--fg-default);
-	font-size: 12.5px;
+	font-size: var(--text-ui);
 }
 
 .source-add:hover:not(:disabled) {
@@ -229,7 +229,7 @@ dialog.dialog::backdrop {
 .dialog-error {
 	margin: 10px 2px 0;
 	color: var(--status-err-fg);
-	font-size: 12px;
+	font-size: var(--text-xs);
 }
 
 dialog.dialog.is-picker[open] {
@@ -237,18 +237,18 @@ dialog.dialog.is-picker[open] {
 	flex-direction: column;
 	width: 520px;
 	max-height: 76vh;
-	padding-bottom: 16px;
+	padding-bottom: var(--space-8);
 }
 
 .picker-search {
 	display: flex;
 	align-items: center;
-	gap: 8px;
+	gap: var(--space-4);
 	margin: 0 0 12px;
-	padding: 0 10px;
+	padding: 0 var(--space-5);
 	height: 34px;
 	border: 1px solid var(--border-default);
-	border-radius: 9px;
+	border-radius: var(--radius-lg);
 	color: var(--fg-subtle);
 }
 
@@ -265,7 +265,7 @@ dialog.dialog.is-picker[open] {
 	display: flex;
 	flex: 1;
 	flex-direction: column;
-	gap: 2px;
+	gap: var(--space-1);
 	min-height: 120px;
 	margin: 0;
 	padding: 0;
@@ -280,8 +280,8 @@ dialog.dialog.is-picker[open] {
 	align-items: center;
 	gap: var(--set-models-mark-gap);
 	min-width: 0;
-	padding: 6px 10px;
-	border-radius: 9px;
+	padding: var(--space-3) var(--space-5);
+	border-radius: var(--radius-lg);
 }
 
 .picker-row:hover {
@@ -292,52 +292,52 @@ dialog.dialog.is-picker[open] {
 	flex: 1;
 	min-width: 0;
 	color: var(--fg-default);
-	font-size: 13px;
+	font-size: var(--text-ui);
 }
 
 .picker-empty {
-	padding: 18px 10px;
+	padding: var(--space-10) var(--space-5);
 	color: var(--fg-subtle);
-	font-size: 12.5px;
+	font-size: var(--text-ui);
 	text-align: center;
 }
 
 .dialog-actions {
 	display: flex;
 	justify-content: flex-end;
-	gap: 10px;
+	gap: var(--space-5);
 	margin-top: 22px;
 }
 
 dialog.dialog.is-picker .dialog-actions {
 	justify-content: space-between;
-	gap: 8px;
+	gap: var(--space-4);
 	margin-top: 14px;
 }
 
 .trust-note {
 	display: flex;
-	gap: 8px;
+	gap: var(--space-4);
 	margin: 12px 0 0;
-	padding: 10px 12px;
+	padding: var(--space-5) var(--space-6);
 	border: 1px solid var(--border-subtle);
-	border-radius: 10px;
+	border-radius: var(--radius-lg);
 	background: var(--bg-elevated);
 	color: var(--fg-muted);
-	font-size: 12px;
-	line-height: 1.6;
+	font-size: var(--text-xs);
+	line-height: var(--leading-ui);
 }
 
 .trust-icon {
 	flex: none;
-	padding-top: 2px;
+	padding-top: var(--space-1);
 	color: var(--fg-subtle);
 }
 
 .trust-text {
 	display: flex;
 	flex-direction: column;
-	gap: 2px;
+	gap: var(--space-1);
 	min-width: 0;
 }
 
@@ -353,7 +353,7 @@ dialog.dialog.is-picker .dialog-actions {
 .ssh-password-error {
 	margin: 8px 0 0;
 	color: var(--status-err-fg);
-	font-size: 13px;
+	font-size: var(--text-ui);
 }
 
 /* 选中文字的右键菜单 */
@@ -367,11 +367,11 @@ dialog.dialog.is-picker .dialog-actions {
 	z-index: var(--z-popup);
 	display: flex;
 	flex-direction: column;
-	gap: 1px;
+	gap: var(--space-1);
 	width: var(--text-menu-width);
 	padding: var(--text-menu-padding);
 	border: 1px solid var(--border-default);
-	border-radius: 8px;
+	border-radius: var(--radius-lg);
 	background: var(--bg-surface);
 	box-shadow: var(--shadow-popover);
 }
@@ -394,9 +394,9 @@ dialog.dialog.is-picker .dialog-actions {
 	max-width: var(--tool-tip-width);
 	max-height: var(--tool-tip-height);
 	overflow: auto;
-	padding: 8px 10px;
+	padding: var(--space-4) var(--space-5);
 	border: 1px solid var(--border-default);
-	border-radius: 10px;
+	border-radius: var(--radius-lg);
 	background: var(--bg-surface);
 	box-shadow: var(--shadow-popover);
 	overscroll-behavior: contain;
@@ -408,15 +408,15 @@ dialog.dialog.is-picker .dialog-actions {
  */
 .pop-tip-card {
 	padding: 0;
-	border-radius: 8px;
+	border-radius: var(--radius-lg);
 }
 
 .pop-tip pre {
 	margin: 0;
 	color: var(--fg-muted);
 	font-family: var(--font-mono);
-	font-size: 11.5px;
-	line-height: 1.55;
+	font-size: var(--text-xs);
+	line-height: var(--leading-ui);
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 }
@@ -450,8 +450,8 @@ dialog.dialog.is-picker .dialog-actions {
 	background: var(--bg-surface);
 	box-shadow: var(--shadow-popover);
 	color: var(--fg-muted);
-	font-size: 12.5px;
-	line-height: 1.45;
+	font-size: var(--text-ui);
+	line-height: var(--leading-ui);
 	pointer-events: auto;
 	/* 进出都走 CSS：进入靠 @starting-style，离开时元素已经从 DOM 里拿掉，只留进入动画 */
 	opacity: 1;
@@ -520,7 +520,7 @@ dialog.dialog.is-picker .dialog-actions {
 .toast-count {
 	flex: none;
 	color: var(--fg-subtle);
-	font-size: 11px;
+	font-size: var(--text-xs);
 }
 
 .toast-close {
@@ -529,7 +529,7 @@ dialog.dialog.is-picker .dialog-actions {
 	align-items: center;
 	justify-content: center;
 	border: 0;
-	border-radius: 6px;
+	border-radius: var(--radius-md);
 	background: transparent;
 	color: var(--fg-subtle);
 	cursor: pointer;

@@ -15,6 +15,7 @@ import { ListRow } from "../common/ListRow.tsx";
 import { Select } from "../common/select.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { Modal } from "../modal.tsx";
+import { MONO_FONT_FAMILY } from "../styles/font-families.ts";
 import { ICON_SIZE } from "../styles/visual-contract.ts";
 import { CODE_THEME_OPTIONS, UI_THEME_OPTIONS } from "../theme.ts";
 import { ModelsSection } from "./ModelsSection.tsx";
@@ -328,6 +329,13 @@ function AppearanceSection({
 }) {
 	const { t } = useI18n();
 	const appearance = draft.appearance;
+	/**
+	 * 编辑器与终端留空时实际用的字体。
+	 *
+	 * 两者在样式表里是 `var(--font-mono)`，所以代码字体填了就跟着它走，没填就是随包的那一个；
+	 * 占位提示写这个，不写「跟代码字体」这种说法。
+	 */
+	const monoFallback = appearance.codeFont.trim().length > 0 ? appearance.codeFont.trim() : MONO_FONT_FAMILY;
 	const themeLabel = (id: FacetSettings["appearance"]["theme"]): string => {
 		switch (id) {
 			case "light":
@@ -439,12 +447,14 @@ function AppearanceSection({
 			</SettingsGroup>
 
 			<SettingsGroup label={t("settings.appearancePage.fonts")}>
+				{/* 占位提示写「留空时实际用的那个字体」：代码字体留空是随包的那一个，编辑器与终端
+				    留空是跟着代码字体走，所以它们的提示就是代码字体当前的值 */}
 				<SettingsRow title={t("settings.appearancePage.codeFont")}>
 					<Input
 						size="md"
 						value={appearance.codeFont}
 						onChange={(event) => patchAppearance({ codeFont: event.target.value })}
-						placeholder="Maple Mono CN"
+						placeholder={MONO_FONT_FAMILY}
 						aria-label={t("settings.appearancePage.codeFont")}
 					/>
 				</SettingsRow>
@@ -453,7 +463,7 @@ function AppearanceSection({
 						size="md"
 						value={appearance.editorFont}
 						onChange={(event) => patchAppearance({ editorFont: event.target.value })}
-						placeholder={t("settings.appearancePage.followCodeFont")}
+						placeholder={monoFallback}
 						aria-label={t("settings.appearancePage.editorFont")}
 					/>
 				</SettingsRow>
@@ -465,7 +475,7 @@ function AppearanceSection({
 						size="md"
 						value={appearance.terminalFont}
 						onChange={(event) => patchAppearance({ terminalFont: event.target.value })}
-						placeholder={t("settings.appearancePage.followCodeFont")}
+						placeholder={monoFallback}
 						aria-label={t("settings.appearancePage.terminalFont")}
 					/>
 				</SettingsRow>

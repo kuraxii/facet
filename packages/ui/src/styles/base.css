@@ -8,7 +8,7 @@
 	 * 位的界面中文字体上。系统 monospace 都没有中文，排到它后面就等于交给各机器自己的回退。
 	 */
 	--font-mono:
-		"Maple Mono CN", "Noto Sans SC Variable", "Noto Sans SC", ui-monospace, SFMono-Regular, Menlo, monospace;
+		"Maple Mono NF", "Noto Sans SC Variable", "Noto Sans SC", ui-monospace, SFMono-Regular, Menlo, monospace;
 	/* 编辑器与终端的字体默认跟代码字体，各自可以在设置里单列 */
 	--font-editor: var(--font-mono);
 	--font-terminal: var(--font-mono);

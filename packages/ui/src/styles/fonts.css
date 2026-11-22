@@ -5,26 +5,26 @@
  * @fontsource-variable/noto-sans-sc，一个可变字体文件按 unicode-range 切成 101 片，字重 100–900
  * 由同一个文件承担，渲染到哪片才加载哪片。
  *
- * 代码字体是 Maple Mono CN 的子集：只含 Latin、符号、制表符与 Nerd Font 图标，不含汉字，
- * 也不分 500 一档（界面里没有把等宽文字设成 500 的地方）。等宽语境里的汉字由 `--font-mono`
- * 栈第二位的界面中文字体接手。两个文件由 scripts/build-fonts.sh 从本机 Maple Mono NL NF CN
- * 生成。
+ * 代码字体是 Maple Mono（NL NF 构建）的子集：只含 Latin、符号、制表符与 Nerd Font 图标，
+ * 汉字与全角标点全部去掉，也不分 500 一档（界面里没有把等宽文字设成 500 的地方）。等宽语境里
+ * 的汉字由 `--font-mono` 栈第二位的界面中文字体接手，所以族名里不带 CN。两个文件由
+ * scripts/build-fonts.sh 生成。
  */
 
 @import "@fontsource-variable/noto-sans-sc";
 
 @font-face {
-	font-family: "Maple Mono CN";
+	font-family: "Maple Mono NF";
 	font-style: normal;
 	font-weight: 400;
 	font-display: swap;
-	src: url("../assets/fonts/maple-mono-cn-400.woff2") format("woff2");
+	src: url("../assets/fonts/maple-mono-nf-400.woff2") format("woff2");
 }
 
 @font-face {
-	font-family: "Maple Mono CN";
+	font-family: "Maple Mono NF";
 	font-style: normal;
 	font-weight: 600;
 	font-display: swap;
-	src: url("../assets/fonts/maple-mono-cn-600.woff2") format("woff2");
+	src: url("../assets/fonts/maple-mono-nf-600.woff2") format("woff2");
 }

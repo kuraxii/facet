@@ -1,7 +1,8 @@
 /**
  * 外壳的三档布局与两栏宽度。
  *
- * 档位照 `docs/layout.md` §2 算：窄档两栏都是抽屉，中档按预算折起一栏，宽档按意图平铺。
+ * 档位照 `docs/layout.md` §2 算：窄档把左栏让给抽屉（右栏继续占列），中档按预算折起一栏，
+ * 宽档按意图平铺。
  * 另外两件事：右栏没有固定上限，钳制上限是「给正文留够地方」之后剩下的宽度（偏好宽本身
  * 不动）；拖动期间整段不重算档位——拖到一半折起一栏会卸载分隔条，收尾会拿一个没人在看的
  * 宽度去提交。`data-*-drag-collapsed` 那条折叠预览由 `PaneResizer` 直接写在 `.app` 上，
@@ -19,12 +20,18 @@ import {
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { shellClassName } from "../../drawer-state.ts";
 import { readLayoutIsNarrow, subscribeLayout } from "../../layout-mode.ts";
-import { clampDragMax, type LayoutResolution, resolveLayout, sameLayout } from "../../resolve-layout.ts";
+import {
+	clampDragMax,
+	fitPanelWidth,
+	type LayoutResolution,
+	resolveLayout,
+	sameLayout,
+} from "../../resolve-layout.ts";
 import type { ShellLayout, ShellLayoutOptions } from "./shell-types.ts";
 import type { PanelPatch } from "./useWorkspacePanels.ts";
 
 export function useShellLayout(options: ShellLayoutOptions): ShellLayout {
-	const { panel, panelExpanded, priorityPane, onPriorityChange, panelActions, drawers } = options;
+	const { panel, panelExpanded, panelActions, drawers } = options;
 	/** 侧栏的收起意图；窄档下这一栏进抽屉，意图位照旧记着 */
 	const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 	const [sidebarWidth, setSidebarWidth] = useState(() => readSidebarWidth(window.localStorage));
@@ -42,12 +49,12 @@ export function useShellLayout(options: ShellLayoutOptions): ShellLayout {
 				viewportWidth: window.innerWidth,
 				sidebarPref: sidebarWidth,
 				panelPref: panel.width,
+				panelPrefViewport: panel.widthViewport,
 				sidebarIntent,
 				panelIntent,
 				isPanelExpanded: panelExpanded,
-				priorityPane,
 			}),
-		[sidebarWidth, panel.width, panelExpanded, sidebarIntent, panelIntent, priorityPane],
+		[sidebarWidth, panel.width, panel.widthViewport, panelExpanded, sidebarIntent, panelIntent],
 	);
 	const [layout, setLayout] = useState<LayoutResolution>(resolve);
 
@@ -78,16 +85,11 @@ export function useShellLayout(options: ShellLayoutOptions): ShellLayout {
 		}
 	}, [isNarrow, panelIntent, panelActions]);
 
-	const updateSidebarWidth = useCallback(
-		(next: number) => {
-			const width = clampSidebarWidth(next);
-			// 调宽也是一次主动交互：预算不够时折起的应该是另一栏
-			onPriorityChange("sidebar");
-			setSidebarWidth(width);
-			writeSidebarWidth(window.localStorage, width);
-		},
-		[onPriorityChange],
-	);
+	const updateSidebarWidth = useCallback((next: number) => {
+		const width = clampSidebarWidth(next);
+		setSidebarWidth(width);
+		writeSidebarWidth(window.localStorage, width);
+	}, []);
 
 	const setPaneResizing = useCallback((dragging: boolean) => setIsResizing(dragging), []);
 
@@ -98,30 +100,30 @@ export function useShellLayout(options: ShellLayoutOptions): ShellLayout {
 			drawers.toggleSidebarDrawer();
 			return;
 		}
-		/*
-		 * 看的是「此刻看不看得见」，不是意图位：被中档预算折起时，点一下是要把它调出来，
-		 * 而不是把意图位关掉；调出来的同时把优先级换到它身上。
-		 */
+		// 看的是「此刻看不看得见」，不是意图位：被中档预算折起时，点一下是要把它调出来
 		if (!layout.sidebarVisible) {
-			onPriorityChange("sidebar");
 			setIsSidebarCollapsed(false);
 			return;
 		}
 		setIsSidebarCollapsed(true);
-	}, [drawers, isNarrow, layout.sidebarVisible, onPriorityChange]);
+	}, [drawers, isNarrow, layout.sidebarVisible]);
 
 	/**
-	 * 右栏实占宽：偏好宽与「给正文留够地方」取小（口径见 `docs/layout.md` §3 约束 2）。
-	 *
-	 * 窄档是例外：那时右栏盖在正文上，没有并列的正文要保护，预算钳制只会把它压到
-	 * `PANEL_MIN_WIDTH`，所以直接用偏好宽，抽屉自己按 `min(宽度, 92vw)` 收。
+	 * 右栏实占宽：窗口变小时先让它窄下去，窄到下限之后正文才开始缩（口径见
+	 * `docs/layout.md` §3 约束 2 与 `fitPanelWidth`）。三档一体，窄档也不例外。
 	 */
+	const panelEffectiveWidth = fitPanelWidth({
+		viewportWidth: layout.viewportWidth,
+		sidebarWidth: layout.sidebarVisible ? sidebarWidth : 0,
+		panelPref: panel.width,
+		panelPrefViewport: panel.widthViewport,
+	});
+	/** 分隔条的实时上限：正文地板给的硬边界，比自动让位宽一档（所以拖得比自动值宽） */
 	const panelMaxWidth = clampDragMax({
 		viewportWidth: layout.viewportWidth,
 		otherWidth: layout.sidebarVisible ? sidebarWidth : 0,
 		min: PANEL_MIN_WIDTH,
 	});
-	const panelEffectiveWidth = isNarrow ? panel.width : Math.min(panel.width, panelMaxWidth);
 	/** 左栏拖动的上限：它自己有 `SIDEBAR_MAX_WIDTH`，再与正文的约束取小 */
 	const sidebarMaxWidth = clampDragMax({
 		viewportWidth: layout.viewportWidth,
@@ -130,47 +132,24 @@ export function useShellLayout(options: ShellLayoutOptions): ShellLayout {
 		max: SIDEBAR_MAX_WIDTH,
 	});
 
-	/** 改右栏状态：窄档下右栏是浮层、宽度由样式表定，宽度补丁直接丢掉。 */
 	const updatePanel = useCallback(
 		(patch: PanelPatch) => {
-			if (isNarrow && typeof patch === "object" && patch.width !== undefined) {
-				return;
-			}
 			panelActions.update(patch);
 		},
-		[isNarrow, panelActions],
+		[panelActions],
 	);
 
-	/** 开关右栏：窄档切临时抽屉；平铺态改意图位（看得见就收起，被折起时点一下是调出来）。 */
+	/** 开关右栏：改意图位（看得见就收起，被折起时点一下是调出来）。 */
 	const togglePanel = useCallback(() => {
-		if (isNarrow) {
-			drawers.togglePanelDrawer();
-			return;
-		}
 		panelActions.setOpen(!layout.panelVisible);
-	}, [drawers, isNarrow, layout.panelVisible, panelActions]);
+	}, [layout.panelVisible, panelActions]);
 
-	/** 关掉右抽屉：宽档下右栏收起时顺带退出宽展开 */
-	const closePanelDrawer = useCallback(() => {
-		if (isNarrow) {
-			drawers.closePanelDrawer();
-			return;
-		}
-		panelActions.collapseExpanded();
-		panelActions.setOpen(false);
-	}, [drawers, isNarrow, panelActions]);
-
-	/** 打开一个工具并切过去：窄档把抽屉调出来，宽档与中档顺手把右栏打开（被折起时预算换边） */
+	/** 打开一个工具并切过去：顺手把右栏打开（被折起时预算换边） */
 	const setPanelTab = useCallback(
 		(tab: RightPanelTab) => {
-			if (isNarrow) {
-				drawers.openPanelDrawer();
-				panelActions.openTab(tab);
-				return;
-			}
 			panelActions.openTab(tab);
 		},
-		[drawers, isNarrow, panelActions],
+		[panelActions],
 	);
 
 	/**
@@ -184,13 +163,10 @@ export function useShellLayout(options: ShellLayoutOptions): ShellLayout {
 	);
 
 	const togglePanelExpanded = panelActions.toggleExpanded;
-	/** 右栏此刻看不看得见：窄档看抽屉，其余看有没有占列 */
-	const isPanelOpen = isNarrow ? drawers.isPanelDrawerOpen : layout.panelVisible;
 	return {
 		isNarrow,
 		isDrawerOpen: drawers.isDrawerOpen,
-		isPanelDrawerOpen: drawers.isPanelDrawerOpen,
-		isPanelOpen,
+		isPanelOpen: layout.panelVisible,
 		isPanelExpanded: layout.expanded,
 		isSidebarCollapsed,
 		isSidebarOpen,
@@ -212,7 +188,6 @@ export function useShellLayout(options: ShellLayoutOptions): ShellLayout {
 		togglePanel,
 		setPanelTab,
 		closePanelTab,
-		closePanelDrawer,
 		togglePanelExpanded,
 		closeDrawer: drawers.closeDrawer,
 	};

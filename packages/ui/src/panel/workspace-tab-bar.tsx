@@ -84,8 +84,8 @@ export const WORKSPACE_TAB_LABEL_BREAKPOINT_PX = LAYOUT_PX.workspaceTabBar.label
  * 最近的查询容器。
  *
  * 容器查询按最近的、`container-type` 不是 `normal` 的祖先解析，这里走同一条规则去找到
- * 它：顶带右格与抽屉顶头是容器，中间的 `.chrome-slot-row` / `.panel-head-row` 只是让位的
- * 一行，不算。找不到时退回父元素，够用。
+ * 它：顶带右格是容器，中间的 `.chrome-slot-row` 只是让位的一行，不算。找不到时退回
+ * 父元素，够用。
  */
 function findQueryContainer(node: HTMLElement): HTMLElement | null {
 	let current = node.parentElement;

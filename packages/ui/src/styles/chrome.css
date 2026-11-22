@@ -20,10 +20,9 @@
 	--col-panel: var(--panel-width);
 }
 
-/* 窄档：两栏都是抽屉，实占宽归零，正文满宽 */
+/* 窄档：左栏进抽屉、实占宽归零；右栏没有抽屉，照旧占列 */
 .app.is-narrow {
 	--col-sidebar: 0px;
-	--col-panel: 0px;
 }
 
 /*

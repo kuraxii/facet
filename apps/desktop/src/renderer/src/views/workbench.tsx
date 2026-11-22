@@ -311,9 +311,7 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 		);
 
 	/* 右栏占着列时，它的控件在顶带右格里；否则顶带中格右端只留一个入口 */
-	const hasPanelColumn = shell.panelVisible && !shell.isNarrow;
-	/* 右栏要渲染：要么占列，要么作为浮层展开着 */
-	const rendersPanel = hasPanelColumn || shell.isPanelDrawerOpen;
+	const hasPanelColumn = shell.panelVisible;
 
 	return (
 		<CodeThemeProvider value={shell.codeTheme}>
@@ -388,13 +386,12 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 				}
 			>
 				<div className={shell.className}>
-					{shell.isDrawerOpen || shell.isPanelDrawerOpen ? (
+					{shell.isDrawerOpen ? (
 						<button
 							type="button"
 							className="drawer-scrim"
 							aria-label={t("app.closeDrawer")}
-							// 右抽屉开着时关的是它；否则关的是窄档的侧栏抽屉
-							onClick={shell.isPanelDrawerOpen ? shell.closePanelDrawer : shell.closeDrawer}
+							onClick={shell.closeDrawer}
 						/>
 					) : null}
 					<SessionSidebar
@@ -457,35 +454,18 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 					{/* 主区只有对话：消息流与输入区直接撑满这一列，不再有标签栏 */}
 					<main className="main">{mainContent}</main>
 
-					{rendersPanel ? (
+					{hasPanelColumn ? (
 						<RightPanel
-							// 占列时是分隔条可拖的那一栏，窄档时是一层盖住正文的全高抽屉
-							variant={hasPanelColumn ? "tiled" : "drawer"}
 							/*
 							 * 宽展开期间不给宽度：那一列的宽度由样式按视口现算，拖动会把它改回
 							 * 偏好宽。展开态本来也不需要拖动——它已经是「能给多宽就给多宽」。
 							 */
-							width={hasPanelColumn && !shell.isPanelExpanded ? shell.panelEffectiveWidth : undefined}
-							onWidthChange={
-								hasPanelColumn && !shell.isPanelExpanded ? (width) => shell.updatePanel({ width }) : undefined
-							}
+							width={shell.isPanelExpanded ? undefined : shell.panelEffectiveWidth}
+							onWidthChange={shell.isPanelExpanded ? undefined : (width) => shell.updatePanel({ width })}
 							maxWidth={shell.panelMaxWidth}
 							onDraggingChange={shell.setPaneResizing}
 							// 缩到最小宽一半以内松手就收起右栏，已打开的标签不动
 							onDragCollapse={shell.togglePanel}
-							head={
-								hasPanelColumn ? undefined : (
-									<WorkspacePanelControls
-										shell={shell}
-										items={tabItems}
-										onSelectTab={selectWorkspaceTab}
-										onCloseTab={closeWorkspaceTab}
-										controlsId="workspace-panel"
-										// 抽屉已经接近满宽，宽展开在那里没有意义
-										showExpand={false}
-									/>
-								)
-							}
 							bodyClassName="is-workspace"
 						>
 							<WorkspaceBody

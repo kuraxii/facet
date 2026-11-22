@@ -108,13 +108,12 @@ afterEach(() => {
 });
 
 describe("窄档抽屉", () => {
-	it("开一个就关另一个", () => {
+	it("点一下开、再点一下关", () => {
 		mount();
 		act(() => handle().toggleSidebarDrawer());
 		expect(handle().isDrawerOpen).toBe(true);
-		act(() => handle().togglePanelDrawer());
+		act(() => handle().toggleSidebarDrawer());
 		expect(handle().isDrawerOpen).toBe(false);
-		expect(handle().isPanelDrawerOpen).toBe(true);
 	});
 
 	it("内层浮层已经吃掉的 Escape 不关抽屉", async () => {
@@ -138,10 +137,9 @@ describe("窄档抽屉", () => {
 
 	it("离开窄档时抽屉自动收起", async () => {
 		mount();
-		act(() => handle().togglePanelDrawer());
-		expect(handle().isPanelDrawerOpen).toBe(true);
+		act(() => handle().toggleSidebarDrawer());
+		expect(handle().isDrawerOpen).toBe(true);
 		await setNarrow(false);
-		expect(handle().isPanelDrawerOpen).toBe(false);
 		expect(handle().isDrawerOpen).toBe(false);
 	});
 });

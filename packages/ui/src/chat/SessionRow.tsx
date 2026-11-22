@@ -8,7 +8,6 @@ import type { ReactNode } from "react";
 import { memo } from "react";
 import { ListRow } from "../common/ListRow.tsx";
 import { ScrollRow } from "../common/scroll-area.tsx";
-import type { HoverTip } from "../tip.tsx";
 import { SessionStatusMark } from "./session-status-mark.tsx";
 import type { SidebarSession } from "./sidebar-model.ts";
 
@@ -24,8 +23,6 @@ export interface SessionRowProps {
 	onOpen: (session: SidebarSession) => void;
 	/** 右键：打开这一条的菜单，位置由调用方算 */
 	onContextMenu: (session: SidebarSession, event: React.MouseEvent<HTMLButtonElement>) => void;
-	/** 行的悬浮提示（标题全文）；用调用方那份提示的状态机 */
-	tip: HoverTip;
 }
 
 /** 一条会话。 */
@@ -35,7 +32,6 @@ export const SessionRow = memo(function SessionRow({
 	twoLine,
 	onOpen,
 	onContextMenu,
-	tip,
 }: SessionRowProps): ReactNode {
 	return (
 		<ScrollRow className="sb-row-item">
@@ -48,7 +44,6 @@ export const SessionRow = memo(function SessionRow({
 					onClick={() => onOpen(session)}
 					onContextMenu={(event) => onContextMenu(session, event)}
 					disabled={session.isPlaceholder === true}
-					{...tip.handlers(session.title)}
 				>
 					<SessionStatusMark bucket={session.bucket} />
 					{twoLine ? (

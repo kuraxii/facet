@@ -266,8 +266,8 @@ function ToolRow({ part }: { part: ToolCallPart }) {
 	const { t } = useI18n();
 	const [isOpen, setOpen] = useState(false);
 	const [isExpanded, setExpanded] = useState(false);
-	// 参数完整内容的悬停浮层，与别处的提示共用一份实现
-	const tip = useHoverTip();
+	// 参数全文的悬停浮层：里面能滚动，指针离开后留一段宽限才收（见 `HoverTipOptions`）
+	const tip = useHoverTip({ holdOnLeave: true });
 	const output = part.output ?? "";
 	// 展开给的就是工具结果原文：模型看到的那份，界面上不再删改任何一行
 	const body = output;

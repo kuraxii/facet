@@ -302,7 +302,6 @@ export const SessionSidebar = memo(function SessionSidebar({
 						label={groupLabel(group.key)}
 						onOpen={openSession}
 						onContextMenu={openSessionMenu}
-						tip={tip}
 					/>
 				))}
 			</ScrollArea>

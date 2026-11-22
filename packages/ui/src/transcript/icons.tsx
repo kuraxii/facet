@@ -1,11 +1,17 @@
-/** 界面用的小图标。统一 24 栅格,尺寸由调用处给。 */
+/**
+ * 界面用的小图标。统一 24 栅格、尺寸由调用处给。
+ *
+ * 描边走 `.ui-icon` 那一条（`--icon-stroke-width`），与 lucide 同一份真值；这里不写
+ * `strokeWidth`，写一处就多一个改不动的地方。
+ */
 import type { SVGProps } from "react";
+import { ICON_SIZE } from "../styles/visual-contract.ts";
 
 type IconProps = SVGProps<SVGSVGElement> & { size?: number };
 
-function Icon({ size = 14, children, ...rest }: IconProps) {
+function Icon({ size = ICON_SIZE.md, children, ...rest }: IconProps) {
 	return (
-		<svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" {...rest}>
+		<svg className="ui-icon" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" {...rest}>
 			{children}
 		</svg>
 	);
@@ -33,7 +39,7 @@ export function FolderIcon({ size, ...rest }: IconProps) {
 /** 发送。 */
 export function SendIcon({ size, ...rest }: IconProps) {
 	return (
-		<Icon size={size} {...rest} style={{ strokeWidth: 2.2 }}>
+		<Icon size={size} {...rest}>
 			<path d="M12 19V5M5 12l7-7 7 7" />
 		</Icon>
 	);

@@ -8,6 +8,7 @@ import MarkdownRender, { type SmoothMarkdownStreamOptions } from "markstream-rea
 import { memo, useMemo, useRef } from "react";
 import "markstream-react/index.css";
 import "katex/dist/katex.min.css";
+import { VISUAL_SCALE } from "../styles/visual-contract.ts";
 import { codeThemeName } from "../theme.ts";
 import { useCodeTheme } from "./code-theme.tsx";
 import { MARKDOWN_SCOPE } from "./registry.ts";
@@ -31,9 +32,12 @@ const CODE_BLOCK_PROPS = {
 /**
  * 代码块排版。长行折行显示,不出现横向滚动条;行号与虚拟化缓冲在聊天流里都用不上。
  * 对象身份要稳定,每次渲染新建会让代码块重建。
+ *
+ * 字号取刻度里的 `--text-xs`，与 `markdown.css` 给代码块那一条是同一个数：渲染器要的是一个
+ * 数字、样式表要的是一个变量，两边都从 `VISUAL_SCALE` 出门。
  */
 const CODE_BLOCK_OPTIONS = {
-	fontSize: 12.5,
+	fontSize: VISUAL_SCALE.text.xs,
 	lineHeight: 1.6,
 	padding: 12,
 	overflow: "wrap",

@@ -11,6 +11,7 @@ import type { GitFileChange } from "@facet/protocol";
 import {
 	ChangesDocument,
 	ChangesPane,
+	ICON_SIZE,
 	useHoverTip,
 	useI18n,
 	WorkspaceSplit,
@@ -111,7 +112,7 @@ function BackToListButton({ onBack }: { onBack: () => void }): ReactNode {
 				{...tip.handlers(label)}
 				onClick={onBack}
 			>
-				<ArrowLeft size={14} strokeWidth={1.5} />
+				<ArrowLeft size={ICON_SIZE.md} />
 			</button>
 			{tip.render()}
 		</>
@@ -135,7 +136,7 @@ function RestoreListButton({ label, onShow }: { label: string; onShow: () => voi
 				{...tip.handlers(label)}
 				onClick={onShow}
 			>
-				<PanelRightOpen size={14} strokeWidth={1.5} />
+				<PanelRightOpen size={ICON_SIZE.md} />
 			</button>
 			{tip.render()}
 		</>

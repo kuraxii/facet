@@ -67,10 +67,11 @@
 	--radius-xl: 12px; /* 菜单容器、输入区、搜索层、对话框 */
 	--radius-pill: 999px; /* 胶囊徽标、圆点 */
 
-	/* 图标尺寸（3 档） */
+	/* 图标尺寸（3 档）与描边宽度：界面图标只认这三个尺寸与这一条描边 */
 	--icon-sm: 12px; /* 徽标、行内状态点 */
 	--icon-md: 14px; /* 侧栏、密集工具条 */
 	--icon-lg: 16px; /* 标准 28 / 32px 图标按钮 */
+	--icon-stroke-width: 1.8px;
 
 	/*
 	 * 正文字号固定，整体大小由窗口缩放控制；这一条同时是对话正文、气泡与 Markdown 的唯一入口，
@@ -819,12 +820,24 @@ textarea:focus-visible {
 	user-select: none;
 }
 
+/*
+ * 图形缺省：不填充、跟着文字色描边、圆头圆角。
+ *
+ * **描边宽度不在这里给**：这一条以前写死 1.8，优先级压过了 lucide 组件上七十多处
+ * `strokeWidth` 属性——那些属性一个都没生效，改一个也不见变化。现在宽度只在
+ * `.lucide` 与界面自绘的 `.ui-icon` 上按 `--icon-stroke-width` 落地，Mermaid、Git 泳道、
+ * 状态环这些自带描边的图形各管各的。
+ */
 svg {
 	fill: none;
 	stroke: currentColor;
-	stroke-width: 1.8;
 	stroke-linecap: round;
 	stroke-linejoin: round;
+}
+
+.lucide,
+.ui-icon {
+	stroke-width: var(--icon-stroke-width);
 }
 
 svg.fl {

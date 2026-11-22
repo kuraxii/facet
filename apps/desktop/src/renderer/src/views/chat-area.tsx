@@ -13,6 +13,7 @@ import {
 	Composer,
 	type ComposerHandle,
 	ExtensionPromptCard,
+	ICON_SIZE,
 	QueueStrip,
 	useI18n,
 } from "@facet/ui";
@@ -139,7 +140,7 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 						aria-label={t("app.backToBottom")}
 						onClick={() => transcript.scrollToBottom("smooth")}
 					>
-						<ArrowDownIcon size={16} />
+						<ArrowDownIcon size={ICON_SIZE.lg} />
 					</button>
 				)}
 				<div className="footer-column">

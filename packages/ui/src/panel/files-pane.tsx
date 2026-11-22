@@ -21,6 +21,7 @@ import {
 } from "react";
 import { FACET_FILE_DRAG_MIME } from "../common/file-drag.ts";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { ICON_SIZE } from "../styles/visual-contract.ts";
 import { useHoverTip } from "../tip.tsx";
 import { TreeChevron } from "../transcript/chevron.tsx";
 
@@ -146,7 +147,7 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath, onCollapse 
 					aria-label={t("panel.collapseTree")}
 					onClick={onCollapse}
 				>
-					<PanelRightClose size={13} strokeWidth={1.5} />
+					<PanelRightClose size={ICON_SIZE.md} />
 				</button>
 			)}
 			<span className="tree-root">{t("panel.projectFiles")}</span>
@@ -158,7 +159,7 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath, onCollapse 
 					disabled={root?.isLoading === true}
 					onClick={refresh}
 				>
-					<RefreshCw size={13} strokeWidth={1.5} />
+					<RefreshCw size={ICON_SIZE.md} />
 				</button>
 			</div>
 		</div>
@@ -314,9 +315,9 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath, onCollapse 
 								}}
 							>
 								{isDirectory ? (
-									<TreeChevron isOpen={isOpen} size={14} />
+									<TreeChevron isOpen={isOpen} size={ICON_SIZE.md} />
 								) : (
-									<FileGlyph size={14} strokeWidth={1.5} className="tree-icon" />
+									<FileGlyph size={ICON_SIZE.md} className="tree-icon" />
 								)}
 								<span className="tree-name">{entry.name}</span>
 								{state?.isLoading === true ? <span className="tree-note">…</span> : null}

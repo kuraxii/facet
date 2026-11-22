@@ -11,6 +11,7 @@ import type { FileContent } from "@facet/protocol";
 import { useI18n } from "@facet/ui/i18n";
 import { Markdown } from "@facet/ui/markdown";
 import { useHoverTip } from "@facet/ui/tip";
+import { ICON_SIZE } from "@facet/ui/visual-contract";
 import { Check, Code, Eye, Save } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { CodeSurface } from "./code-surface.tsx";
@@ -176,7 +177,7 @@ export function FileView({ path, content, onSave, onReload, headerTrailing }: Fi
 							setMarkdownView(isPreviewing ? "source" : "preview");
 						}}
 					>
-						{isPreviewing ? <Code size={14} strokeWidth={1.5} /> : <Eye size={14} strokeWidth={1.5} />}
+						{isPreviewing ? <Code size={ICON_SIZE.md} /> : <Eye size={ICON_SIZE.md} />}
 					</button>
 				) : null}
 				{isText ? (
@@ -189,7 +190,7 @@ export function FileView({ path, content, onSave, onReload, headerTrailing }: Fi
 						{...tip.handlers(t("editor.saveShortcut"))}
 						onClick={() => void save()}
 					>
-						{isSaved ? <Check size={14} strokeWidth={1.5} /> : <Save size={14} strokeWidth={1.5} />}
+						{isSaved ? <Check size={ICON_SIZE.md} /> : <Save size={ICON_SIZE.md} />}
 					</button>
 				) : null}
 				{headerTrailing}

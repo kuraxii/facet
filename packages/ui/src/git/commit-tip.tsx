@@ -11,6 +11,7 @@ import { Clock, Copy, ExternalLink, GitCommitVertical } from "lucide-react";
 import type { ReactNode } from "react";
 import { shortTime } from "../chat/sidebar-model.ts";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { ICON_SIZE } from "../styles/visual-contract.ts";
 import styles from "./git.module.css";
 
 export interface CommitTipProps {
@@ -163,7 +164,7 @@ export function CommitTip({ commit, webUrl }: CommitTipProps): ReactNode {
 			<div className={styles.commitTipMain}>
 				<p className={styles.commitTipHead}>
 					<span className={styles.commitTipAuthor}>{commit.authorName}</span>
-					<Clock className={styles.commitTipIcon} size={13} strokeWidth={1.5} />
+					<Clock className={styles.commitTipIcon} size={ICON_SIZE.md} />
 					<time dateTime={commit.authorDate}>
 						{relative} ({absoluteTime(date, locale)})
 					</time>
@@ -177,7 +178,7 @@ export function CommitTip({ commit, webUrl }: CommitTipProps): ReactNode {
 				</div>
 			)}
 			<div className={styles.commitTipBand}>
-				<GitCommitVertical className={styles.commitTipAccent} size={14} strokeWidth={1.5} />
+				<GitCommitVertical className={styles.commitTipAccent} size={ICON_SIZE.md} />
 				<button
 					type="button"
 					className={styles.commitTipHash}
@@ -185,7 +186,7 @@ export function CommitTip({ commit, webUrl }: CommitTipProps): ReactNode {
 					onClick={copyHash}
 				>
 					<span className={styles.commitTipSha}>{commit.shortSha}</span>
-					<Copy size={13} strokeWidth={1.4} />
+					<Copy size={ICON_SIZE.md} />
 				</button>
 				{href === undefined || host === undefined ? null : (
 					<>
@@ -193,7 +194,7 @@ export function CommitTip({ commit, webUrl }: CommitTipProps): ReactNode {
 							|
 						</span>
 						<a className={styles.commitTipLink} href={href} target="_blank" rel="noreferrer">
-							<ExternalLink size={14} strokeWidth={1.5} />
+							<ExternalLink size={ICON_SIZE.md} />
 							<span>{t("panel.commitOpenRemote", { host: hostLabel(host) })}</span>
 						</a>
 					</>

@@ -12,6 +12,7 @@ import { Brain, FileUp, ImagePlus, Plus, X } from "lucide-react";
 import { type Ref, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FACET_FILE_DRAG_MIME } from "../common/file-drag.ts";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { ICON_SIZE } from "../styles/visual-contract.ts";
 import { useHoverTip } from "../tip.tsx";
 import { ChevronIcon } from "../transcript/chevron.tsx";
 import { SendIcon, StopIcon } from "../transcript/icons.tsx";
@@ -306,7 +307,7 @@ export function Composer({
 									aria-label={t("composer.removeImage", { name: item.name })}
 									onClick={() => onRemoveAttachment(item.id)}
 								>
-									<X size={12} strokeWidth={1.5} />
+									<X size={ICON_SIZE.sm} />
 								</button>
 							)}
 						</figure>
@@ -344,7 +345,7 @@ export function Composer({
 						aria-expanded={openMenu === "attach"}
 						onClick={() => setOpenMenu(openMenu === "attach" ? undefined : "attach")}
 					>
-						<Plus size={16} strokeWidth={1.5} />
+						<Plus size={ICON_SIZE.lg} />
 					</button>
 					{openMenu === "attach" ? (
 						// biome-ignore lint/a11y/useSemanticElements: 浮层里是一组按钮，用不到 fieldset 的表单语义
@@ -361,11 +362,11 @@ export function Composer({
 									onPickImages();
 								}}
 							>
-								<ImagePlus size={14} strokeWidth={1.5} />
+								<ImagePlus size={ICON_SIZE.md} />
 								<span className="ell">{t("composer.addImage")}</span>
 							</button>
 							<button type="button" className="chip-pop-item is-row" role="menuitem" disabled>
-								<FileUp size={14} strokeWidth={1.5} />
+								<FileUp size={ICON_SIZE.md} />
 								<span className="ell">{t("composer.uploadFile")}</span>
 							</button>
 						</div>
@@ -436,7 +437,7 @@ export function Composer({
 							level: thinkingLevel === undefined ? t("composer.defaultLevel") : LEVEL_LABELS[thinkingLevel],
 						})}
 					>
-						<Brain size={13} strokeWidth={1.5} />
+						<Brain size={ICON_SIZE.md} />
 						{thinkingLevel === undefined ? t("composer.defaultLevel") : LEVEL_LABELS[thinkingLevel]}
 						{canPickLevel ? <ChevronIcon isOpen={openMenu === "level"} /> : null}
 					</button>
@@ -513,7 +514,7 @@ export function Composer({
 							aria-label={activity === "stopping" ? t("composer.stopping") : t("composer.stop")}
 							{...tip.handlers(activity === "stopping" ? t("composer.stopping") : t("composer.stopTurn"))}
 						>
-							<StopIcon size={15} />
+							<StopIcon size={ICON_SIZE.lg} />
 						</button>
 					) : (
 						<button
@@ -524,7 +525,7 @@ export function Composer({
 							onClick={onSend}
 							disabled={!canSend}
 						>
-							<SendIcon size={16} />
+							<SendIcon size={ICON_SIZE.lg} />
 						</button>
 					)}
 				</span>

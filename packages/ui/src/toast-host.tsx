@@ -8,6 +8,7 @@ import { Check, CircleAlert, Info, TriangleAlert, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useI18n } from "./i18n/I18nProvider.tsx";
+import { ICON_SIZE } from "./styles/visual-contract.ts";
 import type { Toast, ToastLevel } from "./toast.ts";
 
 /** 各等级的图标，配色交给 CSS。 */
@@ -51,7 +52,7 @@ export function ToastHost({ toasts, onDismiss, onPauseChange }: ToastHostProps):
 						onFocusCapture={() => onPauseChange(true)}
 						onBlurCapture={() => onPauseChange(false)}
 					>
-						<Icon className="toast-icon" size={14} strokeWidth={1.6} aria-hidden />
+						<Icon className="toast-icon" size={ICON_SIZE.md} aria-hidden />
 						<span className="toast-text">{toast.message}</span>
 						{toast.count > 1 ? <span className="toast-count mono">{toast.count}</span> : null}
 						<button
@@ -60,7 +61,7 @@ export function ToastHost({ toasts, onDismiss, onPauseChange }: ToastHostProps):
 							aria-label={t("app.closeNotice")}
 							onClick={() => onDismiss(toast.id)}
 						>
-							<X size={12} strokeWidth={1.5} />
+							<X size={ICON_SIZE.sm} />
 						</button>
 					</div>
 				);

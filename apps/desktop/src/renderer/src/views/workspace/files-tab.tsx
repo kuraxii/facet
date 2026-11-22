@@ -12,6 +12,7 @@ import {
 	FILE_TREE_MIN_WIDTH,
 	FilesPane,
 	fileTreeMaxWidth,
+	ICON_SIZE,
 	PaneResizer,
 	readFileTreeWidth,
 	useHoverTip,
@@ -186,7 +187,7 @@ function FileTreeToggle({ isOpen, onToggle }: { isOpen: boolean; onToggle: () =>
 				{...tip.handlers(label)}
 				onClick={onToggle}
 			>
-				<FolderTree size={14} strokeWidth={1.5} />
+				<FolderTree size={ICON_SIZE.md} />
 			</button>
 			{tip.render()}
 		</>

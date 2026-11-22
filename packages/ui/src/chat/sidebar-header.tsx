@@ -6,6 +6,7 @@
  */
 import { FolderPlus, PanelLeft, Search } from "lucide-react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { ICON_SIZE } from "../styles/visual-contract.ts";
 
 export interface SidebarHeaderProps {
 	/** 会话搜索框是否展开 */
@@ -36,7 +37,7 @@ export function SidebarHeader({
 					aria-expanded={isSearchOpen}
 					onClick={onToggleSearch}
 				>
-					<Search size={15} strokeWidth={1.5} />
+					<Search size={ICON_SIZE.lg} />
 				</button>
 				<button
 					type="button"
@@ -44,7 +45,7 @@ export function SidebarHeader({
 					aria-label={t("common.addProject")}
 					onClick={onAddProject}
 				>
-					<FolderPlus size={15} strokeWidth={1.5} />
+					<FolderPlus size={ICON_SIZE.lg} />
 				</button>
 				{onCollapse === undefined ? null : (
 					<button
@@ -54,7 +55,7 @@ export function SidebarHeader({
 						aria-expanded={true}
 						onClick={onCollapse}
 					>
-						<PanelLeft size={15} strokeWidth={1.5} />
+						<PanelLeft size={ICON_SIZE.lg} />
 					</button>
 				)}
 			</span>

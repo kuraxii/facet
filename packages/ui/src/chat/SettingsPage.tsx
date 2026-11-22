@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Select } from "../common/select.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { Modal } from "../modal.tsx";
+import { ICON_SIZE } from "../styles/visual-contract.ts";
 import { CODE_THEME_OPTIONS, UI_THEME_OPTIONS } from "../theme.ts";
 import { ModelsSection } from "./ModelsSection.tsx";
 import type { SettingsDataSource } from "./settings-data-source.ts";
@@ -199,7 +200,7 @@ export function SettingsPage({
 			<header className="set-head">
 				<h1 className="set-title">{t("settings.title")}</h1>
 				<button type="button" className="set-close" aria-label={t("settings.close")} onClick={onClose}>
-					<X size={16} strokeWidth={1.5} />
+					<X size={ICON_SIZE.lg} />
 				</button>
 			</header>
 

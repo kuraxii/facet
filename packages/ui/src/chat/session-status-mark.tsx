@@ -8,6 +8,7 @@
 import { CircleAlert } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { ICON_SIZE } from "../styles/visual-contract.ts";
 import { type SessionStatusBucket, STATUS_RING_PERIOD_MS, statusBucketLabel } from "./session-status.ts";
 
 /** 状态标记参数。 */
@@ -26,7 +27,7 @@ export function SessionStatusMark({ bucket }: SessionStatusMarkProps) {
 			data-status={bucket}
 		>
 			{bucket === "running" ? <StatusRing /> : null}
-			{bucket === "needs_input" ? <CircleAlert size={12} strokeWidth={2} aria-hidden="true" /> : null}
+			{bucket === "needs_input" ? <CircleAlert size={ICON_SIZE.sm} aria-hidden="true" /> : null}
 			{bucket === "attention" || bucket === "failed" || bucket === "done" ? (
 				<span className="status-dot" aria-hidden="true" />
 			) : null}

@@ -3,6 +3,7 @@ import type { UiFormAnswer, UiFormQuestion, UiPrompt, UiResponse } from "@facet/
 import { Check, X } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { ICON_SIZE } from "../styles/visual-contract.ts";
 import styles from "./ExtensionPromptCard.module.css";
 
 /** 源类名到模块类名的映射，状态类也在这里集中命名。 */
@@ -314,7 +315,7 @@ export function ExtensionPromptCard({ prompt, canRespond, onRespond }: Extension
 							>
 								<span className={s.tabMark} aria-hidden="true">
 									{responded ? (
-										<Check size={11} strokeWidth={2} />
+										<Check size={ICON_SIZE.sm} />
 									) : (
 										<span className={s.tabDot} data-extension-tab-dot />
 									)}
@@ -386,7 +387,7 @@ export function ExtensionPromptCard({ prompt, canRespond, onRespond }: Extension
 								<span className={`${s.radio}${question.multiple ? ` ${s.square}` : ""}`} aria-hidden="true">
 									{answer?.selections.includes(choice.label) === true ? (
 										question.multiple ? (
-											<Check size={12} strokeWidth={2.5} />
+											<Check size={ICON_SIZE.sm} />
 										) : (
 											<span className={s.radioDot} />
 										)
@@ -406,7 +407,7 @@ export function ExtensionPromptCard({ prompt, canRespond, onRespond }: Extension
 									<span className={`${s.radio}${question.multiple ? ` ${s.square}` : ""}`} aria-hidden="true">
 										{hasCustom ? (
 											question.multiple ? (
-												<Check size={12} strokeWidth={2.5} />
+												<Check size={ICON_SIZE.sm} />
 											) : (
 												<span className={s.radioDot} />
 											)
@@ -525,7 +526,7 @@ export function ExtensionPromptCard({ prompt, canRespond, onRespond }: Extension
 							void respond({ kind: "cancel" });
 						}}
 					>
-						<X size={14} strokeWidth={1.5} aria-hidden="true" />
+						<X size={ICON_SIZE.md} aria-hidden="true" />
 						<span>{t("extension.close")}</span>
 					</button>
 					<button
@@ -536,7 +537,7 @@ export function ExtensionPromptCard({ prompt, canRespond, onRespond }: Extension
 						disabled={!canSubmit}
 						onClick={submit}
 					>
-						<Check size={14} strokeWidth={1.5} aria-hidden="true" />
+						<Check size={ICON_SIZE.md} aria-hidden="true" />
 						<span>{t("extension.submit")}</span>
 					</button>
 				</div>

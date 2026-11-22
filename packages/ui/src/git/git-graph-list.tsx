@@ -15,6 +15,7 @@ import type { GitCommit } from "@facet/protocol";
 import { RefreshCw } from "lucide-react";
 import { type ReactNode, type RefObject, useCallback, useEffect, useMemo, useRef } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { ICON_SIZE } from "../styles/visual-contract.ts";
 import { useHoverTip } from "../tip.tsx";
 import { CommitTip } from "./commit-tip.tsx";
 import styles from "./git.module.css";
@@ -135,7 +136,7 @@ export function GitGraphList({
 				aria-label={t("panel.refreshCommits")}
 				onClick={onRefresh}
 			>
-				<RefreshCw size={13} strokeWidth={1.5} data-spinning={isLoading} />
+				<RefreshCw size={ICON_SIZE.md} data-spinning={isLoading} />
 			</button>
 		</div>
 	);

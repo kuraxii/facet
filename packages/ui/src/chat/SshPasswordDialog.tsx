@@ -10,6 +10,7 @@ import { useRef, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { isComposingKey } from "../keys.ts";
 import { Modal } from "../modal.tsx";
+import { ICON_SIZE } from "../styles/visual-contract.ts";
 
 /** 密码框参数。 */
 export interface SshPasswordDialogProps {
@@ -40,7 +41,7 @@ export function SshPasswordDialog({ host, isRetry, onSubmit, onCancel }: SshPass
 			<div className="dialog-head">
 				<h2 className="dialog-title">{t("ssh.heading", { host })}</h2>
 				<button type="button" className="dialog-close" aria-label={t("common.close")} onClick={onCancel}>
-					<X size={18} strokeWidth={1.5} />
+					<X size={ICON_SIZE.lg} />
 				</button>
 			</div>
 

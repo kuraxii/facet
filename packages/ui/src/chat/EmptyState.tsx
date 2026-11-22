@@ -6,6 +6,7 @@
 
 import { FolderPlus, Plus } from "lucide-react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { ICON_SIZE } from "../styles/visual-contract.ts";
 
 /** 引导页参数。 */
 export interface EmptyStateProps {
@@ -34,11 +35,11 @@ export function EmptyState({ cwd, canCreate, onCreate, onAddProject }: EmptyStat
 					onClick={onCreate}
 					disabled={!canCreate || cwd === undefined}
 				>
-					<Plus size={14} strokeWidth={1.5} />
+					<Plus size={ICON_SIZE.md} />
 					{t("common.newSession")}
 				</button>
 				<button type="button" className="empty-secondary" onClick={onAddProject}>
-					<FolderPlus size={14} strokeWidth={1.5} />
+					<FolderPlus size={ICON_SIZE.md} />
 					{t("common.addProject")}
 				</button>
 			</div>

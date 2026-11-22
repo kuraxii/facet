@@ -8,6 +8,7 @@
 import { X } from "lucide-react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { Modal } from "../modal.tsx";
+import { ICON_SIZE } from "../styles/visual-contract.ts";
 import { ShieldIcon } from "../transcript/icons.tsx";
 
 /** 确认框参数。 */
@@ -28,7 +29,7 @@ export function TrustDialog({ cwd, onDecide, onCancel }: TrustDialogProps) {
 			<div className="dialog-head">
 				<h2 className="dialog-title">{t("trust.title")}</h2>
 				<button type="button" className="dialog-close" aria-label={t("common.close")} onClick={onCancel}>
-					<X size={18} strokeWidth={1.5} />
+					<X size={ICON_SIZE.lg} />
 				</button>
 			</div>
 
@@ -39,7 +40,7 @@ export function TrustDialog({ cwd, onDecide, onCancel }: TrustDialogProps) {
 
 			<div className="trust-note">
 				<span className="trust-icon">
-					<ShieldIcon size={15} />
+					<ShieldIcon size={ICON_SIZE.lg} />
 				</span>
 				<span className="trust-text">
 					<span>{t("trust.hasConfig")}</span>

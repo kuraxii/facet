@@ -14,6 +14,7 @@ import {
 	useState,
 } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { ICON_SIZE } from "../styles/visual-contract.ts";
 
 /** 缩放的上下限与单步倍率。1 倍是铺满宽度，不再往更小缩。 */
 const MIN_SCALE = 1;
@@ -72,6 +73,7 @@ function readThemeVariables(): Record<string, string> {
 	const text = read("--fg-default", "#fafafa");
 	const muted = read("--fg-muted", "#a1a1aa");
 	const font = read("--font-sans", "sans-serif");
+	const bodySize = read("--text-body", "14px");
 	return {
 		background: card,
 		mainBkg: surface,
@@ -119,7 +121,8 @@ function readThemeVariables(): Record<string, string> {
 		transitionColor: muted,
 		transitionLabelColor: text,
 		fontFamily: font,
-		fontSize: "14px",
+		// 字号跟正文一档，与 `--text-body` 同一个数：在这里读变量，不再写第二份字面量
+		fontSize: bodySize,
 	};
 }
 
@@ -146,7 +149,7 @@ function CopyButton({ code }: { code: string }) {
 				);
 			}}
 		>
-			{copied ? <Check size={13} strokeWidth={1.5} /> : <Copy size={13} strokeWidth={1.5} />}
+			{copied ? <Check size={ICON_SIZE.md} /> : <Copy size={ICON_SIZE.md} />}
 		</button>
 	);
 }
@@ -326,7 +329,7 @@ export function MermaidBlock({ node }: MermaidBlockProps) {
 							disabled={view.scale <= MIN_SCALE}
 							onClick={() => zoomBy(1 / ZOOM_STEP)}
 						>
-							<ZoomOut size={13} strokeWidth={1.5} />
+							<ZoomOut size={ICON_SIZE.md} />
 						</button>
 						<button
 							type="button"
@@ -335,7 +338,7 @@ export function MermaidBlock({ node }: MermaidBlockProps) {
 							disabled={view.scale >= MAX_SCALE}
 							onClick={() => zoomBy(ZOOM_STEP)}
 						>
-							<ZoomIn size={13} strokeWidth={1.5} />
+							<ZoomIn size={ICON_SIZE.md} />
 						</button>
 						<button
 							type="button"
@@ -343,7 +346,7 @@ export function MermaidBlock({ node }: MermaidBlockProps) {
 							aria-label={t("markdown.fitWidth")}
 							onClick={() => setView({ scale: 1, x: 0, y: 0 })}
 						>
-							<Maximize2 size={13} strokeWidth={1.5} />
+							<Maximize2 size={ICON_SIZE.md} />
 						</button>
 					</>
 				)}
@@ -354,7 +357,7 @@ export function MermaidBlock({ node }: MermaidBlockProps) {
 						aria-label={showSource ? t("markdown.showDiagram") : t("markdown.showSource")}
 						onClick={() => setShowSource((shown) => !shown)}
 					>
-						{showSource ? <Workflow size={13} strokeWidth={1.5} /> : <Code2 size={13} strokeWidth={1.5} />}
+						{showSource ? <Workflow size={ICON_SIZE.md} /> : <Code2 size={ICON_SIZE.md} />}
 					</button>
 				)}
 				<CopyButton code={code} />

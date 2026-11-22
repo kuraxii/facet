@@ -5,6 +5,7 @@
 @import "@fontsource/inter/600.css";
 @import "./theme.css";
 @import "./base.css";
+@import "./primitives.css";
 @import "./chrome.css";
 @import "./sidebar.css";
 @import "./changes.css";

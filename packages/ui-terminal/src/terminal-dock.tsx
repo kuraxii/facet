@@ -8,6 +8,7 @@ import type { TerminalClient } from "@facet/client-core";
 import type { TerminalInfo } from "@facet/protocol";
 import { useI18n } from "@facet/ui/i18n";
 import { useHoverTip } from "@facet/ui/tip";
+import { ICON_SIZE } from "@facet/ui/visual-contract";
 import { Plus, SquareTerminal, X } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";
 import { clampDockHeight } from "./dock-state.ts";
@@ -132,7 +133,7 @@ export function TerminalDock({
 									viewRef.current?.focus();
 								}}
 							>
-								<SquareTerminal size={13} strokeWidth={1.5} />
+								<SquareTerminal size={ICON_SIZE.md} />
 								<span className="term-tab-name">{tabLabel(terminal)}</span>
 								{terminal.exit === null ? null : (
 									<span className="term-tab-exit">{terminal.exit.exitCode}</span>
@@ -144,7 +145,7 @@ export function TerminalDock({
 								aria-label={`关掉 ${tabLabel(terminal)}`}
 								onClick={() => onKill(terminal.id)}
 							>
-								<X size={11} strokeWidth={1.6} />
+								<X size={ICON_SIZE.sm} />
 							</button>
 						</div>
 					))}
@@ -164,10 +165,10 @@ export function TerminalDock({
 						disabled={disabledReason !== undefined}
 						onClick={onCreate}
 					>
-						<Plus size={14} strokeWidth={1.6} />
+						<Plus size={ICON_SIZE.md} />
 					</button>
 					<button type="button" className="term-tool" aria-label={t("terminal.collapse")} onClick={onClose}>
-						<X size={14} strokeWidth={1.6} />
+						<X size={ICON_SIZE.md} />
 					</button>
 				</div>
 			</header>

@@ -10,6 +10,7 @@ import { Check, Copy } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import type { CodeBlockNode } from "stream-markdown-parser";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { ICON_SIZE } from "../styles/visual-contract.ts";
 import { codeThemeName } from "../theme.ts";
 import { shouldShowCodeBlock } from "./code-block-state.ts";
 import { resolveCodeLang } from "./code-lang.ts";
@@ -97,7 +98,7 @@ function CopyButton({ code }: { code: string }) {
 				);
 			}}
 		>
-			{copied ? <Check size={13} strokeWidth={1.5} /> : <Copy size={13} strokeWidth={1.5} />}
+			{copied ? <Check size={ICON_SIZE.md} /> : <Copy size={ICON_SIZE.md} />}
 		</button>
 	);
 }

@@ -8,6 +8,7 @@
 import { PanelLeft, PanelRight } from "lucide-react";
 import type { ReactNode } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { ICON_SIZE } from "../styles/visual-contract.ts";
 
 /** 左栏开关：主区左上角。 */
 export function SidebarToggle({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void }) {
@@ -21,7 +22,7 @@ export function SidebarToggle({ isOpen, onToggle }: { isOpen: boolean; onToggle:
 			aria-expanded={isOpen}
 			onClick={onToggle}
 		>
-			<PanelLeft size={15} strokeWidth={1.5} />
+			<PanelLeft size={ICON_SIZE.lg} />
 		</button>
 	);
 }
@@ -48,7 +49,7 @@ export function PanelToggle({
 			aria-expanded={isOpen}
 			onClick={onToggle}
 		>
-			<PanelRight size={15} strokeWidth={1.5} />
+			<PanelRight size={ICON_SIZE.lg} />
 			{showsBadge ? (
 				<span className="chrome-toggle-badge" aria-hidden="true">
 					{badge}

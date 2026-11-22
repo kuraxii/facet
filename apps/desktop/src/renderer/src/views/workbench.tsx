@@ -18,6 +18,7 @@ import {
 	CreateProjectDialog,
 	EmptyState,
 	HostSwitcher,
+	ICON_SIZE,
 	PanelToggle,
 	parseCommand,
 	RightPanel,
@@ -213,7 +214,7 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 					aria-label={t("app.closeNotice")}
 					onClick={() => session.setSessionError(undefined)}
 				>
-					<X size={12} strokeWidth={1.5} />
+					<X size={ICON_SIZE.sm} />
 				</button>
 			</div>
 		);

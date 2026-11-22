@@ -162,6 +162,7 @@ const NAMED_DECLARATIONS: readonly (readonly [string, string])[] = [
 	["--tool-tip-gap", `${VISUAL_PX.popover.tipGap}px`],
 	["--text-menu-edge", `${VISUAL_PX.popover.textMenuEdge}px`],
 	["--editor-head-gap", `${VISUAL_PX.editorHeadGap}px`],
+	["--image-preview-edge", `${VISUAL_PX.imagePreviewEdge}px`],
 	// 三列聊天轨道：左留白与右轨占位都由别的刻度拼出来，断言拼法而不是断言数
 	["--chat-gutter-min", "var(--space-10)"],
 	["--outline-slot", "calc(var(--outline-rail-width) + var(--outline-inset) * 2)"],

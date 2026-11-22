@@ -44,3 +44,23 @@ class TestResizeObserver implements ResizeObserver {
 if (typeof globalThis.ResizeObserver !== "function") {
 	globalThis.ResizeObserver = TestResizeObserver;
 }
+
+/**
+ * jsdom 没实现 `<dialog>` 的模态方法。设置窗与图片预览都走原生弹层，测试只关心开合与内容，
+ * 这里补一对最小实现：`showModal()` 置 `open`，`close()` 清掉并派发 `close`。
+ */
+if (typeof HTMLDialogElement === "function" && typeof HTMLDialogElement.prototype.showModal !== "function") {
+	HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement): void {
+		this.setAttribute("open", "");
+	};
+}
+
+if (typeof HTMLDialogElement === "function" && typeof HTMLDialogElement.prototype.close !== "function") {
+	HTMLDialogElement.prototype.close = function close(this: HTMLDialogElement, returnValue?: string): void {
+		if (returnValue !== undefined) {
+			this.returnValue = returnValue;
+		}
+		this.removeAttribute("open");
+		this.dispatchEvent(new Event("close"));
+	};
+}

@@ -305,3 +305,14 @@
 	max-width: 100%;
 	border-radius: var(--radius-lg);
 }
+
+/* 正文图片外面那枚按钮：几何与图片重合，只负责把点击交给全局预览 */
+.md-image {
+	display: inline-block;
+	max-width: 100%;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	cursor: zoom-in;
+	line-height: 0;
+}

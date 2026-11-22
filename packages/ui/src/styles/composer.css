@@ -260,6 +260,17 @@
 	object-fit: cover;
 }
 
+/* 缩略图本体是一枚按钮：点开全局图片预览，几何铺满整格 */
+.att-preview {
+	display: block;
+	width: 100%;
+	height: 100%;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	cursor: zoom-in;
+}
+
 /* 移除按钮贴在缩略图右上角，深色底保证在亮图上也能看清 */
 .att-x {
 	position: absolute;

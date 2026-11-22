@@ -804,6 +804,7 @@
 	padding: 2px 0 4px var(--indent-rail-label);
 }
 
+/* 一张工具结果的图片：宽度跟内容、不超过行宽，高度由 `--tool-image-height` 封顶 */
 .tr-image {
 	display: block;
 	width: fit-content;
@@ -812,6 +813,7 @@
 	border: 1px solid var(--border-default);
 	border-radius: var(--tool-image-radius);
 	background: transparent;
+	cursor: zoom-in;
 }
 
 .tr-image.is-pending {

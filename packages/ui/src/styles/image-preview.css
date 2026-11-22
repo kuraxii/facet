@@ -1,0 +1,126 @@
+/* 图片预览浮层：整层铺满窗口，图片按原始像素居中，两簇控件浮在上面。 */
+
+/*
+ * 外层 dialog 占满窗口，本身不画任何东西：底色与图片都在 `.image-preview` 里。
+ * 铺满而不是居中的一块，是为了让大截图能贴着窗口边缘铺开——图片超出窗口的部分由舞台裁掉。
+ */
+dialog.dialog.image-preview-dialog {
+	width: 100vw;
+	height: 100vh;
+	max-width: none;
+	max-height: none;
+	padding: 0;
+	overflow: hidden;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	overscroll-behavior: auto;
+}
+
+/*
+ * 不走弹层那条进场动画：这一层本来就铺满窗口，没有「从窗口里长出来」这回事；图片自己还有
+ * View Transitions 那次形变，两段叠在一起只会让人分不清哪个在动。
+ */
+dialog.dialog.image-preview-dialog[open] {
+	animation: none;
+}
+
+/*
+ * 遮罩交给 `.image-preview` 自己画，`::backdrop` 保持透明：两处都上色的话浓度会叠成 1−(1−a)(1−b)，
+ * 一处调数字另一处看不见地跟着变，最后没人算得清实际是多少。
+ */
+dialog.dialog.image-preview-dialog::backdrop {
+	background: transparent;
+}
+
+/*
+ * 铺满窗口的一层：盖七成的遮罩，背后的会话隐约看得见；大图超出窗口的部分裁在这里。
+ * 小图居中时看到的就是背后的界面，不是一块底色。
+ */
+.image-preview {
+	position: relative;
+	width: 100%;
+	height: 100%;
+	overflow: hidden;
+	background: var(--image-preview-scrim);
+}
+
+/*
+ * 图片舞台：整层都是它。图片按固有尺寸画在正中——默认 100% 原始像素，所以大截图从窗口中间
+ * 铺出去，拖拽可以看到四周；`touch-action: none` 让指针事件归拖拽用。
+ */
+.image-preview-stage {
+	position: absolute;
+	inset: 0;
+	display: grid;
+	place-items: center;
+	overflow: hidden;
+	touch-action: none;
+}
+
+.image-preview-stage img {
+	display: block;
+	/* 固有尺寸交给 `scale` 缩放：这里不设 max-width / max-height，否则 100% 就不再是原始像素 */
+	max-width: none;
+	max-height: none;
+	transform-origin: center;
+	user-select: none;
+	-webkit-user-drag: none;
+}
+
+/* 超出窗口才谈得上拖：指针形状自己说明现在能不能拖 */
+.image-preview.is-draggable .image-preview-stage img {
+	cursor: grab;
+}
+
+.image-preview.is-dragging .image-preview-stage img {
+	cursor: grabbing;
+}
+
+/* 右上角：下载与关闭 */
+.image-preview-actions {
+	position: absolute;
+	top: var(--image-preview-edge);
+	right: var(--image-preview-edge);
+	display: flex;
+	gap: var(--space-1);
+	align-items: center;
+	padding: var(--space-2);
+	border-radius: var(--radius-pill);
+	background: var(--bg-surface);
+	box-shadow: var(--shadow-popover);
+}
+
+/* 底部居中：减、百分比、加 */
+.image-preview-zoom {
+	position: absolute;
+	bottom: var(--image-preview-edge);
+	left: 50%;
+	translate: -50% 0;
+	display: flex;
+	gap: var(--space-1);
+	align-items: center;
+	padding: var(--space-2) var(--space-3);
+	border-radius: var(--radius-pill);
+	background: var(--bg-surface);
+	box-shadow: var(--shadow-popover);
+}
+
+/* 百分比：定宽 + 等宽数字，缩放时两侧按钮不会被数字宽窄推着走 */
+.image-preview-scale {
+	min-width: 4ch;
+	color: var(--fg-muted);
+	font-size: var(--text-xs);
+	font-variant-numeric: tabular-nums;
+	line-height: var(--leading-ui);
+	text-align: center;
+}
+
+/*
+ * 缩略图飞进浮层的补间。时长与曲线取进场那一档，减动效时两档都被清零，
+ * 脚本那边也会直接跳过 View Transitions。
+ */
+::view-transition-group(image-preview) {
+	animation-duration: var(--dur-enter);
+	animation-timing-function: var(--ease-enter);
+}

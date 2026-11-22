@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import {
 	memo,
+	type MouseEvent as ReactMouseEvent,
 	type ReactNode,
 	type RefObject,
 	useCallback,
@@ -32,6 +33,8 @@ import {
 	useState,
 } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { useImagePreview } from "../image/image-preview.tsx";
+import type { ImagePreviewItem } from "../image/image-preview-types.ts";
 import { Markdown } from "../markdown/Markdown.tsx";
 import { ICON_SIZE } from "../styles/visual-contract.ts";
 import { useHoverTip } from "../tip.tsx";
@@ -216,15 +219,27 @@ function categoryIcon(category: ToolCategory): ReactNode {
  *
  * 一行里只有图标、短名与参数摘要，点开才看输出；输出没有边框与底色，直接跟在下面。
  */
-/** 工具结果里的一张图片。进入视口附近才挂载 data URL，默认按行宽缩、限高，点一下回到原始尺寸。 */
-function ToolImageThumb({ image, label }: { image: ToolImage; label: string }) {
-	const [isActual, setActual] = useState(false);
+/**
+ * 工具结果里的一张图片。
+ *
+ * 进入视口附近才挂载 data URL；显示尺寸由行宽与 `--tool-image-height` 定死，点它不会就地
+ * 放大、也不会把行撑开，而是交给全局图片预览。
+ */
+function ToolImageThumb({
+	image,
+	label,
+	onOpen,
+}: {
+	image: ToolImage;
+	label: string;
+	onOpen: (event: ReactMouseEvent<HTMLButtonElement>) => void;
+}) {
 	const [isNearViewport, setIsNearViewport] = useState(() => typeof IntersectionObserver === "undefined");
-	const buttonRef = useRef<HTMLButtonElement>(null);
+	const imageRef = useRef<HTMLButtonElement>(null);
 
 	useEffect(() => {
 		if (isNearViewport) return;
-		const node = buttonRef.current;
+		const node = imageRef.current;
 		if (node === null) return;
 		const observer = new IntersectionObserver(
 			(entries) => {
@@ -238,23 +253,17 @@ function ToolImageThumb({ image, label }: { image: ToolImage; label: string }) {
 		return () => observer.disconnect();
 	}, [isNearViewport]);
 
+	const source = `data:${image.mimeType};base64,${image.data}`;
 	return (
 		<button
-			ref={buttonRef}
+			ref={imageRef}
 			type="button"
 			className={isNearViewport ? "tr-image" : "tr-image is-pending"}
-			onClick={() => setActual((actual) => !actual)}
 			aria-label={label}
-			aria-pressed={isActual}
-			style={{ cursor: isActual ? "zoom-out" : "zoom-in", overflowX: isActual ? "auto" : undefined }}
+			onClick={onOpen}
 		>
 			{isNearViewport ? (
-				<img
-					src={`data:${image.mimeType};base64,${image.data}`}
-					alt={label}
-					decoding="async"
-					style={{ maxWidth: isActual ? "none" : undefined, maxHeight: isActual ? "none" : undefined }}
-				/>
+				<img src={source} alt={label} decoding="async" />
 			) : (
 				<span className="tr-image-placeholder" aria-hidden="true" />
 			)}
@@ -266,6 +275,7 @@ function ToolRow({ part }: { part: ToolCallPart }) {
 	const { t } = useI18n();
 	const [isOpen, setOpen] = useState(false);
 	const [isExpanded, setExpanded] = useState(false);
+	const openImagePreview = useImagePreview();
 	// 参数全文的悬停浮层：里面能滚动，指针离开后留一段宽限才收（见 `HoverTipOptions`）
 	const tip = useHoverTip({ holdOnLeave: true });
 	const output = part.output ?? "";
@@ -280,6 +290,15 @@ function ToolRow({ part }: { part: ToolCallPart }) {
 	const hasDetail = detail.length > 0 && detail !== target;
 	const kind = toolKind(part.name);
 	const isRunning = part.status === "running";
+	/** 这一行的图片既是缩略图的数据源，也是预览里那一组：点第几张就从第几张开始翻 */
+	const imageItems = useMemo<ImagePreviewItem[]>(
+		() =>
+			part.images.map((image, index) => ({
+				src: `data:${image.mimeType};base64,${image.data}`,
+				alt: t("transcript.imageLabel", { tool: kind.label, index: index + 1 }),
+			})),
+		[part.images, kind.label, t],
+	);
 	const outputBody = useUntilFound<HTMLDivElement>(isOpen, () => setOpen(true));
 
 	return (
@@ -302,14 +321,15 @@ function ToolRow({ part }: { part: ToolCallPart }) {
 					</span>
 				)}
 			</button>
-			{/* 图片是结果的主体，不折在展开区里，点一下看原始大小 */}
+			{/* 图片是结果的主体，不折在展开区里；点开是全局预览，同一行的几张可以左右翻 */}
 			{part.images.length === 0 ? null : (
 				<div className="tr-images">
 					{part.images.map((image, index) => (
 						<ToolImageThumb
 							key={`${part.callId}-${image.mimeType}-${image.data.slice(0, 32)}`}
 							image={image}
-							label={t("transcript.imageLabel", { tool: kind.label, index: index + 1 })}
+							label={imageItems[index]?.alt ?? ""}
+							onOpen={(event) => openImagePreview({ items: imageItems, index, source: event.currentTarget })}
 						/>
 					))}
 				</div>

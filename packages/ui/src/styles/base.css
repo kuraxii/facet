@@ -130,6 +130,8 @@
 	--composer-quote-rule: 2px;
 	/* 两枚胶囊的左右内边距：`@文件` 与 `/命令` 共用一份几何 */
 	--composer-chip-padding-x: 3px;
+	/* 图片预览：右上角的动作与底部的缩放条到窗口边缘的距离 */
+	--image-preview-edge: 20px;
 	/*
 	 * 「回到底部」按钮的下缘到输入区上缘的距离。它浮在消息流之上，抬这么高才离开提示行与
 	 * 排队条，正落在输入区上方那片留白里。
@@ -431,6 +433,11 @@
 	--prov-login-gap: 10px;
 	/* 设备码那一行的高度，与密钥行同高，切换时不跳 */
 	--prov-login-code-height: 40px;
+	/*
+	 * 图片预览的遮罩：`--bg-canvas` 取七成，剩下三成透过去，背后的会话隐约看得见。
+	 * 浓度要改就改这一个数。
+	 */
+	--image-preview-scrim: color-mix(in srgb, var(--bg-canvas) 70%, transparent);
 	/* 模型行：六列的宽度与列间距离，表头与每行共用同一组 */
 	--prov-model-columns: 1.3fr 1fr 0.75fr 0.75fr 40px 28px;
 	--prov-model-gap: 8px;

@@ -11,6 +11,8 @@ import "katex/dist/katex.min.css";
 import { VISUAL_SCALE } from "../styles/visual-contract.ts";
 import { codeThemeName } from "../theme.ts";
 import { useCodeTheme } from "./code-theme.tsx";
+import { MarkdownImagesProvider } from "./markdown-image.tsx";
+import { markdownImages } from "./markdown-images.ts";
 import { MARKDOWN_SCOPE } from "./registry.ts";
 
 /** 平滑输出的基速,其余节奏用库默认值。 */
@@ -99,27 +101,32 @@ export const Markdown = memo(function Markdown({ text, isStreaming, indexKey }: 
 		[codeTheme.theme],
 	);
 
+	// 正文里的图片地址先收一遍：预览要能在这段正文的几张图之间翻
+	const images = useMemo(() => markdownImages(text), [text]);
+
 	return (
 		<div className="md">
-			<MarkdownRender
-				customId={MARKDOWN_SCOPE}
-				content={text}
-				final={!isStreaming}
-				fade={false}
-				smoothStreaming={smoothRef.current}
-				smoothStreamingOptions={SMOOTH_OPTIONS}
-				isDark={isDark}
-				codeBlockDarkTheme={blockThemes[0]}
-				codeBlockLightTheme={blockThemes[1]}
-				themes={blockThemes}
-				codeBlockProps={CODE_BLOCK_PROPS}
-				mermaidProps={MERMAID_PROPS}
-				codeBlockOptions={CODE_BLOCK_OPTIONS}
-				showTooltips={false}
-				// 关闭按可见性延迟渲染:占位条只在内容更新时被顺带刷新,流一停就永久留下
-				deferNodesUntilVisible={false}
-				indexKey={indexKey}
-			/>
+			<MarkdownImagesProvider items={images}>
+				<MarkdownRender
+					customId={MARKDOWN_SCOPE}
+					content={text}
+					final={!isStreaming}
+					fade={false}
+					smoothStreaming={smoothRef.current}
+					smoothStreamingOptions={SMOOTH_OPTIONS}
+					isDark={isDark}
+					codeBlockDarkTheme={blockThemes[0]}
+					codeBlockLightTheme={blockThemes[1]}
+					themes={blockThemes}
+					codeBlockProps={CODE_BLOCK_PROPS}
+					mermaidProps={MERMAID_PROPS}
+					codeBlockOptions={CODE_BLOCK_OPTIONS}
+					showTooltips={false}
+					// 关闭按可见性延迟渲染:占位条只在内容更新时被顺带刷新,流一停就永久留下
+					deferNodesUntilVisible={false}
+					indexKey={indexKey}
+				/>
+			</MarkdownImagesProvider>
 		</div>
 	);
 });

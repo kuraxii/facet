@@ -5,7 +5,7 @@
  * 界面里不会同时存在两台主机的节点。后台连着的主机由运行时自己维持，不占 DOM。
  */
 import type { LanguageSetting } from "@facet/i18n";
-import { I18nProvider } from "@facet/ui";
+import { I18nProvider, ImagePreviewProvider } from "@facet/ui";
 import { useCallback, useEffect, useState } from "react";
 import { bridge } from "./bridge.ts";
 import { useHostConnection } from "./hooks/useHostConnection.ts";
@@ -40,7 +40,9 @@ export function App(): React.JSX.Element {
 	return (
 		<I18nProvider language={language}>
 			<ToastProvider>
-				<AppView languageSetting={languageSetting} onLanguageChange={changeLanguage} />
+				<ImagePreviewProvider>
+					<AppView languageSetting={languageSetting} onLanguageChange={changeLanguage} />
+				</ImagePreviewProvider>
 			</ToastProvider>
 		</I18nProvider>
 	);

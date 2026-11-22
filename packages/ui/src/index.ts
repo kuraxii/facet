@@ -129,6 +129,8 @@ export type { ChangeMarkProps, ChangeStatusLabelKey } from "./git/git-status-mar
 export { ChangeMark, changeStatusLabelKey } from "./git/git-status-mark.tsx";
 export type { I18nProviderProps, I18nValue } from "./i18n/I18nProvider.tsx";
 export { I18nProvider, useI18n } from "./i18n/I18nProvider.tsx";
+export { ImagePreviewProvider, useImagePreview } from "./image/image-preview.tsx";
+export type { ImagePreviewItem, OpenImagePreview } from "./image/image-preview-types.ts";
 export { LAYOUT_PX, SHELL_DATA_ATTRS } from "./layout/layout-contract.ts";
 export type { CodeBlockShape } from "./markdown/code-block-state.ts";
 export { shouldShowCodeBlock } from "./markdown/code-block-state.ts";
@@ -137,6 +139,7 @@ export type { CodeThemeValue } from "./markdown/code-theme.tsx";
 export { CodeThemeProvider, useCodeTheme } from "./markdown/code-theme.tsx";
 export type { MarkdownProps } from "./markdown/Markdown.tsx";
 export { Markdown } from "./markdown/Markdown.tsx";
+export { markdownImages } from "./markdown/markdown-images.ts";
 export type { ChangesDocumentProps } from "./panel/changes-document.tsx";
 export { ChangesDocument } from "./panel/changes-document.tsx";
 export type { ChangesPaneProps } from "./panel/changes-pane.tsx";

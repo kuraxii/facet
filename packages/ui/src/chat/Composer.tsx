@@ -13,6 +13,7 @@ import { type Ref, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { FACET_FILE_DRAG_MIME } from "../common/file-drag.ts";
 import { IconButton } from "../common/IconButton.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { useImagePreview } from "../image/image-preview.tsx";
 import { ICON_SIZE } from "../styles/visual-contract.ts";
 import { useHoverTip } from "../tip.tsx";
 import { ChevronIcon } from "../transcript/chevron.tsx";
@@ -188,6 +189,7 @@ export function Composer({
 	sentHistory,
 }: ComposerProps) {
 	const { t } = useI18n();
+	const openImagePreview = useImagePreview();
 	// 一排按钮共用一份悬浮提示：谁被悬停就贴谁
 	const tip = useHoverTip();
 
@@ -298,9 +300,25 @@ export function Composer({
 		>
 			{attachments.length === 0 ? null : (
 				<div className="composer-files">
-					{attachments.map((item) => (
+					{attachments.map((item, index) => (
 						<figure className="att" key={item.id}>
-							<img src={item.previewUrl} alt={item.name} />
+							<button
+								type="button"
+								className="att-preview"
+								aria-label={t("imagePreview.open")}
+								onClick={(event) =>
+									openImagePreview({
+										items: attachments.map((attachment) => ({
+											src: attachment.previewUrl,
+											alt: attachment.name,
+										})),
+										index,
+										source: event.currentTarget,
+									})
+								}
+							>
+								<img src={item.previewUrl} alt={item.name} />
+							</button>
 							{onRemoveAttachment === undefined ? null : (
 								<button
 									type="button"

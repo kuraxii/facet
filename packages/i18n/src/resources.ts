@@ -342,6 +342,13 @@ export const en = {
 		showSource: "Show source",
 		diagram: "Diagram",
 	},
+	imagePreview: {
+		label: "Image preview",
+		open: "View image",
+		zoomIn: "Zoom in",
+		zoomOut: "Zoom out",
+		save: "Save image",
+	},
 	transcript: {
 		copy: "Copy text",
 		copied: "Copied",
@@ -865,6 +872,13 @@ export const zhCN = {
 		showDiagram: "显示图表",
 		showSource: "显示源码",
 		diagram: "流程图",
+	},
+	imagePreview: {
+		label: "图片预览",
+		open: "查看图片",
+		zoomIn: "放大",
+		zoomOut: "缩小",
+		save: "保存图片",
 	},
 	transcript: {
 		copy: "复制原文",

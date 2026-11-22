@@ -1,192 +1,33 @@
 /*
- * 变更页与补丁的公共样式。
+ * 变更与文件视图共用的一小块。
  *
- * 从 `panel.css` 里分出来的一块：变更文档、提交详情与变更索引栏共用的全局类（增删配色、
- * 分支头与文件行）。工作区骨架、标签栏与文件页仍在 `panel.css`。
+ * 文件树、编辑器与变更索引栏都会在某一行下面补一句事实（目录在读、读失败、空目录、
+ * 磁盘上改过了），后面可能跟一个重试。列表与补丁本身在 `panel.css`、`changes.module.css`
+ * 与 `git.module.css` 里各自按领域排。
  */
 
-/* 增删行数的颜色，对话里的文件改动与变更页共用 */
-.add {
-	color: var(--diff-add-fg);
-}
-
-.del {
-	color: var(--diff-del-fg);
-}
-
-/* 变更页：分支头、文件行与就地展开的补丁 */
-.chg-head {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 8px;
-	margin-bottom: 6px;
-	padding: 0 2px 6px;
-}
-
-.chg-branch {
-	min-width: 0;
-	overflow: hidden;
-	color: var(--fg-muted);
-	font-size: 12px;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.chg-upstream {
-	margin-left: 6px;
-	color: var(--fg-subtle);
-	font-size: 11px;
-}
-
-.chg-list {
-	display: flex;
-	flex-direction: column;
-	gap: 1px;
-	margin: 0;
-	padding: 0;
-	list-style: none;
-}
-
-.chg-line {
-	display: flex;
-	align-items: center;
-	gap: 2px;
-}
-
-.chg-row {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	flex: 1;
-	min-width: 0;
-	padding: 4px 6px;
-	border: 0;
-	border-radius: 6px;
-	background: transparent;
-	color: var(--fg-muted);
-	font-size: 12px;
-	text-align: left;
-}
-
-.chg-row:hover {
-	background: var(--bg-hover);
-	color: var(--fg-default);
-}
-
-.chg-open {
-	display: grid;
-	place-items: center;
-	flex: none;
-	width: 22px;
-	height: 22px;
-	padding: 0;
-	border: 0;
-	border-radius: 5px;
-	background: transparent;
-	color: var(--fg-subtle);
-	opacity: 0;
-}
-
-.chg-line:hover .chg-open,
-.chg-open:focus-visible {
-	opacity: 1;
-}
-
-.chg-open:hover {
-	background: var(--bg-hover);
-	color: var(--fg-default);
-}
-
-/* 状态字母：增删改各一色，未跟踪与冲突用弱色与危险色 */
-.chg-status {
-	flex: none;
-	width: 14px;
-	color: var(--fg-subtle);
-	font-family: var(--font-mono);
-	font-size: 11px;
-	text-align: center;
-}
-
-.chg-status.is-added,
-.chg-status.is-untracked {
-	color: var(--status-ok-fg);
-}
-
-.chg-status.is-deleted,
-.chg-status.is-conflicted {
-	color: var(--status-err-fg);
-}
-
-.chg-status.is-renamed {
-	color: var(--status-warn-fg);
-}
-
-.chg-name {
-	flex: none;
-	max-width: 55%;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.chg-dir {
-	flex: 1;
-	min-width: 0;
-	overflow: hidden;
-	color: var(--fg-subtle);
-	font-size: 11px;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.chg-counts {
-	display: flex;
-	flex: none;
-	gap: 4px;
-	margin-left: auto;
-	font-family: var(--font-mono);
-	font-size: 11px;
-}
-
-.chg-binary {
-	color: var(--fg-subtle);
-	font-size: 10.5px;
-}
-
-.chg-diff {
-	margin: 2px 0 8px 20px;
-}
-
+/* 一句事实：不做提示条，也不加图标，只压弱一档颜色 */
 .chg-note {
-	margin: 6px 2px;
+	margin: var(--space-3) var(--space-1);
 	color: var(--fg-subtle);
-	font-size: 12px;
-	line-height: 1.6;
+	font-size: var(--text-xs);
+	line-height: var(--leading-tight);
 }
 
 .chg-note.is-error {
 	color: var(--status-err-fg);
 }
 
+/* 跟在事实后面的文字按钮：没有边框与底色，只在悬停时提亮 */
 .chg-retry {
-	margin-left: 6px;
+	margin-left: var(--space-3);
 	padding: 0;
 	border: 0;
 	background: transparent;
 	color: var(--accent-fg);
-	font-size: 12px;
+	font-size: var(--text-xs);
 }
 
-.chg-total {
-	margin: 8px 2px 0;
-	color: var(--fg-subtle);
-	font-size: 11px;
-	text-align: right;
-}
-
-/* 颜色沿用全局的 .add / .del，这里只统一数字的字体 */
-.chg-total .add,
-.chg-total .del {
-	font-family: var(--font-mono);
+.chg-retry:hover {
+	color: var(--fg-default);
 }

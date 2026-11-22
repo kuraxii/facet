@@ -6,6 +6,7 @@
  */
 import type { ReactNode } from "react";
 import { memo } from "react";
+import { ListRow } from "../common/ListRow.tsx";
 import { ScrollRow } from "../common/scroll-area.tsx";
 import type { HoverTip } from "../tip.tsx";
 import { SessionStatusMark } from "./session-status-mark.tsx";
@@ -39,9 +40,10 @@ export const SessionRow = memo(function SessionRow({
 	return (
 		<ScrollRow className="sb-row-item">
 			<div className="sb-row-wrap">
-				<button
-					type="button"
-					className={`sb-row${isActive ? " is-active" : ""}${twoLine ? " is-two-line" : ""}`}
+				<ListRow
+					as="button"
+					selected={isActive}
+					className={twoLine ? "sb-row is-two-line" : "sb-row"}
 					aria-current={isActive}
 					onClick={() => onOpen(session)}
 					onContextMenu={(event) => onContextMenu(session, event)}
@@ -63,7 +65,7 @@ export const SessionRow = memo(function SessionRow({
 							<span className="sb-row-time mono">{session.timeText}</span>
 						</>
 					)}
-				</button>
+				</ListRow>
 			</div>
 		</ScrollRow>
 	);

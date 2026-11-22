@@ -50,26 +50,10 @@ dialog.search-panel::backdrop {
 	scrollbar-gutter: stable;
 }
 
+/* 搜索结果的行：几何来自 `common/ListRow.tsx` 的 `md` 档 */
 .search-row {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	width: 100%;
-	padding: 7px 8px;
-	border: 0;
-	border-radius: 6px;
-	background: transparent;
-	color: var(--fg-muted);
-	font: inherit;
-	font-size: 13px;
-	text-align: left;
+	padding-inline: var(--space-4);
 }
-
-.search-row.is-selected {
-	background: var(--bg-active);
-	color: var(--fg-default);
-}
-
 .search-row-title {
 	flex: none;
 	max-width: 45%;
@@ -392,24 +376,11 @@ dialog.dialog.is-picker .dialog-actions {
 	box-shadow: var(--shadow-popover);
 }
 
+/* 选中文字的菜单项：几何来自 `common/ListRow.tsx` 的菜单档 */
 .text-menu-item {
-	display: flex;
-	align-items: center;
-	height: var(--text-menu-item-height);
-	padding: 0 8px;
-	border: 0;
-	border-radius: 5px;
-	background: transparent;
+	padding-inline: var(--space-4);
 	color: var(--fg-default);
-	font-size: 12px;
-	text-align: left;
 }
-
-.text-menu-item:hover,
-.text-menu-item:focus-visible {
-	background: var(--bg-hover);
-}
-
 /* 悬浮提示 */
 
 /*

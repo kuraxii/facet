@@ -137,7 +137,6 @@
 	--text-menu-width: 168px;
 	--text-menu-edge: 4px;
 	--text-menu-padding: 4px;
-	--text-menu-item-height: 28px;
 	--context-divider-gap: 12px;
 	--context-divider-padding: 4px;
 	--context-divider-line-height: 1px;
@@ -248,15 +247,13 @@
 	/* Markdown 预览：正文的最大行宽，与窄窗口下两侧必须留出的内边距 */
 	--file-preview-width: 720px;
 	--file-preview-gutter-x: 16px;
-	/* 文件树：紧凑行高、缩进、图标与右侧留白 */
-	--files-row-height: 22px;
+	/* 文件树：缩进、图标与右侧留白（行高由 `common/ListRow` 的 `xs` 档给） */
 	--files-row-padding-x: 8px;
 	--files-tree-indent: 12px;
 	--files-trailing: 8px;
 	--files-icon-size: 14px;
 	--files-icon-gap: 6px;
 	/* 变更树与变更文档：行高、缩进、右侧留白、图标与统计间距 */
-	--changes-row-height: 28px;
 	--changes-row-padding-x: 12px;
 	--changes-tree-indent: 12px;
 	--changes-trailing: 8px;

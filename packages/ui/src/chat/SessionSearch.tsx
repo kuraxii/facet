@@ -8,6 +8,7 @@ import type { SessionStatus, SessionSummary } from "@facet/protocol";
 import { Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Input } from "../common/Input.tsx";
+import { ListRow } from "../common/ListRow.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { isComposingKey } from "../keys.ts";
 import { Modal } from "../modal.tsx";
@@ -136,12 +137,14 @@ export function SessionSearch({
 					</p>
 				) : (
 					results.map((session, index) => (
-						<button
+						<ListRow
+							as="button"
 							key={session.path}
-							type="button"
+							size="md"
+							selected={index === selected}
 							role="option"
 							aria-selected={index === selected}
-							className={index === selected ? "search-row is-selected" : "search-row"}
+							className="search-row"
 							onPointerMove={() => setSelected(index)}
 							onClick={() => open(session)}
 							disabled={session.isPlaceholder === true}
@@ -156,7 +159,7 @@ export function SessionSearch({
 							>
 								{session.timeText}
 							</span>
-						</button>
+						</ListRow>
 					))
 				)}
 			</div>

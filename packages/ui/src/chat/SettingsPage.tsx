@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "../common/Button.tsx";
 import { IconButton } from "../common/IconButton.tsx";
 import { Input } from "../common/Input.tsx";
+import { ListRow } from "../common/ListRow.tsx";
 import { Select } from "../common/select.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { Modal } from "../modal.tsx";
@@ -216,15 +217,16 @@ export function SettingsPage({
 			<div className="set-body">
 				<nav className="set-nav" aria-label={t("settings.categories")}>
 					{SECTIONS.map((item) => (
-						<button
-							type="button"
+						<ListRow
+							as="button"
 							key={item.key}
-							className={item.key === section ? "set-nav-item is-on" : "set-nav-item"}
+							selected={item.key === section}
+							className="set-nav-item"
 							aria-current={item.key === section}
 							onClick={() => onSectionChange(item.key)}
 						>
 							{t(item.labelKey)}
-						</button>
+						</ListRow>
 					))}
 				</nav>
 

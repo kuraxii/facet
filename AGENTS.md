@@ -32,6 +32,7 @@
 - **拆分不改契约**：拆既有模块时导出路径与对外签名 MUST 保持不变，用薄门面或 `index.ts` 转发。
 - **布局暗契约**：断点、拖拽折叠临界值、尺寸常量与 `data-*` 属性名只在 `packages/ui/src/layout/layout-contract.ts` 定义，别处不得手写字面量；`@container` / `@media` 与属性选择器里必须写字面量的位置 MUST 纳入 `layout-contract.test.ts` 的静态断言。运行期样式值走 `:root` 变量（见下文「样式与尺寸规范」），全仓禁止裸 `z-index`，只认 `var(--z-*)`（刻度见 `docs/layout.md` §4）。
 - **视觉刻度契约**：字号、行高、间距、控件高度、圆角与图标只在 `packages/ui/src/styles/visual-contract.ts` 与 `base.css` 的 `:root` 各写一份，两边由 `visual-contract.test.ts` 逐条对齐；新样式 MUST 挑档取值（`var(--text-*)` / `var(--space-*)` / `var(--radius-*)` 等），不得现编 px。脚本要读的长度进 `VISUAL_PX`，组件里不得再抄一份字面量；写死数值的存量按文件记在 `VISUAL_DEBT_BASELINE` 里，只许降不许升（口径见 `docs/visual-system.md`）。
+- **控件复用原语**：按钮、图标按钮、输入框、列表行与徽标 MUST 复用 `packages/ui/src/common/` 的 `Button` / `IconButton` / `Input` / `ListRow` / `Badge`，几何（高度、圆角、内边距、字号）由 `styles/primitives.css` 给；业务样式表只许覆盖外边距、定位与领域配色，不得自创控件高度或另写一套按钮几何。多行输入区 `.composer`、快捷键 `.kbd`、胶囊 `.chip` 与 Git 引用 `.ref` 保持各自语义，不并入原语。
 - **文案与类名零残留**：删改组件或交互路径时，同一个提交里清掉 `packages/i18n/src/resources.ts` 中不再被引用的键、不再使用的 CSS 类名与死导出；不留「以后可能用到」的孤儿文案。
 - **底层副作用单出口**：服务端调用 `git` 等外部进程 MUST 经 `apps/server/src/git-exec.ts` 这一层按只读 / 写入通道分流，业务代码里不得散落 `child_process`。
 

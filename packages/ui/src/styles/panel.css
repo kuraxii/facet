@@ -218,25 +218,10 @@
 	box-shadow: var(--shadow-popover);
 }
 
+/* `+` 菜单的项：几何来自 `common/ListRow.tsx` 的菜单档 */
 .workspace-menu-item {
-	display: flex;
-	gap: 8px;
-	align-items: center;
-	height: var(--workspace-menu-row-height);
-	padding: 0 8px;
-	border: 0;
-	border-radius: 6px;
-	background: transparent;
-	color: var(--fg-muted);
-	font-size: 12.5px;
-	text-align: left;
+	padding-inline: var(--space-4);
 }
-
-.workspace-menu-item:hover:not(:disabled) {
-	background: var(--bg-hover);
-	color: var(--fg-default);
-}
-
 .workspace-menu-item:disabled {
 	color: var(--fg-subtle);
 	cursor: default;
@@ -751,31 +736,12 @@
 	padding-bottom: 8px;
 }
 
+/* 文件树的行：几何来自 `common/ListRow.tsx` 的 `xs` 档，这里只补层级缩进与紧凑的字号 */
 .tree-row {
-	display: flex;
-	align-items: center;
 	gap: var(--files-icon-gap);
-	width: 100%;
-	height: var(--files-row-height);
-	padding-top: 0;
-	padding-right: var(--files-trailing);
-	padding-bottom: 0;
+	font-size: var(--text-xs);
 	padding-left: calc(var(--files-row-padding-x) + var(--files-depth, 0) * var(--files-tree-indent));
-	border: 0;
-	background: transparent;
-	color: var(--fg-muted);
-	font-size: 12.5px;
-	text-align: left;
-}
-
-.tree-row:hover {
-	background: var(--bg-hover);
-	color: var(--fg-default);
-}
-
-.tree-row.is-on {
-	background: var(--bg-active);
-	color: var(--fg-default);
+	padding-right: var(--files-trailing);
 }
 
 .tree-icon {

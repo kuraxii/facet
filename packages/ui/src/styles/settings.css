@@ -724,7 +724,6 @@ dialog.dialog.is-provider[open] {
 	min-width: 0;
 }
 
-/* 已经按下、还没生效的危险按钮：直接就是错误色，再点一下收回 */
 /* 模型清单：表头与每行共用同一组列宽，字段上下对齐 */
 .prov-model-head,
 .prov-model {
@@ -757,10 +756,89 @@ dialog.dialog.is-provider[open] {
 	list-style: none;
 }
 
-.prov-toggle {
+/* 模型行里的思考档位格：一枚按钮，点开是七档的复选菜单 */
+.prov-levels {
+	display: flex;
+	min-width: 0;
+}
+
+/* 触发元素：宽度跟着列走，里面是「思考到哪一档」加一枚箭头 */
+.prov-levels-trigger {
+	flex: 1;
+	min-width: 0;
+	gap: var(--space-2);
+	padding-inline: var(--space-3);
+}
+
+.prov-levels-value {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-align: left;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/*
+ * 菜单：原生 Popover 在 Top Layer 里，不会被弹窗自己的滚动区裁到；点外面与 Esc 由浏览器收，
+ * `Esc` 只关这一层，不会连带关掉设置窗。落点由组件的内联 `anchor-name` / `position-anchor`
+ * 接上，这里只给观感：与右键菜单同款——`--bg-elevated` 底、一层 `--shadow-popover`，
+ * 不再另写描边。
+ */
+.prov-levels-menu {
+	position: fixed;
+	inset: auto;
+	top: anchor(bottom);
+	left: anchor(left);
+	margin: 0;
+	margin-block-start: var(--prov-levels-gap);
+	/* fieldset 自带外框、内边距与按内容撑开的最小宽度，这里都清掉 */
+	min-inline-size: 0;
+	/* 下方放不下时翻到触发器上方 */
+	position-try-fallbacks: flip-block;
+	width: var(--prov-levels-menu-width);
+	max-height: var(--tool-tip-height);
+	overflow-y: auto;
+	padding: var(--space-2);
+	border: 0;
+	border-radius: var(--radius-lg);
+	background: var(--bg-elevated);
+	box-shadow: var(--shadow-popover);
+}
+
+/*
+ * 关着的 Popover 由浏览器的 `[popover]:not(:popover-open) { display: none }` 收起来；那条规则
+ * 的优先级比这里低，所以布局只能写在 `:popover-open` 上，写在外面会让三行的菜单同时铺开。
+ */
+.prov-levels-menu:popover-open {
+	display: flex;
+	flex-direction: column;
+}
+
+/* 一档一行：勾选框在前，档位名在后，整行可点 */
+.prov-levels-item {
 	display: flex;
 	align-items: center;
-	justify-content: center;
+	gap: var(--space-4);
+	padding: var(--space-1) var(--space-4);
+	border-radius: var(--radius-md);
+	color: var(--fg-default);
+	cursor: pointer;
+	font-size: var(--text-ui);
+}
+
+.prov-levels-item:hover {
+	background: var(--bg-hover);
+}
+
+.prov-levels-item input {
+	margin: 0;
+	accent-color: var(--accent-fill);
+}
+
+.prov-levels-name {
+	flex: 1;
+	min-width: 0;
 }
 
 /* 内置提供方的模型读自目录，改不了，只列标识与窗口 */

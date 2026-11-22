@@ -69,6 +69,8 @@ export interface UpstreamModel {
 	maxTokens?: number;
 	/** 是否思考模型，模型信息库里查得到才有 */
 	reasoning?: boolean;
+	/** 支持的思考档位，模型信息库写明了档位才有；按从低到高排列 */
+	thinkingLevels?: ThinkingLevel[];
 }
 
 /**
@@ -113,8 +115,13 @@ export interface CustomModelInfo {
 	id: string;
 	/** 展示名，缺省时用标识 */
 	name?: string;
-	/** 是否支持思考 */
-	reasoning?: boolean;
+	/**
+	 * 支持的思考档位，按从低到高排列。
+	 *
+	 * 这是界面上勾出来的那一组：含 `off` 表示这个模型能关掉思考，其余档位表示会思考。
+	 * 一个会思考的档位都没有时，这个模型按不会思考处理。
+	 */
+	thinkingLevels?: ThinkingLevel[];
 	/** 上下文窗口 */
 	contextWindow?: number;
 	/** 单次最大输出 token */

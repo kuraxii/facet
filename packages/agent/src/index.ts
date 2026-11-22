@@ -42,6 +42,15 @@ export {
 	readSessionSummary,
 	statSessionFile,
 } from "./session-scan.ts";
+export type { ThinkingLevelMap, ThinkingLevelMapValue } from "./thinking-levels.ts";
+export {
+	hasThinking,
+	levelsFromCatalog,
+	levelsFromMap,
+	levelsToMap,
+	normalizeLevels,
+	THINKING_LEVELS,
+} from "./thinking-levels.ts";
 export type * from "./types.ts";
 export type {
 	CatalogIndex,

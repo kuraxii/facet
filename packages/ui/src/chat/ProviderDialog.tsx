@@ -4,16 +4,13 @@
  * 一个提供方要改的东西都收在这里：密钥，自定义提供方还有地址、协议与模型清单。内置提供方的
  * 名字、地址、协议与模型全由 pi 的目录给定，这里只能改密钥——要改地址就得自己建一个自定义
  * 提供方。这一页是份草稿：名字、地址、协议、模型、密钥的替换与删除都只改本地状态，点弹窗底部
- * 的「保存」才落盘，点「取消」全部丢掉。密钥在一个输入框里改，已配置的另给一个删除开关（同样
- * 要等保存才生效）。新建自定义提供方时标识按名字自动推出。
+ * 的「保存」才落盘，点「取消」全部丢掉。新建自定义提供方时标识按名字自动推出。
  * 凭证与清单分别写在两处配置里，所以保存时按「先建提供方、再写凭证」的顺序提交。
  *
- * 能走账号登录的提供方（pi 给了登录按钮文字的那些）另有一条登录通路：它不等「保存」，点下去
- * 就在主机上跑，凭证由 pi 直接落盘，完成后关掉弹窗。登录期间这块区域换成流程给的那几步——
- * 浏览器授权、设备码、要回答的一步——问答与取消都即时发给主机。
+ * 模型清单、凭证分区各自一个文件；这里只管草稿状态、保存与删除。
  */
-import type { CustomModelInfo, ModelInfo, ProviderLoginState } from "@facet/protocol";
-import { Plus, X } from "lucide-react";
+import type { CustomModelInfo, CustomProviderInfo, ModelInfo } from "@facet/protocol";
+import { X } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { Button } from "../common/Button.tsx";
 import { IconButton } from "../common/IconButton.tsx";
@@ -22,24 +19,13 @@ import { Select } from "../common/select.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { Modal } from "../modal.tsx";
 import { ICON_SIZE } from "../styles/visual-contract.ts";
+import { ProviderCredentialSection } from "./ProviderCredentialSection.tsx";
+import { ProviderModelTable } from "./ProviderModelTable.tsx";
 import { API_OPTIONS, apiOptionLabel } from "./provider-api.ts";
 import { providerDraftIssue } from "./provider-draft.ts";
+import { type ModelRow, modelRow, rewriteModelRow } from "./provider-model-row.ts";
 import type { ProviderRow } from "./provider-rows.ts";
 import type { SettingsDataSource } from "./settings-data-source.ts";
-
-/** 表单里的一行模型。`key` 只用于渲染，跟着行一起移动，不用下标当键。 */
-interface ModelRow {
-	key: string;
-	model: CustomModelInfo;
-}
-
-let rowCounter = 0;
-
-/** 造一行模型。 */
-function modelRow(model: CustomModelInfo = { id: "" }): ModelRow {
-	rowCounter += 1;
-	return { key: `row-${rowCounter}`, model };
-}
 
 /** 从名字推一个标识：标识只认小写字母、数字、点、下划线与连字符。 */
 function slugify(name: string): string {
@@ -137,7 +123,8 @@ export function ProviderDialog({
 	 * 从上游的 `/v1/models` 拉模型清单填进模型表。
 	 *
 	 * 有的网关要密钥才给列表：带上密钥框里刚填的那个，没填就由主机按这个提供方已有的认证去解析。
-	 * 已经填了标识的行原样保留（用户可能改过名字与窗口），只把还没有的补在后面。
+	 * 拉回来的清单已经在主机侧按模型信息库补过展示名、上下文窗口、最大输出与思考档位，所以同一个
+	 * 标识的行整行按它重写；表里没有的补在后面，没填标识的空行原样留着。
 	 */
 	const fetchModels = async (): Promise<void> => {
 		setIsFetching(true);
@@ -158,13 +145,17 @@ export function ProviderDialog({
 				return;
 			}
 			setRows((current) => {
-				const kept = current.filter((item) => item.model.id.trim().length > 0);
-				// 标识完全相同才跳过：已有的行原样保留，展示名、窗口等一个字都不动；大小写不同算新模型
-				const known = new Set(kept.map((item) => item.model.id.trim()));
-				const added = fetched.models
-					.filter((model) => !known.has(model.id.trim()))
-					.map((model) => modelRow({ ...model }));
-				return [...kept, ...added];
+				const byId = new Map(fetched.models.map((model) => [model.id.trim(), model]));
+				const next = current.map((item) => {
+					const hit = byId.get(item.model.id.trim());
+					if (hit === undefined) {
+						return item;
+					}
+					byId.delete(hit.id.trim());
+					return rewriteModelRow(item, hit);
+				});
+				const added = [...byId.values()].map((model) => modelRow({ ...model }));
+				return [...next, ...added];
 			});
 		} catch (fetchError) {
 			setError(messageOf(fetchError));
@@ -203,13 +194,14 @@ export function ProviderDialog({
 		setError(undefined);
 		try {
 			if (isCustom) {
-				await data.saveCustomProvider({
+				const provider: CustomProviderInfo = {
 					id: shownId.trim(),
 					name: name.trim(),
 					baseUrl: baseUrl.trim(),
 					api,
 					models: rows.map((item) => ({ ...item.model, id: item.model.id.trim() })),
-				});
+				};
+				await data.saveCustomProvider(provider);
 			}
 			// 密钥与提供方配置分两处存放：配置走上面那一步，密钥的两种改动都在这里落盘
 			if (isDeletingKey) {
@@ -243,6 +235,7 @@ export function ProviderDialog({
 	const title = isNew
 		? t("providerForm.addTitle")
 		: t("providers.editTitle", { name: custom?.name ?? provider?.name ?? "" });
+	const shownName = custom?.name ?? provider?.name ?? "";
 
 	return (
 		<Modal open onClose={onClose} label={title} className="is-provider">
@@ -326,171 +319,36 @@ export function ProviderDialog({
 					</div>
 				) : null}
 
-				<section className="prov-section">
-					<div className="prov-section-head">
-						<span className="set-label">{t("providerForm.credential")}</span>
-						{canLogin ? (
-							<span className="prov-section-actions">
-								<Button
-									variant="ghost"
-									size="sm"
-									className="prov-tone-accent"
-									disabled={isBusy || (loginState !== undefined && loginState.status === "running")}
-									onClick={() => {
-										setError(undefined);
-										void data.startProviderLogin(shownId, "oauth").catch((startError: unknown) => {
-											setError(messageOf(startError));
-										});
-									}}
-								>
-									{loginLabel}
-								</Button>
-							</span>
-						) : null}
-					</div>
-					{loginState !== undefined && loginState.status === "running" ? (
-						<LoginFlow
-							state={loginState}
-							onRespond={(promptId, value) => {
-								void data.respondProviderLogin(loginState.loginId, promptId, value);
-							}}
-							onCancel={() => {
-								void data.cancelProviderLogin(loginState.loginId);
-							}}
-						/>
-					) : (
-						<div className="prov-cred">
-							<Input
-								size="md"
-								type="password"
-								value={key}
-								disabled={isDeletingKey}
-								onChange={(event) => setKey(event.target.value)}
-								placeholder={
-									hasCredential && !isDeletingKey ? t("providers.apiKeyUpdate") : t("providers.apiKeyMissing")
-								}
-								aria-label={t("providers.apiKeyLabel", { name: custom?.name ?? provider?.name ?? "" })}
-								{...(isCustom ? {} : { "data-autofocus": true })}
-							/>
-							{hasCredential ? (
-								<Button
-									variant="danger"
-									size="sm"
-									armed={isDeletingKey}
-									aria-pressed={isDeletingKey}
-									onClick={() => {
-										setKey("");
-										setIsDeletingKey(!isDeletingKey);
-									}}
-								>
-									{isDeletingKey ? t("providers.cancelDeleteCredential") : t("providers.deleteCredential")}
-								</Button>
-							) : null}
-						</div>
-					)}
-					{loginState?.status === "failed" && loginState.message !== undefined ? (
-						<p className="prov-error">{loginState.message}</p>
-					) : null}
-				</section>
+				<ProviderCredentialSection
+					providerId={shownId}
+					name={shownName}
+					hasCredential={hasCredential}
+					canLogin={canLogin}
+					loginLabel={loginLabel}
+					isBusy={isBusy}
+					loginState={loginState}
+					value={key}
+					onChange={setKey}
+					isDeletingKey={isDeletingKey}
+					onToggleDelete={() => {
+						setKey("");
+						setIsDeletingKey(!isDeletingKey);
+					}}
+					isCustom={isCustom}
+					data={data}
+					onError={setError}
+				/>
 
 				{isCustom ? (
-					<section className="prov-section">
-						<div className="prov-section-head">
-							<span className="set-label">{t("providerForm.models")}</span>
-							<span className="prov-section-actions">
-								<Button
-									variant="ghost"
-									size="sm"
-									className="prov-tone-accent"
-									disabled={isFetching || baseUrl.trim().length === 0}
-									onClick={() => void fetchModels()}
-								>
-									{t("providerForm.fetchModels")}
-								</Button>
-								<Button
-									variant="ghost"
-									size="sm"
-									className="prov-tone-accent"
-									onClick={() => setRows((current) => [...current, modelRow()])}
-								>
-									<Plus size={ICON_SIZE.md} aria-hidden="true" />
-									{t("providerForm.addModel")}
-								</Button>
-							</span>
-						</div>
-						<div className="prov-model-head" aria-hidden="true">
-							<span>{t("providerForm.modelId")}</span>
-							<span>{t("providerForm.modelName")}</span>
-							<span>{t("providerForm.contextWindow")}</span>
-							<span>{t("providerForm.maxOutput")}</span>
-							<span>{t("providerForm.supportsThinking")}</span>
-							<span />
-						</div>
-						<ul className="prov-models">
-							{rows.map((row_, index) => {
-								const model = row_.model;
-								return (
-									<li key={row_.key} className="prov-model">
-										<Input
-											size="md"
-											value={model.id}
-											onChange={(event) => patchModel(row_.key, { id: event.target.value })}
-											placeholder={t("providerForm.modelId")}
-											aria-label={t("providerForm.modelIdLabel", { index: index + 1 })}
-										/>
-										<Input
-											size="md"
-											value={model.name ?? ""}
-											onChange={(event) => patchModel(row_.key, { name: event.target.value })}
-											placeholder={t("providerForm.modelName")}
-											aria-label={t("providerForm.modelNameLabel", { index: index + 1 })}
-										/>
-										<Input
-											size="md"
-											type="number"
-											value={model.contextWindow ?? ""}
-											onChange={(event) =>
-												patchModel(row_.key, {
-													contextWindow: event.target.value === "" ? undefined : Number(event.target.value),
-												})
-											}
-											placeholder={t("providerForm.contextWindow")}
-											aria-label={t("providerForm.modelContextLabel", { index: index + 1 })}
-										/>
-										<Input
-											size="md"
-											type="number"
-											value={model.maxTokens ?? ""}
-											onChange={(event) =>
-												patchModel(row_.key, {
-													maxTokens: event.target.value === "" ? undefined : Number(event.target.value),
-												})
-											}
-											placeholder={t("providerForm.maxOutput")}
-											aria-label={t("providerForm.modelOutputLabel", { index: index + 1 })}
-										/>
-										<label className="prov-toggle">
-											<input
-												type="checkbox"
-												checked={model.reasoning === true}
-												onChange={(event) => patchModel(row_.key, { reasoning: event.target.checked })}
-												aria-label={t("providerForm.supportsThinking")}
-											/>
-										</label>
-										<IconButton
-											variant="outline"
-											size="sm"
-											aria-label={t("providerForm.remove")}
-											disabled={rows.length <= 1}
-											onClick={() => setRows((current) => current.filter((item) => item.key !== row_.key))}
-										>
-											<X size={ICON_SIZE.lg} aria-hidden="true" />
-										</IconButton>
-									</li>
-								);
-							})}
-						</ul>
-					</section>
+					<ProviderModelTable
+						rows={rows}
+						isFetching={isFetching}
+						canFetch={baseUrl.trim().length > 0}
+						onFetch={() => void fetchModels()}
+						onAdd={() => setRows((current) => [...current, modelRow()])}
+						onPatch={patchModel}
+						onRemove={(key_) => setRows((current) => current.filter((item) => item.key !== key_))}
+					/>
 				) : models.length === 0 ? null : (
 					<section className="prov-section">
 						<span className="set-label">{t("providerForm.models")}</span>
@@ -534,103 +392,5 @@ export function ProviderDialog({
 				</span>
 			</footer>
 		</Modal>
-	);
-}
-
-/**
- * 登录流程里要用户看与要用户答的那一块。
- *
- * 只渲染主机给的东西：设备码、授权地址、要回答的一步。进度与终局由样式表达，不写状态文字；
- * 失败时照样给主机原话，那是事实内容而不是标签。
- */
-function LoginFlow({
-	state,
-	onRespond,
-	onCancel,
-}: {
-	state: ProviderLoginState;
-	onRespond: (promptId: string, value: string | null) => void;
-	onCancel: () => void;
-}): React.JSX.Element {
-	const { t } = useI18n();
-	const [answer, setAnswer] = useState("");
-	const prompt = state.prompt;
-	const submit = (value: string): void => {
-		if (prompt === undefined || value.trim().length === 0) {
-			return;
-		}
-		setAnswer("");
-		onRespond(prompt.promptId, value.trim());
-	};
-
-	return (
-		<div className="prov-login">
-			{state.deviceCode !== undefined ? (
-				<div className="prov-login-code">
-					<span className="mono">{state.deviceCode.userCode}</span>
-					<Button
-						variant="ghost"
-						size="sm"
-						className="prov-tone-accent"
-						onClick={() => window.open(state.deviceCode?.verificationUri, "_blank", "noopener")}
-					>
-						{t("providerForm.loginOpen")}
-					</Button>
-				</div>
-			) : null}
-
-			{state.authUrl !== undefined ? (
-				<Button
-					variant="secondary"
-					size="sm"
-					onClick={() => window.open(state.authUrl?.url, "_blank", "noopener")}
-				>
-					{t("providerForm.loginOpen")}
-				</Button>
-			) : null}
-
-			{prompt !== undefined && prompt.kind === "select" ? (
-				<div className="prov-login-options">
-					{(prompt.options ?? []).map((option) => (
-						<Button key={option.id} variant="secondary" size="sm" onClick={() => submit(option.id)}>
-							{option.label}
-						</Button>
-					))}
-				</div>
-			) : null}
-
-			{prompt !== undefined && prompt.kind !== "select" ? (
-				<form
-					className="prov-login-answer"
-					onSubmit={(event) => {
-						event.preventDefault();
-						submit(answer);
-					}}
-				>
-					{/* 题目由登录流程给，单独一行；输入框只留占位，免得长句子被截断 */}
-					<label className="prov-login-label" htmlFor={prompt.promptId}>
-						{prompt.message}
-					</label>
-					<div className="prov-login-field">
-						<Input
-							id={prompt.promptId}
-							size="md"
-							type={prompt.kind === "secret" ? "password" : "text"}
-							value={answer}
-							{...{ "data-autofocus": true }}
-							onChange={(event) => setAnswer(event.target.value)}
-							placeholder={prompt.placeholder}
-						/>
-						<Button type="submit" variant="secondary" size="sm" disabled={answer.trim().length === 0}>
-							{t("providerForm.loginContinue")}
-						</Button>
-					</div>
-				</form>
-			) : null}
-
-			<Button variant="ghost" size="sm" className="prov-tone-danger" onClick={onCancel}>
-				{t("providerForm.loginCancel")}
-			</Button>
-		</div>
 	);
 }

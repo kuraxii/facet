@@ -31,11 +31,25 @@ describe("自定义提供方输入的归一", () => {
 	it("其余字段原样带过去", () => {
 		const out = normalizeProviderInput({
 			...provider,
-			models: [{ id: "glm-5.3-flash", reasoning: true, contextWindow: 1000000, maxTokens: 8192 }],
+			models: [
+				{
+					id: "glm-5.3-flash",
+					thinkingLevels: ["off", "medium", "high", "max"],
+					contextWindow: 1000000,
+					maxTokens: 8192,
+				},
+			],
 		});
 		expect(out).toEqual({
 			...provider,
-			models: [{ id: "glm-5.3-flash", reasoning: true, contextWindow: 1000000, maxTokens: 8192 }],
+			models: [
+				{
+					id: "glm-5.3-flash",
+					thinkingLevels: ["off", "medium", "high", "max"],
+					contextWindow: 1000000,
+					maxTokens: 8192,
+				},
+			],
 		});
 	});
 });

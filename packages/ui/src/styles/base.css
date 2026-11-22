@@ -438,9 +438,12 @@
 	 * 浓度要改就改这一个数。
 	 */
 	--image-preview-scrim: color-mix(in srgb, var(--bg-canvas) 70%, transparent);
-	/* 模型行：六列的宽度与列间距离，表头与每行共用同一组 */
-	--prov-model-columns: 1.3fr 1fr 0.75fr 0.75fr 40px 28px;
+	/* 模型行：六列的宽度与列间距离，表头与每行共用同一组；第五列是思考档位，最长的档位名是 minimal */
+	--prov-model-columns: 1.3fr 1fr 0.78fr 0.78fr 96px 28px;
 	--prov-model-gap: 8px;
+	/* 思考档位菜单：它上缘到触发器下缘的距离，以及菜单自身的宽度 */
+	--prov-levels-gap: 4px;
+	--prov-levels-menu-width: 132px;
 }
 
 /*

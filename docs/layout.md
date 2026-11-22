@@ -142,7 +142,7 @@
 - 抽屉从窗口顶边到底边（`position: fixed`，`inset: 0 auto 0 0`），表面、右边线、阴影从 `y=0` 起连续，顶部 36px 就是它自己的顶头（见 §4）。
 - 抽屉开合不写回宽档的意图位：拉宽后仍按侧栏收起位平铺。
 - 遮罩（`.drawer-scrim`）只服务左抽屉：盖住正文与顶带，点它、点 `Esc`、点抽屉自己的关闭按钮都关抽屉；关闭后焦点还给打开它的那个顶带开关（开关在抽屉开着时仍留在 DOM 里）。
-- 抽屉用传统 `position: fixed` + 可控遮罩 + `Esc` + 点外部关闭。**不使用 `popover="auto"`**：Top Layer 压过一切，`z-index` 无法让窗口按钮浮在抽屉之上；且 `popover` 的 Esc 没有可拦截的 `cancel` 事件，与仓库现有 `Modal` 依赖 `onCancel` + `preventDefault` 的做法冲突。
+- 抽屉用传统 `position: fixed` + 可控遮罩 + `Esc` + 点外部关闭。**不使用 `popover="auto"`**：Top Layer 压过一切，`z-index` 无法让窗口按钮浮在抽屉之上；且 `popover` 的 Esc 没有可拦截的 `cancel` 事件，与仓库现有 `Modal` 依赖 `onCancel` + `preventDefault` 的做法冲突。同一份理由只否掉「抽屉用 popover」，不否掉 popover 本身：弹窗**内部**的小菜单（目前只有设置里模型行的思考档位）用它，因为那一层要的是 Top Layer 带来的「不被滚动区裁掉」与浏览器的点外部关闭，且它没有需要压在它上面的东西。`Esc` 的冲突由菜单自己在 `document` 捕获阶段 `preventDefault()` 补上——不拦的话一次 `Esc` 会把设置窗一起关掉。
 
 **宽展开（`⤢`，右栏最大化）**：
 

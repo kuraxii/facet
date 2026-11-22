@@ -346,7 +346,8 @@ export const REQUEST_SCHEMAS = {
 					Type.Object({
 						id: Id,
 						name: Type.Optional(Type.String()),
-						reasoning: Type.Optional(Type.Boolean()),
+						// 勾出来的那一组思考档位；空数组与不传都表示这个模型不会思考
+						thinkingLevels: Type.Optional(Type.Array(ThinkingLevel)),
 						contextWindow: Type.Optional(Type.Number()),
 						maxTokens: Type.Optional(Type.Number()),
 					}),

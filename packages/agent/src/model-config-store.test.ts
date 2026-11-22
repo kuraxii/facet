@@ -51,6 +51,69 @@ describe("自定义提供方", () => {
 		expect(await store.isCustom("anthropic")).toBe(false);
 	});
 
+	it("思考档位写成 reasoning 与逐档映射,读回来是同一组", async () => {
+		const store = new ModelConfigStore({ file });
+		await store.saveProvider({
+			...entry,
+			models: [
+				{
+					id: "deepseek-flash",
+					name: "DeepSeek V4.1 Flash 1017",
+					thinkingLevels: ["off", "low", "high", "max"],
+				},
+			],
+		});
+
+		const written = JSON.parse(await readFile(file, "utf8")) as {
+			providers: Record<string, { models: Record<string, unknown>[] }>;
+		};
+		expect(written.providers["my-gateway"]?.models[0]).toEqual({
+			id: "deepseek-flash",
+			name: "DeepSeek V4.1 Flash 1017",
+			reasoning: true,
+			thinkingLevelMap: { minimal: null, medium: null, xhigh: null, max: "max" },
+		});
+		expect((await store.customProviders())[0]?.models[0]?.thinkingLevels).toEqual([
+			"off",
+			"low",
+			"high",
+			"max",
+		]);
+	});
+
+	it("只有 off 时写 reasoning: false,不写映射", async () => {
+		const store = new ModelConfigStore({ file });
+		await store.saveProvider({ ...entry, models: [{ id: "plain", thinkingLevels: ["off"] }] });
+
+		const written = JSON.parse(await readFile(file, "utf8")) as {
+			providers: Record<string, { models: Record<string, unknown>[] }>;
+		};
+		expect(written.providers["my-gateway"]?.models[0]).toEqual({ id: "plain", reasoning: false });
+		expect((await store.customProviders())[0]?.models[0]?.thinkingLevels).toBeUndefined();
+	});
+
+	it("手写的映射读成同一组档位", async () => {
+		await writeFile(
+			file,
+			JSON.stringify({
+				providers: {
+					"my-gateway": {
+						models: [
+							{ id: "a", reasoning: true, thinkingLevelMap: { off: null, xhigh: "xhigh", max: "max" } },
+							{ id: "b", reasoning: true },
+						],
+					},
+				},
+			}),
+			"utf8",
+		);
+		const store = new ModelConfigStore({ file });
+		expect((await store.customProviders())[0]?.models).toEqual([
+			{ id: "a", thinkingLevels: ["minimal", "low", "medium", "high", "xhigh", "max"] },
+			{ id: "b", thinkingLevels: ["off", "minimal", "low", "medium", "high"] },
+		]);
+	});
+
 	it("修改时保留其他字段", async () => {
 		await writeFile(
 			file,

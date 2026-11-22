@@ -32,17 +32,17 @@
 .term-dock-head {
 	display: flex;
 	align-items: center;
-	gap: 8px;
+	gap: var(--space-4);
 	flex: none;
 	height: 34px;
-	padding: 0 8px 0 10px;
+	padding: 0 var(--space-4) 0 var(--space-5);
 	border-bottom: 1px solid var(--border-default);
 }
 
 .term-dock-tabs {
 	display: flex;
 	align-items: center;
-	gap: 2px;
+	gap: var(--space-1);
 	min-width: 0;
 	overflow-x: auto;
 	scrollbar-width: none;
@@ -58,10 +58,10 @@
 	flex: none;
 	max-width: 200px;
 	height: 24px;
-	padding: 0 2px 0 2px;
-	border-radius: 6px;
+	padding: 0 var(--space-1);
+	border-radius: var(--radius-md);
 	color: var(--fg-muted);
-	font-size: 12px;
+	font-size: var(--text-xs);
 }
 
 .term-tab:hover {
@@ -77,10 +77,10 @@
 .term-tab-main {
 	display: inline-flex;
 	align-items: center;
-	gap: 6px;
+	gap: var(--space-3);
 	min-width: 0;
 	height: 100%;
-	padding: 0 2px 0 8px;
+	padding: 0 var(--space-1) 0 var(--space-4);
 	border: 0;
 	background: transparent;
 	color: inherit;
@@ -98,7 +98,7 @@
 	flex: none;
 	color: var(--fg-subtle);
 	font-variant-numeric: tabular-nums;
-	font-size: 11px;
+	font-size: var(--text-xs);
 }
 
 .term-tab-close {
@@ -110,7 +110,7 @@
 	height: 16px;
 	margin-right: 3px;
 	border: 0;
-	border-radius: 4px;
+	border-radius: var(--radius-sm);
 	background: transparent;
 	color: var(--fg-subtle);
 	cursor: pointer;
@@ -124,7 +124,7 @@
 .term-dock-actions {
 	display: flex;
 	align-items: center;
-	gap: 2px;
+	gap: var(--space-1);
 	flex: none;
 	margin-left: auto;
 }
@@ -136,7 +136,7 @@
 	width: 24px;
 	height: 24px;
 	border: 0;
-	border-radius: 6px;
+	border-radius: var(--radius-md);
 	background: transparent;
 	color: var(--fg-muted);
 	cursor: pointer;
@@ -156,7 +156,7 @@
 	display: flex;
 	flex: 1;
 	min-height: 0;
-	padding: 6px 0 6px 8px;
+	padding: var(--space-3) 0 var(--space-3) var(--space-4);
 }
 
 /* xterm 自己撑满容器，容器留一点内边距让文字不贴边 */
@@ -192,30 +192,30 @@
 .term-dock-error {
 	display: flex;
 	align-items: center;
-	gap: 8px;
+	gap: var(--space-4);
 	flex: none;
 	margin: 0;
-	padding: 6px 12px;
+	padding: var(--space-3) var(--space-6);
 	border-top: 1px solid var(--border-default);
 	background: var(--status-err-bg);
 	color: var(--status-err-fg);
-	font-size: 12px;
+	font-size: var(--text-xs);
 }
 
 .term-empty {
 	margin: 0;
-	padding: 12px 4px;
+	padding: var(--space-6) var(--space-2);
 	color: var(--fg-subtle);
-	font-size: 12px;
+	font-size: var(--text-xs);
 }
 
 /* 窄一点的停靠栏把内边距收回一档：xterm 自己的列宽里再扣两份留白就太窄了 */
 @container (width < 880px) {
 	.term-dock-head {
-		padding: 0 6px;
+		padding: 0 var(--space-3);
 	}
 
 	.term-dock-body {
-		padding: 4px 0 4px 4px;
+		padding: var(--space-2) 0 var(--space-2) var(--space-2);
 	}
 }

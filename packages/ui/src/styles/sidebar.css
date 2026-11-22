@@ -11,7 +11,7 @@
 	height: 100%;
 	/* 横向内边距交给每一行（`.scroll-row`），滚动条才能贴着右缘；
 	   顶带里那行头部自己带 4px 下边距，这里再留 4px，头部控件到新建按钮正好 8px */
-	padding: 4px 0 8px;
+	padding: var(--space-2) 0 var(--space-4);
 	border-right: 1px solid var(--border-subtle);
 	background: var(--bg-subtle);
 	overflow: hidden;
@@ -69,7 +69,7 @@
 	justify-content: space-between;
 	width: 100%;
 	/* 上下各留 4px，28px 的图标按钮正好在 36px 的顶带里居中 */
-	padding: 4px 0;
+	padding: var(--space-2) 0;
 	-webkit-app-region: drag;
 }
 
@@ -79,15 +79,14 @@
 }
 
 .sb-title {
-	font-size: 14px;
+	font-size: var(--text-body);
 	font-weight: 600;
-	letter-spacing: 0.2px;
 }
 
 .sb-tools {
 	display: flex;
 	align-items: center;
-	gap: 2px;
+	gap: var(--space-1);
 }
 
 /* 新建会话：几何来自 `common/Button.tsx`，这里只管它在侧栏里的外边距 */
@@ -105,15 +104,15 @@
 .sb-filter-btn {
 	display: flex;
 	align-items: center;
-	gap: 7px;
+	gap: var(--space-3);
 	width: 100%;
 	height: 28px;
-	padding: 0 8px;
+	padding: 0 var(--space-4);
 	border: 1px solid var(--border-subtle);
-	border-radius: 6px;
+	border-radius: var(--radius-md);
 	background: transparent;
 	color: var(--fg-muted);
-	font-size: 12.5px;
+	font-size: var(--text-ui);
 	text-align: left;
 	transition:
 		border-color var(--dur-fast) var(--ease-standard),
@@ -140,9 +139,9 @@
 	right: 0;
 	left: 0;
 	z-index: var(--z-popup);
-	padding: 6px;
+	padding: var(--space-3);
 	border: 1px solid var(--border-default);
-	border-radius: 8px;
+	border-radius: var(--radius-lg);
 	background: var(--bg-surface);
 	box-shadow: var(--shadow-popover);
 }
@@ -155,14 +154,14 @@
 .sb-search {
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: var(--space-3);
 	height: 28px;
-	padding: 0 8px;
+	padding: 0 var(--space-4);
 	border: 1px solid var(--border-subtle);
-	border-radius: 6px;
+	border-radius: var(--radius-md);
 	background: var(--bg-canvas);
 	color: var(--fg-subtle);
-	font-size: 12.5px;
+	font-size: var(--text-ui);
 	transition: border-color var(--dur-fast) var(--ease-standard);
 }
 
@@ -178,7 +177,7 @@
 	background: transparent;
 	color: var(--fg-default);
 	font: inherit;
-	font-size: 12.5px;
+	font-size: var(--text-ui);
 }
 
 .sb-search input::placeholder {
@@ -189,7 +188,7 @@
 .sb-opts {
 	display: flex;
 	flex-direction: column;
-	gap: 1px;
+	gap: var(--space-1);
 	max-height: 260px;
 	margin: 6px 0;
 	overflow-x: hidden;
@@ -200,15 +199,15 @@
 .sb-opt {
 	display: flex;
 	align-items: center;
-	gap: 7px;
+	gap: var(--space-3);
 	width: 100%;
 	height: 28px;
-	padding: 0 8px;
+	padding: 0 var(--space-4);
 	border: 0;
-	border-radius: 6px;
+	border-radius: var(--radius-md);
 	background: transparent;
 	color: var(--fg-muted);
-	font-size: 12.5px;
+	font-size: var(--text-ui);
 	text-align: left;
 }
 
@@ -229,9 +228,9 @@
 
 .sb-opt.is-add {
 	margin-top: 2px;
-	padding-top: 2px;
+	padding-top: var(--space-1);
 	border-top: 1px solid var(--border-subtle);
-	border-radius: 0 0 6px 6px;
+	border-radius: 0 0 var(--radius-md) var(--radius-md);
 	height: 30px;
 }
 
@@ -259,17 +258,17 @@
 	display: flex;
 	flex-direction: column;
 	align-items: stretch;
-	gap: 2px;
+	gap: var(--space-1);
 }
 
 .sb-menu-item {
 	height: 24px;
-	padding: 0 6px;
+	padding: 0 var(--space-3);
 	border: 0;
-	border-radius: 5px;
+	border-radius: var(--radius-sm);
 	background: transparent;
 	color: var(--fg-muted);
-	font-size: 12px;
+	font-size: var(--text-xs);
 	text-align: left;
 }
 
@@ -285,7 +284,7 @@
 .sb-rename {
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: var(--space-3);
 }
 
 /* 重命名输入框：几何来自 `common/Input.tsx`，这里只让它吃掉标题那一行的剩余宽度 */
@@ -296,18 +295,18 @@
 .sb-confirm {
 	display: flex;
 	flex-direction: column;
-	gap: 6px;
+	gap: var(--space-3);
 }
 
 .sb-confirm-text {
 	color: var(--fg-subtle);
-	font-size: 11.5px;
-	line-height: 1.5;
+	font-size: var(--text-xs);
+	line-height: var(--leading-ui);
 }
 
 .sb-confirm-actions {
 	display: flex;
-	gap: 6px;
+	gap: var(--space-3);
 }
 
 .sb-opt-action.is-danger {
@@ -318,30 +317,30 @@
 .sb-menu-error {
 	margin: 0;
 	color: var(--status-err-fg);
-	font-size: 11.5px;
-	line-height: 1.5;
+	font-size: var(--text-xs);
+	line-height: var(--leading-ui);
 }
 
 .sb-opt-stale {
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: var(--space-3);
 	margin-top: 2px;
-	padding: 4px 8px;
+	padding: var(--space-2) var(--space-4);
 	border-top: 1px solid var(--border-subtle);
 	color: var(--fg-subtle);
-	font-size: 11.5px;
+	font-size: var(--text-xs);
 }
 
 .sb-opt-action {
 	flex: none;
 	height: 22px;
-	padding: 0 8px;
+	padding: 0 var(--space-4);
 	border: 1px solid var(--border-subtle);
-	border-radius: 5px;
+	border-radius: var(--radius-sm);
 	background: var(--bg-elevated);
 	color: var(--fg-muted);
-	font-size: 11.5px;
+	font-size: var(--text-xs);
 }
 
 .sb-opt-action:hover {
@@ -351,9 +350,9 @@
 
 .sb-opt-empty {
 	margin: 0;
-	padding: 8px;
+	padding: var(--space-4);
 	color: var(--fg-subtle);
-	font-size: 12px;
+	font-size: var(--text-xs);
 }
 
 .sb-queue {
@@ -369,7 +368,7 @@
 	display: flex;
 	flex: none;
 	flex-direction: column;
-	gap: 1px;
+	gap: var(--space-1);
 	margin-bottom: 6px;
 }
 
@@ -382,10 +381,9 @@
 	/* 分组标题与行文字对齐：行外侧留白再加行自己那份 */
 	padding: 8px 0 3px calc(var(--sidebar-edge) + var(--sb-row-inset));
 	color: var(--fg-subtle);
-	font-size: 11px;
+	font-size: var(--text-xs);
 	font-variant-numeric: tabular-nums;
 	font-weight: 500;
-	letter-spacing: 0.3px;
 }
 
 /* 会话行：几何来自 `common/ListRow.tsx` 的 `sm` 档，这里只留侧栏自己的内缩与两行布局 */
@@ -415,7 +413,7 @@
 	justify-content: space-between;
 	min-width: 0;
 	color: var(--fg-subtle);
-	font-size: 11px;
+	font-size: var(--text-xs);
 }
 
 .sb-row-title {
@@ -445,7 +443,7 @@
 	flex: none;
 	max-width: 72px;
 	color: var(--fg-subtle);
-	font-size: 11px;
+	font-size: var(--text-xs);
 }
 
 .sb-row-meta .sb-row-proj {
@@ -456,7 +454,7 @@
 .sb-row-time {
 	flex: none;
 	color: var(--fg-subtle);
-	font-size: 11px;
+	font-size: var(--text-xs);
 	font-variant-numeric: tabular-nums;
 }
 
@@ -480,28 +478,28 @@
 	margin: 0;
 	padding: 10px 0 10px calc(var(--sidebar-edge) + var(--sb-row-inset));
 	color: var(--fg-subtle);
-	font-size: 12.5px;
+	font-size: var(--text-ui);
 }
 
 .sb-foot {
 	display: flex;
 	flex: none;
 	align-items: center;
-	gap: 6px;
+	gap: var(--space-3);
 	margin-top: 6px;
 	padding: 8px var(--sidebar-edge) 0;
 	border-top: 1px solid var(--border-subtle);
 	color: var(--fg-subtle);
-	font-size: 11px;
+	font-size: var(--text-xs);
 }
 
 .sb-foot-btn {
 	padding: 0;
 	border: 0;
-	border-radius: 6px;
+	border-radius: var(--radius-md);
 	background: transparent;
 	color: var(--fg-muted);
-	font-size: 12px;
+	font-size: var(--text-xs);
 }
 
 .sb-foot-btn:disabled {
@@ -513,7 +511,7 @@
 .sb-foot-status {
 	margin-left: auto;
 	color: var(--fg-subtle);
-	font-size: 10.5px;
+	font-size: var(--text-xs);
 }
 
 .sb-foot > .sb-foot-btn.is-icon:last-child {
@@ -522,11 +520,11 @@
 
 .kbd {
 	margin-left: auto;
-	padding: 0 6px;
+	padding: 0 var(--space-3);
 	border: 1px solid var(--border-default);
-	border-radius: 5px;
+	border-radius: var(--radius-sm);
 	color: var(--fg-subtle);
-	font-size: 11px;
+	font-size: var(--text-xs);
 }
 
 /* 主机切换：页脚按钮与弹出的清单 */
@@ -540,9 +538,9 @@
 	left: 0;
 	z-index: var(--z-popup);
 	width: 248px;
-	padding: 6px;
+	padding: var(--space-3);
 	border: 1px solid var(--border-default);
-	border-radius: 10px;
+	border-radius: var(--radius-lg);
 	background: var(--bg-elevated);
 	box-shadow: var(--shadow-popover);
 }
@@ -556,8 +554,8 @@
 .host-row {
 	display: flex;
 	align-items: center;
-	gap: 2px;
-	border-radius: 6px;
+	gap: var(--space-1);
+	border-radius: var(--radius-md);
 }
 
 .host-row.is-on {
@@ -568,15 +566,15 @@
 	display: flex;
 	flex: 1;
 	align-items: center;
-	gap: 7px;
+	gap: var(--space-3);
 	min-width: 0;
 	height: 28px;
-	padding: 0 6px;
+	padding: 0 var(--space-3);
 	border: 0;
-	border-radius: 6px;
+	border-radius: var(--radius-md);
 	background: transparent;
 	color: var(--fg-muted);
-	font-size: 12px;
+	font-size: var(--text-xs);
 	text-align: left;
 }
 
@@ -601,7 +599,7 @@
 	min-width: 0;
 	overflow: hidden;
 	color: var(--fg-subtle);
-	font-size: 11px;
+	font-size: var(--text-xs);
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
@@ -615,7 +613,7 @@
 	margin-right: 4px;
 	padding: 0;
 	border: 0;
-	border-radius: 5px;
+	border-radius: var(--radius-sm);
 	background: transparent;
 	color: var(--fg-subtle);
 }
@@ -629,23 +627,23 @@
 	flex: 1;
 	min-width: 0;
 	height: 24px;
-	font-size: 11.5px;
+	font-size: var(--text-xs);
 }
 
 .host-add {
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: var(--space-3);
 	width: 100%;
 	height: 28px;
 	margin-top: 4px;
-	padding: 0 6px;
+	padding: 0 var(--space-3);
 	border: 0;
 	border-top: 1px solid var(--border-subtle);
-	border-radius: 6px;
+	border-radius: var(--radius-md);
 	background: transparent;
 	color: var(--fg-muted);
-	font-size: 12px;
+	font-size: var(--text-xs);
 	text-align: left;
 }
 
@@ -657,21 +655,21 @@
 .host-form {
 	display: flex;
 	flex-direction: column;
-	gap: 6px;
+	gap: var(--space-3);
 	margin-top: 6px;
-	padding-top: 6px;
+	padding-top: var(--space-3);
 	border-top: 1px solid var(--border-subtle);
 }
 
 .host-error {
 	margin: 0;
 	color: var(--status-err-fg);
-	font-size: 11.5px;
+	font-size: var(--text-xs);
 }
 
 .host-form-actions {
 	display: flex;
-	gap: 6px;
+	gap: var(--space-3);
 }
 
 /* 窄档：侧栏收成贴左缘的全高抽屉，从窗口顶边到底边 */

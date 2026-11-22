@@ -183,6 +183,29 @@ describe("输入区", () => {
 		unmount();
 	});
 
+	it("有一条还在路上时按钮不再可点，点也不多发一条", async () => {
+		const onSend = vi.fn();
+		const { container, unmount } = await renderComposer({ value: "你好", onSend, isSending: true });
+		// 仍显示发送（不是停止）：在途不是「这一轮在跑」，一下没收住就会把轮次停掉
+		expect(container.querySelector(".composer-send .is-stop")).toBeNull();
+		expect(sendButton(container).getAttribute("aria-label")).toBe("发送");
+		expect(sendButton(container).disabled).toBe(true);
+		sendButton(container).click();
+		expect(onSend).not.toHaveBeenCalled();
+		unmount();
+	});
+
+	it("运行中还在等回执时按钮留在发送上，不换成停止", async () => {
+		const { container, unmount } = await renderComposer({
+			activity: "running",
+			value: "补充一句",
+			isSending: true,
+		});
+		expect(container.querySelector(".composer-send .is-stop")).toBeNull();
+		expect(sendButton(container).disabled).toBe(true);
+		unmount();
+	});
+
 	it("占位提示挂在输入域外面那一圈上,有缩略图时跟着下移", async () => {
 		const attachment = { id: "a1", name: "shot.png", previewUrl: "data:image/png;base64,AA==" };
 		const { container, unmount } = await renderComposer({ attachments: [attachment] });
@@ -263,6 +286,47 @@ describe("键盘", () => {
 		// 有的浏览器组词时只给 keyCode 229
 		await pressKey(editor, "Enter", { keyCode: 229 });
 		expect(onSend).not.toHaveBeenCalled();
+		unmount();
+	});
+
+	it("长按回车的重复事件不发送也不补空行", async () => {
+		const onSend = vi.fn();
+		const onChange = vi.fn();
+		const { editor, unmount } = await renderComposer({ value: "你好", onSend, onChange });
+		await focusEditor(editor);
+
+		// 第一下正常发送
+		await pressKey(editor, "Enter");
+		expect(onSend).toHaveBeenCalledTimes(1);
+
+		// 按住不放：浏览器接着发的都是 repeat 事件，既不发送也不插入换行
+		for (let index = 0; index < 3; index += 1) {
+			const repeated = new KeyboardEvent("keydown", {
+				key: "Enter",
+				bubbles: true,
+				cancelable: true,
+				repeat: true,
+			});
+			await act(async () => {
+				editor.dispatchEvent(repeated);
+			});
+			expect(repeated.defaultPrevented).toBe(true);
+		}
+		expect(onSend).toHaveBeenCalledTimes(1);
+		expect(onChange).not.toHaveBeenCalled();
+		unmount();
+	});
+
+	it("有一条还在路上时回车不发出去", async () => {
+		const onSend = vi.fn();
+		const onChange = vi.fn();
+		const { editor, unmount } = await renderComposer({ value: "你好", onSend, onChange, isSending: true });
+		await focusEditor(editor);
+		const event = await pressKey(editor, "Enter");
+		expect(onSend).not.toHaveBeenCalled();
+		// 发送键位本来就拦下默认行为：不该顺手多出一个换行
+		expect(event.defaultPrevented).toBe(true);
+		expect(onChange).not.toHaveBeenCalled();
 		unmount();
 	});
 

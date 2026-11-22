@@ -78,6 +78,13 @@ export interface ComposerProps {
 	shiftEnterToSend?: boolean;
 	/** 现在能不能发送：断开、只读、压缩中、停止中等情况下给出 true，按钮禁用，不额外显示说明 */
 	isBlocked?: boolean | undefined;
+	/**
+	 * 有一条发送已经发出、还没被主机确认（或在编码图片）。
+	 *
+	 * 与 `isBlocked` 分开：它不代表“不能发”，只是“这一条还在路上”。两条入口（按钮与回车）
+	 * 都读 `canSend`，锁在这里就能一起生效，且按钮仍是发送（只是不可点），不会变成停止。
+	 */
+	isSending?: boolean | undefined;
 	/** 是否允许停止；连接断开或只读时为 false。 */
 	canStop?: boolean;
 	/** 上下文用量，未估算出来时为空 */
@@ -175,6 +182,7 @@ export function Composer({
 	onThinkingLevelChange,
 	shiftEnterToSend = false,
 	isBlocked,
+	isSending = false,
 	canStop = activity === "running",
 	contextUsage,
 	isCompacting = false,
@@ -195,13 +203,15 @@ export function Composer({
 
 	// 运行中发送走排队，插入当前轮次；压缩、停止中与连接断开时不接受新输入。
 	// 只有图片没有文字也算一条要发的内容。
+	// 上一条还没被主机确认时也发不了：草稿要等回执才收，不锁的话慢回执期间每次点击都是一次新发送。
 	const canSend =
 		isBlocked !== true &&
+		!isSending &&
 		(value.trim().length > 0 || attachments.length > 0) &&
 		(activity === "idle" || activity === "running");
 	const isQueuing = activity === "running";
-	/** 这一轮还在跑且没内容要发时，按钮换成停止；有内容时按钮换回发送（排队）。 */
-	const showsStop = activity !== "idle" && !canSend;
+	/** 这一轮还在跑且没内容要发时，按钮换成停止；发送在途时仍留在发送上，免得一下没收住轮次。 */
+	const showsStop = activity !== "idle" && !canSend && !isSending;
 	const [openMenu, setOpenMenu] = useState<"model" | "level" | "attach" | "context" | undefined>(undefined);
 	/** 有文件悬在输入区上方，界面据此给出可投放的样子 */
 	const [isDropping, setIsDropping] = useState(false);

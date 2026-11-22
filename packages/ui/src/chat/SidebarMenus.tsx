@@ -43,12 +43,12 @@ function useMenuDismiss(selector: string, isOpen: boolean, close: () => void): v
 		});
 		document.addEventListener("pointerdown", onPointerDown);
 		document.addEventListener("keydown", onKeyDown);
-		window.addEventListener("scroll", onScroll, true);
+		window.addEventListener("scroll", onScroll, { passive: true, capture: true });
 		return () => {
 			cancelAnimationFrame(frame);
 			document.removeEventListener("pointerdown", onPointerDown);
 			document.removeEventListener("keydown", onKeyDown);
-			window.removeEventListener("scroll", onScroll, true);
+			window.removeEventListener("scroll", onScroll, { capture: true });
 		};
 	}, [close, isOpen, selector]);
 }

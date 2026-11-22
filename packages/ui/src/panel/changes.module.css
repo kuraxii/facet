@@ -108,7 +108,8 @@
 	width: var(--changes-icon-size);
 	height: var(--changes-icon-size);
 	color: var(--fg-subtle);
-	transition: transform var(--dur-fast) var(--ease-standard);
+	/* 与文件树、过程组同一个节拍：转角走 `--dur-slow` 配 `--ease-out` */
+	transition: transform var(--dur-slow) var(--ease-out);
 }
 
 .chevron[data-open="true"] {

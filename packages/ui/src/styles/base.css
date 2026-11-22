@@ -565,6 +565,18 @@
 	}
 }
 
+/*
+ * `hidden` 的兜底。
+ *
+ * 浏览器自带的 `[hidden] { display: none }` 只是一条属性选择器，权重和组件自己的类名一样；
+ * 组件样式表排在后面，所以 `.group-body { display: flex }` 这种规则会把 `hidden` 顶掉。
+ * 这里补一条只在"不是 until-found"时生效的高权重规则，`hidden` 才真的藏得起来；
+ * `hidden="until-found"` 交给浏览器做尺寸包含与页内查找，不在这里碰。
+ */
+[hidden]:not([hidden="until-found"]) {
+	display: none;
+}
+
 * {
 	box-sizing: border-box;
 }
@@ -574,6 +586,15 @@ body,
 #root {
 	height: 100%;
 	margin: 0;
+}
+
+/*
+ * 整窗不跟着橡皮筋回弹：桌面上滚到底再继续滚，整页跟着弹一下会让人以为界面没接住滚轮。
+ * 这条只管窗口本身，内部滚动区（`.scroll-y` 等）仍保留各自的行为。
+ */
+html,
+body {
+	overscroll-behavior-y: none;
 }
 
 body {
@@ -646,6 +667,22 @@ svg {
 .lucide,
 .ui-icon {
 	stroke-width: var(--icon-stroke-width);
+}
+
+/*
+ * 树的展开箭头：一枚 chevron 转 90°，收起朝右、展开朝下。
+ *
+ * 文件树、过程组与目录树共用，所以放在基础层；转动走 `--dur-slow` 配 `--ease-out`，
+ * 与折叠体出现同一个节拍，减动效时随时长归零一起变成瞬切。
+ */
+.tree-chevron {
+	flex: none;
+	transform: rotate(0deg);
+	transition: transform var(--dur-slow) var(--ease-out);
+}
+
+.tree-chevron[data-open="true"] {
+	transform: rotate(90deg);
 }
 
 svg.fl {

@@ -467,6 +467,31 @@ describe("颜色只从主题来", () => {
  * 尺寸或底色。两样都不占，它就会以浏览器默认的灰方块出现——按钮的几何从样式表里删了、元素却
  * 没换成原语时，屏幕上长的就是这个样子。
  */
+/**
+ * 滚动类监听器必须显式声明 `passive`。
+ *
+ * 不写第三参数时浏览器要把这次滚动当成可能 `preventDefault()` 的来等，主线程一忙就掉帧。
+ * 真正需要拦默认行为的（Mermaid 图的 Ctrl+滚轮缩放）写 `passive: false`，其余一律
+ * `passive: true`——两种都算"声明过"，漏写才算违规。
+ */
+describe("滚动监听的 passive 声明", () => {
+	it("所有 scroll / wheel / touch 监听都显式声明了 passive", () => {
+		const offenders: string[] = [];
+		const pattern = /addEventListener\(\s*"(?:scroll|wheel|touchstart|touchmove)"\s*,[^)]*?\)/g;
+		for (const file of TSX_FILES) {
+			if (file.includes(".test.")) {
+				continue;
+			}
+			for (const match of readAny(file).matchAll(pattern)) {
+				if (!/passive\s*:/.test(match[0])) {
+					offenders.push(`${file}: ${match[0].replace(/\s+/g, " ")}`);
+				}
+			}
+		}
+		expect(offenders).toEqual([]);
+	});
+});
+
 describe("原生按钮必须自带样式底", () => {
 	/** 从 `from` 开始取一段配平的 `{...}`，含两侧花括号；取不到时返回 `undefined`。 */
 	function braced(source: string, from: number): string | undefined {

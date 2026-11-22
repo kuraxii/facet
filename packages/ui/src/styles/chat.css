@@ -61,7 +61,7 @@
 		calc(var(--outline-rail-width) - 2 * var(--outline-rail-inset))
 	);
 	height: calc(var(--outline-pill-height) + var(--outline-grow) * var(--outline-pill-grow-height));
-	border-radius: 9999px;
+	border-radius: var(--radius-pill);
 	background: var(--border-default);
 	transition:
 		width var(--dur-fast) var(--ease-standard),
@@ -86,9 +86,9 @@
 	width: 260px;
 	min-height: 48px;
 	margin-top: -24px;
-	padding: 10px 12px;
+	padding: var(--space-5) var(--space-6);
 	border: 1px solid var(--border-subtle);
-	border-radius: 8px;
+	border-radius: var(--radius-lg);
 	background: var(--bg-elevated);
 	box-shadow: var(--shadow-popover);
 	align-items: center;
@@ -97,8 +97,8 @@
 .outline-preview-text {
 	margin: 0;
 	color: var(--fg-default);
-	font-size: 12px;
-	line-height: 1.5;
+	font-size: var(--text-xs);
+	line-height: var(--leading-ui);
 	display: -webkit-box;
 	-webkit-box-orient: vertical;
 	-webkit-line-clamp: 2;
@@ -117,16 +117,16 @@
 .column {
 	display: flex;
 	flex-direction: column;
-	gap: 16px;
+	gap: var(--space-6);
 	width: 100%;
 	max-width: var(--chat-column-max);
 	margin: auto auto 0;
 }
 
 .empty {
-	padding: 40px 0;
+	padding: var(--space-16) 0;
 	color: var(--fg-subtle);
-	font-size: 13px;
+	font-size: var(--text-ui);
 	text-align: center;
 }
 
@@ -143,7 +143,7 @@
 	contain: layout style;
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
+	gap: var(--space-4);
 }
 
 .row.is-user {
@@ -154,21 +154,21 @@
 	display: flex;
 	align-items: flex-start;
 	justify-content: flex-end;
-	gap: 8px;
+	gap: var(--space-4);
 	width: 100%;
 }
 
 .session-error {
 	display: flex;
 	align-items: center;
-	gap: 8px;
+	gap: var(--space-4);
 	margin-bottom: 8px;
-	padding: 8px 10px;
+	padding: var(--space-4) var(--space-5);
 	border: 1px solid var(--status-err-fg);
-	border-radius: 8px;
+	border-radius: var(--radius-lg);
 	background: var(--status-err-bg);
 	color: var(--status-err-fg);
-	font-size: 12px;
+	font-size: var(--text-xs);
 }
 
 .session-error-text {
@@ -181,10 +181,10 @@
 .queue-strip {
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: var(--space-3);
 	flex-wrap: wrap;
 	margin-bottom: 8px;
-	font-size: 12px;
+	font-size: var(--text-xs);
 	color: var(--fg-subtle);
 }
 
@@ -200,9 +200,9 @@
 
 .queue-item {
 	max-width: 220px;
-	padding: 2px 8px;
+	padding: var(--space-1) var(--space-4);
 	border: 1px solid var(--border-subtle);
-	border-radius: 6px;
+	border-radius: var(--radius-md);
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -212,14 +212,14 @@
 .queue-clear {
 	display: inline-flex;
 	align-items: center;
-	gap: 4px;
+	gap: var(--space-2);
 	flex: none;
-	padding: 2px 6px;
+	padding: var(--space-1) var(--space-3);
 	border: 1px solid var(--border-subtle);
-	border-radius: 6px;
+	border-radius: var(--radius-md);
 	background: transparent;
 	color: var(--fg-subtle);
-	font-size: 12px;
+	font-size: var(--text-xs);
 }
 
 .queue-clear:hover {
@@ -230,7 +230,7 @@
 .user-foot {
 	display: flex;
 	justify-content: flex-end;
-	gap: 4px;
+	gap: var(--space-2);
 	width: 100%;
 }
 
@@ -274,9 +274,9 @@
 
 .bub {
 	max-width: 80%;
-	padding: 16px;
+	padding: var(--space-8);
 	border: 0;
-	border-radius: 16px 4px 16px 16px;
+	border-radius: var(--radius-xl) var(--radius-sm) var(--radius-xl) var(--radius-xl);
 	background: var(--bg-active);
 	color: var(--fg-default);
 	font-size: var(--text-size);
@@ -288,7 +288,7 @@
 .stopped-line {
 	margin-top: 6px;
 	color: var(--fg-subtle);
-	font-size: 12px;
+	font-size: var(--text-xs);
 }
 
 .row.is-fork {
@@ -300,13 +300,13 @@
 .turn-foot {
 	display: flex;
 	align-items: center;
-	gap: 8px;
+	gap: var(--space-4);
 }
 
 .turn-actions {
 	display: flex;
 	align-items: center;
-	gap: 4px;
+	gap: var(--space-2);
 }
 
 .fork-btn {
@@ -348,7 +348,7 @@
 	flex: none;
 	width: 7px;
 	height: 7px;
-	border-radius: 50%;
+	border-radius: var(--radius-pill);
 	background: var(--dot-ok);
 }
 
@@ -392,7 +392,7 @@
 	display: block;
 	width: var(--status-dot);
 	height: var(--status-dot);
-	border-radius: 50%;
+	border-radius: var(--radius-pill);
 }
 
 .status-mark.is-attention {
@@ -502,23 +502,23 @@
 	display: flex;
 	flex-direction: column;
 	align-items: flex-start;
-	gap: 2px;
+	gap: var(--space-1);
 }
 
 .group-head {
 	display: flex;
 	align-items: center;
-	gap: 7px;
+	gap: var(--space-3);
 	width: 100%;
 	max-width: 100%;
 	margin-left: 0;
 	padding: 4px var(--group-head-padding-x);
 	border: 0;
-	border-radius: 999px;
+	border-radius: var(--radius-pill);
 	background: transparent;
 	color: var(--fg-muted);
-	font-size: 13px;
-	line-height: 1.4;
+	font-size: var(--text-ui);
+	line-height: var(--leading-ui);
 	text-align: left;
 }
 
@@ -599,7 +599,7 @@
 .group-body {
 	display: flex;
 	flex-direction: column;
-	gap: 1px;
+	gap: var(--space-1);
 	margin: 2px 0 0 calc(var(--indent-rail-inset) + var(--group-head-padding-x));
 	padding-left: calc(var(--indent-rail-offset) - 1px);
 	border-left: 1px solid var(--border-subtle);
@@ -618,13 +618,13 @@
 	gap: var(--indent-rail-gap);
 	width: 100%;
 	min-width: 0;
-	padding: 5px 0;
+	padding: var(--space-2) 0;
 	border: 0;
-	border-radius: 7px;
+	border-radius: var(--radius-md);
 	background: transparent;
 	color: var(--fg-muted);
-	font-size: 13px;
-	line-height: 1.45;
+	font-size: var(--text-ui);
+	line-height: var(--leading-ui);
 	text-align: left;
 }
 
@@ -662,7 +662,7 @@
 	min-width: 0;
 	color: var(--fg-subtle);
 	font-family: var(--font-mono);
-	font-size: 12px;
+	font-size: var(--text-xs);
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
@@ -727,8 +727,8 @@
 	margin: 0;
 	color: var(--fg-muted);
 	font-family: var(--font-mono);
-	font-size: 11.5px;
-	line-height: 1.6;
+	font-size: var(--text-xs);
+	line-height: var(--leading-ui);
 	white-space: pre-wrap;
 	word-break: break-word;
 }
@@ -743,7 +743,7 @@
 	border: 0;
 	background: transparent;
 	color: var(--accent-fg);
-	font-size: 11.5px;
+	font-size: var(--text-xs);
 }
 
 .tr-think {
@@ -753,8 +753,8 @@
 	padding: 2px 0 6px var(--indent-rail-label);
 	color: var(--fg-subtle);
 	font-family: var(--font-sans);
-	font-size: 12.5px;
-	line-height: 1.7;
+	font-size: var(--text-xs);
+	line-height: var(--leading-prose);
 	white-space: pre-wrap;
 	word-break: break-word;
 }
@@ -768,7 +768,7 @@
 
 .turn-time {
 	color: var(--fg-subtle);
-	font-size: 12.5px;
+	font-size: var(--text-xs);
 }
 
 /* 窄栏里补丁不折行，横向滚动看长行 */
@@ -788,9 +788,9 @@
 .error-line {
 	display: flex;
 	align-items: flex-start;
-	gap: 8px;
-	padding: 10px 12px;
-	border-radius: 6px;
+	gap: var(--space-4);
+	padding: var(--space-5) var(--space-6);
+	border-radius: var(--radius-md);
 	background: var(--status-err-bg);
 }
 
@@ -808,14 +808,14 @@
 .error-text {
 	color: var(--fg-default);
 	font-size: var(--text-size);
-	line-height: 1.4;
+	line-height: var(--leading-ui);
 	overflow-wrap: anywhere;
 	user-select: text;
 }
 
 .error-actions {
 	display: flex;
-	gap: 12px;
+	gap: var(--space-6);
 	margin-top: 6px;
 }
 
@@ -825,7 +825,7 @@
 	border: 0;
 	background: transparent;
 	color: var(--fg-muted);
-	font-size: 13px;
+	font-size: var(--text-ui);
 }
 
 .error-btn:hover,
@@ -842,14 +842,14 @@
 .chip {
 	display: inline-flex;
 	align-items: center;
-	gap: 6px;
+	gap: var(--space-3);
 	height: 24px;
-	padding: 0 10px;
+	padding: 0 var(--space-5);
 	border: 1px solid var(--border-subtle);
-	border-radius: 12px;
+	border-radius: var(--radius-pill);
 	background: var(--bg-elevated);
 	color: var(--fg-muted);
-	font-size: 12px;
+	font-size: var(--text-xs);
 }
 
 .chip.is-warn {
@@ -870,7 +870,7 @@
 	gap: var(--context-divider-gap);
 	padding: var(--context-divider-padding) 0;
 	color: var(--fg-subtle);
-	font-size: 12px;
+	font-size: var(--text-xs);
 }
 
 .divider span.line {
@@ -906,8 +906,8 @@
 	display: flex;
 	flex: 1;
 	flex-direction: column;
-	gap: 10px;
-	padding: 18px 24px 0;
+	gap: var(--space-5);
+	padding: var(--space-10) var(--space-12) 0;
 }
 
 .empty-main {
@@ -916,15 +916,15 @@
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	gap: 10px;
-	padding: 40px 24px;
+	gap: var(--space-5);
+	padding: var(--space-16) var(--space-12);
 	text-align: center;
 }
 
 .empty-title {
 	margin: 0;
 	color: var(--fg-default);
-	font-size: 17px;
+	font-size: var(--text-title-sm);
 	font-weight: 600;
 }
 
@@ -932,14 +932,14 @@
 	margin: 0;
 	max-width: 420px;
 	color: var(--fg-subtle);
-	font-size: 12.5px;
-	line-height: 1.6;
+	font-size: var(--text-xs);
+	line-height: var(--leading-ui);
 	overflow-wrap: anywhere;
 }
 
 .empty-actions {
 	display: flex;
-	gap: 8px;
+	gap: var(--space-4);
 	margin-top: 6px;
 }
 

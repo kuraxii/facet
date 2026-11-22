@@ -159,6 +159,9 @@ type DebtKind = "fontSize" | "radius" | "gap" | "padding" | "shadow" | "transiti
 /** 一个文件里各维度还剩多少条写死的声明。 */
 type DebtCount = Record<DebtKind, number>;
 
+/** 只写相对单位的字号：跟着父级走，不算写死的数值。 */
+const RELATIVE_SIZE = /^-?[\d.]+(?:em|rem|%)$/;
+
 /** 各维度匹配的属性名。 */
 const DEBT_PROPS: readonly (readonly [DebtKind, RegExp])[] = [
 	["fontSize", /^font-size$/],
@@ -178,10 +181,10 @@ const DEBT_PROPS: readonly (readonly [DebtKind, RegExp])[] = [
 const VISUAL_DEBT_BASELINE: Readonly<Record<string, DebtCount>> = {
 	"ui-terminal/src/terminal.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
 	"ui/src/chat/ExtensionPromptCard.module.css": {
-		fontSize: 7,
-		radius: 5,
-		gap: 3,
-		padding: 1,
+		fontSize: 0,
+		radius: 0,
+		gap: 0,
+		padding: 0,
 		shadow: 0,
 		transition: 0,
 	},
@@ -189,13 +192,13 @@ const VISUAL_DEBT_BASELINE: Readonly<Record<string, DebtCount>> = {
 	"ui/src/panel/changes.module.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
 	"ui/src/styles/base.css": { fontSize: 0, radius: 1, gap: 0, padding: 0, shadow: 0, transition: 0 },
 	"ui/src/styles/changes.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
-	"ui/src/styles/chat.css": { fontSize: 18, radius: 12, gap: 18, padding: 11, shadow: 0, transition: 0 },
+	"ui/src/styles/chat.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
 	"ui/src/styles/chrome.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
-	"ui/src/styles/composer.css": { fontSize: 12, radius: 12, gap: 10, padding: 10, shadow: 0, transition: 0 },
+	"ui/src/styles/composer.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
 	"ui/src/styles/fonts.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
 	"ui/src/styles/git-graph.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
 	"ui/src/styles/index.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
-	"ui/src/styles/markdown.css": { fontSize: 8, radius: 4, gap: 1, padding: 9, shadow: 0, transition: 0 },
+	"ui/src/styles/markdown.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
 	"ui/src/styles/motion.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
 	"ui/src/styles/overlays.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
 	"ui/src/styles/panel.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
@@ -266,9 +269,15 @@ function countDebt(source: string): DebtCount {
 				continue;
 			}
 			// `padding: 0` 这类全零复位不是"写死的数值"，不计入
-			if (!value.includes("var(") && /[1-9]/.test(value)) {
-				counts[kind] += 1;
+			if (value.includes("var(") || !/[1-9]/.test(value)) {
+				continue;
 			}
+			// Markdown 里跟着父级缩放的相对字号（`1.6em` / `0.8em`）不是写死的像素值：
+			// 标题与行内代码要跟着正文一起放大，换成固定档位反而丢掉这层关系
+			if (kind === "fontSize" && RELATIVE_SIZE.test(value.trim())) {
+				continue;
+			}
+			counts[kind] += 1;
 		}
 	}
 	return counts;

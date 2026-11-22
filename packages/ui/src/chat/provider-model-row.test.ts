@@ -17,6 +17,7 @@ describe("从上游拉回同一标识的模型", () => {
 			contextWindow: 1048576,
 			maxTokens: 393216,
 			thinkingLevels: ["off", "low", "high", "max"],
+			input: ["text", "image"],
 		});
 		expect(next.key).toBe(row.key);
 		expect(next.model).toEqual({
@@ -25,6 +26,7 @@ describe("从上游拉回同一标识的模型", () => {
 			contextWindow: 1048576,
 			maxTokens: 393216,
 			thinkingLevels: ["off", "low", "high", "max"],
+			input: ["text", "image"],
 		});
 	});
 

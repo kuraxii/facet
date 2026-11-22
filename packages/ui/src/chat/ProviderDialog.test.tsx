@@ -35,7 +35,14 @@ const custom: CustomProviderInfo = {
 	name: "aimao",
 	baseUrl: "https://gateway.example.com/v1",
 	api: "openai-completions",
-	models: [{ id: "deepseek-flash", name: "DeepSeek V4.1 Flash 1017", thinkingLevels: ["off", "high"] }],
+	models: [
+		{
+			id: "deepseek-flash",
+			name: "DeepSeek V4.1 Flash 1017",
+			thinkingLevels: ["off", "high"],
+			input: ["text", "image"],
+		},
+	],
 };
 
 const provider: ProviderInfo = {
@@ -115,7 +122,25 @@ describe("提供方弹窗里的模型清单", () => {
 			id: "deepseek-flash",
 			name: "DeepSeek V4.1 Flash 1017",
 			thinkingLevels: ["off", "low", "high"],
+			input: ["text", "image"],
 		});
+	});
+
+	it("图片勾选框默认按模型现在的能力显示，勾掉之后保存成只收文字", async () => {
+		let saved: CustomProviderInfo | undefined;
+		const data = fakeData({
+			saveCustomProvider: async (input) => {
+				saved = input;
+				return [input];
+			},
+		});
+		mountDialog(data);
+
+		const image = container.querySelector<HTMLInputElement>(".prov-flag input");
+		expect(image?.checked).toBe(true);
+		act(() => image?.click());
+		await act(async () => button("保存")?.click());
+		expect(saved?.models[0]?.input).toEqual(["text"]);
 	});
 
 	it("从上游拉模型：同标识的那行整行重写,新模型补在后面", async () => {
@@ -126,6 +151,7 @@ describe("提供方弹窗里的模型清单", () => {
 				contextWindow: 1048576,
 				maxTokens: 393216,
 				thinkingLevels: ["off", "low", "high", "max"],
+				input: ["text", "image"],
 			},
 			{ id: "glm-5.3", name: "GLM 5.3", contextWindow: 200000, maxTokens: 64000 },
 		];
@@ -149,6 +175,7 @@ describe("提供方弹窗里的模型清单", () => {
 				contextWindow: 1048576,
 				maxTokens: 393216,
 				thinkingLevels: ["off", "low", "high", "max"],
+				input: ["text", "image"],
 			},
 			{ id: "glm-5.3", name: "GLM 5.3", contextWindow: 200000, maxTokens: 64000 },
 		]);

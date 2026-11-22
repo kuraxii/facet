@@ -756,6 +756,18 @@ dialog.dialog.is-provider[open] {
 	list-style: none;
 }
 
+/* 「收不收图片」那一格：一枚勾选框，居中放进 40px 的列里 */
+.prov-flag {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.prov-flag input {
+	margin: 0;
+	accent-color: var(--accent-fill);
+}
+
 /* 模型行里的思考档位格：一枚按钮，点开是七档的复选菜单 */
 .prov-levels {
 	display: flex;

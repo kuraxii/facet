@@ -422,7 +422,7 @@
 	--set-models-dot: 6px;
 	--set-models-dot-gap: 12px;
 	/* 提供方编辑弹窗：宽度，以及头部与正文的左右内边距 */
-	--prov-dialog-width: 640px;
+	--prov-dialog-width: 720px;
 	--prov-dialog-padding-x: 24px;
 	--prov-dialog-padding-y: 18px;
 	/* 弹窗里字段之间、并排两个字段之间与各分区之间的距离 */
@@ -438,8 +438,11 @@
 	 * 浓度要改就改这一个数。
 	 */
 	--image-preview-scrim: color-mix(in srgb, var(--bg-canvas) 70%, transparent);
-	/* 模型行：六列的宽度与列间距离，表头与每行共用同一组；第五列是思考档位，最长的档位名是 minimal */
-	--prov-model-columns: 1.3fr 1fr 0.78fr 0.78fr 96px 28px;
+	/*
+	 * 模型行：七列的宽度与列间距离，表头与每行共用同一组。
+	 * 第五列是「收不收图片」的勾选框，第六列是思考档位，最长的档位名是 minimal。
+	 */
+	--prov-model-columns: 1.3fr 1fr 0.78fr 0.78fr 40px 96px 28px;
 	--prov-model-gap: 8px;
 	/* 思考档位菜单：它上缘到触发器下缘的距离，以及菜单自身的宽度 */
 	--prov-levels-gap: 4px;

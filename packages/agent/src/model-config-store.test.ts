@@ -92,6 +92,26 @@ describe("自定义提供方", () => {
 		expect((await store.customProviders())[0]?.models[0]?.thinkingLevels).toBeUndefined();
 	});
 
+	it("收图片写 input，只收文字不写", async () => {
+		const store = new ModelConfigStore({ file });
+		await store.saveProvider({
+			...entry,
+			models: [
+				{ id: "vision", input: ["text", "image"] },
+				{ id: "plain", input: ["text"] },
+			],
+		});
+		const written = JSON.parse(await readFile(file, "utf8")) as {
+			providers: Record<string, { models: Record<string, unknown>[] }>;
+		};
+		expect(written.providers["my-gateway"]?.models).toEqual([
+			{ id: "vision", input: ["text", "image"] },
+			{ id: "plain" },
+		]);
+		expect((await store.customProviders())[0]?.models[0]?.input).toEqual(["text", "image"]);
+		expect((await store.customProviders())[0]?.models[1]?.input).toBeUndefined();
+	});
+
 	it("手写的映射读成同一组档位", async () => {
 		await writeFile(
 			file,

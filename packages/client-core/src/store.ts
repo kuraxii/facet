@@ -148,12 +148,30 @@ export class SessionStore {
 			return view;
 		}
 		if (snapshot !== undefined) {
-			const view = createSessionView(channel, snapshot);
+			const rebuilt = createSessionView(channel, snapshot);
+			// 快照不描述本端的在途发送：重取快照不能把它抹掉，否则界面会在等回执期间又解锁
+			const pending = slot.view.state.hasPendingSend;
+			const view: SessionView =
+				pending === false ? rebuilt : { ...rebuilt, state: { ...rebuilt.state, hasPendingSend: pending } };
 			this.sessions.set(channel, { view, lastSeq: slot.lastSeq });
 			this.markChanged();
 			return view;
 		}
 		return slot.view;
+	}
+
+	/**
+	 * 记下本端有没有在途的发送。
+	 *
+	 * 写入方只有 `SessionClient`：值不变时不动视图，免得每条回执都多刷一帧。
+	 */
+	setPendingSend(channel: Channel, hasPendingSend: boolean): void {
+		const slot = this.sessions.get(channel);
+		if (slot === undefined || slot.view.state.hasPendingSend === hasPendingSend) {
+			return;
+		}
+		slot.view = { ...slot.view, state: { ...slot.view.state, hasPendingSend } };
+		this.markChanged();
 	}
 
 	/** 建出对话通道视图。 */

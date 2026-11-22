@@ -293,6 +293,7 @@ export class SessionClient {
 		}
 		this.runtimes.delete(runtime.opened.sessionId);
 		runtime.pendingSend.clear();
+		this.publishPendingSend(runtime);
 		if (this.active === runtime) {
 			this.activeId = undefined;
 		}
@@ -342,6 +343,7 @@ export class SessionClient {
 		runtime.retainTimer = setTimeout(() => {
 			runtime.retainTimer = undefined;
 			runtime.pendingSend.clear();
+			this.publishPendingSend(runtime);
 			if (this.active === runtime) {
 				this.closeSession(file);
 				return;
@@ -1068,6 +1070,7 @@ export class SessionClient {
 		// 新连接的主机给了新的 clientId，旧连接的确认回执不会再回来：悬挂的发送就此作废，
 		// 否则草稿永远收不起来，界面一直停在「发送中」
 		runtime.pendingSend.clear();
+		this.publishPendingSend(runtime);
 		// 新连接没有旧订阅，非当前会话的缓存无法继续接收动作；切回时重新打开
 		for (const inactive of [...this.runtimes.values()]) {
 			if (inactive !== runtime) await this.releaseRuntime(inactive);
@@ -1118,6 +1121,26 @@ export class SessionClient {
 	}
 
 	/**
+	 * 本端有没有一条已经发出去、还没被主机确认的一轮消息。
+	 *
+	 * 界面在派发之前**同步**读它：`store` 里的同名状态是按帧调度通知的，同一帧里连点两下时
+	 * 尚未重绘，只看那段状态拦不住第二下。排队那条不算：它只进队列，不启动新的回合。
+	 * `file` 给了就看那个会话（已经切走、缓存还活着的会话也查得到），不给看当前激活的。
+	 */
+	hasPendingSend(file?: string): boolean {
+		const runtime = file === undefined ? this.active : this.runtimeForFile(file);
+		if (runtime === undefined) {
+			return false;
+		}
+		for (const pending of runtime.pendingSend.values()) {
+			if (pending.kind === "turn") {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * 发一条消息。
 	 *
 	 * 界面在主机把这条用户消息放进对话之后才算发出:那之前草稿留在输入框,被拒时用户可以
@@ -1132,6 +1155,7 @@ export class SessionClient {
 			...(options.streamingBehavior === undefined ? {} : { streamingBehavior: options.streamingBehavior }),
 		});
 		runtime.pendingSend.set(clientSeq, { clientSeq, text, kind: "turn" });
+		this.publishPendingSend(runtime);
 		return clientSeq;
 	}
 
@@ -1149,6 +1173,7 @@ export class SessionClient {
 			text,
 		});
 		runtime.pendingSend.set(clientSeq, { clientSeq, text, kind: "steering" });
+		this.publishPendingSend(runtime);
 		return clientSeq;
 	}
 
@@ -1163,6 +1188,18 @@ export class SessionClient {
 		return () => {
 			this.sentListeners.delete(listener);
 		};
+	}
+
+	/** 把「有发送在途」同步进会话视图，界面靠它把发送入口锁住。 */
+	private publishPendingSend(runtime: SessionRuntime): void {
+		let hasPending = false;
+		for (const pending of runtime.pendingSend.values()) {
+			if (pending.kind === "turn") {
+				hasPending = true;
+				break;
+			}
+		}
+		this.state.setPendingSend(runtime.opened.sessionChannel, hasPending);
 	}
 
 	/**
@@ -1188,6 +1225,7 @@ export class SessionClient {
 				return;
 			}
 			runtime.pendingSend.delete(pending.clientSeq);
+			this.publishPendingSend(runtime);
 			this.notifySent(pending.text);
 			return;
 		}
@@ -1204,6 +1242,7 @@ export class SessionClient {
 		}
 		const pending = runtime.pendingSend.get(fallbackSeq);
 		runtime.pendingSend.delete(fallbackSeq);
+		this.publishPendingSend(runtime);
 		if (pending !== undefined) {
 			this.notifySent(pending.text);
 		}
@@ -1250,6 +1289,7 @@ export class SessionClient {
 		const runtime = this.runtimeForChannel(frame.channel);
 		if (clientSeq !== undefined && runtime !== undefined) {
 			runtime.pendingSend.delete(clientSeq);
+			this.publishPendingSend(runtime);
 		}
 		const label =
 			frame.action.type === "chat/turnStarted" || frame.action.type === "session/pendingMessageSet"
@@ -1454,6 +1494,7 @@ export class SessionClient {
 		}
 		// 缺口里可能就有这条发送的确认回执，重新对齐之前先作废，免得永远等下去
 		runtime.pendingSend.clear();
+		this.publishPendingSend(runtime);
 		const opened = runtime.opened;
 		if (gap.channel === opened.sessionChannel) {
 			if (runtime.resyncing.session) {

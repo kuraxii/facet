@@ -435,6 +435,83 @@ describe("SessionClient", () => {
 		expect(sent).toEqual([]);
 	});
 
+	it("待确认的发送记进会话状态，回执到达后解除", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		expect(client.sessionView()?.state.hasPendingSend).toBe(false);
+		expect(client.hasPendingSend()).toBe(false);
+
+		const clientSeq = client.send("还在路上");
+		// 同步读得出、视图里也立刻记下：界面靠这两处分别拦同一帧的连点与重绘后的点击
+		expect(client.hasPendingSend()).toBe(true);
+		expect(client.sessionView()?.state.hasPendingSend).toBe(true);
+
+		transport.handled(clientSeq);
+		expect(client.hasPendingSend()).toBe(false);
+		expect(client.sessionView()?.state.hasPendingSend).toBe(false);
+	});
+
+	it("只进队列的那条不算在途，不会把发送入口锁住", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		client.enqueue("排队的一句");
+		expect(client.hasPendingSend()).toBe(false);
+		transport.emit(SESSION, { type: "session/queueChanged", steering: ["排队的一句"], followUp: [] });
+		expect(client.sessionView()?.state.hasPendingSend).toBe(false);
+	});
+
+	it("发送被拒之后解锁，用户可以改完再发", async () => {
+		const { transport, client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		const clientSeq = client.send("会被拒的");
+		expect(client.hasPendingSend()).toBe(true);
+		transport.reject(CHAT, clientSeq, { type: "chat/turnStarted", text: "会被拒的" }, "session is running");
+		expect(client.hasPendingSend()).toBe(false);
+		expect(client.sessionView()?.state.hasPendingSend).toBe(false);
+		// 下一条还能发：闸门不该卡在失败的这一条上
+		expect(client.send("改完之后再发")).toBe(clientSeq + 1);
+		expect(client.hasPendingSend()).toBe(true);
+	});
+
+	it("重连之后不再等在途状态上", async () => {
+		const { client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		client.send("断线前发的");
+		expect(client.hasPendingSend()).toBe(true);
+		await client.resume();
+		// 新连接带着新的 clientId，旧回执不会再回来，悬挂的发送作废
+		expect(client.hasPendingSend()).toBe(false);
+		expect(client.sessionView()?.state.hasPendingSend).toBe(false);
+	});
+
+	it("在途状态按会话隔离：切走之后另一个会话照常发", async () => {
+		const { client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		client.send("发给 a 的");
+		expect(client.hasPendingSend("/tmp/s1.jsonl")).toBe(true);
+		expect(client.hasPendingSend()).toBe(true);
+
+		await client.switchSession("/tmp/b.jsonl");
+		// 当前激活的是 b：它没有在途发送，a 那条仍然记着
+		expect(client.hasPendingSend()).toBe(false);
+		expect(client.hasPendingSend("/tmp/s1.jsonl")).toBe(true);
+		expect(client.sessionView()?.state.hasPendingSend).toBe(false);
+
+		// 切回 a 时锁还在，等它的回执
+		await client.switchSession("/tmp/s1.jsonl");
+		expect(client.hasPendingSend()).toBe(true);
+	});
+
+	it("重取快照不会抹掉在途状态", async () => {
+		const { client } = createClient(2);
+		await client.openSession("/tmp/s1.jsonl");
+		client.send("等回执的一条");
+		await client.refreshSession();
+		// 快照只描述主机那边，本端的在途记账要留着，否则等回执期间界面又解锁
+		expect(client.sessionView()?.state.hasPendingSend).toBe(true);
+		expect(client.hasPendingSend()).toBe(true);
+	});
+
 	it("清空排队走会话通道", async () => {
 		const { transport, client } = createClient(2);
 		await client.openSession("/tmp/s1.jsonl");

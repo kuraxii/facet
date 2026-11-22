@@ -100,6 +100,13 @@ export interface SessionState {
 	/** 上下文用量，刚压缩完或估算不出来时为空 */
 	readonly contextUsage: ContextUsage | undefined;
 	readonly queued: QueuedInput;
+	/**
+	 * 本端有没有一条已经发出去、还没被主机确认的一轮消息。
+	 *
+	 * 不来自主机快照：《发送在途》是本端的事实，由 `SessionClient` 在派发与核销时写入。
+	 * 界面靠它把发送入口锁住，慢回执期间连点不会重复发；排队那条不计入（它只进队列）。
+	 */
+	readonly hasPendingSend: boolean;
 }
 
 /** 会话通道的客户端状态。 */
@@ -171,6 +178,8 @@ export function createSessionView(channel: Channel, snapshot?: SessionSnapshot):
 			maintenance: snapshot?.maintenance,
 			contextUsage: snapshot?.contextUsage,
 			queued: snapshot?.queued ?? { steering: [], followUp: [] },
+			// 快照只描述主机那边的状态；在途发送是本端记账，建视图时一律从「没有」起
+			hasPendingSend: false,
 		},
 	};
 }

@@ -29,8 +29,9 @@
 	--fg-default: #1a1a1e;
 	--fg-muted: #71717a;
 	--fg-subtle: #a1a1aa;
-	--border-subtle: #e4e4e7;
-	--border-default: #ececf1;
+	/* 浅色里越深越重：分割线比控件边框淡一档，与深色主题的强弱关系一致 */
+	--border-subtle: #ececf1;
+	--border-default: #e4e4e7;
 	/* 焦点环与主强调同色；分开命名是为了将来能单独调 */
 	--border-focus: var(--accent-fg);
 	/* 钴蓝：文字版压在白底上 5.2:1，填充版深一档，白字压上去 6.6:1 */
@@ -61,7 +62,7 @@
 	--code-fg: #3f3f46;
 	/* 浅底靠一条压边撑起层次，不用大 alpha 的投影 */
 	--shadow-control: 0 1px 0 0 rgb(31 35 40 / 4%);
-	--shadow-popover: 0 8px 24px rgb(31 35 40 / 12%), 0 0 0 1px rgb(31 35 40 / 6%);
+	--shadow-popover: 0 8px 24px rgb(31 35 40 / 12%), 0 0 0 1px var(--border-subtle);
 	--shadow-modal: 0 24px 64px rgb(31 35 40 / 18%);
 	--selection-bg: color-mix(in srgb, var(--accent-fg) 22%, transparent);
 	/* 模态遮罩：叠在正文上的那一层黑，深浅各按底色给透明度 */
@@ -110,9 +111,12 @@
 	--diff-del-bar: var(--diff-del-fg);
 	--code-bg: #242427;
 	--code-fg: #d4d4d8;
-	/* 深色不用压边阴影，浮层靠一层描边轮廓与底色拉开 */
+	/*
+	 * 深色不用压边阴影，浮层靠自己那条 1px 环与底色拉开：环色取 `--border-default`——
+	 * `--border-subtle` 在这里与浮层底色同值，勾不住边。
+	 */
 	--shadow-control: none;
-	--shadow-popover: 0 12px 32px rgb(0 0 0 / 40%), 0 0 0 1px var(--border-subtle);
+	--shadow-popover: 0 12px 32px rgb(0 0 0 / 40%), 0 0 0 1px var(--border-default);
 	--shadow-modal: 0 24px 64px rgb(0 0 0 / 45%), 0 0 0 1px var(--border-subtle);
 	--selection-bg: color-mix(in srgb, var(--accent-fg) 22%, transparent);
 	/* 模态遮罩：叠在正文上的那一层黑，深浅各按底色给透明度 */
@@ -158,7 +162,7 @@
 	--code-bg: #222430;
 	--code-fg: #d4d4d8;
 	--shadow-control: none;
-	--shadow-popover: 0 12px 32px rgb(0 0 0 / 40%), 0 0 0 1px var(--border-subtle);
+	--shadow-popover: 0 12px 32px rgb(0 0 0 / 40%), 0 0 0 1px var(--border-default);
 	--shadow-modal: 0 24px 64px rgb(0 0 0 / 45%), 0 0 0 1px var(--border-subtle);
 	--selection-bg: color-mix(in srgb, var(--accent-fg) 22%, transparent);
 	/* 模态遮罩：叠在正文上的那一层黑，深浅各按底色给透明度 */
@@ -204,7 +208,7 @@
 	--code-bg: #2a2826;
 	--code-fg: #d4d4d8;
 	--shadow-control: none;
-	--shadow-popover: 0 12px 32px rgb(0 0 0 / 40%), 0 0 0 1px var(--border-subtle);
+	--shadow-popover: 0 12px 32px rgb(0 0 0 / 40%), 0 0 0 1px var(--border-default);
 	--shadow-modal: 0 24px 64px rgb(0 0 0 / 45%), 0 0 0 1px var(--border-subtle);
 	--selection-bg: color-mix(in srgb, var(--accent-fg) 22%, transparent);
 	/* 模态遮罩：叠在正文上的那一层黑，深浅各按底色给透明度 */
@@ -250,7 +254,7 @@
 	--code-bg: #323643;
 	--code-fg: #d4d4d8;
 	--shadow-control: none;
-	--shadow-popover: 0 12px 32px rgb(0 0 0 / 40%), 0 0 0 1px var(--border-subtle);
+	--shadow-popover: 0 12px 32px rgb(0 0 0 / 40%), 0 0 0 1px var(--border-default);
 	--shadow-modal: 0 24px 64px rgb(0 0 0 / 45%), 0 0 0 1px var(--border-subtle);
 	--selection-bg: color-mix(in srgb, var(--accent-fg) 22%, transparent);
 	/* 模态遮罩：叠在正文上的那一层黑，深浅各按底色给透明度 */

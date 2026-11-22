@@ -82,7 +82,12 @@
 	background: var(--fg-default);
 }
 
-/* 预览向左展开：竖轨贴着窗口右缘，朝右放会被裁掉 */
+/*
+ * 预览向左展开：竖轨贴着窗口右缘，朝右放会被裁掉。
+ *
+ * 浮层的边只由 `--shadow-popover` 自带的那条 1px 环勾出来，不再叠 `border`——两者都画的话
+ * 边缘是两圈（描边一圈、环一圈），压在正文文字上会显得发脏。
+ */
 .outline-preview {
 	position: absolute;
 	top: 50%;
@@ -92,7 +97,6 @@
 	min-height: 48px;
 	margin-top: -24px;
 	padding: var(--space-5) var(--space-6);
-	border: 1px solid var(--border-subtle);
 	border-radius: var(--radius-lg);
 	background: var(--bg-elevated);
 	box-shadow: var(--shadow-popover);

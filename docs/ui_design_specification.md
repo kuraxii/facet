@@ -34,8 +34,8 @@
     *   `--fg-muted`：次文本（描述、次要信息）。dark `#a1a1aa` / light `#71717a`
     *   `--fg-subtle`：弱文本（占位符、辅助时间/数据）。dark `#71717a` / light `#a1a1aa`
 *   **边框 (Borders)**：
-    *   `--border-subtle`：结构分割线、面板隔断。dark `#27272a` / light `#e4e4e7`
-    *   `--border-default`：控件边框（按钮、输入框、卡片）。dark `#303036` / light `#ececf1`
+    *   `--border-subtle`：结构分割线、面板隔断，永远比控件边框淡一档。dark `#27272a` / light `#ececf1`
+    *   `--border-default`：控件边框（按钮、输入框、卡片），浮层阴影里那条 1px 环也用它。dark `#303036` / light `#e4e4e7`
     *   `--border-focus`：键盘焦点环与输入区聚焦描边，与 `--accent-fg` 同色
 *   **强调色 (Accent)**：
     *   `--accent-fg`：强调色的文字版（链接、强调图标、指示条）。dark `#60a5fa`（钴蓝亮版，压深底 7.5:1）/ light `#2563eb`（钴蓝，白底上 5.2:1）
@@ -55,7 +55,7 @@
     *   `--code-fg`：行内代码的文字色。dark `#d4d4d8` / light `#3f3f46`
 *   **阴影与遮罩 (Shadow & Scrim)**：明暗分治，组件不再自己写 alpha。
     *   `--shadow-control`：内容卡片的极轻压边（浅色 `0 1px 0 0 rgb(31 35 40 / 4%)`，深色 `none`）
-    *   `--shadow-popover`：菜单、悬浮提示、轻提示这一层的柔影；浅色轻透，深色叠一条 `1px` 描边轮廓
+    *   `--shadow-popover`：菜单、悬浮提示、轻提示这一层的柔影；浅色轻透，深色叠一条 `1px` 轮廓环（`--border-default`，`pureBlack` 用更暗的 `--border-subtle` 免得过亮）。浮层不再另写 `border`，否则边缘会叠成两圈
     *   `--shadow-modal`：搜索层、设置窗、对话框与抽屉这一层的大范围投影
     *   `--scrim-bg`：模态遮罩。dark `45%` 黑 / light `32%` 黑 / pureBlack `55%` 黑
     *   `--selection-bg`：选中文字的高亮，取 `--accent-fg` 的 22% 混合

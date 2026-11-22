@@ -142,6 +142,9 @@
   都是同一个值，不再各调一档。
 - **阴影只有三档**：内容卡片 `--shadow-control`、浮层 `--shadow-popover`、模态 `--shadow-modal`。
   组件里不写 `box-shadow` 的字面量。
+- **浮层的轮廓只有一圈**：带 `--shadow-popover` / `--shadow-modal` 的浮层由阴影里那条
+  `0 0 0 1px` 环提供 1px 轮廓，规则里不再额外写 `border`——两者都画会叠成 2px，深色主题下
+  还是同色双圈。需要单边状态条（`.toast` 的 3px 左条）时只写那一边。
 - **焦点环画在盒子内侧**：`outline: 2px solid var(--border-focus)` 配 `outline-offset: -2px`
   （输入类控件 `-1px`）。向外扩会挤动相邻元素、贴边时溢出容器。
 

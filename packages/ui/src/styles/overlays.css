@@ -9,7 +9,6 @@ dialog.search-panel[open] {
 	margin-top: 12vh;
 	margin-bottom: auto;
 	padding: 0;
-	border: 1px solid var(--border-default);
 	border-radius: var(--radius-xl);
 	background: var(--bg-surface);
 	box-shadow: var(--shadow-modal);
@@ -126,7 +125,6 @@ dialog.dialog {
 	max-height: calc(100vh - 48px);
 	margin: auto;
 	padding: var(--space-12) var(--space-12) var(--space-10);
-	border: 1px solid var(--border-default);
 	border-radius: var(--radius-xl);
 	background: var(--bg-surface);
 	box-shadow: var(--shadow-modal);
@@ -399,7 +397,6 @@ dialog.dialog.is-picker .dialog-actions {
 	gap: var(--space-1);
 	width: var(--text-menu-width);
 	padding: var(--text-menu-padding);
-	border: 1px solid var(--border-default);
 	border-radius: var(--radius-lg);
 	background: var(--bg-surface);
 	box-shadow: var(--shadow-popover);
@@ -424,7 +421,6 @@ dialog.dialog.is-picker .dialog-actions {
 	max-height: var(--tool-tip-height);
 	overflow: auto;
 	padding: var(--space-4) var(--space-5);
-	border: 1px solid var(--border-default);
 	border-radius: var(--radius-lg);
 	background: var(--bg-surface);
 	box-shadow: var(--shadow-popover);
@@ -473,7 +469,7 @@ dialog.dialog.is-picker .dialog-actions {
 	align-items: flex-start;
 	gap: var(--toast-icon-gap);
 	padding: var(--toast-padding-y) var(--toast-padding-x);
-	border: 1px solid var(--border-default);
+	/* 左边是 3px 状态条；其余三边不画，轮廓交给 `--shadow-popover` 那条 1px 环 */
 	border-left: 3px solid var(--border-default);
 	border-radius: var(--toast-radius);
 	background: var(--bg-surface);

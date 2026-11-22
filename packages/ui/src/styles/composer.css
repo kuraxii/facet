@@ -363,29 +363,16 @@
 }
 
 /* 输入区左侧的小图标按钮：默认只有图标，悬停时给一层底色并提亮图标 */
-.ib {
-	display: grid;
-	place-items: center;
-	width: 26px;
-	height: 26px;
-	padding: 0;
-	border: 0;
-	border-radius: 6px;
-	background: transparent;
-	color: var(--fg-subtle);
-	transition:
-		background-color var(--dur-fast) var(--ease-standard),
-		color var(--dur-fast) var(--ease-standard);
+/* 输入区工具条上的图标按钮：几何来自 `.ui-icon-btn`，这里只管展开态 */
+.ib[aria-expanded="true"] {
+	background: var(--bg-hover);
+	color: var(--fg-default);
 }
 
 .ib:hover:not(:disabled),
 .ib[aria-expanded="true"] {
 	background: var(--bg-hover);
 	color: var(--fg-default);
-}
-
-.ib:disabled {
-	cursor: default;
 }
 
 /* 错误条上的图标按钮用危险色，不管悬停与否 */
@@ -499,42 +486,23 @@
 	background: transparent;
 }
 
-.send {
-	display: grid;
-	place-items: center;
-	width: 34px;
-	height: 34px;
-	border: 0;
-	border-radius: 10px;
-	background: var(--accent-fill);
-	color: var(--accent-on-fill);
-}
-
-.send:hover:not(:disabled):not(.is-stop) {
-	background: var(--accent-fill-hover);
-}
-
-.send:active:not(:disabled):not(.is-stop) {
-	background: var(--accent-fill-active);
-}
-
-.send:disabled {
-	background: var(--bg-elevated);
-	color: var(--fg-subtle);
-	cursor: default;
-}
-
-/* 停止：边界与发送是同一个方框（同尺寸同圆角），中间换成红色方块 */
-.send.is-stop {
-	border: 1px solid color-mix(in srgb, var(--fg-subtle) 62%, transparent);
+/* 停止态与发送态共用一个方框：几何来自 `common/IconButton.tsx`，这里只换配色 */
+.is-stop {
+	border-color: color-mix(in srgb, var(--fg-subtle) 62%, transparent);
 	background: transparent;
+	color: var(--status-err-fg);
 }
 
-.send.is-stop:hover:not(:disabled) {
+.is-stop:hover:not(:disabled) {
 	border-color: var(--fg-subtle);
 	background: var(--bg-hover);
+	color: var(--status-err-fg);
 }
 
+.is-stop:active:not(:disabled) {
+	background: var(--bg-active);
+	color: var(--status-err-fg);
+}
 .chip-wrap {
 	position: relative;
 	display: inline-flex;

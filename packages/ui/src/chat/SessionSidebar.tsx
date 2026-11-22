@@ -11,6 +11,7 @@
 import type { ProjectInfo, SessionStatus, SessionSummary } from "@facet/protocol";
 import { Plus, Settings } from "lucide-react";
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Button } from "../common/Button.tsx";
 import { ScrollArea } from "../common/scroll-area.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { SHELL_DATA_ATTRS } from "../layout/layout-contract.ts";
@@ -244,8 +245,9 @@ export const SessionSidebar = memo(function SessionSidebar({
 					{...(onCollapse === undefined ? {} : { onCollapse })}
 				/>
 			) : null}
-			<button
-				type="button"
+			<Button
+				variant="primary"
+				size="md"
 				className="sb-new"
 				onClick={() => {
 					// 没有可用的项目目录时不给「新建会话」：这台主机上还没有目录可选，
@@ -265,7 +267,7 @@ export const SessionSidebar = memo(function SessionSidebar({
 			>
 				<Plus size={ICON_SIZE.md} />
 				{t("common.newSession")}
-			</button>
+			</Button>
 
 			<ProjectFilter
 				projects={data.projects}

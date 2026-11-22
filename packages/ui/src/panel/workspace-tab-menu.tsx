@@ -21,6 +21,7 @@ import {
 	useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { Badge } from "../common/Badge.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { ICON_SIZE, VISUAL_PX } from "../styles/visual-contract.ts";
 import type { WorkspaceTabId, WorkspaceTabItem } from "./workspace-tab-bar.tsx";
@@ -217,7 +218,7 @@ export function WorkspaceTabMenu({
 									<span className="workspace-menu-icon">{item.icon}</span>
 									<span className="workspace-menu-label">{item.label}</span>
 									{item.badge === undefined || item.badge === 0 || item.badge === "" ? null : (
-										<span className="workspace-menu-badge">{item.badge}</span>
+										<Badge>{item.badge}</Badge>
 									)}
 									{item.shortcut === undefined ? null : (
 										<span className="workspace-menu-key">{item.shortcut}</span>

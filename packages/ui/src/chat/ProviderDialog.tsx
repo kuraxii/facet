@@ -15,6 +15,9 @@
 import type { CustomModelInfo, ModelInfo, ProviderLoginState } from "@facet/protocol";
 import { Plus, X } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { Button } from "../common/Button.tsx";
+import { IconButton } from "../common/IconButton.tsx";
+import { Input } from "../common/Input.tsx";
 import { Select } from "../common/select.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { Modal } from "../modal.tsx";
@@ -245,9 +248,15 @@ export function ProviderDialog({
 		<Modal open onClose={onClose} label={title} className="is-provider">
 			<header className="prov-head">
 				<h2 className="dialog-title">{title}</h2>
-				<button type="button" className="dialog-close" aria-label={t("common.close")} onClick={onClose}>
+				<IconButton
+					variant="ghost"
+					size="sm"
+					className="dialog-close"
+					aria-label={t("common.close")}
+					onClick={onClose}
+				>
 					<X size={ICON_SIZE.lg} />
-				</button>
+				</IconButton>
 			</header>
 
 			<div className="prov-body">
@@ -255,8 +264,8 @@ export function ProviderDialog({
 					<div className="prov-pair">
 						<label className="set-field">
 							<span className="set-label">{t("providerForm.name")}</span>
-							<input
-								className="set-input"
+							<Input
+								size="md"
 								value={name}
 								onChange={(event) => {
 									const next = event.target.value;
@@ -272,8 +281,8 @@ export function ProviderDialog({
 						</label>
 						<label className="set-field">
 							<span className="set-label">{t("providerForm.id")}</span>
-							<input
-								className="set-input"
+							<Input
+								size="md"
 								value={shownId}
 								// 已经存在的提供方改标识等于换一个提供方，配置对不上，所以只在新建时可改
 								disabled={!isNew}
@@ -291,8 +300,8 @@ export function ProviderDialog({
 				{isCustom ? (
 					<label className="set-field">
 						<span className="set-label">{t("providerForm.baseUrl")}</span>
-						<input
-							className="set-input"
+						<Input
+							size="md"
 							value={baseUrl}
 							onChange={(event) => setBaseUrl(event.target.value)}
 							placeholder="https://gateway.example.com/v1"
@@ -322,9 +331,10 @@ export function ProviderDialog({
 						<span className="set-label">{t("providerForm.credential")}</span>
 						{canLogin ? (
 							<span className="prov-section-actions">
-								<button
-									type="button"
-									className="prov-btn is-ghost"
+								<Button
+									variant="ghost"
+									size="sm"
+									className="prov-tone-accent"
 									disabled={isBusy || (loginState !== undefined && loginState.status === "running")}
 									onClick={() => {
 										setError(undefined);
@@ -334,7 +344,7 @@ export function ProviderDialog({
 									}}
 								>
 									{loginLabel}
-								</button>
+								</Button>
 							</span>
 						) : null}
 					</div>
@@ -350,8 +360,8 @@ export function ProviderDialog({
 						/>
 					) : (
 						<div className="prov-cred">
-							<input
-								className="set-input"
+							<Input
+								size="md"
 								type="password"
 								value={key}
 								disabled={isDeletingKey}
@@ -387,22 +397,24 @@ export function ProviderDialog({
 						<div className="prov-section-head">
 							<span className="set-label">{t("providerForm.models")}</span>
 							<span className="prov-section-actions">
-								<button
-									type="button"
-									className="prov-btn is-ghost"
+								<Button
+									variant="ghost"
+									size="sm"
+									className="prov-tone-accent"
 									disabled={isFetching || baseUrl.trim().length === 0}
 									onClick={() => void fetchModels()}
 								>
 									{t("providerForm.fetchModels")}
-								</button>
-								<button
-									type="button"
-									className="prov-btn is-ghost"
+								</Button>
+								<Button
+									variant="ghost"
+									size="sm"
+									className="prov-tone-accent"
 									onClick={() => setRows((current) => [...current, modelRow()])}
 								>
 									<Plus size={ICON_SIZE.md} aria-hidden="true" />
 									{t("providerForm.addModel")}
-								</button>
+								</Button>
 							</span>
 						</div>
 						<div className="prov-model-head" aria-hidden="true">
@@ -418,22 +430,22 @@ export function ProviderDialog({
 								const model = row_.model;
 								return (
 									<li key={row_.key} className="prov-model">
-										<input
-											className="set-input"
+										<Input
+											size="md"
 											value={model.id}
 											onChange={(event) => patchModel(row_.key, { id: event.target.value })}
 											placeholder={t("providerForm.modelId")}
 											aria-label={t("providerForm.modelIdLabel", { index: index + 1 })}
 										/>
-										<input
-											className="set-input"
+										<Input
+											size="md"
 											value={model.name ?? ""}
 											onChange={(event) => patchModel(row_.key, { name: event.target.value })}
 											placeholder={t("providerForm.modelName")}
 											aria-label={t("providerForm.modelNameLabel", { index: index + 1 })}
 										/>
-										<input
-											className="set-input"
+										<Input
+											size="md"
 											type="number"
 											value={model.contextWindow ?? ""}
 											onChange={(event) =>
@@ -444,8 +456,8 @@ export function ProviderDialog({
 											placeholder={t("providerForm.contextWindow")}
 											aria-label={t("providerForm.modelContextLabel", { index: index + 1 })}
 										/>
-										<input
-											className="set-input"
+										<Input
+											size="md"
 											type="number"
 											value={model.maxTokens ?? ""}
 											onChange={(event) =>
@@ -464,15 +476,15 @@ export function ProviderDialog({
 												aria-label={t("providerForm.supportsThinking")}
 											/>
 										</label>
-										<button
-											type="button"
-											className="prov-btn is-icon"
+										<IconButton
+											variant="outline"
+											size="sm"
 											aria-label={t("providerForm.remove")}
 											disabled={rows.length <= 1}
 											onClick={() => setRows((current) => current.filter((item) => item.key !== row_.key))}
 										>
 											<X size={ICON_SIZE.lg} aria-hidden="true" />
-										</button>
+										</IconButton>
 									</li>
 								);
 							})}
@@ -499,30 +511,25 @@ export function ProviderDialog({
 			<footer className="prov-foot">
 				{custom === undefined ? null : isConfirmingDelete ? (
 					<span className="prov-foot-danger">
-						<button
-							type="button"
-							className="prov-btn is-danger"
-							disabled={isBusy}
-							onClick={() => void removeProvider()}
-						>
+						<Button variant="danger" size="sm" disabled={isBusy} onClick={() => void removeProvider()}>
 							{t("providers.confirmDelete")}
-						</button>
-						<button type="button" className="prov-btn" onClick={() => setIsConfirmingDelete(false)}>
+						</Button>
+						<Button variant="secondary" size="sm" onClick={() => setIsConfirmingDelete(false)}>
 							{t("common.cancel")}
-						</button>
+						</Button>
 					</span>
 				) : (
-					<button type="button" className="prov-btn is-danger" onClick={() => setIsConfirmingDelete(true)}>
+					<Button variant="danger" size="sm" onClick={() => setIsConfirmingDelete(true)}>
 						{t("providerForm.deleteProvider")}
-					</button>
+					</Button>
 				)}
 				<span className="prov-foot-actions">
-					<button type="button" className="prov-btn" onClick={onClose}>
+					<Button variant="secondary" size="sm" onClick={onClose}>
 						{t("providerForm.cancel")}
-					</button>
-					<button type="button" className="set-save" disabled={isBusy} onClick={() => void save()}>
+					</Button>
+					<Button variant="primary" size="md" disabled={isBusy} onClick={() => void save()}>
 						{isBusy ? t("providerForm.saving") : t("providerForm.save")}
-					</button>
+					</Button>
 				</span>
 			</footer>
 		</Modal>
@@ -560,32 +567,33 @@ function LoginFlow({
 			{state.deviceCode !== undefined ? (
 				<div className="prov-login-code">
 					<span className="mono">{state.deviceCode.userCode}</span>
-					<button
-						type="button"
-						className="prov-btn is-ghost"
+					<Button
+						variant="ghost"
+						size="sm"
+						className="prov-tone-accent"
 						onClick={() => window.open(state.deviceCode?.verificationUri, "_blank", "noopener")}
 					>
 						{t("providerForm.loginOpen")}
-					</button>
+					</Button>
 				</div>
 			) : null}
 
 			{state.authUrl !== undefined ? (
-				<button
-					type="button"
-					className="prov-btn"
+				<Button
+					variant="secondary"
+					size="sm"
 					onClick={() => window.open(state.authUrl?.url, "_blank", "noopener")}
 				>
 					{t("providerForm.loginOpen")}
-				</button>
+				</Button>
 			) : null}
 
 			{prompt !== undefined && prompt.kind === "select" ? (
 				<div className="prov-login-options">
 					{(prompt.options ?? []).map((option) => (
-						<button key={option.id} type="button" className="prov-btn" onClick={() => submit(option.id)}>
+						<Button key={option.id} variant="secondary" size="sm" onClick={() => submit(option.id)}>
 							{option.label}
-						</button>
+						</Button>
 					))}
 				</div>
 			) : null}
@@ -603,25 +611,25 @@ function LoginFlow({
 						{prompt.message}
 					</label>
 					<div className="prov-login-field">
-						<input
+						<Input
 							id={prompt.promptId}
-							className="set-input"
+							size="md"
 							type={prompt.kind === "secret" ? "password" : "text"}
 							value={answer}
 							{...{ "data-autofocus": true }}
 							onChange={(event) => setAnswer(event.target.value)}
 							placeholder={prompt.placeholder}
 						/>
-						<button type="submit" className="prov-btn" disabled={answer.trim().length === 0}>
+						<Button type="submit" variant="secondary" size="sm" disabled={answer.trim().length === 0}>
 							{t("providerForm.loginContinue")}
-						</button>
+						</Button>
 					</div>
 				</form>
 			) : null}
 
-			<button type="button" className="prov-btn is-danger is-ghost" onClick={onCancel}>
+			<Button variant="ghost" size="sm" className="prov-tone-danger" onClick={onCancel}>
 				{t("providerForm.loginCancel")}
-			</button>
+			</Button>
 		</div>
 	);
 }

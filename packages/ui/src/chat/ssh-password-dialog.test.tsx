@@ -25,6 +25,6 @@ describe("SSH 密码框", () => {
 	});
 
 	it("密码为空时连接按钮置灰", () => {
-		expect(render("root@10.1.10.152", false)).toMatch(/class="dialog-primary"[^>]*disabled/);
+		expect(render("root@10.1.10.152", false)).toMatch(/data-variant="primary"[^>]*disabled/);
 	});
 });

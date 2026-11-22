@@ -87,8 +87,6 @@
 	/* 顶部那条带的高度与每个窗口按钮的宽度 */
 	--chrome-height: 36px;
 	--window-button-width: 44px;
-	/* 侧栏里图标按钮的边长，以及按钮到侧栏左右边缘的距离；顶带的开关用同一组数 */
-	--icon-button-size: 28px;
 	/* 会话行首状态标记：槽位尺寸固定，环由 6 的点加内外各一圈描边与留白算出来 */
 	--status-slot: 12px;
 	/* 输入区的待发图片：缩略图边长、两张之间的距离、圆角与移除按钮的边长 */
@@ -381,10 +379,6 @@
 	/* 行尾凭证状态点的直径，以及它到「编辑」按钮的距离 */
 	--set-models-dot: 6px;
 	--set-models-dot-gap: 12px;
-	/* 行内动作按钮（编辑、测试）：高度、横向内边距与圆角 */
-	--set-models-action-height: 26px;
-	--set-models-action-padding-x: 10px;
-	--set-models-action-radius: 7px;
 	/* 提供方编辑弹窗：宽度，以及头部与正文的左右内边距 */
 	--prov-dialog-width: 640px;
 	--prov-dialog-padding-x: 24px;
@@ -393,9 +387,6 @@
 	--prov-field-gap: 14px;
 	--prov-field-columns-gap: 12px;
 	--prov-section-gap: 10px;
-	/* 弹窗里的按钮：高度与横向内边距 */
-	--prov-btn-height: 30px;
-	--prov-btn-padding-x: 12px;
 	/* 登录那一块：设备码、授权按钮、要回答的一步，彼此之间的距离 */
 	--prov-login-gap: 10px;
 	/* 设备码那一行的高度，与密钥行同高，切换时不跳 */

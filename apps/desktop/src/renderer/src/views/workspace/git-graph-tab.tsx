@@ -14,7 +14,7 @@
  *   一次退到图谱，不会顺手关掉整个右抽屉。
  */
 import type { GitCommit, GitStatus } from "@facet/protocol";
-import { ChangesDocument, GitGraphList, ICON_SIZE, useHoverTip, useI18n } from "@facet/ui";
+import { ChangesDocument, GitGraphList, ICON_SIZE, IconButton, useHoverTip, useI18n } from "@facet/ui";
 import { ArrowLeft } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { WorkspaceDocs } from "../../hooks/useWorkspaceDocs.ts";
@@ -162,15 +162,16 @@ function BackToGraphButton({ onBack }: { onBack: () => void }): ReactNode {
 	const tip = useHoverTip();
 	return (
 		<>
-			<button
-				type="button"
+			<IconButton
+				variant="ghost"
+				size="sm"
 				className="workspace-back"
 				aria-label={label}
 				{...tip.handlers(label)}
 				onClick={onBack}
 			>
 				<ArrowLeft size={ICON_SIZE.md} />
-			</button>
+			</IconButton>
 			{tip.render()}
 		</>
 	);

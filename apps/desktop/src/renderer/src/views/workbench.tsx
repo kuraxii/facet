@@ -13,12 +13,14 @@ import type { ChatView } from "@facet/client-core";
 import { chatActivity } from "@facet/client-core";
 import type { LanguageSetting } from "@facet/i18n";
 import {
+	Button,
 	CodeThemeProvider,
 	type ComposerHandle,
 	CreateProjectDialog,
 	EmptyState,
 	HostSwitcher,
 	ICON_SIZE,
+	IconButton,
 	PanelToggle,
 	parseCommand,
 	RightPanel,
@@ -205,17 +207,18 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 		session.sessionError === undefined ? null : (
 			<div className="session-error">
 				<span className="session-error-text">{session.sessionError.message}</span>
-				<button type="button" className="btn" onClick={session.sessionError.retry}>
+				<Button variant="secondary" size="md" onClick={session.sessionError.retry}>
 					{t("common.retry")}
-				</button>
-				<button
-					type="button"
+				</Button>
+				<IconButton
+					variant="ghost"
+					size="sm"
 					className="ib"
 					aria-label={t("app.closeNotice")}
 					onClick={() => session.setSessionError(undefined)}
 				>
 					<X size={ICON_SIZE.sm} />
-				</button>
+				</IconButton>
 			</div>
 		);
 

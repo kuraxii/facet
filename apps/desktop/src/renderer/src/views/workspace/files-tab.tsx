@@ -13,6 +13,7 @@ import {
 	FilesPane,
 	fileTreeMaxWidth,
 	ICON_SIZE,
+	IconButton,
 	PaneResizer,
 	readFileTreeWidth,
 	useHoverTip,
@@ -179,8 +180,9 @@ function FileTreeToggle({ isOpen, onToggle }: { isOpen: boolean; onToggle: () =>
 	const tip = useHoverTip();
 	return (
 		<>
-			<button
-				type="button"
+			<IconButton
+				variant="ghost"
+				size="sm"
 				className="workspace-head-action workspace-tree-toggle"
 				aria-label={label}
 				aria-pressed={isOpen}
@@ -188,7 +190,7 @@ function FileTreeToggle({ isOpen, onToggle }: { isOpen: boolean; onToggle: () =>
 				onClick={onToggle}
 			>
 				<FolderTree size={ICON_SIZE.md} />
-			</button>
+			</IconButton>
 			{tip.render()}
 		</>
 	);

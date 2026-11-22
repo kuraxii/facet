@@ -20,6 +20,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { Badge } from "../common/Badge.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { LAYOUT_PX } from "../layout/layout-contract.ts";
 import { ICON_SIZE } from "../styles/visual-contract.ts";
@@ -267,7 +268,7 @@ export function WorkspaceTabBar({
 							<span className="workspace-tab-icon">{item.icon}</span>
 							<span className="workspace-tab-label">{item.label}</span>
 							{item.badge === undefined || item.badge === 0 || item.badge === "" ? null : (
-								<span className="workspace-tab-badge">{item.badge}</span>
+								<Badge>{item.badge}</Badge>
 							)}
 						</button>
 						{onClose === undefined ? null : (

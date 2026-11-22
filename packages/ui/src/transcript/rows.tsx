@@ -21,6 +21,7 @@ import {
 	Wrench,
 } from "lucide-react";
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { IconButton } from "../common/IconButton.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { Markdown } from "../markdown/Markdown.tsx";
 import { ICON_SIZE } from "../styles/visual-contract.ts";
@@ -448,15 +449,16 @@ const RowView = memo(function RowView({
 						{onCopyText === undefined || forkText.length === 0 || row.isStreaming ? null : (
 							<CopyButton text={forkText} onCopy={onCopyText} />
 						)}
-						<button
-							type="button"
+						<IconButton
+							variant="ghost"
+							size="sm"
 							className="fork-btn"
 							aria-label={t("transcript.fork")}
 							disabled={fork.needsSettle && !canFork}
 							onClick={() => onFork(fork.beforeEntryId)}
 						>
 							<Split size={ICON_SIZE.md} />
-						</button>
+						</IconButton>
 					</div>
 					{turnDurationText(row, now, t).length === 0 ? null : (
 						<span className="turn-time">{turnDurationText(row, now, t)}</span>
@@ -544,14 +546,15 @@ const RowView = memo(function RowView({
 					<div className="user-foot">
 						{onCopyText === undefined ? null : <CopyButton text={text} onCopy={onCopyText} />}
 						{canRevertThis ? (
-							<button
-								type="button"
+							<IconButton
+								variant="ghost"
+								size="xs"
 								className="revert-btn"
 								aria-label={t("transcript.revert")}
 								onClick={() => onRevert(entryId, text)}
 							>
 								<Undo2 size={ICON_SIZE.sm} />
-							</button>
+							</IconButton>
 						) : null}
 					</div>
 				)}

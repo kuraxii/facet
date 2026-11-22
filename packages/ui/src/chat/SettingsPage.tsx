@@ -8,6 +8,9 @@ import type { LanguageSetting } from "@facet/i18n";
 import type { FacetSettings, LiveMotion, ProviderInfo } from "@facet/protocol";
 import { X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Button } from "../common/Button.tsx";
+import { IconButton } from "../common/IconButton.tsx";
+import { Input } from "../common/Input.tsx";
 import { Select } from "../common/select.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { Modal } from "../modal.tsx";
@@ -199,9 +202,15 @@ export function SettingsPage({
 		<Modal open onClose={onClose} label={t("settings.title")} className="set-page">
 			<header className="set-head">
 				<h1 className="set-title">{t("settings.title")}</h1>
-				<button type="button" className="set-close" aria-label={t("settings.close")} onClick={onClose}>
+				<IconButton
+					variant="ghost"
+					size="sm"
+					className="set-close"
+					aria-label={t("settings.close")}
+					onClick={onClose}
+				>
 					<X size={ICON_SIZE.lg} />
-				</button>
+				</IconButton>
 			</header>
 
 			<div className="set-body">
@@ -343,8 +352,8 @@ function AppearanceSection({
 	};
 	/** 字号输入的公共写法：留空或越界时保持原值。 */
 	const sizeInput = (value: number, name: keyof FacetSettings["appearance"]): React.JSX.Element => (
-		<input
-			className="set-input"
+		<Input
+			size="md"
 			type="number"
 			min={11}
 			max={20}
@@ -409,8 +418,8 @@ function AppearanceSection({
 					/>
 				</SettingsRow>
 				<SettingsRow title={t("settings.appearancePage.outlineScale")}>
-					<input
-						className="set-input"
+					<Input
+						size="md"
 						type="number"
 						min={50}
 						max={200}
@@ -429,8 +438,8 @@ function AppearanceSection({
 
 			<SettingsGroup label={t("settings.appearancePage.fonts")}>
 				<SettingsRow title={t("settings.appearancePage.codeFont")}>
-					<input
-						className="set-input"
+					<Input
+						size="md"
 						value={appearance.codeFont}
 						onChange={(event) => patchAppearance({ codeFont: event.target.value })}
 						placeholder="Maple Mono CN"
@@ -438,8 +447,8 @@ function AppearanceSection({
 					/>
 				</SettingsRow>
 				<SettingsRow title={t("settings.appearancePage.editorFont")}>
-					<input
-						className="set-input"
+					<Input
+						size="md"
 						value={appearance.editorFont}
 						onChange={(event) => patchAppearance({ editorFont: event.target.value })}
 						placeholder={t("settings.appearancePage.followCodeFont")}
@@ -450,8 +459,8 @@ function AppearanceSection({
 					{sizeInput(appearance.editorFontSize, "editorFontSize")}
 				</SettingsRow>
 				<SettingsRow title={t("settings.appearancePage.terminalFont")}>
-					<input
-						className="set-input"
+					<Input
+						size="md"
 						value={appearance.terminalFont}
 						onChange={(event) => patchAppearance({ terminalFont: event.target.value })}
 						placeholder={t("settings.appearancePage.followCodeFont")}
@@ -588,14 +597,9 @@ function AboutSection({ about, data }: { about: SettingsPageProps["about"]; data
 				</li>
 			</ul>
 			<div className="set-actions">
-				<button
-					type="button"
-					className="set-save"
-					disabled={isExporting}
-					onClick={() => void exportDiagnostics()}
-				>
+				<Button variant="primary" size="md" disabled={isExporting} onClick={() => void exportDiagnostics()}>
 					{isExporting ? t("settings.aboutPage.exporting") : t("settings.aboutPage.export")}
-				</button>
+				</Button>
 			</div>
 			{result === undefined ? null : (
 				<p className={result.tone === "error" ? "set-row-error" : "set-hint"}>{result.message}</p>

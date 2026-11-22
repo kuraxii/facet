@@ -153,17 +153,6 @@
 	text-overflow: ellipsis;
 }
 
-.workspace-tab-badge {
-	flex: none;
-	padding: 0 4px;
-	border-radius: 999px;
-	background: var(--bg-active);
-	color: var(--fg-muted);
-	font-family: var(--font-mono);
-	font-size: 10.5px;
-	line-height: 14px;
-}
-
 /*
  * 容器窄于 640px 时把文字折起来，只剩图标、计数与关闭按钮。
  *
@@ -272,17 +261,6 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-}
-
-.workspace-menu-badge {
-	flex: none;
-	padding: 0 4px;
-	border-radius: 999px;
-	background: var(--bg-active);
-	color: var(--fg-muted);
-	font-family: var(--font-mono);
-	font-size: 10.5px;
-	line-height: 14px;
 }
 
 .workspace-menu-key {
@@ -602,17 +580,9 @@
  * 「返回列表」只在单栏态出现：那时索引整层不在屏幕上，预览顶栏左端这枚左箭头是唯一的退路。
  * 「收起索引」「展开索引」反过来只在两栏态有，单栏态藏起来——那里没有「收起」这回事。
  */
+/* 退回图谱的箭头：只在面板视图里出现，其余宽度由原语给 */
 .workspace-back {
 	display: none;
-	flex: none;
-	place-items: center;
-	width: var(--icon-button-size);
-	height: var(--icon-button-size);
-	padding: 0;
-	border: 0;
-	border-radius: 6px;
-	background: transparent;
-	color: var(--fg-muted);
 }
 
 .workspace-back:hover {
@@ -664,28 +634,9 @@
 }
 
 /*
- * 顶栏右端那个把索引叫回来的按钮。
- *
- * 它和顶栏自己的按钮同一档尺寸（`--icon-button-size`），放在最右端：收起之后预览区的
- * 二级顶栏只剩它一个可点，位置固定，不会因为内容长短跳来跳去。
+ * 预览顶栏最右端的那枚举，尺寸来自 `common/IconButton.tsx` 的 `sm` 档（28px），
+ * 与顶栏自己的按钮同档：收起之后它就是二级顶栏里唯一的可点项，位置固定，不随内容长短跳动。
  */
-.workspace-head-action {
-	display: grid;
-	flex: none;
-	place-items: center;
-	width: var(--icon-button-size);
-	height: var(--icon-button-size);
-	padding: 0;
-	border: 0;
-	border-radius: 6px;
-	background: transparent;
-	color: var(--fg-subtle);
-}
-
-.workspace-head-action:hover {
-	background: var(--bg-hover);
-	color: var(--fg-default);
-}
 
 /* 开关按住时只换颜色：文件树开没开由它自己看得出来 */
 .workspace-head-action[aria-pressed="true"] {

@@ -15,6 +15,8 @@ import type {
 } from "@facet/protocol";
 import { Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { Badge } from "../common/Badge.tsx";
+import { Button } from "../common/Button.tsx";
 import { Select, type SelectOption } from "../common/select.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { ICON_SIZE } from "../styles/visual-contract.ts";
@@ -212,10 +214,10 @@ export function ModelsSection({
 		<div className="set-models">
 			<header className="set-models-head">
 				<h2 className="set-section-title">{t("settings.models")}</h2>
-				<button type="button" className="set-models-add" onClick={() => setIsPickerOpen(true)}>
+				<Button variant="primary" size="md" onClick={() => setIsPickerOpen(true)}>
 					<Plus size={ICON_SIZE.md} aria-hidden="true" />
 					{t("providers.addProvider")}
-				</button>
+				</Button>
 			</header>
 
 			<SettingsGroup>
@@ -322,14 +324,14 @@ export function ModelsSection({
 											) : null}
 										</span>
 									)}
-									<button
-										type="button"
-										className="set-models-action"
+									<Button
+										variant="secondary"
+										size="sm"
 										disabled={testing === key}
 										onClick={() => void runTest(model)}
 									>
 										{t("settings.modelsPage.test")}
-									</button>
+									</Button>
 								</li>
 							);
 						})}
@@ -386,14 +388,14 @@ function ProviderListRow({ row, onEdit }: { row: ProviderRow; onEdit: () => void
 			</span>
 			<span className="set-models-title">
 				<span className="set-models-name ell">{provider.name}</span>
-				{custom === undefined ? null : <span className="set-badge is-custom">{t("providers.custom")}</span>}
+				{custom === undefined ? null : <Badge shape="tag">{t("providers.custom")}</Badge>}
 			</span>
 			{provider.authenticated ? null : (
 				<span className="set-models-dot is-off" role="status" aria-label={t("providers.credentialMissing")} />
 			)}
-			<button type="button" className="set-models-action" onClick={onEdit}>
+			<Button variant="secondary" size="sm" onClick={onEdit}>
 				{t("providers.edit")}
-			</button>
+			</Button>
 		</li>
 	);
 }

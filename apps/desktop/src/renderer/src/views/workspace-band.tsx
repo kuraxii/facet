@@ -10,7 +10,7 @@
  */
 
 import type { WorkspaceTabId, WorkspaceTabItem } from "@facet/ui";
-import { ICON_SIZE, useI18n, WorkspaceTabBar, WorkspaceTabMenu } from "@facet/ui";
+import { ICON_SIZE, IconButton, useI18n, WorkspaceTabBar, WorkspaceTabMenu } from "@facet/ui";
 import { Maximize2, Minimize2, PanelRightClose } from "lucide-react";
 import type { ReactNode } from "react";
 import type { WorkspaceShell } from "../hooks/useWorkspaceShell.ts";
@@ -71,24 +71,26 @@ export function WorkspacePanelControls({
 			)}
 			<span className="chrome-spacer" />
 			{showExpand ? (
-				<button
-					type="button"
+				<IconButton
+					variant="ghost"
+					size="sm"
 					className="chrome-toggle"
 					aria-label={shell.isPanelExpanded ? t("panel.restoreWide") : t("panel.expandWide")}
 					aria-pressed={shell.isPanelExpanded}
 					onClick={shell.togglePanelExpanded}
 				>
 					<ExpandIcon size={ICON_SIZE.md} />
-				</button>
+				</IconButton>
 			) : null}
-			<button
-				type="button"
+			<IconButton
+				variant="ghost"
+				size="sm"
 				className="chrome-toggle"
 				aria-label={t("panel.collapsePanel")}
 				onClick={shell.isPanelDrawerOpen ? shell.closePanelDrawer : shell.togglePanel}
 			>
 				<PanelRightClose size={ICON_SIZE.md} />
-			</button>
+			</IconButton>
 		</>
 	);
 }

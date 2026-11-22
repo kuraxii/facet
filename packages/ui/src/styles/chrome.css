@@ -181,21 +181,8 @@
 
 /* 顶带里的图标按钮：开与关同一个亮度，展开与否由面板本身看得出来 */
 .chrome-toggle {
-	display: grid;
-	flex: none;
-	place-items: center;
-	width: var(--icon-button-size);
-	height: var(--icon-button-size);
-	border: 0;
-	border-radius: 6px;
-	background: transparent;
 	color: var(--fg-muted);
 	-webkit-app-region: no-drag;
-}
-
-.chrome-toggle:hover {
-	background: var(--bg-hover);
-	color: var(--fg-default);
 }
 
 /* 双态开关按住时只换颜色：宽展开是否生效由它自己看得出来 */
@@ -208,19 +195,18 @@
 	position: relative;
 }
 
+/*
+ * 顶栏开关上的计数角标。
+ *
+ * 外观来自 `common/Badge.tsx`（强调色胶囊、12px 等宽数字），这里只做两件事：贴到开关的
+ * 右上角，以及把高度收到一行字——20px 的胶囊压在 28px 的图标上会把图标盖掉。
+ */
 .chrome-toggle-badge {
 	position: absolute;
-	top: 0;
-	right: 0;
-	min-width: 13px;
-	padding: 0 3px;
-	border-radius: 999px;
-	background: var(--accent-fg);
-	color: var(--bg-canvas);
-	font-family: var(--font-mono);
-	font-size: 9.5px;
-	line-height: 12px;
-	text-align: center;
+	top: calc(-1 * var(--space-1));
+	right: calc(-1 * var(--space-1));
+	min-height: var(--leading-tight);
+	padding-inline: var(--space-2);
 	pointer-events: none;
 }
 

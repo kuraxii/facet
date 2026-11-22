@@ -8,13 +8,15 @@
  *    样式表里的值必须与 `visual-contract.ts` 相等。两边各改一处就等于漂移，而漂移了也看不
  *    出来——只能靠读源码比对。
  * 2. **纪律闸**：`0` 处 `!important`、`0` 处裸 `z-index`、`0` 处非 `prefers-*` 的 `@media`。
- * 3. **棘轮**：每个样式文件里还写死着多少个字号 / 圆角 / gap / padding / 阴影 / 过渡，
- *    记在 `VISUAL_DEBT_BASELINE` 里，只许降不许升。新增一个 CSS 文件必须在这里登记基线，
- *    否则这条用例会红——不然新文件从第一天起就可以随便写死数值。
+ * 3. **零债门禁**：全仓每个样式文件里，字号 / 圆角 / gap / padding / 阴影 / 过渡都不许写死，
+ *    一律走刻度变量。没有基线表、没有豁免表：新加的文件从第一天起就按同一把尺子量。
  *
- * 棘轮的计数口径（与迁移步骤一一对应）：
- * - 一条声明里**一个 `var()` 都没有**，就算写死：`font-size: 12px` 算，`var(--text-xs)` 不算，
- *   `calc(var(--a) - 1px)` 不算。
+ * 计数口径（一条声明算不算写死）：
+ * - 声明里有 `var()`，就不算：`var(--text-xs)` 与 `calc(var(--a) - 1px)` 都算走变量。
+ *   边框折叠、图标基线这类结构性的 ±1～2px 微调因此本来就是 `calc(...)`，不会被误伤。
+ * - 全零复位（`padding: 0`）不算：它没有引入数值。
+ * - 只写相对单位的字号（`1.6em` 标题、`0.8em` 行内代码）不算：它跟着父级缩放，换成固定档位
+ *   反而丢掉这层关系。
  * - `transition` 另算：把 `var(...)` 整段抹掉之后还剩下时间字面量（`120ms` / `0.18s`）或缓动
  *   关键字（`ease` / `linear` / `cubic-bezier` / `steps`）才算。
  */
@@ -159,6 +161,9 @@ type DebtKind = "fontSize" | "radius" | "gap" | "padding" | "shadow" | "transiti
 /** 一个文件里各维度还剩多少条写死的声明。 */
 type DebtCount = Record<DebtKind, number>;
 
+/** 六个数一起看：门禁逐维度断言为 0。 */
+const DEBT_KINDS: readonly DebtKind[] = ["fontSize", "radius", "gap", "padding", "shadow", "transition"];
+
 /** 只写相对单位的字号：跟着父级走，不算写死的数值。 */
 const RELATIVE_SIZE = /^-?[\d.]+(?:em|rem|%)$/;
 
@@ -171,42 +176,6 @@ const DEBT_PROPS: readonly (readonly [DebtKind, RegExp])[] = [
 	["shadow", /^box-shadow$/],
 	["transition", /^transition(?:-property|-duration|-timing-function|-delay)?$/],
 ];
-
-/**
- * 棘轮基线：按文件记下当前的存量，只许降不许升。
- *
- * 数值是各文件当前的实际条数，不是目标值。每迁完一个文件就把它那一行改小；一个文件归零之后，
- * 这一行就是 0 且不会再长回去——阴影与过渡已经全仓归零，只剩字号、圆角、间距与内边距。
- */
-const VISUAL_DEBT_BASELINE: Readonly<Record<string, DebtCount>> = {
-	"ui-terminal/src/terminal.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
-	"ui/src/chat/ExtensionPromptCard.module.css": {
-		fontSize: 0,
-		radius: 0,
-		gap: 0,
-		padding: 0,
-		shadow: 0,
-		transition: 0,
-	},
-	"ui/src/git/git.module.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
-	"ui/src/panel/changes.module.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
-	"ui/src/styles/base.css": { fontSize: 0, radius: 1, gap: 0, padding: 0, shadow: 0, transition: 0 },
-	"ui/src/styles/changes.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
-	"ui/src/styles/chat.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
-	"ui/src/styles/chrome.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
-	"ui/src/styles/composer.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
-	"ui/src/styles/fonts.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
-	"ui/src/styles/git-graph.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
-	"ui/src/styles/index.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
-	"ui/src/styles/markdown.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
-	"ui/src/styles/motion.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
-	"ui/src/styles/overlays.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
-	"ui/src/styles/panel.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
-	"ui/src/styles/primitives.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
-	"ui/src/styles/settings.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
-	"ui/src/styles/sidebar.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
-	"ui/src/styles/theme.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
-};
 
 /** 去掉注释：注释里举例写的数值不算存量。 */
 function stripComments(source: string): string {
@@ -484,27 +453,25 @@ describe("颜色只从主题来", () => {
 	});
 });
 
-describe("写死数值的棘轮只许往下走", () => {
-	it("每个样式文件都登记了基线", () => {
-		// 新增文件必须先进基线再写样式，不然它从第一天起就可以随便写死数值
-		expect(CSS_FILES).toEqual(Object.keys(VISUAL_DEBT_BASELINE).sort());
-	});
-
-	it("阴影与过渡没有存量：全部走变量", () => {
+describe("写死数值的零债门禁", () => {
+	it("全仓样式表没有写死的字号、圆角、间距、内边距、阴影与过渡", () => {
 		for (const file of CSS_FILES) {
 			const actual = countDebt(read(file));
-			expect(actual.shadow, `${file} 的 box-shadow`).toBe(0);
-			expect(actual.transition, `${file} 的 transition`).toBe(0);
-		}
-	});
-
-	it("各文件的存量不超过基线", () => {
-		for (const file of CSS_FILES) {
-			const baseline = VISUAL_DEBT_BASELINE[file];
-			const actual = countDebt(read(file));
-			for (const kind of Object.keys(actual) as DebtKind[]) {
-				expect(actual[kind], `${file} 的 ${kind}`).toBeLessThanOrEqual(baseline?.[kind] ?? 0);
+			for (const kind of DEBT_KINDS) {
+				expect(actual[kind], `${file} 的 ${kind}`).toBe(0);
 			}
 		}
+	});
+
+	it("零债是量出来的，不是表里写出来的", () => {
+		// 防呆：这一条先证明计数器还在工作（否则一个恒为 0 的计数器也能让上一条通过），
+		// 再证明全仓文件都被扫到了
+		const sample = countDebt(
+			[".a {", "\tfont-size: 12px;", "\tborder-radius: 6px;", "\tgap: 8px;", "\tpadding: 0 10px;", "}"].join(
+				"\n",
+			),
+		);
+		expect(sample).toEqual({ fontSize: 1, radius: 1, gap: 1, padding: 1, shadow: 0, transition: 0 });
+		expect(CSS_FILES.length).toBeGreaterThan(10);
 	});
 });

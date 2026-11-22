@@ -401,11 +401,6 @@
  * 浏览器就会关掉 `::-webkit-scrollbar` 伪元素。所以这里以伪元素为主（宽度可控、拇指能画成
  * 圆角并带悬停态，`--scrollbar-width` 也因此等于实际宽度，行的右内边距才算得准），
  * 标准属性只作为没有伪元素的引擎的回退。
- *
- * 规则只挂在真正会滚的容器上，不用 `*`：通配选择器会让每个元素都参与一次样式重算。
- * 第三方组件自己的滚动容器（CodeMirror 的 `.cm-scroller`、xterm 的 `.xterm-viewport`、
- * markstream 里画表格与代码块的那几个节点）按各自的类名列在里面，它们的 DOM 不在我们手里，
- * 加不了 `scroll-y`。
  */
 
 /**
@@ -466,12 +461,21 @@
 	padding-right: calc(var(--scroll-inset, 0px) - var(--scrollbar-width));
 }
 
-/* 会滚动的容器：文字区、弹层与浮层、代码块与编辑器、终端标签栏 */
+/*
+ * 会滚动的容器：文字区、弹层与浮层、代码块与编辑器、终端视口。
+ *
+ * 规则只挂在真正会滚的容器上，不用 `*`：通配选择器会让每个元素都参与一次样式重算。
+ * 第三方组件自己的滚动容器（CodeMirror 的 `.cm-scroller`、xterm 的 `.xterm-viewport`、
+ * markstream 里画表格与代码块的那几个节点）按各自的类名列在里面，它们的 DOM 不在我们手里，
+ * 加不了 `scroll-y`。
+ *
+ * 这份清单只写一遍，六条滚动条伪元素靠嵌套挂在同一份 `:where()` 上：拆成六段重复的选择器
+ * 链既难对齐，改一处漏五处也没有任何提示。
+ */
 :where(
 	.scroll-y,
 	.scroll-x,
 	.scroll-both,
-	.scroll,
 	.sb-opts,
 	.panel-body,
 	.set-content,
@@ -500,243 +504,45 @@
 	.markstream-react .overflow-auto,
 	.markstream-react .overflow-x-auto,
 	.xterm-viewport
-)::-webkit-scrollbar {
-	width: var(--scrollbar-width);
-	height: var(--scrollbar-width);
-	background: transparent;
-}
+) {
+	&::-webkit-scrollbar {
+		width: var(--scrollbar-width);
+		height: var(--scrollbar-width);
+		background: transparent;
+	}
 
-:where(
-	.scroll-y,
-	.scroll-x,
-	.scroll-both,
-	.scroll,
-	.sb-opts,
-	.panel-body,
-	.set-content,
-	.prov-body,
-	.search-results,
-	.picker-list,
-	.cmd-pop,
-	.chip-pop,
-	.pop-tip,
-	.composer-editor,
-	.tr-out pre,
-	.tr-think,
-	.code-card-body,
-	.mermaid-source,
-	.math-block,
-	dialog.dialog,
-	.cm-scroller,
-	/* markstream 渲染器内部的滚动容器：类名在依赖里，改不了 DOM，只能按选择器列 */
-	.markstream-react .table-node-wrapper,
-	.markstream-react .code-block-node,
-	.markstream-react .code-block-content,
-	.markstream-react .code-editor-fallback-surface,
-	.markstream-react .code-fallback-plain,
-	.markstream-react pre[data-markstream-pre="1"],
-	.markstream-react .mermaid-modal-body,
-	.markstream-react .overflow-auto,
-	.markstream-react .overflow-x-auto,
-	.xterm-viewport
-)::-webkit-scrollbar-button {
-	display: none;
-	width: 0;
-	height: 0;
-}
+	/* 两端的箭头：宽度与高度都归零，画出来的滚动条才是干净的一条 */
+	&::-webkit-scrollbar-button {
+		display: none;
+		width: 0;
+		height: 0;
+	}
 
-:where(
-	.scroll-y,
-	.scroll-x,
-	.scroll-both,
-	.scroll,
-	.sb-opts,
-	.panel-body,
-	.set-content,
-	.prov-body,
-	.search-results,
-	.picker-list,
-	.cmd-pop,
-	.chip-pop,
-	.pop-tip,
-	.composer-editor,
-	.tr-out pre,
-	.tr-think,
-	.code-card-body,
-	.mermaid-source,
-	.math-block,
-	dialog.dialog,
-	.cm-scroller,
-	/* markstream 渲染器内部的滚动容器：类名在依赖里，改不了 DOM，只能按选择器列 */
-	.markstream-react .table-node-wrapper,
-	.markstream-react .code-block-node,
-	.markstream-react .code-block-content,
-	.markstream-react .code-editor-fallback-surface,
-	.markstream-react .code-fallback-plain,
-	.markstream-react pre[data-markstream-pre="1"],
-	.markstream-react .mermaid-modal-body,
-	.markstream-react .overflow-auto,
-	.markstream-react .overflow-x-auto,
-	.xterm-viewport
-)::-webkit-scrollbar-track,
-:where(
-	.scroll-y,
-	.scroll-x,
-	.scroll-both,
-	.scroll,
-	.sb-opts,
-	.panel-body,
-	.set-content,
-	.prov-body,
-	.search-results,
-	.picker-list,
-	.cmd-pop,
-	.chip-pop,
-	.pop-tip,
-	.composer-editor,
-	.tr-out pre,
-	.tr-think,
-	.code-card-body,
-	.mermaid-source,
-	.math-block,
-	dialog.dialog,
-	.cm-scroller,
-	/* markstream 渲染器内部的滚动容器：类名在依赖里，改不了 DOM，只能按选择器列 */
-	.markstream-react .table-node-wrapper,
-	.markstream-react .code-block-node,
-	.markstream-react .code-block-content,
-	.markstream-react .code-editor-fallback-surface,
-	.markstream-react .code-fallback-plain,
-	.markstream-react pre[data-markstream-pre="1"],
-	.markstream-react .mermaid-modal-body,
-	.markstream-react .overflow-auto,
-	.markstream-react .overflow-x-auto,
-	.xterm-viewport
-)::-webkit-scrollbar-corner {
-	background: var(--scrollbar-track-color);
-}
+	&::-webkit-scrollbar-track,
+	&::-webkit-scrollbar-corner {
+		background: var(--scrollbar-track-color);
+	}
 
-:where(
-	.scroll-y,
-	.scroll-x,
-	.scroll-both,
-	.scroll,
-	.sb-opts,
-	.panel-body,
-	.set-content,
-	.prov-body,
-	.search-results,
-	.picker-list,
-	.cmd-pop,
-	.chip-pop,
-	.pop-tip,
-	.composer-editor,
-	.tr-out pre,
-	.tr-think,
-	.code-card-body,
-	.mermaid-source,
-	.math-block,
-	dialog.dialog,
-	.cm-scroller,
-	/* markstream 渲染器内部的滚动容器：类名在依赖里，改不了 DOM，只能按选择器列 */
-	.markstream-react .table-node-wrapper,
-	.markstream-react .code-block-node,
-	.markstream-react .code-block-content,
-	.markstream-react .code-editor-fallback-surface,
-	.markstream-react .code-fallback-plain,
-	.markstream-react pre[data-markstream-pre="1"],
-	.markstream-react .mermaid-modal-body,
-	.markstream-react .overflow-auto,
-	.markstream-react .overflow-x-auto,
-	.xterm-viewport
-)::-webkit-scrollbar-thumb {
-	border: calc((var(--scrollbar-width) - var(--scrollbar-thumb)) / 2) solid transparent;
-	border-radius: 999px;
-	background: var(--scrollbar-thumb-color);
-	background-clip: content-box;
-}
+	&::-webkit-scrollbar-thumb {
+		border: calc((var(--scrollbar-width) - var(--scrollbar-thumb)) / 2) solid transparent;
+		border-radius: var(--radius-pill);
+		background: var(--scrollbar-thumb-color);
+		background-clip: content-box;
+	}
 
-:where(
-	.scroll-y,
-	.scroll-x,
-	.scroll-both,
-	.scroll,
-	.sb-opts,
-	.panel-body,
-	.set-content,
-	.prov-body,
-	.search-results,
-	.picker-list,
-	.cmd-pop,
-	.chip-pop,
-	.pop-tip,
-	.composer-editor,
-	.tr-out pre,
-	.tr-think,
-	.code-card-body,
-	.mermaid-source,
-	.math-block,
-	dialog.dialog,
-	.cm-scroller,
-	/* markstream 渲染器内部的滚动容器：类名在依赖里，改不了 DOM，只能按选择器列 */
-	.markstream-react .table-node-wrapper,
-	.markstream-react .code-block-node,
-	.markstream-react .code-block-content,
-	.markstream-react .code-editor-fallback-surface,
-	.markstream-react .code-fallback-plain,
-	.markstream-react pre[data-markstream-pre="1"],
-	.markstream-react .mermaid-modal-body,
-	.markstream-react .overflow-auto,
-	.markstream-react .overflow-x-auto,
-	.xterm-viewport
-)::-webkit-scrollbar-thumb:hover {
-	background: var(--scrollbar-thumb-color-hover);
-	background-clip: content-box;
-}
+	&::-webkit-scrollbar-thumb:hover {
+		background: var(--scrollbar-thumb-color-hover);
+		background-clip: content-box;
+	}
 
-/* 没有伪元素的引擎：标准属性的宽度只有三档，画不出圆角拇指，观感上退一步 */
-@supports not (scrollbar-color: auto) {
-	:where(
-		.scroll-y,
-		.scroll-x,
-		.scroll-both,
-		.scroll,
-		.sb-opts,
-		.panel-body,
-		.set-content,
-		.prov-body,
-		.search-results,
-		.picker-list,
-		.cmd-pop,
-		.chip-pop,
-		.pop-tip,
-		.composer-editor,
-		.tr-out pre,
-		.tr-think,
-		.code-card-body,
-		.mermaid-source,
-		.math-block,
-		dialog.dialog,
-		.cm-scroller,
-		/* markstream 渲染器内部的滚动容器：类名在依赖里，改不了 DOM，只能按选择器列 */
-		.markstream-react .table-node-wrapper,
-		.markstream-react .code-block-node,
-		.markstream-react .code-block-content,
-		.markstream-react .code-editor-fallback-surface,
-		.markstream-react .code-fallback-plain,
-		.markstream-react pre[data-markstream-pre="1"],
-		.markstream-react .mermaid-modal-body,
-		.markstream-react .overflow-auto,
-		.markstream-react .overflow-x-auto,
-		.xterm-viewport
-	) {
+	/* 没有伪元素的引擎：标准属性的宽度只有三档，画不出圆角拇指，观感上退一步 */
+	@supports not (scrollbar-color: auto) {
 		/* 复位成 auto：非 auto 的宽度会反过来关掉 `::-webkit-scrollbar` */
 		scrollbar-width: auto;
 		scrollbar-color: var(--scrollbar-thumb-color) var(--scrollbar-track-color);
 	}
 }
 
-/* 系统要求更高对比度时，拇指换成正文色、轨道给出不透明底色 */
 @media (prefers-contrast: more) {
 	:root {
 		--scrollbar-thumb-color: var(--fg-default);

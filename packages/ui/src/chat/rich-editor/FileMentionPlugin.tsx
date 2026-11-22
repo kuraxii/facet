@@ -2,7 +2,7 @@
  * `@文件` 补全。
  *
  * 打在行首或空白之后的 `@` 会把后面这段当作查询，列出当前工作区里匹配的文件；选中之后
- * 把 `@查询` 换成胶囊，并在后面补一个空格，接着写正文。代码块与行内代码里一律不弹：
+ * 把 `@查询` 换成胶囊，并在后面补一个空格，接着写正文。代码块里不弹：
  * 那里面的 `@Override`、`@Component` 是装饰器，不是文件。
  *
  * 菜单挂成 `.composer` 外框的直接子节点，与 `/` 命令面板（`.cmd-pop`）贴在同一处：
@@ -19,7 +19,6 @@ import {
 	$createTextNode,
 	$getSelection,
 	$isRangeSelection,
-	$isTextNode,
 	type LexicalEditor,
 	type LexicalNode,
 	type TextNode,
@@ -71,17 +70,13 @@ export function mentionTrigger(textBeforeCursor: string): MenuTextMatch | null {
 	};
 }
 
-/** 光标是不是在代码里：代码块内，或者行内代码格式上。 */
+/** 光标是不是在代码块里：那里面 `@` 多半是装饰器或注释，不该弹补全。 */
 function $isCaretInCode(): boolean {
 	const selection = $getSelection();
 	if (!$isRangeSelection(selection)) {
 		return true;
 	}
-	const node = selection.anchor.getNode();
-	if ($isTextNode(node) && node.hasFormat("code")) {
-		return true;
-	}
-	let current: LexicalNode | null = node;
+	let current: LexicalNode | null = selection.anchor.getNode();
 	while (current !== null) {
 		if (current.getType() === "code") {
 			return true;

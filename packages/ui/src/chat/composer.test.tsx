@@ -1,5 +1,13 @@
 import type { ModelInfo, SlashCommand } from "@facet/protocol";
-import { $getRoot, $getSelection, $isRangeSelection, type LexicalEditor, UNDO_COMMAND } from "lexical";
+import {
+	$getRoot,
+	$getSelection,
+	$isRangeSelection,
+	FORMAT_TEXT_COMMAND,
+	type LexicalEditor,
+	PASTE_COMMAND,
+	UNDO_COMMAND,
+} from "lexical";
 import { act, createElement, type ReactElement, type RefObject, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -740,7 +748,7 @@ function rectAt(top: number, height: number): DOMRect {
 	} as DOMRect;
 }
 
-/** 输入域顶层块的名字，用来确认引用、列表有没有干净地结束。 */
+/** 输入域顶层块的名字，用来确认引用有没有干净地结束。 */
 function topBlocks(container: HTMLElement): string[] {
 	return [...container.querySelectorAll(".composer-editor > *")].map((node) => node.tagName.toLowerCase());
 }
@@ -765,25 +773,6 @@ describe("块级结构换行", () => {
 
 			expect(rendered.draft()).toBe("> quote\nnormal");
 			expect(topBlocks(rendered.container)).toEqual(["blockquote", "p"]);
-			rendered.unmount();
-		});
-
-		it(`${mode}：有序列表里换行切出新条目，空条目上再换行退出列表`, async () => {
-			const rendered = await renderEditor("1. first", shiftEnterToSend);
-			await focusEditor(rendered.editorElement);
-
-			await pressKey(rendered.editorElement, "Enter", newlineKey);
-			expect(rendered.container.querySelectorAll("li")).toHaveLength(2);
-			await typeText(rendered.editor, "second");
-			expect(rendered.draft()).toBe("1. first\n2. second");
-
-			// 再换行出一个空条目，然后在空条目上换行：退出列表，已写的条目留在原地
-			await pressKey(rendered.editorElement, "Enter", newlineKey);
-			expect(rendered.container.querySelectorAll("li")).toHaveLength(3);
-			await pressKey(rendered.editorElement, "Enter", newlineKey);
-			expect(rendered.container.querySelectorAll("li")).toHaveLength(2);
-			expect(topBlocks(rendered.container)).toEqual(["ol", "p"]);
-			expect(rendered.draft().startsWith("1. first\n2. second")).toBe(true);
 			rendered.unmount();
 		});
 	}
@@ -832,18 +821,6 @@ describe("块级结构换行", () => {
 		await pressKey(rendered.editorElement, "Backspace");
 		expect(rendered.container.querySelector("blockquote")).toBeNull();
 		expect(topBlocks(rendered.container)).toEqual(["p"]);
-		rendered.unmount();
-	});
-
-	it("空的列表项在开头退格会变回普通段落", async () => {
-		const rendered = await renderEditor("1. first", false);
-		await focusEditor(rendered.editorElement);
-		// 换行出来的第二项是空的，在它开头退格应当退出列表
-		await pressKey(rendered.editorElement, "Enter", { shiftKey: true });
-		expect(rendered.container.querySelectorAll("li")).toHaveLength(2);
-		await pressKey(rendered.editorElement, "Backspace");
-		expect(rendered.container.querySelectorAll("li")).toHaveLength(1);
-		expect(topBlocks(rendered.container)).toEqual(["ol", "p"]);
 		rendered.unmount();
 	});
 });
@@ -1080,39 +1057,6 @@ describe("命令式句柄", () => {
 		await typeText(rendered.editor, "!");
 		expect(rendered.draft()).toBe("一段草稿!");
 		rendered.unmount();
-	});
-});
-
-describe("探针", () => {
-	it("backspace 行为", async () => {
-		const commands: SlashCommand[] = [
-			{ name: "review", description: "审查改动", source: "skill", handler: "pi" },
-		] as SlashCommand[];
-		const onChange = vi.fn();
-		const { container, editor, unmount } = await renderComposer({ value: "/rev", commands, onChange });
-		await focusEditor(editor);
-		console.log("panel open:", container.querySelector('[role="listbox"]') !== null);
-		await pressKey(editor, "Enter");
-		await act(async () => {});
-		console.log("editor text:", JSON.stringify(editor.textContent));
-		console.log(
-			"after enter:",
-			JSON.stringify(onChange.mock.calls),
-			container.querySelector(".composer-command")?.outerHTML,
-		);
-		await pressKey(editor, "Backspace");
-		console.log(
-			"after bs1:",
-			JSON.stringify(onChange.mock.calls),
-			container.querySelector(".composer-command")?.outerHTML,
-		);
-		await pressKey(editor, "Backspace");
-		console.log(
-			"after bs2:",
-			JSON.stringify(onChange.mock.calls),
-			container.querySelector(".composer-command")?.outerHTML,
-		);
-		unmount();
 	});
 });
 
@@ -1406,6 +1350,77 @@ describe("已发消息的历史回溯", () => {
 		// 高亮动了，历史没被翻出来
 		expect(rendered.draft()).toBe("/");
 		expect(rendered.container.querySelector(".cmd-row.is-on")?.textContent).not.toBe(before);
+		rendered.unmount();
+	});
+});
+
+describe("路线 B：提示词源码优先", () => {
+	/** 一段典型的手写提示词：只有代码块是真结构件，其余都该原样留在屏幕上 */
+	const PROMPT = [
+		"## 标题",
+		"1. **加粗**",
+		"`layout-contract.ts`",
+		"- 列表项",
+		"```ts",
+		"const a = 1;",
+		"```",
+	].join("\n");
+
+	it("`⌘/Ctrl+B` 这类格式命令被吃掉，草稿里不出现星号", async () => {
+		const rendered = await renderEditor("普通文字", false);
+		await focusEditor(rendered.editorElement);
+
+		const handled = await act(async () => rendered.editor.dispatchCommand(FORMAT_TEXT_COMMAND, "bold"));
+		// 命令被接管：默认的加粗不会发生
+		expect(handled).toBe(true);
+		expect(rendered.draft()).toBe("普通文字");
+		const formats = rendered.editor.getEditorState().read(() =>
+			$getRoot()
+				.getAllTextNodes()
+				.map((node) => node.getFormat()),
+		);
+		expect(formats.every((format) => format === 0)).toBe(true);
+		rendered.unmount();
+	});
+
+	it("粘贴带 Markdown 记号的提示词：原样展示，草稿逐字符一致", async () => {
+		const rendered = await renderEditor("", false);
+		await focusEditor(rendered.editorElement);
+
+		// jsdom 没有真的剪贴板事件，按插件读到的那几个字段造一个
+		let prevented = false;
+		const event = {
+			clipboardData: { files: [], getData: () => PROMPT },
+			preventDefault: () => {
+				prevented = true;
+			},
+		} as unknown as ClipboardEvent;
+		await act(async () => {
+			rendered.editor.dispatchCommand(PASTE_COMMAND, event);
+		});
+		expect(prevented).toBe(true);
+		expect(rendered.draft()).toBe(PROMPT);
+		// 粘贴和"切会话恢复"走同一套解析：围栏是代码块，其余四行是原文
+		expect(topBlocks(rendered.container)).toEqual(["p", "p", "p", "p", "code"]);
+		rendered.unmount();
+	});
+
+	it("切会话铺回来的草稿只有代码块是结构件，其余是原文", async () => {
+		const rendered = await renderEditor(PROMPT, false);
+		// 顶层块：四个普通段落 + 一个代码块
+		expect(topBlocks(rendered.container)).toEqual(["p", "p", "p", "p", "code"]);
+		expect(rendered.draft()).toBe(PROMPT);
+		expect(rendered.draft()).not.toContain("\\");
+		rendered.unmount();
+	});
+
+	it("`↑` 回填的历史消息也按原文铺开", async () => {
+		const rendered = await renderEditor("", false, { sentHistory: [PROMPT] });
+		await focusEditor(rendered.editorElement);
+
+		await pressKey(rendered.editorElement, "ArrowUp");
+		expect(rendered.draft()).toBe(PROMPT);
+		expect(topBlocks(rendered.container)).toEqual(["p", "p", "p", "p", "code"]);
 		rendered.unmount();
 	});
 });

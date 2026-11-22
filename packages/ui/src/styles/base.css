@@ -125,11 +125,11 @@
 	--composer-padding-left: 16px;
 	--composer-font-size: var(--text-body);
 	--composer-line-height: 1.6;
-	/* 输入区富文本的缩进：引用块竖线到正文、列表标记到条目文字，以及行内代码的左右留白 */
+	/* 输入区富文本的缩进：引用块竖线到正文的距离，以及那条竖线自身的宽度 */
 	--composer-quote-inset: 10px;
 	--composer-quote-rule: 2px;
-	--composer-list-indent: 24px;
-	--composer-inline-code-padding-x: 3px;
+	/* 两枚胶囊的左右内边距：`@文件` 与 `/命令` 共用一份几何 */
+	--composer-chip-padding-x: 3px;
 	/* 工具结果里的图片：收起时的最大高度，与多张之间的间距 */
 	--tool-image-height: 320px;
 	--tool-image-gap: 8px;

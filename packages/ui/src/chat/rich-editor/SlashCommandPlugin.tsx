@@ -58,7 +58,7 @@ export function slashTrigger(textBeforeCursor: string): MenuTextMatch | null {
 }
 
 /**
- * 光标是不是停在「能打命令」的那一处：文档第一段的第一个子节点里、且不是行内代码。
+ * 光标是不是停在「能打命令」的那一处：文档第一段的第一个子节点里。
  *
  * 第一个子节点是胶囊（已经选过一条命令）时也不成立：那时候光标在胶囊后面的空白里，
  * 再弹一次面板只会让人以为能连着选两条命令。
@@ -72,8 +72,8 @@ function $caretAtCommandStart(): boolean {
 		return false;
 	}
 	const node = selection.anchor.getNode();
-	// 行内代码里的 `/` 是命令行或路径
-	if (!$isTextNode(node) || node.hasFormat("code") || node.getPreviousSibling() !== null) {
+	// `/` 得是这一段的第一截文字：前面已经有内容时它只是正文里的斜杠
+	if (!$isTextNode(node) || node.getPreviousSibling() !== null) {
 		return false;
 	}
 	const paragraph = node.getParent();

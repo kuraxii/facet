@@ -136,11 +136,10 @@
 	pointer-events: none;
 }
 
-/* 富文本结构：段落、引用块、列表与代码都不带外边距，行距全由输入域给 */
+/* 富文本结构：段落、引用块与代码块都不带外边距，行距全由输入域给 */
 .composer-paragraph,
 .composer-quote,
-.composer-code-block,
-.composer-list {
+.composer-code-block {
 	margin: 0;
 }
 
@@ -151,16 +150,7 @@
 	color: var(--fg-muted);
 }
 
-/*
- * 列表：标记画在条目外侧，由左内边距腾出位置。输入域自己是 `padding: 0`，
- * 所以这段留白只能给在这里，而且得留够——两位数的 `10.` 也要完整露出来。
- */
-.composer-list {
-	padding-left: var(--composer-list-indent);
-	list-style-position: outside;
-}
-
-/* 代码块与行内代码只求可读：等宽字体，行内代码压一档底色 */
+/* 代码块只求可读：等宽字体、行距跟着代码那一档走 */
 .composer-code-block {
 	display: block;
 	font-family: var(--font-mono);
@@ -170,28 +160,13 @@
 	tab-size: 4;
 }
 
-.composer-inline-code {
-	padding: 0 var(--composer-inline-code-padding-x);
-	border-radius: var(--radius-sm);
-	background: var(--bg-elevated);
-	color: var(--fg-muted);
-	font-family: var(--font-mono);
-	/* 与 Markdown 里的行内代码同一份缩放比例（相对输入域字号，13px 那档） */
-	font-size: var(--text-code-inline);
-}
-
-.composer-link {
-	color: var(--accent-fg);
-	text-decoration: underline;
-}
-
 /*
  * 两枚胶囊共用的几何：一个原子 token，整块选中、整块删除，里面不许断行。
  * `@文件` 与 `/命令` 只在底色上分开——都是「草稿里的一枚整体」，尺寸不该有第二套。
  */
 .composer-mention,
 .composer-command {
-	padding: 0 var(--composer-inline-code-padding-x);
+	padding: 0 var(--composer-chip-padding-x);
 	border-radius: var(--radius-sm);
 	color: var(--accent-fg);
 	font-size: calc(var(--composer-font-size) - 1px);

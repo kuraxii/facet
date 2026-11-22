@@ -13,7 +13,7 @@
 import type { SlashCommand } from "@facet/protocol";
 import { $isCodeNode } from "@lexical/code";
 import { PrismTokenizer, registerCodeHighlighting } from "@lexical/code-prism";
-import { $isListItemNode } from "@lexical/list";
+import { $generateNodesFromMarkdownString } from "@lexical/markdown";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
@@ -24,7 +24,6 @@ import {
 	HistoryPlugin,
 	type HistoryState,
 } from "@lexical/react/LexicalHistoryPlugin";
-import { ListPlugin } from "@lexical/react/LexicalListPlugin";
 import { MarkdownShortcutPlugin } from "@lexical/react/LexicalMarkdownShortcutPlugin";
 import { OnChangePlugin } from "@lexical/react/LexicalOnChangePlugin";
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
@@ -44,7 +43,7 @@ import {
 	COMMAND_PRIORITY_HIGH,
 	COMMAND_PRIORITY_LOW,
 	COMMAND_PRIORITY_NORMAL,
-	INSERT_PARAGRAPH_COMMAND,
+	FORMAT_TEXT_COMMAND,
 	KEY_ARROW_DOWN_COMMAND,
 	KEY_ARROW_UP_COMMAND,
 	KEY_BACKSPACE_COMMAND,
@@ -82,6 +81,8 @@ import { $createFileMentionNode } from "./file-mention-node.ts";
 import {
 	$exportComposerMarkdown,
 	$importComposerMarkdown,
+	$restoreFileMentions,
+	$restoreSlashCommands,
 	CHAT_TRANSFORMERS,
 	COMPOSER_NODES,
 	COMPOSER_THEME,
@@ -241,22 +242,12 @@ function $handleQuoteNewline(quote: QuoteNode, selection: RangeSelection): void 
 }
 
 /**
- * 换行键位上落在列表或引用里的块级处理。
+ * 换行键位上落在引用里的块级处理：续一行，或者站在末尾空行上退出引用。
  *
- * 列表项里应当是「切出新条目」而不是插入一个空行：插入段落那条命令会拆开当前条目，
- * 在空条目上按则退出列表回到普通段落（`ListPlugin` 与核心各接一段）。
  * 返回 false 表示这一下交给编辑器默认行为。
  */
-function $newlineInBlock(editor: LexicalEditor): boolean {
-	const selection = $getSelection();
-	if (!$isRangeSelection(selection) || !selection.isCollapsed()) {
-		return false;
-	}
-	const anchorNode = selection.anchor.getNode();
-	if ($nearestAncestor(anchorNode, $isListItemNode) !== null) {
-		return editor.dispatchCommand(INSERT_PARAGRAPH_COMMAND, undefined);
-	}
-	const quote = $nearestAncestor(anchorNode, $isQuoteNode);
+function $newlineInBlock(selection: RangeSelection): boolean {
+	const quote = $nearestAncestor(selection.anchor.getNode(), $isQuoteNode);
 	if (quote === null) {
 		return false;
 	}
@@ -354,8 +345,12 @@ function KeyboardPlugin({
 						}
 						return true;
 					}
-					// 换行键位落在列表或引用里：按块级结构处理，而不是插一个空行
-					if ($newlineInBlock(editor)) {
+					// 换行键位落在引用里：续一行或退出引用，而不是插一个空行
+					const selection = $getSelection();
+					if (!$isRangeSelection(selection) || !selection.isCollapsed()) {
+						return false;
+					}
+					if ($newlineInBlock(selection)) {
 						event.preventDefault();
 						return true;
 					}
@@ -375,8 +370,7 @@ function KeyboardPlugin({
 						return false;
 					}
 					const quote = $nearestAncestor(selection.anchor.getNode(), $isQuoteNode);
-					// 空的引用块在开头退格：退化成普通段落。列表项同一步由 `ListPlugin` 做，
-					// 它注册在编辑器队列的最前面，这里不抢。
+					// 空的引用块在开头退格：退化成普通段落
 					if (quote === null || quote.getTextContent().trim().length > 0) {
 						return false;
 					}
@@ -386,7 +380,6 @@ function KeyboardPlugin({
 					paragraph.selectStart();
 					return true;
 				},
-				// 低优先级：列表自己的退格处理在编辑器队列里，本处理器只管引用
 				COMMAND_PRIORITY_LOW,
 			),
 			editor.registerCommand<KeyboardEvent>(
@@ -409,6 +402,13 @@ function KeyboardPlugin({
 				},
 				COMMAND_PRIORITY_HIGH,
 			),
+			/*
+			 * 行内样式不在输入区的语法范围里：`⌘/Ctrl+B`、`⌘/Ctrl+I`、`⌘/Ctrl+U` 与任何走
+			 * `FORMAT_TEXT_COMMAND` 的路径都在这里吃掉（返回 true 表示已处理）。文字不会变粗，
+			 * 草稿里也就不会出现"只有样式、没有字符"的那层格式——输入区显示的就是要发出去的
+			 * 原文，切会话铺回来也还是它。
+			 */
+			editor.registerCommand(FORMAT_TEXT_COMMAND, () => true, COMMAND_PRIORITY_HIGH),
 		);
 	}, [editor, isTypeaheadOpen]);
 
@@ -423,7 +423,7 @@ interface LineEdges {
 	last: boolean;
 }
 
-/** 直接挂在根下的那个块：段落、列表、引用、代码块各自算一个。 */
+/** 直接挂在根下的那个块：段落、引用、代码块各算一个。 */
 function $topLevelBlock(node: LexicalNode): LexicalNode | null {
 	let current: LexicalNode | null = node;
 	while (current !== null) {
@@ -718,30 +718,43 @@ function pastedData(event: PasteCommandType): DataTransfer | null {
 	return event.clipboardData ?? null;
 }
 
-/** 把一段纯文本按行铺进光标处，每行一个段落。 */
-function $insertPlainText(text: string): void {
-	const lines = text.replace(/\r\n?/g, "\n").split("\n");
-	$insertNodes(
-		lines.map((line) => {
-			const paragraph = $createParagraphNode();
-			if (line.length > 0) {
-				paragraph.append($createTextNode(line));
-			}
-			return paragraph;
-		}),
-	);
+/**
+ * 把一段纯文本铺进光标处。
+ *
+ * 走的是和"切会话恢复草稿"同一个解析器：四类结构件（围栏代码块、引用块、`@文件`、`/命令`）
+ * 该长成什么样就长成什么样，其余字符原样留着。这样贴一段提示词进来、把光标移走再切回来，
+ * 两次看到的是同一份东西——粘贴不该是唯一一条"只当文字"的岔路。
+ */
+function $insertPastedText(
+	text: string,
+	files: ReadonlySet<string>,
+	knownCommands: ReadonlySet<string>,
+): void {
+	// 先把 Windows 换行归一：导入侧按 `\n` 切行，留着 `\r` 会跑进正文
+	const nodes = $generateNodesFromMarkdownString(text.replace(/\r\n?/g, "\n"), CHAT_TRANSFORMERS, true);
+	$insertNodes(nodes);
+	$restoreSlashCommands(knownCommands);
+	$restoreFileMentions(files);
 }
 
 /**
- * 纯文本粘贴。
+ * 粘贴。
  *
- * 从浏览器或文档里复制的内容带着字号、背景色、行内样式，直接落进编辑器会把输入区染得
- * 花花绿绿；输入区只认自己的样式，所以一律按纯文本插入。
+ * 只取剪贴板里的 `text/plain`：从浏览器或文档里复制的内容带着字号、背景色、行内样式，
+ * 直接落进编辑器会把输入区染得花花绿绿；输入区只认自己的样式。
  *
  * 剪贴板里有文件时什么都不做：图片附件的入口在输入区容器上（拖拽与粘贴都走同一处），
  * 编辑器不该把图片当文字吃掉。
  */
-function PlainPastePlugin(): null {
+function PlainPastePlugin({
+	files,
+	knownCommands,
+}: {
+	/** 已知文件：贴进来的 `@路径` 命中它们时落成胶囊，与恢复草稿同一套判定 */
+	files: ReadonlySet<string>;
+	/** 已知命令：贴进来的文首 `/命令` 命中它们时落成胶囊 */
+	knownCommands: ReadonlySet<string>;
+}): null {
 	const [editor] = useLexicalComposerContext();
 
 	useEffect(() => {
@@ -757,12 +770,12 @@ function PlainPastePlugin(): null {
 					return false;
 				}
 				event.preventDefault();
-				$insertPlainText(text);
+				$insertPastedText(text, files, knownCommands);
 				return true;
 			},
 			COMMAND_PRIORITY_NORMAL,
 		);
-	}, [editor]);
+	}, [editor, files, knownCommands]);
 
 	return null;
 }
@@ -885,8 +898,6 @@ export function ComposerEditor({
 			/>
 			{/* 撤销栈按草稿分开：切走再切回来，还能接着撤销自己那一份 */}
 			<HistoryPlugin externalHistoryState={historyState} />
-			{/* 列表的拆分、序号递增与空项退出都由它接：少了它，回车只会往条目里插空行 */}
-			<ListPlugin />
 			<CodeHighlightPlugin />
 			<MarkdownShortcutPlugin transformers={CHAT_TRANSFORMERS} />
 			<OnChangePlugin
@@ -907,7 +918,7 @@ export function ComposerEditor({
 				knownCommands={knownCommands}
 				isTypeaheadOpen={isTypeaheadOpen}
 			/>
-			<PlainPastePlugin />
+			<PlainPastePlugin files={files} knownCommands={knownCommands} />
 			{mentionFiles.length === 0 ? null : (
 				<FileMentionPlugin
 					files={mentionFiles}

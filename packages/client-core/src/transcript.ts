@@ -46,16 +46,31 @@ export interface ToolCallPart {
 	images: readonly ToolImage[];
 }
 
-/** 工具结果里的一张图片。 */
-export interface ToolImage {
+/** 一张图片:base64 数据与媒体类型,消息与工具结果共用这一形状。 */
+export interface MessageImage {
 	/** base64 编码的图片数据 */
 	data: string;
 	/** 媒体类型,例如 image/png */
 	mimeType: string;
 }
 
+/** 工具结果里的一张图片。 */
+export type ToolImage = MessageImage;
+
+/**
+ * 消息里的一张图片。
+ *
+ * 用户随消息发出的截图、模型直接给出的图片都在这里。数据本来就是消息的一部分,渲染侧拼成
+ * `data:` URL 即可,不必另开字段或走网络。
+ */
+export interface ImagePart extends MessageImage {
+	kind: "image";
+	/** 单元内的稳定标识 */
+	partId: string;
+}
+
 /** 渲染单元里的一段内容。 */
-export type Part = TextPart | ThinkingPart | ToolCallPart;
+export type Part = TextPart | ThinkingPart | ImagePart | ToolCallPart;
 
 /** 一项渲染单元。 */
 export interface TranscriptItem {
@@ -112,6 +127,9 @@ function blockPart(block: ContentBlock | InputBlock, index: number): Part | unde
 	if (block.type === "thinking") {
 		return { kind: "thinking", partId: `thinking:${index}`, text: block.thinking };
 	}
+	if (block.type === "image") {
+		return { kind: "image", partId: `image:${index}`, data: block.data, mimeType: block.mimeType };
+	}
 	return undefined;
 }
 
@@ -149,17 +167,15 @@ function streamParts(streaming: Readonly<Record<number, StreamedPart>>): Part[] 
 	);
 }
 
-/** 用户消息的正文段。图片没有可读文本,占一个标记。 */
+/** 用户消息的正文段:文本按原样,图片单独成段,顺序跟内容块一致。 */
 function userParts(entryView: EntryView): Part[] {
 	const message = entryView.message;
 	if (message === undefined || message.role !== "user") {
 		return [];
 	}
-	return message.content.map((block, index) =>
-		block.type === "text"
-			? { kind: "text" as const, partId: `text:${index}`, text: block.text }
-			: { kind: "text" as const, partId: `text:${index}`, text: `[Image ${block.mimeType}]` },
-	);
+	return message.content
+		.map((block, index) => blockPart(block, index))
+		.filter((part): part is Part => part !== undefined);
 }
 
 /** 没有对应工具视图的一段调用。 */

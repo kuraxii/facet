@@ -184,7 +184,9 @@ describe("错误卡片", () => {
 		endedAt: 2,
 	};
 
-	function renderWithActions(onRetryTurn: (entryId: string, text: string) => void): string {
+	function renderWithActions(
+		onRetryTurn: (entryId: string, text: string, images: readonly { data: string }[]) => void,
+	): string {
 		return renderToStaticMarkup(
 			createElement(ChatTranscript, {
 				items: [userItem("e:u1", "u1", "帮我看下日志"), errorItem],

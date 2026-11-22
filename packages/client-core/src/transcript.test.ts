@@ -131,6 +131,42 @@ describe("toTranscript", () => {
 		});
 	});
 
+	it("用户消息里的图片单独成段,顺序跟内容块一致", () => {
+		const items = toTranscript(
+			viewWith([
+				historyItem("u1", {
+					role: "user",
+					content: [
+						{ type: "text", text: "看这两张" },
+						{ type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" },
+						{ type: "image", data: "AAAAIGZ0", mimeType: "image/jpeg" },
+					],
+					timestamp: 1,
+				}),
+			]),
+		);
+		expect(items[0]?.parts).toEqual([
+			{ kind: "text", partId: "text:0", text: "看这两张" },
+			{ kind: "image", partId: "image:1", data: "iVBORw0KGgo=", mimeType: "image/png" },
+			{ kind: "image", partId: "image:2", data: "AAAAIGZ0", mimeType: "image/jpeg" },
+		]);
+	});
+
+	it("助手消息里的图片也照原位置成段", () => {
+		const items = toTranscript(
+			viewWith([
+				historyItem(
+					"a1",
+					assistant([
+						{ type: "text", text: "画好了" },
+						{ type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" },
+					]),
+				),
+			]),
+		);
+		expect(items[0]?.parts.map((part) => part.kind)).toEqual(["text", "image"]);
+	});
+
 	it("工具结果里的结构化信息透传到工具段", () => {
 		const patch = "--- a/x.ts\n+++ b/x.ts\n@@\n-old\n+next";
 		const items = toTranscript(

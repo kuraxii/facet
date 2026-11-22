@@ -4,7 +4,7 @@
  * 草稿与图片都存在本端，发送之后由主机确认再收；命令与文字分开处理，图形界面有对应
  * 入口的命令就地执行，不当消息发出去。
  */
-import type { HostHandshake, SessionClient, SessionView } from "@facet/client-core";
+import type { HostHandshake, MessageImage, SessionClient, SessionView } from "@facet/client-core";
 import type { SlashCommand, ThinkingLevel } from "@facet/protocol";
 import { parseCommand, useI18n } from "@facet/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -33,6 +33,11 @@ export interface DraftImage {
 
 /** 没有待发图片时用的空列表，避免每帧新建数组 */
 const EMPTY_IMAGES: readonly DraftImage[] = [];
+
+/** 从历史消息还原的图片没有原始文件名，按媒体类型编一个：扩展名与内容对得上就行。 */
+function restoredImageName(mimeType: string): string {
+	return `restored.${mimeType.slice(mimeType.indexOf("/") + 1)}`;
+}
 
 /** 生成一张待发图片的标识。 */
 function draftImageId(): string {
@@ -105,10 +110,10 @@ export interface Composer {
 	removeImage: (id: string) => void;
 	/** 跑一条界面自己处理的命令，返回是否认领 */
 	runFacetCommand: (name: string, args: string) => boolean;
-	/** 回退到某条用户消息之前 */
-	revertTo: (entryId: string, text: string) => void;
-	/** 重试失败的一轮 */
-	retryTurn: (entryId: string, text: string) => void;
+	/** 回退到某条用户消息之前，文本与图片一起放回输入区 */
+	revertTo: (entryId: string, text: string, images: readonly MessageImage[]) => void;
+	/** 重试失败的一轮，图片跟着一起重发 */
+	retryTurn: (entryId: string, text: string, images: readonly MessageImage[]) => void;
 }
 
 export function useComposer(options: ComposerOptions): Composer {
@@ -415,16 +420,48 @@ export function useComposer(options: ComposerOptions): Composer {
 	}, [clearImages, client, updateDraft]);
 
 	/**
-	 * 回退到某条用户消息之前：把这条消息的文本放回输入框。
+	 * 把一条已有消息里的图片放回输入区。
+	 *
+	 * 回退与重试都要用：图片本来就在消息里（base64），拼回 `Blob` 就能走与选图窗口同一条路，
+	 * 预览地址是 objectURL，与手动添加的附件没有区别。
+	 */
+	const restoreImages = useCallback(
+		(images: readonly MessageImage[]) => {
+			if (images.length === 0) {
+				return;
+			}
+			const restored: DraftImage[] = images.map((image) => {
+				const blob = blobFromBase64(image.data, image.mimeType);
+				return {
+					id: draftImageId(),
+					name: restoredImageName(image.mimeType),
+					mimeType: image.mimeType,
+					blob,
+					previewUrl: URL.createObjectURL(blob),
+				};
+			});
+			setDraftImages((current) => {
+				const next = new Map(current);
+				next.set(draftKey, [...(next.get(draftKey) ?? []), ...restored]);
+				return next;
+			});
+			setImageNotice(undefined);
+		},
+		[draftKey],
+	);
+
+	/**
+	 * 回退到某条用户消息之前：把这条消息的文本与图片放回输入框。
 	 *
 	 * 回退在同一个会话里改分支指针，不新建会话；历史由主机推的 chat/branchMoved 触发重装。
 	 */
 	const revertTo = useCallback(
-		(entryId: string, text: string) => {
+		(entryId: string, text: string, images: readonly MessageImage[]) => {
 			client.revert(entryId);
 			updateDraft(() => text);
+			restoreImages(images);
 		},
-		[client, updateDraft],
+		[client, restoreImages, updateDraft],
 	);
 
 	/**
@@ -434,13 +471,20 @@ export function useComposer(options: ComposerOptions): Composer {
 	 * 的那次调用留在原会话里，不会重复追加。
 	 */
 	const retryTurn = useCallback(
-		(entryId: string, text: string) => {
+		(entryId: string, text: string, images: readonly MessageImage[]) => {
 			withTrust(session?.state.cwd, () => {
 				runSessionAction(
 					async () => (await client.fork(entryId)).file,
 					() => {
 						updateDraft(() => text);
-						client.send(text);
+						// 图片按消息里的原样重发：只发文字等于把用户当初的截图丢了
+						client.send(text, {
+							images: images.map((image) => ({
+								type: "image" as const,
+								data: image.data,
+								mimeType: image.mimeType,
+							})),
+						});
 					},
 				);
 			});

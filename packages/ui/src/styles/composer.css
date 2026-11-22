@@ -121,12 +121,21 @@
 	outline: 0;
 }
 
+/*
+ * 输入域外面这一圈：只做定位基准，不画任何东西。
+ *
+ * 占位提示绝对定位到它身上，所以上面有缩略图、有提示行时，占位跟着输入域一起下移，不会压在图上。
+ */
+.composer-input {
+	position: relative;
+}
+
 /* 占位符贴在输入域首行的同一处，绝对定位免得它参与高度计算 */
 .composer-placeholder {
 	position: absolute;
-	top: var(--composer-padding-top);
-	right: var(--composer-padding-right);
-	left: var(--composer-padding-left);
+	top: 0;
+	right: 0;
+	left: 0;
 	overflow: hidden;
 	color: var(--fg-subtle);
 	font-size: var(--composer-font-size);
@@ -271,25 +280,44 @@
 	cursor: zoom-in;
 }
 
-/* 移除按钮贴在缩略图右上角，深色底保证在亮图上也能看清 */
+/*
+ * 移除按钮贴在缩略图右上角。
+ *
+ * 平时不出现：指针没落在缩略图上时它是一块看不见的区域，留在那里只会让人误点，所以连指针事件
+ * 一起关掉。指针移到缩略图上、或者键盘把焦点移到它身上时才显示（`opacity` 为 0 时仍能聚焦，
+ * 键盘用户照样按得到）。
+ *
+ * 底色用不透明的 `--bg-elevated` 加一圈 1px 描边：压在亮图、暗图上都看得清，不再靠半透明遮罩；
+ * 悬停换到同样不透明的 `--bg-surface`。
+ */
 .att-x {
 	position: absolute;
-	top: 2px;
-	right: 2px;
+	top: var(--space-1);
+	right: var(--space-1);
 	display: grid;
 	place-items: center;
 	width: var(--attach-remove-size);
 	height: var(--attach-remove-size);
 	padding: 0;
-	border: 0;
+	border: 1px solid var(--border-default);
 	border-radius: var(--radius-pill);
-	background: rgb(0 0 0 / 55%);
+	background: var(--bg-elevated);
 	color: var(--fg-default);
 	cursor: pointer;
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity var(--dur-fast) var(--ease-standard);
+}
+
+.att:hover .att-x,
+.att-x:focus-visible {
+	opacity: 1;
+	pointer-events: auto;
 }
 
 .att-x:hover {
-	background: rgb(0 0 0 / 75%);
+	/* 悬停也留在不透明的一档上：`--bg-hover` / `--bg-active` 是带透明的混色，压在图上会透过去 */
+	background: var(--bg-surface);
 }
 
 /* 有图片没被收下时的一行事实：文件名与大小上限，放在图片下方 */

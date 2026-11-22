@@ -334,26 +334,29 @@ export function Composer({
 				</div>
 			)}
 			{attachmentNotice === undefined ? null : <p className="composer-note">{attachmentNotice}</p>}
-			<ComposerEditor
-				handleRef={handleRef}
-				mentionFiles={mentionFiles}
-				commands={commands}
-				onRunCommand={onRunCommand}
-				draftKey={draftKey}
-				onOpenMentionFile={onOpenMentionFile}
-				sentHistory={sentHistory}
-				menuContainerRef={boxRef}
-				value={value}
-				placeholder={
-					isQueuing
-						? t("composer.queuedPlaceholder")
-						: sendsOnEnter
-							? t("composer.sendPlaceholder")
-							: t("composer.shiftEnterPlaceholder")
-				}
-				onChange={onChange}
-				routes={{ canSend, shiftEnterToSend, onSend }}
-			/>
+			{/* 输入域外面这一圈只管定位：占位提示按它的上缘对齐，图片多了也不会盖到缩略图上 */}
+			<div className="composer-input">
+				<ComposerEditor
+					handleRef={handleRef}
+					mentionFiles={mentionFiles}
+					commands={commands}
+					onRunCommand={onRunCommand}
+					draftKey={draftKey}
+					onOpenMentionFile={onOpenMentionFile}
+					sentHistory={sentHistory}
+					menuContainerRef={boxRef}
+					value={value}
+					placeholder={
+						isQueuing
+							? t("composer.queuedPlaceholder")
+							: sendsOnEnter
+								? t("composer.sendPlaceholder")
+								: t("composer.shiftEnterPlaceholder")
+					}
+					onChange={onChange}
+					routes={{ canSend, shiftEnterToSend, onSend }}
+				/>
+			</div>
 			<div className="composer-row">
 				<div className="chip-wrap" ref={attachRef}>
 					<IconButton

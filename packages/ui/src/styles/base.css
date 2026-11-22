@@ -115,8 +115,6 @@
 	--composer-quote-rule: 2px;
 	--composer-list-indent: 24px;
 	--composer-inline-code-padding-x: 3px;
-	/* 聚焦时外面那圈光晕：与 `:focus-visible` 的描边同一种强调色 */
-	--focus-ring: 0 0 0 3px color-mix(in srgb, var(--border-focus) 22%, transparent);
 	/* 工具结果里的图片：收起时的最大高度，与多张之间的间距 */
 	--tool-image-height: 320px;
 	--tool-image-gap: 8px;

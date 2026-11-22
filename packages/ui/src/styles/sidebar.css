@@ -15,7 +15,7 @@
 	border-right: 1px solid var(--line);
 	background: var(--sb);
 	overflow: hidden;
-	transition: background-color var(--dur-fast) var(--ease);
+	transition: background-color var(--dur-fast) var(--ease-standard);
 }
 
 /*
@@ -105,7 +105,7 @@
 	color: var(--on-acc);
 	font-size: 13px;
 	font-weight: 500;
-	transition: filter var(--dur-fast) var(--ease);
+	transition: filter var(--dur-fast) var(--ease-standard);
 }
 
 .sb-new:hover:not(:disabled) {
@@ -138,9 +138,9 @@
 	font-size: 12.5px;
 	text-align: left;
 	transition:
-		border-color var(--dur-fast) var(--ease),
-		background-color var(--dur-fast) var(--ease),
-		color var(--dur-fast) var(--ease);
+		border-color var(--dur-fast) var(--ease-standard),
+		background-color var(--dur-fast) var(--ease-standard),
+		color var(--dur-fast) var(--ease-standard);
 }
 
 .sb-filter-btn:hover,
@@ -185,7 +185,7 @@
 	background: var(--bg);
 	color: var(--t3);
 	font-size: 12.5px;
-	transition: border-color var(--dur-fast) var(--ease);
+	transition: border-color var(--dur-fast) var(--ease-standard);
 }
 
 .sb-search:focus-within {
@@ -433,8 +433,8 @@
 	font-size: 13px;
 	text-align: left;
 	transition:
-		background-color var(--dur-fast) var(--ease),
-		color var(--dur-fast) var(--ease);
+		background-color var(--dur-fast) var(--ease-standard),
+		color var(--dur-fast) var(--ease-standard);
 }
 
 .sb-row:hover:not(:disabled):not(.is-active) {
@@ -582,8 +582,8 @@
 	background: transparent;
 	color: var(--t3);
 	transition:
-		background-color var(--dur-fast) var(--ease),
-		color var(--dur-fast) var(--ease);
+		background-color var(--dur-fast) var(--ease-standard),
+		color var(--dur-fast) var(--ease-standard);
 }
 
 .sb-foot-btn.is-icon:hover {
@@ -765,7 +765,7 @@
 	/* 顶部 36px 是抽屉自己的顶头（头部就在里面），所以基类那 4px 上内边距让给顶头 */
 	padding-top: 0;
 	transform: translateX(-100%);
-	transition: transform var(--dur-fast) var(--ease);
+	transition: transform var(--dur-fast) var(--ease-standard);
 }
 
 /*

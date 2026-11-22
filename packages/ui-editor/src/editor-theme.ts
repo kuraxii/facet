@@ -6,6 +6,7 @@
  */
 import type { Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
+import { VISUAL_PX } from "@facet/ui/visual-contract";
 
 /** 从根节点读一个变量的值。 */
 function readVar(name: string, fallback: string): string {
@@ -44,7 +45,7 @@ export function readEditorPalette(): EditorPalette {
 		accent: readVar("--acc", "#fafafa"),
 		selection: readVar("--surface3", "#3f3f46"),
 		raised: readVar("--surface2", "#27272a"),
-		headGap: readVar("--editor-head-gap", "4px"),
+		headGap: readVar("--editor-head-gap", `${VISUAL_PX.editorHeadGap}px`),
 		monoFont: readVar("--font-editor", readVar("--font-mono", "ui-monospace, monospace")),
 		fontSize: readVar("--editor-size", "13px"),
 	};

@@ -14,15 +14,16 @@
 
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { VISUAL_PX } from "./styles/visual-contract.ts";
 
 /** 指针在触发元素上停留这么久才显示，毫秒。 */
 const TIP_DELAY_MS = 500;
 /** 指针离开后留这么久再关，够把指针挪进浮层，毫秒。 */
 const TIP_HIDE_DELAY_MS = 300;
-/** 浮层与触发元素之间的间隙，与 `--tool-tip-gap` 一致。 */
-const TIP_GAP = 6;
-/** 浮层与视口边缘至少留的空白。 */
-const TIP_EDGE = 8;
+/** 浮层与触发元素之间的间隙，与 `--tool-tip-gap` 是同一个数。 */
+const TIP_GAP = VISUAL_PX.popover.tipGap;
+/** 浮层与视口边缘至少留的空白；没有同名变量，值就在契约里。 */
+const TIP_EDGE = VISUAL_PX.popover.tipEdge;
 
 /** 触发元素给出的落点：左右取触发元素的左边，上下取它的上下边。 */
 interface TipAnchor {

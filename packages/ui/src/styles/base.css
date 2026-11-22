@@ -12,10 +12,73 @@
 	/* 编辑器与终端的字体默认跟代码字体，各自可以在设置里单列 */
 	--font-editor: var(--font-mono);
 	--font-terminal: var(--font-mono);
-	/* 正文字号固定；整体大小由窗口缩放控制 */
-	--text-size: 15px;
-	/* 交互动效：极快反馈 120ms，展开折叠 180ms */
-	--ease: cubic-bezier(0.2, 0.6, 0.3, 1);
+	/*
+	 * 视觉刻度：字号、行高、间距、控件高度、圆角与图标。
+	 *
+	 * 真值在 `styles/visual-contract.ts`，两边由 `visual-contract.test.ts` 逐条对齐——这里改一个
+	 * 数字，测试就红。档位数是纪律不是普查结果：新样式只许挑档，不许现编数值。
+	 *
+	 * 配套基准（迁移时照这条判断，别另立规矩）：
+	 * - 零字距微调：层级靠字号与字重（400 / 500 / 600）拉开，不写 `letter-spacing`。
+	 * - 单向下边距：正文与 Markdown 区块只用 `margin-bottom`，首尾由
+	 *   `> :first-child { margin-top: 0 }` 与 `> :last-child { margin-bottom: 0 }` 归零。
+	 * - 6px / 10px 只用于控件内边距，用来凑出 28px / 32px 的整数高度；别处一律走 4px 网格。
+	 *
+	 * 业务样式表按 `docs/visual-system.md` 的顺序分批迁移；迁完之前旧字面量照旧留在原处，
+	 * 各文件的存量数量记在测试的棘轮基线里，只许降不许升。
+	 */
+
+	/* 字号阶梯（6 档，取代 9.5 / 10.5 / 11.5 / 12.5 / 13.5 这些半档） */
+	--text-xs: 12px; /* 辅助信息、元数据、徽标、代码 */
+	--text-ui: 13px; /* 界面外壳：按钮、侧栏行、标签、表头、表单 */
+	--text-body: 14px; /* 内容正文：对话消息、描述、输入区 */
+	--text-title-sm: 16px; /* 小标题、弹窗标题 */
+	--text-title-md: 20px; /* 设置页与区块标题 */
+	--text-title-lg: 26px; /* 主展示标题（空态等） */
+
+	/* 行高：13px 外壳与 14px 正文共用 20px 基线，同一行上的文字底边才对得齐 */
+	--leading-tight: 16px; /* 紧凑计数、脚注 */
+	--leading-ui: 20px; /* 控件、菜单、侧栏、普通正文 */
+	--leading-prose: 24px; /* Markdown 长文阅读区 */
+	--leading-display: 32px; /* 主标题 */
+
+	/* 间距刻度（4px 网格，2px / 6px / 10px 是对齐到像素的半步） */
+	--space-1: 2px; /* 紧邻列表项、页签间隙 */
+	--space-2: 4px;
+	--space-3: 6px; /* 控件内边距半步 */
+	--space-4: 8px; /* 默认同级元素 gap */
+	--space-5: 10px; /* 输入框横向内边距半步 */
+	--space-6: 12px;
+	--space-8: 16px; /* 分区与代码块内边距 */
+	--space-10: 20px;
+	--space-12: 24px; /* 容器级留白 */
+	--space-16: 32px;
+
+	/* 控件高度：由 20px 行高 + 2×纵向内边距 + 2×边框严格推导，不另起数值 */
+	--control-xs: 24px; /* 迷你图标按钮、极紧凑文件树行 */
+	--control-sm: 28px; /* IDE 主力：工具条按钮、图标按钮、侧栏与菜单行 */
+	--control-md: 32px; /* 表单主按钮、输入框、对话框按钮 */
+	--control-lg: 40px; /* 大号按钮、区块标题行 */
+
+	/* 圆角分档（5 档，取代 5 / 7 / 9 / 10 / 14 / 16 / 20px 这些临时值） */
+	--radius-sm: 4px; /* 菜单项、小标签、行内高亮 */
+	--radius-md: 6px; /* 按钮、输入框、代码块、侧栏行 */
+	--radius-lg: 8px; /* 卡片、内联表单、大号按钮、工具提示 */
+	--radius-xl: 12px; /* 菜单容器、输入区、搜索层、对话框 */
+	--radius-pill: 999px; /* 胶囊徽标、圆点 */
+
+	/* 图标尺寸（3 档） */
+	--icon-sm: 12px; /* 徽标、行内状态点 */
+	--icon-md: 14px; /* 侧栏、密集工具条 */
+	--icon-lg: 16px; /* 标准 28 / 32px 图标按钮 */
+
+	/*
+	 * 正文字号固定，整体大小由窗口缩放控制；这一条同时是对话正文、气泡与 Markdown 的唯一入口，
+	 * 改字号只动 `--text-body`，改行高只动 `--leading-prose`。
+	 */
+	--text-size: var(--text-body);
+	/* 交互动效：极快反馈 120ms，展开折叠 180ms；`data-motion="reduced"` 把两者清零 */
+	--ease-standard: cubic-bezier(0.2, 0.6, 0.3, 1);
 	--dur-fast: 120ms;
 	--dur-slow: 180ms;
 	/* 运行中动效的周期：文字呼吸、扫光与状态点共用同一个节拍 */
@@ -718,7 +781,7 @@ body {
 	background: var(--bg);
 	color: var(--t1);
 	font-family: var(--font-sans);
-	font-size: 14px;
+	font-size: var(--text-body);
 	line-height: 1.6;
 	-webkit-font-smoothing: antialiased;
 	user-select: none;

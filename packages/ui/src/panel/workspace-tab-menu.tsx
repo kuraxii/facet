@@ -22,6 +22,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { VISUAL_PX } from "../styles/visual-contract.ts";
 import type { WorkspaceTabId, WorkspaceTabItem } from "./workspace-tab-bar.tsx";
 
 /** `+` 菜单的参数。 */
@@ -38,11 +39,11 @@ export interface WorkspaceTabMenuProps {
 	className?: string;
 }
 
-/** 菜单与窗口边缘的距离（CSS px）；与 `panel.css` 里的 `--workspace-menu-edge` 一致。 */
-const MENU_EDGE = 8;
+/** 菜单与窗口边缘的距离（CSS px）：与 `base.css` 的 `--workspace-menu-edge` 是同一个数。 */
+const MENU_EDGE = VISUAL_PX.popover.menuEdge;
 
-/** 菜单与 `+` 按钮之间的空隙（CSS px），与 `--workspace-menu-offset` 一致。 */
-const MENU_OFFSET = 4;
+/** 菜单与 `+` 按钮之间的空隙（CSS px），与 `--workspace-menu-offset` 是同一个数。 */
+const MENU_OFFSET = VISUAL_PX.popover.menuOffset;
 
 export function WorkspaceTabMenu({
 	items,

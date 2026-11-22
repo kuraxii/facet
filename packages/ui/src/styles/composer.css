@@ -374,8 +374,8 @@
 	background: transparent;
 	color: var(--t3);
 	transition:
-		background-color var(--dur-fast) var(--ease),
-		color var(--dur-fast) var(--ease);
+		background-color var(--dur-fast) var(--ease-standard),
+		color var(--dur-fast) var(--ease-standard);
 }
 
 .ib:hover:not(:disabled),
@@ -403,8 +403,8 @@
 	background: transparent;
 	color: var(--t3);
 	transition:
-		background-color var(--dur-fast) var(--ease),
-		color var(--dur-fast) var(--ease);
+		background-color var(--dur-fast) var(--ease-standard),
+		color var(--dur-fast) var(--ease-standard);
 }
 
 .composer-row .chip:hover:not(:disabled),
@@ -443,7 +443,7 @@
 }
 
 .ctx-ring circle:last-child {
-	transition: stroke-dashoffset var(--dur-fast) var(--ease);
+	transition: stroke-dashoffset var(--dur-fast) var(--ease-standard);
 }
 
 /* 用量浮层：一行数值加一个手动压缩入口，向上展开 */

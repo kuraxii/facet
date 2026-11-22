@@ -16,6 +16,7 @@ import {
 	useState,
 } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { VISUAL_PX } from "../styles/visual-contract.ts";
 import {
 	activeOutlineIndex,
 	createOutlineHoverIntent,
@@ -24,27 +25,21 @@ import {
 	outlineTickMagnification,
 } from "./chat-outline.ts";
 
-/** 正文列的最大宽度，决定竖轨两侧各有多少留白可用。 */
-const CONTENT_MAX_WIDTH = 780;
-
-/** 竖轨到主区左缘的间距，固定值，不随缩放变。 */
-const RAIL_GAP = 8;
-
-/** 竖轨在 100% 缩放下的宽度，实际轨宽按缩放倍数放大。 */
-const RAIL_WIDTH = 36;
-
 /**
  * 算出竖轨的最小可用宽度。
  *
- * 正文列居中之后左右各留 (宽 - 780) / 2，这段留白要放得下竖轨的间距加轨宽，短条才不会压到
- * 正文上。间距是固定值，只有轨宽跟着 `--outline-scale` 放大。
+ * 正文列居中之后左右各留 (宽 - `readingColumnMax`) / 2，这段留白要放得下竖轨的间距加轨宽，
+ * 短条才不会压到正文上。间距是固定值，只有轨宽跟着 `--outline-scale` 放大。
+ *
+ * 两个数与 `--chat-column-max` / `--outline-inset` / `--outline-rail-width` 是同一份真值，
+ * 取自 `VISUAL_PX`，由 `visual-contract.test.ts` 盯着对齐。
  */
 function minHostWidth(): number {
 	const raw = Number.parseFloat(
 		getComputedStyle(document.documentElement).getPropertyValue("--outline-scale"),
 	);
 	const scale = Number.isFinite(raw) && raw > 0 ? raw : 1;
-	return CONTENT_MAX_WIDTH + 2 * (RAIL_GAP + RAIL_WIDTH * scale);
+	return VISUAL_PX.readingColumnMax + 2 * (VISUAL_PX.outlineRail.inset + VISUAL_PX.outlineRail.width * scale);
 }
 
 /** 跳转后这条消息距视口上沿留多少像素，避免贴着顶部。 */

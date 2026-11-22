@@ -248,9 +248,9 @@
 	color: var(--t3);
 	opacity: 0;
 	transition:
-		opacity var(--dur-fast) var(--ease),
-		color var(--dur-fast) var(--ease),
-		background-color var(--dur-fast) var(--ease);
+		opacity var(--dur-fast) var(--ease-standard),
+		color var(--dur-fast) var(--ease-standard),
+		background-color var(--dur-fast) var(--ease-standard);
 }
 
 /* 收尾处的复制默认可见，用户消息上的等整行悬停才出现 */
@@ -285,9 +285,9 @@
 	font-size: 12px;
 	opacity: 0;
 	transition:
-		opacity var(--dur-fast) var(--ease),
-		color var(--dur-fast) var(--ease),
-		background-color var(--dur-fast) var(--ease);
+		opacity var(--dur-fast) var(--ease-standard),
+		color var(--dur-fast) var(--ease-standard),
+		background-color var(--dur-fast) var(--ease-standard);
 }
 
 .row.is-user:hover .revert-btn,
@@ -307,7 +307,7 @@
 	background: var(--surface3);
 	color: var(--t1);
 	font-size: var(--text-size);
-	line-height: 1.4;
+	line-height: var(--leading-prose);
 	white-space: pre-wrap;
 	word-break: break-word;
 }
@@ -346,7 +346,7 @@
 	border-radius: 6px;
 	background: transparent;
 	color: var(--t3);
-	transition: color var(--dur-fast) var(--ease);
+	transition: color var(--dur-fast) var(--ease-standard);
 }
 
 .fork-btn:hover:not(:disabled),

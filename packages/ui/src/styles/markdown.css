@@ -91,7 +91,7 @@
 	border-radius: 6px;
 	background: transparent;
 	color: var(--t3);
-	transition: color var(--dur-fast) var(--ease);
+	transition: color var(--dur-fast) var(--ease-standard);
 	pointer-events: auto;
 }
 
@@ -151,7 +151,7 @@
 
 .mermaid-diagram {
 	transform-origin: 0 0;
-	transition: transform var(--dur-fast) var(--ease);
+	transition: transform var(--dur-fast) var(--ease-standard);
 }
 
 .mermaid-viewport.is-panning .mermaid-diagram {
@@ -201,7 +201,7 @@
 
 .md {
 	font-size: var(--text-size);
-	line-height: 1.4;
+	line-height: var(--leading-prose);
 	word-break: break-word;
 }
 

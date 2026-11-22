@@ -127,7 +127,7 @@
 	width: var(--changes-icon-size);
 	height: var(--changes-icon-size);
 	color: var(--t3);
-	transition: transform var(--dur-fast) var(--ease);
+	transition: transform var(--dur-fast) var(--ease-standard);
 }
 
 .chevron[data-open="true"] {
@@ -293,7 +293,7 @@
 	margin: 8px 12px;
 	border-radius: 6px;
 	background: var(--surface2);
-	animation: changes-loading 1.2s var(--ease) infinite alternate;
+	animation: changes-loading 1.2s var(--ease-standard) infinite alternate;
 }
 
 @keyframes changes-loading {

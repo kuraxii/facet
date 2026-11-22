@@ -10,6 +10,7 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useI18n } from "./i18n/I18nProvider.tsx";
+import { VISUAL_PX } from "./styles/visual-contract.ts";
 
 /** 弹出中的菜单。 */
 interface OpenMenu {
@@ -163,7 +164,7 @@ export function TextMenu({ onCopy, onQuote, quoteScope }: TextMenuProps): React.
 		if (node === null) {
 			return;
 		}
-		const edge = readLength("--text-menu-edge", 4);
+		const edge = readLength("--text-menu-edge", VISUAL_PX.popover.textMenuEdge);
 		const rect = node.getBoundingClientRect();
 		setPlaced({
 			left: Math.max(edge, Math.min(menu.x, window.innerWidth - rect.width - edge)),

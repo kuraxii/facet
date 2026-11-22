@@ -184,6 +184,7 @@ export type {
 export { WorkspaceTabBar } from "./panel/workspace-tab-bar.tsx";
 export type { WorkspaceTabMenuProps } from "./panel/workspace-tab-menu.tsx";
 export { WorkspaceTabMenu } from "./panel/workspace-tab-menu.tsx";
+export { VISUAL_PX, VISUAL_SCALE } from "./styles/visual-contract.ts";
 export type { TextMenuProps } from "./text-menu.tsx";
 export { TextMenu } from "./text-menu.tsx";
 export type { CodeThemeOption, UiThemeOption } from "./theme.ts";

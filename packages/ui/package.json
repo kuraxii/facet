@@ -10,6 +10,7 @@
 		"./styles": "./src/styles/index.css",
 		"./i18n": "./src/i18n/I18nProvider.tsx",
 		"./tip": "./src/tip.tsx",
+		"./visual-contract": "./src/styles/visual-contract.ts",
 		"./markdown": "./src/markdown/Markdown.tsx"
 	},
 	"scripts": {

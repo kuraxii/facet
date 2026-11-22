@@ -7,9 +7,10 @@
 import type { HostHandshake, MessageImage, SessionClient, SessionView } from "@facet/client-core";
 import type { SlashCommand, ThinkingLevel } from "@facet/protocol";
 import { parseCommand, useI18n } from "@facet/ui";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bridge } from "../bridge.ts";
 import { blobFromBase64, encodeImage, IMAGE_MAX_BYTES, IMAGE_MIME_TYPES } from "../image-encode.ts";
+import { createSendGate } from "./send-gate.ts";
 import type { SessionErrorNotice } from "./useSessionLifecycle.ts";
 
 /** 草稿在本地保存的键 */
@@ -92,6 +93,12 @@ export interface Composer {
 	draft: string;
 	/** 当前草稿待发的图片 */
 	pendingImages: readonly DraftImage[];
+	/**
+	 * 有没有一条发送刚刚发出、还没被主机确认（或在编码图片）。
+	 *
+	 * 界面靠它把发送入口锁住：草稿要等回执才收，不锁的话慢回执期间每次点击都是一次新发送。
+	 */
+	isSending: boolean;
 	/** 被拒图片给出的事实 */
 	imageNotice: string | undefined;
 	/** 输入区能用的命令：界面自带几条，加会话里的扩展、模板与技能 */
@@ -145,6 +152,28 @@ export function useComposer(options: ComposerOptions): Composer {
 	const draft = drafts[draftKey] ?? "";
 	const pendingImages = draftImages.get(draftKey) ?? EMPTY_IMAGES;
 	const queued = session?.state.queued ?? { steering: [], followUp: [] };
+
+	/**
+	 * 正在编码图片的草稿键。
+	 *
+	 * 按草稿键隔离：同一时刻只有一个当前草稿，但编码可能比一次会话切换还慢，切回来时还得
+	 * 看得见「这条还没发出去」。
+	 */
+	const [encodingKeys, setEncodingKeys] = useState<ReadonlySet<string>>(() => new Set());
+	/** 闸门要同步读客户端，而客户端会随主机切换换实例，所以用 ref 取当前那个 */
+	const clientRef = useRef(client);
+	useEffect(() => {
+		clientRef.current = client;
+	}, [client]);
+	/** 发送闸门：同步拦下同一帧里的连点与重复编码，见 `send-gate.ts` */
+	const sendGate = useMemo(
+		() =>
+			createSendGate({
+				hasPendingSend: () => clientRef.current.hasPendingSend(),
+				onChange: setEncodingKeys,
+			}),
+		[],
+	);
 
 	/** 改当前草稿。延迟写入本地保存，切换会话时不丢。 */
 	const updateDraft = useCallback(
@@ -358,8 +387,15 @@ export function useComposer(options: ComposerOptions): Composer {
 	}, []);
 
 	const send = useCallback(() => {
+		// 先占位再判内容：同一个键正在编码、或本端已有待确认的发送时直接放弃。这一道必须同步
+		// 问下来——React 的重绘要等一帧，等它算完时第二下已经发出去了
+		const ticket = sendGate.begin(draftKey);
+		if (ticket === undefined) {
+			return;
+		}
 		const text = draft.trim();
 		if (text.length === 0 && pendingImages.length === 0) {
+			ticket.close();
 			return;
 		}
 		// 界面自己处理的命令就地执行，不当消息发出去；图片不参与命令
@@ -368,6 +404,7 @@ export function useComposer(options: ComposerOptions): Composer {
 			command !== undefined &&
 			commands.some((item) => item.name === command.name && item.handler === "facet")
 		) {
+			ticket.close();
 			if (runFacetCommand(command.name, command.args)) {
 				updateDraft("");
 			}
@@ -375,20 +412,26 @@ export function useComposer(options: ComposerOptions): Composer {
 		}
 		// 草稿留到主机确认再收，发送被拒时不用重打
 		const key = draftKey;
-		sentImagesKey.current = pendingImages.length === 0 ? undefined : key;
+		const imagesKey = pendingImages.length === 0 ? undefined : key;
 		void (async () => {
-			const images = await Promise.all(pendingImages.map((item) => encodeImage(item)));
-			if (activity === "running") {
-				// 排队那条路只有文本，带图片时改走插入当前回合
-				client.send(text, {
-					streamingBehavior: "steer",
-					...(images.length === 0 ? {} : { images }),
-				});
-				return;
+			try {
+				const images = await Promise.all(pendingImages.map((item) => encodeImage(item)));
+				sentImagesKey.current = imagesKey;
+				if (activity === "running") {
+					// 排队那条路只有文本，带图片时改走插入当前回合
+					client.send(text, {
+						streamingBehavior: "steer",
+						...(images.length === 0 ? {} : { images }),
+					});
+					return;
+				}
+				client.send(text, images.length === 0 ? {} : { images });
+			} finally {
+				// 编码失败、派发抛错、中途切走会话都得解开，否则这个草稿键再也发不出去
+				ticket.close();
 			}
-			client.send(text, images.length === 0 ? {} : { images });
 		})();
-	}, [activity, client, commands, draft, draftKey, pendingImages, runFacetCommand, updateDraft]);
+	}, [activity, client, commands, draft, draftKey, pendingImages, runFacetCommand, sendGate, updateDraft]);
 
 	/**
 	 * 收回排队内容：清空主机侧队列，把文字拼回输入框。
@@ -496,6 +539,7 @@ export function useComposer(options: ComposerOptions): Composer {
 		draftKey,
 		draft,
 		pendingImages,
+		isSending: encodingKeys.has(draftKey) || (session?.state.hasPendingSend ?? false),
 		imageNotice,
 		commands,
 		updateDraft,

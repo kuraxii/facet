@@ -188,6 +188,7 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 						value={composer.draft}
 						onChange={composer.updateDraft}
 						onSend={composer.send}
+						isSending={composer.isSending}
 						attachments={composer.pendingImages.map((item) => ({
 							id: item.id,
 							name: item.name,

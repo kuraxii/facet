@@ -46,10 +46,14 @@
 	background: var(--bg-surface);
 }
 
-/* 聚焦态：边框转强调色，外面再罩一层光晕。输入区里任何一个控件拿到焦点都算 */
+/*
+ * 聚焦态只换边框颜色，不画光晕也不加描边。
+ *
+ * 输入区里任何一个控件拿到焦点都算，打字时这一圈几乎一直在；再罩一层光晕等于在整个框上多出
+ * 一条常驻的粗边。1px 的边框转成强调色就够了，尺寸与位置都不动。
+ */
 .composer:focus-within {
 	border-color: var(--border-focus);
-	box-shadow: var(--focus-ring);
 }
 
 /*
@@ -79,7 +83,7 @@
 	overflow-wrap: anywhere;
 }
 
-/* 聚焦提示由 `.composer:focus-within` 那条边框与光晕承担，这里不再叠一层描边 */
+/* 聚焦提示由 `.composer:focus-within` 那条边框承担，输入域自己不再叠一层描边 */
 .composer-editor:focus-visible {
 	outline: 0;
 }

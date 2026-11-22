@@ -427,6 +427,18 @@ dialog.dialog.is-picker .dialog-actions {
 	overscroll-behavior: contain;
 }
 
+/*
+ * 自带内边距的分段卡片（提交悬浮卡）：外层不再垫一圈留白。
+ *
+ * 卡片每一段自己带横向内边距（`.commitTipMain` 12/14、`.commitTipBand` 8/14），再叠上这里的
+ * 8/10 就成了双层套壳，文字被推到离浮层边缘 24px。归零后段与段之间的分隔线才能从左到右贯通，
+ * 有效水平内缩由 24px 收到 14px，与用户消息气泡的横向基准线对齐。
+ * 圆角与裁切不受影响：`overflow: auto` 的裁切带着圆角，首尾段的上下内边距仍由卡片自己给。
+ */
+.pop-tip.is-flush {
+	padding: 0;
+}
+
 .pop-tip pre {
 	margin: 0;
 	color: var(--fg-muted);

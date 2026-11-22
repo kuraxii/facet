@@ -85,6 +85,13 @@
 	 * 改字号只动 `--text-body`，改行高只动 `--leading-prose`。
 	 */
 	--text-size: var(--text-body);
+	/*
+	 * 用户消息气泡的四周留白：纵向取半档，加上行高 24px 带来的半个行距（5px）后视觉留白约
+	 * 15px，与横向的 14px 基本齐平；横向用精确刻度里没有的 14px，单独给一个名字。
+	 * 不复用 `--space-8`——那个刻度同时是代码块与 Markdown 段落的留白。
+	 */
+	--bubble-padding-y: var(--space-5);
+	--bubble-padding-x: 14px;
 	/* 交互动效：极快反馈 120ms，展开折叠 180ms；`data-motion="reduced"` 把两者清零 */
 	--ease-standard: cubic-bezier(0.2, 0.6, 0.3, 1);
 	/* 三档时长：反馈（颜色、透明度）、展开（位移、折叠）、结构变化（面板、抽屉） */
@@ -317,8 +324,8 @@
 	--commit-tip-padding-x: 14px;
 	--commit-tip-padding-y: 12px;
 	--commit-tip-band-padding-y: 8px;
-	--commit-tip-lead-gap: 10px;
-	--commit-tip-row-gap: 6px;
+	--commit-tip-lead-gap: var(--space-4);
+	--commit-tip-row-gap: var(--space-3);
 	--commit-tip-text-size: var(--text-ui);
 	--commit-tip-line-height: 1.5;
 	--commit-tip-subject-lines: 2;

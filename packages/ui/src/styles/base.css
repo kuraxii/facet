@@ -83,8 +83,6 @@
 	--dur-slow: 180ms;
 	/* 运行中动效的周期：文字呼吸、扫光与状态点共用同一个节拍 */
 	--live-cycle: 1.6s;
-	/* 代码字号乘数,由设置里的字号档位写入 */
-	--fs-code-scale: 1;
 	/* 顶部那条带的高度与每个窗口按钮的宽度 */
 	--chrome-height: 36px;
 	--window-button-width: 44px;
@@ -119,7 +117,7 @@
 	--composer-list-indent: 24px;
 	--composer-inline-code-padding-x: 3px;
 	/* 聚焦时外面那圈光晕：与 `:focus-visible` 的描边同一种强调色 */
-	--focus-ring: 0 0 0 3px color-mix(in srgb, var(--acc) 22%, transparent);
+	--focus-ring: 0 0 0 3px color-mix(in srgb, var(--border-focus) 22%, transparent);
 	/* 工具结果里的图片：收起时的最大高度，与多张之间的间距 */
 	--tool-image-height: 320px;
 	--tool-image-gap: 8px;
@@ -182,9 +180,6 @@
 	--sb-row-mark-offset: 3px;
 	/* 会话行内部横向内边距：行背景左右各留这么多，文字从留白之后开始 */
 	--sb-row-inset: 8px;
-	/* 侧栏会话行：悬停 4%、选中 8% 的文字色叠加 */
-	--sb-row-hover: color-mix(in srgb, var(--t1) 4%, transparent);
-	--sb-row-selected: color-mix(in srgb, var(--t1) 8%, transparent);
 	/* 会话标题溢出时右侧渐隐的宽度 */
 	--sb-title-fade: 24px;
 	--status-dot: 6px;
@@ -272,11 +267,6 @@
 	--changes-header-height: 28px;
 	--changes-line-height: 1.5;
 	--changes-line-number-width: 40px;
-	/* 提交历史：行高、图形槽、短哈希宽度与列表最大高度 */
-	--commit-row-height: 24px;
-	--commit-graph-width: 8px;
-	--commit-sha-width: 64px;
-	--commit-section-max-height: 60%;
 	/*
 	 * 提交悬浮卡：卡片宽度，三个区段的左右留白与上下留白，段内行距与并列项之间的距离，
 	 * 以及说明第一行与正文各自最多显示的行数。超出的部分收成省略号——卡片高度要留在
@@ -332,18 +322,18 @@
 	/*
 	 * 拇指与轨道的颜色。
 	 *
-	 * 拇指按观感取 `--t3` 的 40%：它与底色的对比只有 1.4:1 到 2:1，低于 WCAG 1.4.11 给非文本
-	 * 内容要求的 3:1，是这里刻意选淡的结果——指针落上去才提到 `--t2`，靠悬停区分。系统要求
+	 * 拇指按观感取 `--fg-subtle` 的 40%：它与底色的对比只有 1.4:1 到 2:1，低于 WCAG 1.4.11 给
+	 * 非文本内容要求的 3:1，是这里刻意选淡的结果——指针落上去才提到 `--fg-muted`，靠悬停区分。
 	 * 更高对比度时由下方 `prefers-contrast: more` 那段补齐。
 	 */
-	--scrollbar-thumb-color: color-mix(in srgb, var(--t3) 40%, transparent);
-	--scrollbar-thumb-color-hover: var(--t2);
+	--scrollbar-thumb-color: color-mix(in srgb, var(--fg-subtle) 40%, transparent);
+	--scrollbar-thumb-color-hover: var(--fg-muted);
 	--scrollbar-track-color: transparent;
 	/* 分隔条的鼠标命中区总宽度，左右两条共用；悬停时那条高亮线的颜色取下一项 */
 	--divider-hit-width: 6px;
 	/* 左栏分隔条压进列表内容的宽度：只压 1px，其余命中区落在接缝外侧，贴右缘的滚动条照旧可点 */
 	--sidebar-hit-inset: 1px;
-	--divider-highlight: color-mix(in srgb, var(--acc) 55%, transparent);
+	--divider-highlight: color-mix(in srgb, var(--accent-fg) 55%, transparent);
 	/* 对话导航的缩放倍数，由设置里的百分比写入；下面每个尺寸都是它的倍数 */
 	--outline-scale: 1;
 	/* 对话导航竖轨：离主区左缘的间距、轨宽、轨内边距、短条静止尺寸、当前轮次的加宽倍数
@@ -760,9 +750,9 @@
 /* 系统要求更高对比度时，拇指换成正文色、轨道给出不透明底色 */
 @media (prefers-contrast: more) {
 	:root {
-		--scrollbar-thumb-color: var(--t1);
-		--scrollbar-thumb-color-hover: var(--t1);
-		--scrollbar-track-color: var(--surface2);
+		--scrollbar-thumb-color: var(--fg-default);
+		--scrollbar-thumb-color-hover: var(--fg-default);
+		--scrollbar-track-color: var(--bg-elevated);
 	}
 }
 
@@ -778,8 +768,8 @@ body,
 }
 
 body {
-	background: var(--bg);
-	color: var(--t1);
+	background: var(--bg-canvas);
+	color: var(--fg-default);
 	font-family: var(--font-sans);
 	font-size: var(--text-body);
 	line-height: 1.6;
@@ -789,7 +779,7 @@ body {
 }
 
 ::selection {
-	background: color-mix(in srgb, var(--t1) 22%, transparent);
+	background: var(--selection-bg);
 }
 
 button {
@@ -798,9 +788,20 @@ button {
 	cursor: pointer;
 }
 
+/*
+ * 键盘焦点环画在元素自己的盒子内侧：向外扩会挤动相邻元素、贴边时会溢出容器，
+ * 尤其是滚动容器里的行与宽高写死的图标按钮。
+ */
 :focus-visible {
-	outline: 2px solid var(--acc);
-	outline-offset: 2px;
+	outline: 2px solid var(--border-focus);
+	outline-offset: -2px;
+}
+
+/* 输入类控件本来就带自己的边框，描边再往里收 1px 就够，不至于在文字上乱窜 */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+	outline-offset: -1px;
 }
 
 /*
@@ -836,11 +837,11 @@ svg.fl {
 }
 
 .t2 {
-	color: var(--t2);
+	color: var(--fg-muted);
 }
 
 .t3 {
-	color: var(--t3);
+	color: var(--fg-subtle);
 }
 
 .ell {

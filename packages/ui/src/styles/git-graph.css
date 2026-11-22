@@ -8,7 +8,7 @@
 
 :root {
 	/* 泳道配色：六个够用，多出来的循环取用；暗色下也保持可分辨 */
-	--graph-lane-1: var(--acc);
+	--graph-lane-1: var(--accent-fg);
 	--graph-lane-2: #b480e8;
 	--graph-lane-3: #56b6a8;
 	--graph-lane-4: #d9a441;

@@ -17,20 +17,19 @@
 /* markstream 自己的变量换成本项目的配色 */
 .md .markstream-react,
 .md .markstream-react.dark {
-	--background: var(--card);
-	--foreground: var(--t1);
-	--border: var(--line);
-	--secondary: var(--card2);
-	--muted: var(--card2);
-	--muted-foreground: var(--t2);
-	--code-bg: var(--code-surface);
-	--code-fg: var(--t2);
-	--code-border: var(--line);
-	--code-header-bg: var(--code-surface);
-	--code-action-fg: var(--t3);
-	--code-action-hover-bg: var(--card2);
-	--code-action-hover-fg: var(--t1);
-	--code-line-number: var(--t3);
+	--background: var(--bg-surface);
+	--foreground: var(--fg-default);
+	--border: var(--border-subtle);
+	--secondary: var(--bg-elevated);
+	--muted: var(--bg-elevated);
+	--muted-foreground: var(--fg-muted);
+	/* `--code-bg` / `--code-fg` 由 `:root` 直接给，这里不重复定义：同名覆盖会变成自我引用 */
+	--code-border: var(--border-subtle);
+	--code-header-bg: var(--code-bg);
+	--code-action-fg: var(--fg-subtle);
+	--code-action-hover-bg: var(--bg-elevated);
+	--code-action-hover-fg: var(--fg-default);
+	--code-line-number: var(--fg-subtle);
 	--ms-font-sans: var(--font-sans);
 	--ms-size-code-max-height: 360px;
 	/* 字号跟着 `.md` 走：这里再写一个固定值就会把正文的字号定在它上面 */
@@ -43,10 +42,8 @@
 	position: relative;
 	margin: 0 0 10px;
 	border-radius: 12px;
-	background: var(--code-surface);
-	box-shadow:
-		0 1px 2px rgba(0, 0, 0, 0.28),
-		0 8px 24px -18px rgba(0, 0, 0, 0.55);
+	background: var(--code-bg);
+	box-shadow: var(--shadow-control);
 	overflow: hidden;
 }
 
@@ -62,7 +59,7 @@
 	padding: 6px 8px;
 	opacity: 0;
 	pointer-events: none;
-	transition: opacity 0.18s ease;
+	transition: opacity var(--dur-slow) var(--ease-standard);
 }
 
 .code-card:hover .code-card-head,
@@ -90,13 +87,13 @@
 	border: 0;
 	border-radius: 6px;
 	background: transparent;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	transition: color var(--dur-fast) var(--ease-standard);
 	pointer-events: auto;
 }
 
 .code-copy:hover {
-	color: var(--t1);
+	color: var(--fg-default);
 }
 
 .code-card-body {
@@ -106,9 +103,9 @@
 	margin: 0;
 	padding: 12px 14px;
 	font-family: var(--font-mono);
-	font-size: calc(12.5px * var(--fs-code-scale, 1));
+	font-size: var(--text-xs);
 	line-height: 1.6;
-	color: var(--markdown-code-text);
+	color: var(--code-fg);
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 	word-break: break-word;
@@ -121,11 +118,11 @@
 
 /* diff 围栏按行上红绿 */
 .code-card-line.is-add {
-	background: color-mix(in srgb, var(--addbg) 72%, transparent);
+	background: color-mix(in srgb, var(--diff-add-bg) 72%, transparent);
 }
 
 .code-card-line.is-del {
-	background: color-mix(in srgb, var(--delbg) 72%, transparent);
+	background: color-mix(in srgb, var(--diff-del-bg) 72%, transparent);
 }
 
 /*
@@ -171,9 +168,9 @@
 	margin: 0;
 	overflow: auto;
 	padding: 12px 14px;
-	color: var(--t2);
+	color: var(--fg-muted);
 	font-family: var(--font-mono);
-	font-size: calc(12.5px * var(--fs-code-scale, 1));
+	font-size: var(--text-xs);
 	line-height: 1.6;
 	white-space: pre-wrap;
 	word-break: break-word;
@@ -183,7 +180,7 @@
 .mermaid-note {
 	margin: 0;
 	padding: 0 14px 12px;
-	color: var(--err);
+	color: var(--status-err-fg);
 	font-size: 12px;
 }
 
@@ -195,7 +192,7 @@
 
 /* 公式跟随正文颜色，长公式在块内滚动 */
 .md .katex {
-	color: var(--t1);
+	color: var(--fg-default);
 	font-size: 1.02em;
 }
 
@@ -218,14 +215,14 @@
 	padding: 1px 5px;
 	border: 0;
 	border-radius: 4px;
-	background: var(--surface2);
-	color: var(--markdown-code-text);
+	background: var(--bg-elevated);
+	color: var(--code-fg);
 	font-family: var(--font-mono);
 	font-size: 0.8em;
 }
 
 .md a {
-	color: var(--acc);
+	color: var(--accent-fg);
 }
 
 .md table {
@@ -237,20 +234,20 @@
 .md th,
 .md td {
 	padding: 6px 10px;
-	border: 1px solid var(--line);
+	border: 1px solid var(--border-subtle);
 	text-align: left;
 }
 
 .md th {
-	background: var(--card2);
+	background: var(--bg-elevated);
 	font-weight: 500;
 }
 
 .md blockquote {
 	margin: 0 0 8px;
 	padding: 2px 12px;
-	border-left: 2px solid var(--line2);
-	color: var(--t2);
+	border-left: 2px solid var(--border-default);
+	color: var(--fg-muted);
 }
 
 .md ul,

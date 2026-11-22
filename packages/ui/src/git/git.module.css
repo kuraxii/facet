@@ -4,13 +4,13 @@
 .note {
 	margin: 0;
 	padding: 10px 12px;
-	color: var(--t2);
+	color: var(--fg-muted);
 	font-size: 12px;
 	line-height: 1.6;
 }
 
 .noteError {
-	color: var(--err);
+	color: var(--status-err-fg);
 }
 
 .retry {
@@ -18,7 +18,7 @@
 	padding: 0;
 	border: 0;
 	background: transparent;
-	color: var(--acc);
+	color: var(--accent-fg);
 	font-size: 12px;
 }
 
@@ -53,7 +53,7 @@
 	flex: none;
 	width: var(--changes-line-number-width);
 	padding-right: 10px;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font-style: normal;
 	text-align: right;
 	user-select: none;
@@ -70,17 +70,17 @@
  * 用弱色。这一份必须留在这里——三处补丁都走 `GitPatch`，缺了它补丁就只剩一行行文字。
  */
 .diffLine:global(.is-add) {
-	background: color-mix(in srgb, var(--add) 15%, transparent);
-	color: var(--add);
+	background: color-mix(in srgb, var(--diff-add-fg) 15%, transparent);
+	color: var(--diff-add-fg);
 }
 
 .diffLine:global(.is-del) {
-	background: color-mix(in srgb, var(--del) 10%, transparent);
-	color: var(--del);
+	background: color-mix(in srgb, var(--diff-del-fg) 10%, transparent);
+	color: var(--diff-del-fg);
 }
 
 .diffLine:global(.is-meta) {
-	color: var(--t3);
+	color: var(--fg-subtle);
 }
 
 .diffBody[data-wrap="true"] .diffLine {
@@ -117,8 +117,8 @@
 	overflow: hidden;
 	padding: 0 5px;
 	border-radius: 4px;
-	background: var(--surface2);
-	color: var(--t2);
+	background: var(--bg-elevated);
+	color: var(--fg-muted);
 	font-family: var(--font-mono);
 	font-size: 10.5px;
 	line-height: 15px;
@@ -127,17 +127,17 @@
 }
 
 .ref[data-kind="head"] {
-	background: color-mix(in srgb, var(--acc) 22%, transparent);
-	color: var(--acc);
+	background: color-mix(in srgb, var(--accent-fg) 22%, transparent);
+	color: var(--accent-fg);
 }
 
 .ref[data-kind="tag"] {
-	color: var(--warn);
+	color: var(--status-warn-fg);
 }
 
 .refMore {
 	flex: none;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font-size: 10.5px;
 }
 
@@ -158,14 +158,14 @@
 	align-items: center;
 	height: var(--changes-header-height);
 	padding: 0 var(--changes-trailing) 0 var(--changes-row-padding-x);
-	border-bottom: 1px solid var(--line);
+	border-bottom: 1px solid var(--border-subtle);
 }
 
 .graphBranch {
 	flex: 1;
 	min-width: 0;
 	overflow: hidden;
-	color: var(--t2);
+	color: var(--fg-muted);
 	font-size: 12px;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -173,7 +173,7 @@
 
 .graphCount {
 	flex: none;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font-family: var(--font-mono);
 	font-size: 11px;
 }
@@ -188,12 +188,12 @@
 	border: 0;
 	border-radius: 5px;
 	background: transparent;
-	color: var(--t3);
+	color: var(--fg-subtle);
 }
 
 .graphRefresh:hover {
-	background: var(--surface2);
-	color: var(--t1);
+	background: var(--bg-hover);
+	color: var(--fg-default);
 }
 
 .graphRefresh svg[data-spinning="true"] {
@@ -230,16 +230,16 @@
 	padding: 0 var(--changes-trailing) 0 0;
 	border: 0;
 	background: transparent;
-	color: var(--t1);
+	color: var(--fg-default);
 	text-align: left;
 }
 
 .graphRow:hover {
-	background: var(--sb-row-hover);
+	background: var(--bg-hover);
 }
 
 .graphRow[data-selected="true"] {
-	background: var(--sb-row-selected);
+	background: var(--bg-active);
 }
 
 .lanes {
@@ -269,20 +269,20 @@
 	flex-direction: column;
 	width: var(--commit-tip-width);
 	max-width: 100%;
-	color: var(--t2);
+	color: var(--fg-muted);
 }
 
 .commitTipAccent {
 	flex: none;
-	color: var(--acc);
+	color: var(--accent-fg);
 }
 
 .commitTipAdded {
-	color: var(--add);
+	color: var(--diff-add-fg);
 }
 
 .commitTipAuthor {
-	color: var(--t1);
+	color: var(--fg-default);
 	font-weight: 500;
 }
 
@@ -291,7 +291,7 @@
 	align-items: center;
 	gap: var(--commit-tip-row-gap);
 	padding: var(--commit-tip-band-padding-y) var(--commit-tip-padding-x);
-	border-top: 1px solid var(--line);
+	border-top: 1px solid var(--border-subtle);
 	font-size: 13px;
 	line-height: 1.4;
 }
@@ -302,7 +302,7 @@
 	-webkit-line-clamp: var(--commit-tip-body-lines);
 	margin: 0;
 	overflow: hidden;
-	color: var(--t1);
+	color: var(--fg-default);
 	font-size: var(--commit-tip-text-size);
 	line-height: var(--commit-tip-line-height);
 	white-space: pre-wrap;
@@ -310,7 +310,7 @@
 }
 
 .commitTipDivider {
-	color: var(--line2);
+	color: var(--border-default);
 }
 
 .commitTipHash {
@@ -320,7 +320,7 @@
 	padding: 0;
 	border: 0;
 	background: transparent;
-	color: var(--acc);
+	color: var(--accent-fg);
 }
 
 .commitTipHead {
@@ -329,21 +329,21 @@
 	flex-wrap: wrap;
 	gap: var(--commit-tip-row-gap);
 	margin: 0;
-	color: var(--t2);
+	color: var(--fg-muted);
 	font-size: 13px;
 	line-height: 1.4;
 }
 
 .commitTipIcon {
 	flex: none;
-	color: var(--t3);
+	color: var(--fg-subtle);
 }
 
 .commitTipLink {
 	display: inline-flex;
 	align-items: center;
 	gap: var(--commit-tip-row-gap);
-	color: var(--acc);
+	color: var(--accent-fg);
 	text-decoration: none;
 }
 
@@ -355,7 +355,7 @@
 }
 
 .commitTipRemoved {
-	color: var(--del);
+	color: var(--diff-del-fg);
 }
 
 .commitTipSha {
@@ -372,7 +372,7 @@
 	display: flex;
 	flex-wrap: wrap;
 	margin: 0;
-	color: var(--t2);
+	color: var(--fg-muted);
 	font-variant-numeric: tabular-nums;
 }
 
@@ -382,7 +382,7 @@
 	-webkit-line-clamp: var(--commit-tip-subject-lines);
 	margin: 0;
 	overflow: hidden;
-	color: var(--t1);
+	color: var(--fg-default);
 	font-size: var(--commit-tip-text-size);
 	line-height: var(--commit-tip-line-height);
 }

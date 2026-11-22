@@ -21,8 +21,8 @@
 	grid-column: 3;
 	flex-direction: column;
 	min-width: 0;
-	border-left: 1px solid var(--line);
-	background: var(--bg);
+	border-left: 1px solid var(--border-subtle);
+	background: var(--bg-canvas);
 }
 
 /* 拖宽用的命中区，画面上什么都不显示；hr 自带边框要先清掉，否则那条线会留在分界上 */
@@ -80,11 +80,11 @@
 }
 
 .workspace-tab-shell:hover {
-	background: color-mix(in srgb, var(--t1) 4%, transparent);
+	background: var(--bg-hover);
 }
 
 .workspace-tab-shell[data-selected="true"] {
-	background: var(--surface2);
+	background: var(--bg-active);
 }
 
 .workspace-tab {
@@ -97,7 +97,7 @@
 	border: 0;
 	border-radius: 6px 0 0 6px;
 	background: transparent;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font-size: 12.5px;
 	white-space: nowrap;
 	-webkit-app-region: no-drag;
@@ -105,11 +105,11 @@
 
 .workspace-tab-shell:hover .workspace-tab,
 .workspace-tab-shell[data-selected="true"] .workspace-tab {
-	color: var(--t1);
+	color: var(--fg-default);
 }
 
 .workspace-tab:disabled {
-	color: var(--t3);
+	color: var(--fg-subtle);
 	cursor: default;
 	opacity: 0.45;
 }
@@ -126,7 +126,7 @@
 	border: 0;
 	border-radius: 4px;
 	background: transparent;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	opacity: 0.5;
 	-webkit-app-region: no-drag;
 }
@@ -137,8 +137,8 @@
 }
 
 .workspace-tab-close:hover {
-	background: var(--surface3);
-	color: var(--t1);
+	background: var(--bg-active);
+	color: var(--fg-default);
 }
 
 .workspace-tab-icon {
@@ -157,8 +157,8 @@
 	flex: none;
 	padding: 0 4px;
 	border-radius: 999px;
-	background: var(--surface3);
-	color: var(--t2);
+	background: var(--bg-active);
+	color: var(--fg-muted);
 	font-family: var(--font-mono);
 	font-size: 10.5px;
 	line-height: 14px;
@@ -223,10 +223,10 @@
 	gap: 1px;
 	min-width: var(--workspace-menu-min-width);
 	padding: 4px;
-	border: 1px solid var(--line2);
+	border: 1px solid var(--border-default);
 	border-radius: 8px;
-	background: var(--card);
-	box-shadow: 0 10px 30px rgb(0 0 0 / 40%);
+	background: var(--bg-surface);
+	box-shadow: var(--shadow-popover);
 }
 
 .workspace-menu-item {
@@ -238,18 +238,18 @@
 	border: 0;
 	border-radius: 6px;
 	background: transparent;
-	color: var(--t2);
+	color: var(--fg-muted);
 	font-size: 12.5px;
 	text-align: left;
 }
 
 .workspace-menu-item:hover:not(:disabled) {
-	background: var(--surface2);
-	color: var(--t1);
+	background: var(--bg-hover);
+	color: var(--fg-default);
 }
 
 .workspace-menu-item:disabled {
-	color: var(--t3);
+	color: var(--fg-subtle);
 	cursor: default;
 	opacity: 0.5;
 }
@@ -258,12 +258,12 @@
 	display: grid;
 	flex: none;
 	place-items: center;
-	color: var(--t3);
+	color: var(--fg-subtle);
 }
 
 /* 已经开着的那几项：图标染成强调色，一眼看出点下去只会切过去 */
 .workspace-menu-item[data-open="true"] .workspace-menu-icon {
-	color: var(--acc);
+	color: var(--accent-fg);
 }
 
 .workspace-menu-label {
@@ -278,8 +278,8 @@
 	flex: none;
 	padding: 0 4px;
 	border-radius: 999px;
-	background: var(--surface3);
-	color: var(--t2);
+	background: var(--bg-active);
+	color: var(--fg-muted);
 	font-family: var(--font-mono);
 	font-size: 10.5px;
 	line-height: 14px;
@@ -287,7 +287,7 @@
 
 .workspace-menu-key {
 	flex: none;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font-family: var(--font-mono);
 	font-size: 10.5px;
 }
@@ -317,18 +317,18 @@
 	border: 0;
 	border-radius: 7px;
 	background: transparent;
-	color: var(--t2);
+	color: var(--fg-muted);
 	font-size: 12.5px;
 	text-align: left;
 }
 
 .workspace-launcher-item:hover:not(:disabled) {
-	background: var(--surface2);
-	color: var(--t1);
+	background: var(--bg-hover);
+	color: var(--fg-default);
 }
 
 .workspace-launcher-item:disabled {
-	color: var(--t3);
+	color: var(--fg-subtle);
 	cursor: default;
 	opacity: 0.5;
 }
@@ -337,11 +337,11 @@
 	display: grid;
 	flex: none;
 	place-items: center;
-	color: var(--t3);
+	color: var(--fg-subtle);
 }
 
 .workspace-launcher-item:hover .workspace-launcher-icon {
-	color: var(--t1);
+	color: var(--fg-default);
 }
 
 .workspace-launcher-label {
@@ -356,8 +356,8 @@
 	flex: none;
 	padding: 0 4px;
 	border-radius: 999px;
-	background: var(--surface3);
-	color: var(--t2);
+	background: var(--bg-active);
+	color: var(--fg-muted);
 	font-family: var(--font-mono);
 	font-size: 10.5px;
 	line-height: 14px;
@@ -365,7 +365,7 @@
 
 .workspace-launcher-key {
 	flex: none;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font-family: var(--font-mono);
 	font-size: 10.5px;
 }
@@ -474,8 +474,8 @@
 		var(--file-tree-width, var(--file-tree-default)),
 		min(var(--file-tree-max), calc(100% - var(--editor-keep-width)))
 	);
-	border-inline-start: 1px solid var(--line);
-	background: var(--bg);
+	border-inline-start: 1px solid var(--border-subtle);
+	background: var(--bg-canvas);
 }
 
 /* 关掉只藏起来：树的展开状态与滚动位置都留着，再打开还是原来那一棵 */
@@ -547,7 +547,7 @@
 	min-width: 0;
 	min-height: 0;
 	/* 滚动交给 `scroll-y`（类在组件里）：细滚动条 + 始终预留沟槽 */
-	border-inline-start: 1px solid var(--line);
+	border-inline-start: 1px solid var(--border-subtle);
 }
 
 /* 收起：索引整栏不占位，预览向右长满（左缘不动，它就是工作区边界） */
@@ -612,12 +612,12 @@
 	border: 0;
 	border-radius: 6px;
 	background: transparent;
-	color: var(--t2);
+	color: var(--fg-muted);
 }
 
 .workspace-back:hover {
-	background: var(--surface2);
-	color: var(--t1);
+	background: var(--bg-hover);
+	color: var(--fg-default);
 }
 
 /*
@@ -679,17 +679,17 @@
 	border: 0;
 	border-radius: 6px;
 	background: transparent;
-	color: var(--t3);
+	color: var(--fg-subtle);
 }
 
 .workspace-head-action:hover {
-	background: var(--surface2);
-	color: var(--t1);
+	background: var(--bg-hover);
+	color: var(--fg-default);
 }
 
 /* 开关按住时只换颜色：文件树开没开由它自己看得出来 */
 .workspace-head-action[aria-pressed="true"] {
-	color: var(--acc);
+	color: var(--accent-fg);
 }
 
 /*
@@ -732,7 +732,7 @@
 /* 待关闭的提示就是这一条线：整条命中区染强调色，与悬停、拖动时的分界线同一个色号 */
 .panel-resizer[data-collapse-pending="true"],
 .sb-resizer[data-collapse-pending="true"] {
-	background: color-mix(in srgb, var(--acc) 26%, transparent);
+	background: color-mix(in srgb, var(--accent-fg) 26%, transparent);
 }
 
 /*
@@ -744,7 +744,7 @@
  */
 .app[data-sidebar-drag-collapsed="true"] .chrome-slot.is-sidebar {
 	inline-size: var(--divider-hit-width);
-	background: color-mix(in srgb, var(--acc) 26%, transparent);
+	background: color-mix(in srgb, var(--accent-fg) 26%, transparent);
 }
 
 /*
@@ -776,7 +776,7 @@
 }
 
 .tree-root {
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font-size: 11px;
 }
 
@@ -812,26 +812,26 @@
 	padding-left: calc(var(--files-row-padding-x) + var(--files-depth, 0) * var(--files-tree-indent));
 	border: 0;
 	background: transparent;
-	color: var(--t2);
+	color: var(--fg-muted);
 	font-size: 12.5px;
 	text-align: left;
 }
 
 .tree-row:hover {
-	background: var(--sb-row-hover);
-	color: var(--t1);
+	background: var(--bg-hover);
+	color: var(--fg-default);
 }
 
 .tree-row.is-on {
-	background: var(--sb-row-selected);
-	color: var(--t1);
+	background: var(--bg-active);
+	color: var(--fg-default);
 }
 
 .tree-icon {
 	flex: none;
 	width: var(--files-icon-size);
 	height: var(--files-icon-size);
-	color: var(--t3);
+	color: var(--fg-subtle);
 }
 
 .tree-name {
@@ -842,12 +842,12 @@
 
 .tree-note {
 	margin-left: auto;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font-size: 11px;
 }
 
 .tree-note.is-error {
-	color: var(--err);
+	color: var(--status-err-fg);
 }
 
 /* 文件页的查看与编辑：标题行贴着预览区上缘，代码正文贴工作区边界 */
@@ -872,7 +872,7 @@
 	flex: 1;
 	min-width: 0;
 	overflow: hidden;
-	color: var(--t2);
+	color: var(--fg-muted);
 	font-family: var(--font-mono);
 	font-size: 11px;
 	text-overflow: ellipsis;
@@ -894,7 +894,7 @@
 	width: 6px;
 	height: 6px;
 	border-radius: 50%;
-	background: var(--acc);
+	background: var(--accent-fg);
 }
 
 /* Markdown 的渲染预览：正文按可读宽度居中，长文档与宽表格、长代码块自己滚 */
@@ -926,7 +926,7 @@
 .panel-empty {
 	margin: 0;
 	padding: 24px 12px;
-	color: var(--t3);
+	color: var(--fg-subtle);
 	font-size: 12px;
 	line-height: 1.6;
 	text-align: center;
@@ -941,7 +941,7 @@
 	inset: 0 0 0 auto;
 	z-index: var(--z-drawer);
 	width: min(var(--panel-width), 92vw);
-	box-shadow: 0 0 40px rgb(0 0 0 / 45%);
+	box-shadow: var(--shadow-modal);
 }
 
 /*
@@ -954,7 +954,7 @@
 .panel-head {
 	flex: none;
 	height: var(--chrome-height);
-	border-bottom: 1px solid var(--line);
+	border-bottom: 1px solid var(--border-subtle);
 	container-type: inline-size;
 	-webkit-app-region: no-drag;
 }

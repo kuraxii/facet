@@ -11,6 +11,7 @@
 | :--- | :--- | :--- |
 | `VISUAL_SCALE` | `packages/ui/src/styles/visual-contract.ts` | 刻度：字号、行高、间距、控件高度、圆角、图标、动效 |
 | `VISUAL_PX` | 同上 | 具名长度：正文列宽、对话导航竖轨、浮层落点、编辑器标题行间距 |
+| `theme.css` | `packages/ui/src/styles/theme.css` | 颜色：六套配色的同一组语义键，外加阴影、遮罩与选区 |
 
 样式表那头的对应物是 `packages/ui/src/styles/base.css` 的 `:root`（`--text-*` /
 `--leading-*` / `--space-*` / `--control-*` / `--radius-*` / `--icon-*` / `--dur-*` /
@@ -91,7 +92,41 @@
 
 `data-motion="reduced"` 把两条时长清零，曲线不动；时长只认这两个变量，别处不写裸值。
 
-## 2. 配套基准
+## 2. 颜色与主题
+
+颜色只有一份真值：`theme.css` 里六套配色（`light` / `dark` / `midnight` / `claude` / `ghostty` /
+`pureBlack`）填满**同一组语义键**。组件读名字，不读具体色值；换主题只换取值。
+
+变量按角色分组，不按颜色分组——这就是"语义化主题层"的全部意思：
+
+| 组 | 变量 | 用法 |
+| :--- | :--- | :--- |
+| 表面海拔 | `--bg-canvas` `--bg-subtle` `--bg-surface` `--bg-elevated` | 从最底的工作台到浮在最上的弹层；`elevated` 必须不透明 |
+| 交互态 | `--bg-hover` `--bg-active` | 全仓只有这两个交互底色，由各主题自己的 `--fg-default` 按 7% / 14% 混出 |
+| 前景 | `--fg-default` `--fg-muted` `--fg-subtle` | 三档文字 |
+| 边框 | `--border-subtle` `--border-default` `--border-focus` | 结构线、控件边框、焦点环 |
+| 语义 | `--accent-*` `--status-*` `--dot-*` `--diff-*` `--code-*` | 强调、状态、差异、代码区 |
+| 阴影与遮罩 | `--shadow-control` `--shadow-popover` `--shadow-modal` `--scrim-bg` `--selection-bg` | 明暗分治，组件不写 alpha |
+
+几条硬规矩：
+
+- **主按钮只有一个底色**：`--accent-fill` 配 `--accent-on-fill`。悬停与按下走
+  `--accent-fill-hover` / `--accent-fill-active`（按各主题自身色相混出），不写 `filter`、
+  不用 `opacity` 临时提亮，也不拿 `--fg-default` 反色当主按钮。
+- **选中态只有一个底色**：`--bg-active`。侧栏选中行、设置导航、工具条 `is-on`、标签页当前项
+  都是同一个值，不再各调一档。
+- **阴影只有三档**：内容卡片 `--shadow-control`、浮层 `--shadow-popover`、模态 `--shadow-modal`。
+  组件里不写 `box-shadow` 的字面量。
+- **焦点环画在盒子内侧**：`outline: 2px solid var(--border-focus)` 配 `outline-offset: -2px`
+  （输入类控件 `-1px`）。向外扩会挤动相邻元素、贴边时溢出容器。
+
+- 六套配色的键集完全一致（`theme.test.ts`）。
+- `theme.css` 里每个变量在全仓至少有一处引用，没人读的色彩变量等于一份要一直维护的死配置（`theme.test.ts`）。
+- `theme.css` 与泳道色（`git-graph.css`）之外不许出现裸颜色字面量：`#hex` / `rgb()` / `hsl()`
+  （`visual-contract.test.ts`）。豁免逐条写在测试里——遮罩只取 alpha、"跟随系统"色片要两种底色
+  同屏、贴在图片上的移除按钮必须一直是深色。
+
+## 3. 配套基准
 
 - **零字距微调**：层级靠字号与字重（`400 / 500 / 600`）拉开，不写 `letter-spacing`。
 - **单向下边距**：正文与 Markdown 区块只用 `margin-bottom`，首尾由
@@ -99,24 +134,26 @@
 - **一个数一处定义**：脚本要读的长度进 `VISUAL_PX`，样式要用的进 `:root`，两边同名同值；
   不许在组件里再抄一份字面量。
 
-## 3. 门禁
+## 4. 门禁
 
-`visual-contract.test.ts` 跑四类断言：
+`visual-contract.test.ts` 跑五类断言：
 
 1. **刻度对齐**：`base.css` 的 `:root` 与 `VISUAL_SCALE` / `VISUAL_PX` 逐条相等。
 2. **纪律**：全仓样式表 `0` 处 `!important`、`0` 处裸 `z-index`、`0` 处 `prefers-*` 之外的
    `@media`。
-3. **棘轮**：每个样式文件里还写死着多少个 `font-size` / `border-radius` / `gap` / `padding` /
-   `box-shadow` / `transition`，记在 `VISUAL_DEBT_BASELINE` 里，只许降不许升；新增一个 CSS
-   文件必须先在基线里登记，否则用例会红。
-4. **单入口**：`--ease` 这个旧名不再出现，`--text-size` 只指向 `--text-body`。
+3. **颜色只从主题来**：`theme.css` 与泳道色之外不许有裸颜色字面量，豁免逐条写在测试里。
+4. **棘轮**：每个样式文件里还写死着多少个 `font-size` / `border-radius` / `gap` / `padding`，
+   记在 `VISUAL_DEBT_BASELINE` 里，只许降不许升；新增一个 CSS 文件必须先在基线里登记，否则
+   用例会红。`box-shadow` 与 `transition` 已经全仓归零，单独一条断言压着不许回潮。
+5. **单入口**：旧名 `--ease` 不再出现，`--text-size` 只指向 `--text-body`。
 
 棘轮的计数口径：一条声明里**一个 `var()` 都没有**就算写死（`calc(var(--a) - 1px)` 不算）；
 `transition` 另算——抹掉 `var(...)` 之后还剩时间字面量或缓动关键字才算。
 
-## 4. 迁移顺序
+## 5. 迁移顺序
 
-存量样式按区域分批搬，每迁完一个文件就把基线改小；顺序按收益排：
+颜色、阴影、遮罩、动效时长与焦点环已经全仓迁移完毕（没有旧名残留）。剩下的是几何：字号、
+圆角、间距与内边距仍按文件分批搬，每迁完一个文件就把基线改小；顺序按收益排：
 
 1. `chrome.css`、`panel.css`（外壳与工具条，件数少、影响面小）
 2. `sidebar.css`、`overlays.css`（列表行与浮层，行高与圆角收益最大）

@@ -82,7 +82,7 @@
 | `packages/ui/src/git/git-status-mark.tsx` / `git-refs.tsx` / `commit-tip.tsx` | 状态图形、引用胶囊、提交悬浮卡（作者 / 时间 / 改动规模都在卡里） |
 | `packages/ui/src/styles/changes.css` / `git-graph.css` / `panel.css` | 全局样式按领域拆：变更与补丁、图谱页、面板骨架与文件视图 |
 
-- **文件视图的文件树（只在 `files` 视图）**：编辑器与文件树是**同一个 flex 行里的两栏**——编辑器 `flex: 1 1 0; min-width: 0`，文件树 `flex: 0 0 auto`，互不覆盖。底色与文件内容相同（`--bg`）、无投影，只有左缘一条 `1px` 线。
+- **文件视图的文件树（只在 `files` 视图）**：编辑器与文件树是**同一个 flex 行里的两栏**——编辑器 `flex: 1 1 0; min-width: 0`，文件树 `flex: 0 0 auto`，互不覆盖。底色与文件内容相同（`--bg-canvas`）、无投影，只有左缘一条 `1px` 线。
   - 每层都写 `min-width: 0`（`.panel-body` → `.workspace-files` → 编辑器外壳 → `.code-surface`）：不给 0 时 flex 子项的自动最小宽度会被长代码行顶成内容宽，一路把容器撑破。
   - 宽度三层：样式 `clamp(var(--file-tree-min), var(--file-tree-width, var(--file-tree-default)), min(var(--file-tree-max), calc(100% - var(--editor-keep-width))))` 兜底；界面按本地存储写的偏好宽（`facet.files.treeWidth`，`file-tree-state.ts`）；拖动时的实时上限 `fileTreeMaxWidth()`（`min(420, max(180, 容器宽 − 120))`，`120` 是 `EDITOR_KEEP_WIDTH`）。四个数都在 `:root` 与 `layout-contract.ts` 里各有一份并逐条对齐。右栏拖到下限 `300` 时树让到 `180`、编辑器还剩 `120`。
   - 偏好宽写在根节点的 `--file-tree-width` 上；拖动期间分隔条把同一个变量写在 `.app` 上（更近的祖先赢），松手才落盘，拖动不经过 React 渲染。

@@ -1,6 +1,4 @@
 import { $createCodeNode } from "@lexical/code";
-import { $createLinkNode } from "@lexical/link";
-import { $createListItemNode, $createListNode } from "@lexical/list";
 import { $createQuoteNode } from "@lexical/rich-text";
 import {
 	$createParagraphNode,
@@ -80,6 +78,22 @@ function exportedDocument(build: (root: ElementNode) => void): string {
 	return exported;
 }
 
+/** 铺一段 Markdown 之后，根下每个块的节点类型（`paragraph` / `quote` / `code` …）。 */
+function blockKinds(markdown: string): string[] {
+	const editor = testEditor();
+	let kinds: string[] = [];
+	editor.update(
+		() => {
+			$importComposerMarkdown(markdown);
+			kinds = $getRoot()
+				.getChildren()
+				.map((node) => node.getType());
+		},
+		{ discrete: true },
+	);
+	return kinds;
+}
+
 /** 铺一段 Markdown 之后，树里 `/命令` 胶囊的命令名。 */
 function commandsOf(markdown: string, known: readonly string[]): string[] {
 	const editor = testEditor();
@@ -138,9 +152,11 @@ describe("输入区的 Markdown 口径", () => {
 		expect(roundTrip(quoted)).toBe(quoted);
 	});
 
-	it("列表往返仍是列表", () => {
+	it("列表记号保持原文，不进结构件", () => {
+		// 输入区只认四类结构件，`- ` 与 `1. ` 是用户要模型看见的字面量
 		expect(roundTrip("- 甲\n- 乙")).toBe("- 甲\n- 乙");
 		expect(roundTrip("1. 甲\n2. 乙")).toBe("1. 甲\n2. 乙");
+		expect(blockKinds("- 甲\n1. 乙")).toEqual(["paragraph", "paragraph"]);
 	});
 
 	it("代码块往返保留围栏与内容", () => {
@@ -148,8 +164,10 @@ describe("输入区的 Markdown 口径", () => {
 		expect(roundTrip(code)).toBe(code);
 	});
 
-	it("行内格式与行内代码往返", () => {
-		expect(roundTrip("**粗**与*斜*与`代码`")).toBe("**粗**与*斜*与`代码`");
+	it("行内语法保持原文，不变成结构件", () => {
+		const text = "**粗**与*斜*与`代码`";
+		expect(roundTrip(text)).toBe(text);
+		expect(blockKinds(text)).toEqual(["paragraph"]);
 	});
 
 	it("开头的井号不当成标题", () => {
@@ -218,7 +236,7 @@ describe("`@文件` 胶囊", () => {
 		expect(mentionsOf("```\n// @src/a.ts\n```", FILES)).toEqual([]);
 	});
 
-	it("行内代码里的 @路径 不还原成胶囊", () => {
+	it("反引号只是普通字符：包起来的那截路径不算胶囊", () => {
 		expect(mentionsOf("`@src/a.ts`", FILES)).toEqual([]);
 	});
 
@@ -270,14 +288,18 @@ describe("`/命令` 胶囊", () => {
 		expect(commandsOf("/review 看下 diff", [])).toEqual([]);
 	});
 
-	it("行内代码与代码块里的 `/名字` 不还原成胶囊", () => {
-		expect(commandsOf("`/review`", KNOWN)).toEqual([]);
+	it("代码块里的 `/名字` 不还原成胶囊", () => {
 		expect(commandsOf("```\n/review\n```", KNOWN)).toEqual([]);
+	});
+
+	it("反引号包起来的 `/名字` 不算命令", () => {
+		// 反引号现在是普通字符，整段以它开头，自然不是文首命令
+		expect(commandsOf("`/review`", KNOWN)).toEqual([]);
 	});
 });
 
 describe("粘进来的原文不转义", () => {
-	/** 一段典型的手写提示词：标题、列表、行内代码、通配符都在里面 */
+	/** 一段典型的手写提示词：标题、列表、反引号、通配符都在里面 */
 	const RAW = ["## 标题", "1. **加粗**", "`layout-contract.ts`", "`prefers-*`", "通配符 *.ts"].join("\n");
 
 	it("整段原文导出逐字符一致", () => {
@@ -305,62 +327,19 @@ describe("粘进来的原文不转义", () => {
 	});
 });
 
-describe("手敲出来的富文本导出", () => {
-	it("加粗、斜体、粗斜体与行内代码各包一层", () => {
-		const out = exportedDocument((root) => {
-			root.append(
-				$createParagraphNode().append(
-					$createTextNode("粗").toggleFormat("bold"),
-					$createTextNode("与"),
-					$createTextNode("斜").toggleFormat("italic"),
-					$createTextNode("与"),
-					$createTextNode("粗斜").toggleFormat("bold").toggleFormat("italic"),
-					$createTextNode("与"),
-					$createTextNode("行内").toggleFormat("code"),
-				),
-			);
-		});
-		expect(out).toBe("**粗**与*斜*与***粗斜***与`行内`");
-	});
-
-	it("两端带空白的加粗把空白挪到标记外面", () => {
-		const out = exportedDocument((root) => {
-			root.append(
-				$createParagraphNode().append(
-					$createTextNode("甲 "),
-					$createTextNode(" 加粗 ").toggleFormat("bold"),
-					$createTextNode(" 乙"),
-				),
-			);
-		});
-		expect(out).toBe("甲  **加粗**  乙");
-	});
-
-	it("同一段粗体被拆成多个文本节点时只包一层", () => {
-		const out = exportedDocument((root) => {
-			root.append(
-				$createParagraphNode().append(
-					$createTextNode("前").toggleFormat("bold"),
-					$createTextNode("后").toggleFormat("bold"),
-				),
-			);
-		});
-		expect(out).toBe("**前后**");
-	});
-
-	it("行内代码里含反引号时围栏加长并补空格", () => {
-		expect(
-			exportedDocument((root) => {
-				root.append($createParagraphNode().append($createTextNode("a`b").toggleFormat("code")));
-			}),
-		).toBe("`` a`b ``");
-	});
-
+describe("手敲出来的结构件导出", () => {
 	it("代码块带语言，内容原样", () => {
 		const out = exportedDocument((root) => {
 			root.append($createCodeNode("ts").append($createTextNode("const a = 1;")));
 		});
 		expect(out).toBe("```ts\nconst a = 1;\n```");
+	});
+
+	it("代码块里本来就有围栏时换更长的围栏", () => {
+		const out = exportedDocument((root) => {
+			root.append($createCodeNode().append($createTextNode("```inner\n")));
+		});
+		expect(out).toBe("````\n```inner\n\n````");
 	});
 
 	it("引用块每一行都带前缀", () => {
@@ -370,54 +349,6 @@ describe("手敲出来的富文本导出", () => {
 			root.append(quote);
 		});
 		expect(out).toBe("> 一\n> 二");
-	});
-
-	it("无序列表的嵌套按父项标记宽度缩进两格", () => {
-		const out = exportedDocument((root) => {
-			const inner = $createListNode("bullet");
-			inner.append($createListItemNode().append($createTextNode("甲一")));
-			const outer = $createListNode("bullet");
-			const item = $createListItemNode().append($createTextNode("甲"));
-			item.append(inner);
-			outer.append(item, $createListItemNode().append($createTextNode("乙")));
-			root.append(outer);
-		});
-		expect(out).toBe("- 甲\n  - 甲一\n- 乙");
-		expect(roundTrip(out)).toBe(out);
-	});
-
-	it("三层嵌套与混排都按各层标记宽度累加", () => {
-		const out = exportedDocument((root) => {
-			const third = $createListNode("number");
-			third.append($createListItemNode().append($createTextNode("丙")));
-			const second = $createListNode("bullet");
-			const secondItem = $createListItemNode().append($createTextNode("乙"));
-			secondItem.append(third);
-			second.append(secondItem);
-			const first = $createListNode("bullet");
-			const firstItem = $createListItemNode().append($createTextNode("甲"));
-			firstItem.append(second);
-			first.append(firstItem);
-			root.append(first);
-		});
-		// 第一层 `- ` 两格，第二层再让出 `- ` 两格，第三层的 `1. ` 落在四格上
-		expect(out).toBe("- 甲\n  - 乙\n    1. 丙");
-		// 缩进恰好落在上一层的起始列上，读回来还是同一棵树
-		expect(roundTrip(out)).toBe(out);
-	});
-
-	it("有序列表按 list.getStart() 递增，嵌套跟着标记宽度缩进三格", () => {
-		const out = exportedDocument((root) => {
-			const inner = $createListNode("number");
-			inner.append($createListItemNode().append($createTextNode("乙")));
-			const outer = $createListNode("number");
-			const item = $createListItemNode().append($createTextNode("甲"));
-			item.append(inner);
-			outer.append(item);
-			root.append(outer);
-		});
-		expect(out).toBe("1. 甲\n   1. 乙");
-		expect(roundTrip(out)).toBe(out);
 	});
 
 	it("文件胶囊与命令胶囊导出成 `@路径` 与 `/名字`", () => {
@@ -434,20 +365,64 @@ describe("手敲出来的富文本导出", () => {
 		expect(out).toBe("看 @src/a.ts 再 /review");
 	});
 
-	it("链接的文本与地址相同时只写地址，否则写成行内链接", () => {
-		const same = exportedDocument((root) => {
+	it("行内样式不是结构件：带格式的文字照样按原文导出", () => {
+		// 输入区不再提供行内样式（`FORMAT_TEXT_COMMAND` 被吃掉），万一节点上留了格式位，
+		// 草稿也不该多出星号——屏幕上看见什么，发出去的就是什么
+		const out = exportedDocument((root) => {
 			root.append(
 				$createParagraphNode().append(
-					$createLinkNode("https://a.dev").append($createTextNode("https://a.dev")),
+					$createTextNode("粗").toggleFormat("bold"),
+					$createTextNode("与"),
+					$createTextNode("代码").toggleFormat("code"),
 				),
 			);
 		});
-		expect(same).toBe("https://a.dev");
-		const labelled = exportedDocument((root) => {
-			root.append(
-				$createParagraphNode().append($createLinkNode("https://a.dev").append($createTextNode("地址"))),
-			);
-		});
-		expect(labelled).toBe("[地址](https://a.dev)");
+		expect(out).toBe("粗与代码");
+	});
+});
+
+describe("路线 B：提示词源码优先", () => {
+	/** 一段典型的手写提示词：只有代码块是真的结构件，其余都是原文 */
+	const PROMPT = [
+		"## 标题",
+		"1. **加粗**",
+		"`layout-contract.ts`",
+		"- 列表项",
+		"```ts",
+		"const a = 1;",
+		"```",
+		"> 引用一行",
+	].join("\n");
+
+	it("导入之后除代码块与引用外全是普通段落", () => {
+		expect(blockKinds(PROMPT)).toEqual(["paragraph", "paragraph", "paragraph", "paragraph", "code", "quote"]);
+	});
+
+	it("普通段落里没有任何行内格式位", () => {
+		const editor = testEditor();
+		let formats: number[] = [];
+		editor.update(
+			() => {
+				$importComposerMarkdown(PROMPT);
+				formats = $getRoot()
+					.getAllTextNodes()
+					.map((node) => node.getFormat());
+			},
+			{ discrete: true },
+		);
+		expect(formats.every((format) => format === 0)).toBe(true);
+	});
+
+	it("往返一字不差，没有反斜杠", () => {
+		const out = roundTrip(PROMPT);
+		expect(out).toBe(PROMPT);
+		expect(out).not.toContain("\\");
+	});
+
+	it("两枚胶囊在结构化文档里仍然成立", () => {
+		const text = "@src/a.ts 看这段\n\n> 引用\n\n```ts\nconst a = 1;\n```";
+		expect(roundTrip(text, ["src/a.ts"])).toBe(text);
+		expect(mentionsOf(text, ["src/a.ts"])).toEqual(["src/a.ts"]);
+		expect(blockKinds(text)).toEqual(["paragraph", "paragraph", "quote", "paragraph", "code"]);
 	});
 });

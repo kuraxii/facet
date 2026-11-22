@@ -5,24 +5,15 @@
  * 都用它。所以导入与导出必须稳定——同一份内容来回跑一次不能换一种写法，否则草稿会在用户
  * 没有改动的情况下自己变样，`onSent` 那套去空白相等的判定也会失准。
  *
- * 只认聊天里说得清的结构：行内粗体、斜体、行内代码，以及代码块、引用块、两种列表。
- * 标题被刻意排除：`#` 在聊天里更常是行首编号（`#12` 这类引用），自动变成标题会把原意改坏。
+ * 输入区只把四类东西做成结构件：`@文件` 胶囊、`/命令` 胶囊、围栏代码块、引用块。其余
+ * Markdown 语法一律保持提示词源码——`## 标题`、`**粗体**`、`1. 甲`、`- 乙`、反引号都只是
+ * 普通文字。理由很直接：输入区的产物是给模型的提示词，用户写的是「要模型看见的原文」，把
+ * `**粗体**` 吃成一段加粗的字，粘进 `*.ts`、`prefers-*` 这类通配符就被改写了；同一条内容
+ * 手敲、粘贴、切会话恢复、`↑/↓` 回溯四种进场方式也就没有第二种样子。标题同理不转换：
+ * `#` 在聊天里更常是行首编号（`#12` 这类引用）。
  */
 import { $isCodeNode, CodeHighlightNode, CodeNode } from "@lexical/code";
-import { $isLinkNode, LinkNode } from "@lexical/link";
-import { $isListItemNode, $isListNode, ListItemNode, ListNode } from "@lexical/list";
-import {
-	$convertFromMarkdownString,
-	BOLD_ITALIC_STAR,
-	BOLD_STAR,
-	CODE,
-	INLINE_CODE,
-	ITALIC_STAR,
-	ORDERED_LIST,
-	QUOTE,
-	type Transformer,
-	UNORDERED_LIST,
-} from "@lexical/markdown";
+import { $convertFromMarkdownString, CODE, QUOTE, type Transformer } from "@lexical/markdown";
 import { $isQuoteNode, QuoteNode } from "@lexical/rich-text";
 import {
 	$createParagraphNode,
@@ -35,9 +26,6 @@ import {
 	type EditorThemeClasses,
 	type ElementNode,
 	HISTORIC_TAG,
-	IS_BOLD,
-	IS_CODE,
-	IS_ITALIC,
 	type LexicalEditor,
 	type LexicalNode,
 	type TextNode,
@@ -48,25 +36,16 @@ import { $createSlashCommandNode, $isSlashCommandNode, SlashCommandNode } from "
 /**
  * 编辑器要注册的节点。
  *
- * 链接节点一并注册着，留给后面在输入区里认网址的余地；这一版没开链接转换，所以现在不会
- * 生成链接节点。
+ * 只有这五类：代码块（含高亮子节点）、引用块、两枚胶囊。列表与链接不在输入区的语法范围
+ * 里，注册了反而会让导入侧把它们解析成结构件。
  */
-export const COMPOSER_NODES = [
-	CodeNode,
-	CodeHighlightNode,
-	QuoteNode,
-	ListNode,
-	ListItemNode,
-	LinkNode,
-	FileMentionNode,
-	SlashCommandNode,
-];
+export const COMPOSER_NODES = [CodeNode, CodeHighlightNode, QuoteNode, FileMentionNode, SlashCommandNode];
 
 /**
  * 编辑器的样式类名。
  *
- * 结构性节点各给一个类名；粗体与斜体由浏览器原生的 `strong` / `em` 表现，免得同一段文字
- * 在不同主题下有两套观感。`codeHighlight` 里的键是 Prism 的 token 名，代码块高亮按它上色。
+ * 只有结构件要类名：段落、引用块、代码块、两枚胶囊。`codeHighlight` 里的键是 Prism 的
+ * token 名，代码块高亮按它上色。
  */
 export const COMPOSER_THEME: EditorThemeClasses = {
 	paragraph: "composer-paragraph",
@@ -97,38 +76,20 @@ export const COMPOSER_THEME: EditorThemeClasses = {
 		variable: "composer-token",
 		punctuation: "composer-token",
 	},
-	list: {
-		ul: "composer-list",
-		ol: "composer-list",
-		listitem: "composer-list-item",
-	},
-	text: {
-		code: "composer-inline-code",
-	},
-	link: "composer-link",
 	fileMention: "composer-mention",
 	slashCommand: "composer-command",
 };
 
 /**
- * 双向转换的转换器表。
+ * 双向转换的转换器表：只有围栏代码块与引用块。
  *
- * 顺序只在同类转换器之间有影响：代码块（多行）排在引用与列表之前，行内格式按
- * 「粗斜体 → 粗体 → 斜体」从长到短排，否则 `**x**` 会先被当成斜体吃掉一层星号。
+ * 少即是多：每多认一种语法，用户写下的那串原文就多一种被改写的机会。这两样是"结构"
+ * （代码块要按语言上色、引用要画竖线），其余都是提示词源码，原样留着。
  *
  * 胶囊不用转换器：文件胶囊的文本内容本来就是 `@完整路径`，命令胶囊是 `/命令名`，导出时
  * 按文本走；导入时分别由 `$restoreFileMentions` 与 `$restoreSlashCommands` 认回来。
  */
-export const CHAT_TRANSFORMERS: Transformer[] = [
-	CODE,
-	QUOTE,
-	UNORDERED_LIST,
-	ORDERED_LIST,
-	BOLD_ITALIC_STAR,
-	BOLD_STAR,
-	ITALIC_STAR,
-	INLINE_CODE,
-];
+export const CHAT_TRANSFORMERS: Transformer[] = [CODE, QUOTE];
 
 /** 文本里的 `@路径`：前面是行首或空白，后面到空白或另一个 `@` 为止。 */
 const MENTION_PATTERN = /(^|\s)@([^\s@]+)/g;
@@ -156,11 +117,11 @@ function $textPieceLike(source: TextNode, text: string): TextNode {
 /**
  * 把一段文字里命中已知文件的 `@路径` 换成胶囊。
  *
- * 只认 `files` 里有的路径：`@某个人`、`a@b.com` 这类保持普通文字。代码块与行内代码里
+ * 只认 `files` 里有的路径：`@某个人`、`a@b.com` 这类保持普通文字。代码块里
  * 一律不换——那里面 `@` 多半是装饰器或注释。
  */
 function $mentionizeTextNode(node: TextNode, files: ReadonlySet<string>): void {
-	if (node.hasFormat("code") || $isInsideCode(node)) {
+	if ($isInsideCode(node)) {
 		return;
 	}
 	const text = node.getTextContent();
@@ -229,8 +190,7 @@ export function $restoreSlashCommands(known: ReadonlySet<string>): void {
 		return;
 	}
 	const head = paragraph.getFirstChild();
-	// 行内代码里的 `/` 是命令行或路径，不是命令
-	if (!$isTextNode(head) || head.hasFormat("code")) {
+	if (!$isTextNode(head)) {
 		return;
 	}
 	const text = head.getTextContent();
@@ -250,126 +210,25 @@ export function $restoreSlashCommands(known: ReadonlySet<string>): void {
 }
 
 /**
- * 把一段文字包成行内代码。
+ * 一段行内内容（段落、引用的直接子节点）。
  *
- * 围栏比内容里最长的一串反引号再长一个：内容里有 `` ` `` 时单反引号会被它提前闭合。含反引号
- * 或两端本来就是空白时按 CommonMark 补一对空格，读回来才还是原来那串字面量。
- */
-function codeSpan(text: string): string {
-	const runs = text.match(/`+/g) ?? [];
-	const longest = runs.reduce((length, run) => Math.max(length, run.length), 0);
-	const fence = "`".repeat(longest + 1);
-	const needsPadding = text.length === 0 || text.includes("`") || (/^\s/.test(text) && /\s$/.test(text));
-	return needsPadding ? `${fence} ${text} ${fence}` : `${fence}${text}${fence}`;
-}
-
-/**
- * 按格式位把一段文字包成行内 Markdown。
- *
- * 两端空白放在标记外面（`** 粗 **` 不是强调语法，读回来会是一堆星号）；整段都是空白时不加
- * 标记——加了也没有可包的内容。
- */
-function formattedText(text: string, format: number): string {
-	const bold = (format & IS_BOLD) !== 0;
-	const italic = (format & IS_ITALIC) !== 0;
-	const marker = bold && italic ? "***" : bold ? "**" : "*";
-	// 行内代码里的空白与反引号都是内容，整段塞进围栏，不往外挪
-	if ((format & IS_CODE) !== 0) {
-		return bold || italic ? `${marker}${codeSpan(text)}${marker}` : codeSpan(text);
-	}
-	if (!bold && !italic) {
-		return text;
-	}
-	const leading = /^\s*/.exec(text)?.[0] ?? "";
-	const rest = text.slice(leading.length);
-	const trailing = /\s*$/.exec(rest)?.[0] ?? "";
-	const core = rest.slice(0, rest.length - trailing.length);
-	// 整段都是空白：没有可包的内容，加标记只会写出 `** **`
-	if (core.length === 0) {
-		return text;
-	}
-	return `${leading}${marker}${core}${marker}${trailing}`;
-}
-
-/**
- * 一段行内内容（段落、列表项、引用的直接子节点）。
- *
- * 相邻且格式完全相同的文字节点拼成一段：编辑器改动常常把同一段粗体拆成好几个文本节点，
- * 逐个包标记会写出 `**甲****乙**` 这种读回来不确定的写法。
+ * 行内没有样式：只把文字、换行与两枚胶囊按顺序拼起来，`getTextContent()` 原样输出，
+ * 一个反斜杠都不补——输入区里看见什么，草稿里就是什么。
  */
 function $inlineText(parent: ElementNode): string {
 	let out = "";
-	/** 还没收尾的一段同格式文字 */
-	let run: { format: number; text: string } | null = null;
-	const flush = (): void => {
-		if (run !== null) {
-			out += formattedText(run.text, run.format);
-			run = null;
-		}
-	};
 	for (const child of parent.getChildren()) {
 		if ($isLineBreakNode(child)) {
-			flush();
 			out += "\n";
 		} else if ($isFileMentionNode(child)) {
-			flush();
 			out += `@${child.getFilePath()}`;
 		} else if ($isSlashCommandNode(child)) {
-			flush();
 			out += `/${child.getCommandName()}`;
-		} else if ($isLinkNode(child)) {
-			flush();
-			const text = child.getTextContent();
-			const url = child.getURL();
-			out += text === url ? url : `[${text}](${url})`;
-		} else if ($isTextNode(child)) {
-			const format = child.getFormat();
-			if (run !== null && run.format === format) {
-				run.text += child.getTextContent();
-			} else {
-				flush();
-				run = { format, text: child.getTextContent() };
-			}
-		} else if (!$isListNode(child)) {
-			// 嵌套列表由外层列表单独铺成续行，不混进这一行的文字里
-			flush();
+		} else {
 			out += child.getTextContent();
 		}
 	}
-	flush();
 	return out;
-}
-
-/**
- * 一个有序/无序列表。
- *
- * 缩进宽度取父项标记自身的宽度（`- ` 是 2、`1. ` 是 3、`10. ` 是 4）：导入侧按"缩进是否
- * 到达上一层内容的起始列"判断嵌套，固定 2 空格在 `1. ` 下面反而不算一层，读回来会拍平。
- */
-function $listMarkdown(list: ListNode, indent: string): string {
-	const ordered = list.getListType() === "number";
-	const start = list.getStart();
-	const lines: string[] = [];
-	let index = 0;
-	for (const item of list.getChildren()) {
-		if (!$isListItemNode(item)) {
-			continue;
-		}
-		const marker = ordered ? `${start + index}. ` : "- ";
-		const nested = item.getChildren().filter((child) => $isListNode(child));
-		// 只装着一层子列表的条目是导入器留下的壳（`- 甲` 下面那层缩进），自己不占一行
-		const isWrapper = nested.length > 0 && nested.length === item.getChildrenSize();
-		if (!isWrapper) {
-			lines.push(`${indent}${marker}${$inlineText(item)}`);
-			index += 1;
-		}
-		for (const child of nested) {
-			if ($isListNode(child)) {
-				lines.push($listMarkdown(child, `${indent}${" ".repeat(marker.length)}`));
-			}
-		}
-	}
-	return lines.join("\n");
 }
 
 /** 一个引用块：内部每一行都加 `> ` 前缀，与 `quoteBlock` 的写法一致。 */
@@ -401,17 +260,11 @@ function $blockMarkdown(node: LexicalNode): string {
 	if ($isQuoteNode(node)) {
 		return $quoteMarkdown(node);
 	}
-	if ($isListNode(node)) {
-		return $listMarkdown(node, "");
-	}
 	if ($isCodeNode(node)) {
 		return $codeMarkdown(node);
 	}
 	if ($isLineBreakNode(node)) {
 		return "\n";
-	}
-	if ($isTextNode(node)) {
-		return formattedText(node.getTextContent(), node.getFormat());
 	}
 	return node.getTextContent();
 }
@@ -422,7 +275,8 @@ function $blockMarkdown(node: LexicalNode): string {
  * 自己走一遍树，不用 `@lexical/markdown` 的 `$convertToMarkdownString`：它会给普通文本里的
  * `*`、`` ` ``、`_`、`~` 一律补反斜杠，用户粘贴进来的原始 Markdown（`*.ts`、`prefers-*`、
  * `## 标题`）会被写成一堆 `\*`，而且这个行为没有开关。这一段是确定性的序列化：文字原样
- * 输出，只有真带格式的节点才加标记，同一份内容进去出来必然一字不差。
+ * 输出，只有真成了结构件的（代码块、引用块、两枚胶囊）才重新拼语法，同一份内容进去出来
+ * 必然一字不差。
  *
  * 顶层块之间用一个 `\n` 连接：保留单换行的导入会把空行铺成空段落，导出时空段落自己就是
  * 那一个空行，于是 `甲\n\n乙` 与 `甲\n乙` 各自原样回来。末尾的空行同理照实保留——用户按了
@@ -432,7 +286,7 @@ function $blockMarkdown(node: LexicalNode): string {
  * 必须在一个读取上下文里调用；对外的 `exportComposerMarkdown` 负责这件事。
  */
 export function $exportComposerMarkdown(root: ElementNode = $getRoot()): string {
-	// 只有空段落（或空列表、空引用这类没有文字的容器）时按空内容处理
+	// 只有空段落（或空引用这类没有文字的容器）时按空内容处理
 	if (root.getTextContent().trim().length === 0) {
 		return "";
 	}

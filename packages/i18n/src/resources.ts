@@ -428,7 +428,6 @@ export const en = {
 			editorFontSize: "Editor font size",
 			terminalFont: "Terminal font",
 			terminalFontSize: "Terminal font size",
-			followCodeFont: "Same as code font",
 			codeTheme: "Code theme",
 		},
 		inputPage: {
@@ -947,7 +946,6 @@ export const zhCN = {
 			editorFontSize: "编辑器字号",
 			terminalFont: "终端字体",
 			terminalFontSize: "终端字号",
-			followCodeFont: "跟代码字体",
 			codeTheme: "代码配色",
 		},
 		inputPage: {

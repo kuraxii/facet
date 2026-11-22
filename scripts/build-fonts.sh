@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# 从本机的完整 Maple Mono CN 生成界面用的 woff2。
+# 从本机的完整 Maple Mono NL NF CN 生成界面用的 woff2（族名 Maple Mono NF，见
+# `packages/ui/src/styles/font-families.ts`）。
 #
 # 只留 Latin 与 Latin 扩展、标点与符号、制表符与框线、以及 Nerd Font 图标（私有区）；
 # 汉字与全角标点全部去掉，等宽语境里的汉字交给 `--font-mono` 栈第二位的界面中文字体。
@@ -28,6 +29,6 @@ for pair in Regular:400 SemiBold:600; do
 		--unicodes="$unicodes" \
 		--layout-features='*' \
 		--flavor=woff2 \
-		--output-file="$target_dir/maple-mono-cn-$name.woff2"
+		--output-file="$target_dir/maple-mono-nf-$name.woff2"
 done
 echo "字体已生成到 $target_dir"

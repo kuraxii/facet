@@ -49,9 +49,9 @@ export interface AppearanceSettings {
 	theme: ThemeMode;
 	/** 代码块与差异视图的高亮配色 */
 	codeTheme: CodeTheme;
-	/** 聊天里代码块与补丁用的等宽字体，空串表示用内置的 Maple Mono CN */
+	/** 聊天里代码块与补丁用的等宽字体，空串表示用内置的 Maple Mono NF */
 	codeFont: string;
-	/** 编辑器字体，空串表示跟代码字体 */
+	/** 编辑器字体，空串表示跟代码字体走同一个字体栈 */
 	editorFont: string;
 	/** 编辑器字号，单位 px */
 	editorFontSize: number;

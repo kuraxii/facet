@@ -234,42 +234,40 @@
 	width: 100%;
 }
 
-/* 复制一段原文，与回退同一套尺寸；复制成功后短暂换成对勾 */
-.copy-btn {
-	cursor: pointer;
-	opacity: 0;
+/*
+ * 消息行尾的图标动作：复制、回退、分叉共用一套，几何来自 `common/IconButton.tsx`。
+ * 这里只定"什么时候可见"与"悬停什么颜色"，三处不再各写一份。
+ */
+.msg-action {
+	color: var(--fg-subtle);
 }
 
-/* 收尾处的复制默认可见，用户消息上的等整行悬停才出现 */
-.row.is-fork .copy-btn {
-	opacity: 1;
-}
-
-.row.is-user:hover .copy-btn,
-.copy-btn:focus-visible {
-	opacity: 1;
-}
-
-.copy-btn:hover {
+/* 悬停与键盘聚焦同一个强调色：同一行动作区里不该有两种反馈色 */
+.msg-action:hover:not(:disabled),
+.msg-action:focus-visible {
 	color: var(--accent-fg);
 }
 
-.copy-btn.is-done {
+/* 复制成功后短暂亮一下，随即换回图标 */
+.msg-action.is-done,
+.msg-action.is-done:hover:not(:disabled) {
 	color: var(--status-ok-fg);
 }
 
-.revert-btn {
-	cursor: pointer;
+/* 不可用：留着位置，压到几乎看不见（分叉要等这一轮落定） */
+.msg-action:disabled {
+	opacity: 0.25;
+	cursor: default;
+}
+
+/* 用户消息上的动作等整行悬停才出现，收起时也不占视觉重量 */
+.msg-action.is-reveal {
 	opacity: 0;
 }
 
-.row.is-user:hover .revert-btn,
-.revert-btn:focus-visible {
+.row.is-user:hover .msg-action.is-reveal,
+.msg-action.is-reveal:focus-visible {
 	opacity: 1;
-}
-
-.revert-btn:hover {
-	color: var(--accent-fg);
 }
 
 .bub {
@@ -307,20 +305,6 @@
 	display: flex;
 	align-items: center;
 	gap: var(--space-2);
-}
-
-.fork-btn {
-	cursor: pointer;
-}
-
-.fork-btn:hover:not(:disabled),
-.fork-btn:focus-visible {
-	color: var(--border-focus);
-}
-
-.fork-btn:disabled {
-	opacity: 0.25;
-	cursor: default;
 }
 
 .row-action {

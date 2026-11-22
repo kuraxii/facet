@@ -62,23 +62,23 @@ const twoTurns = [
 describe("用户消息的回退入口", () => {
 	it("除第一条之外的用户消息各有一个回退按钮", () => {
 		const html = render(twoTurns, true);
-		expect((html.match(/revert-btn/g) ?? []).length).toBe(1);
+		expect((html.match(/data-action="revert"/g) ?? []).length).toBe(1);
 		expect(html).toContain("回退");
 	});
 
 	it("本轮未结束时不显示回退", () => {
 		const html = render(twoTurns, false);
-		expect(html).not.toContain("revert-btn");
+		expect(html).not.toContain('data-action="revert"');
 	});
 
 	it("还没有条目 id 的实时用户消息不显示回退", () => {
 		const html = render([userItem("m1", undefined, "刚发出的"), assistantItem("e:a1", "答复")], true);
-		expect(html).not.toContain("revert-btn");
+		expect(html).not.toContain('data-action="revert"');
 	});
 
 	it("只有一条用户消息时没有回退入口", () => {
 		const html = render([userItem("e:u1", "u1", "唯一一条"), assistantItem("e:a1", "答复")], true);
-		expect(html).not.toContain("revert-btn");
+		expect(html).not.toContain('data-action="revert"');
 	});
 });
 
@@ -225,7 +225,7 @@ describe("复制原文", () => {
 	it("给了复制回调时，用户消息与收尾处各有一个复制按钮", () => {
 		const html = render(twoTurns, true, [], { withCopy: true });
 		// 两条用户消息 + 两轮的收尾动作区
-		expect((html.match(/copy-btn/g) ?? []).length).toBe(4);
+		expect((html.match(/data-action="copy"/g) ?? []).length).toBe(4);
 		expect((html.match(/user-foot/g) ?? []).length).toBe(2);
 		expect(html).toContain("复制原文");
 	});
@@ -233,11 +233,25 @@ describe("复制原文", () => {
 	it("用户消息里复制排在回退左边", () => {
 		const html = render(twoTurns, true, [], { withCopy: true });
 		const foot = html.slice(html.indexOf("user-foot"));
-		expect(foot.indexOf("copy-btn")).toBeLessThan(foot.indexOf("revert-btn"));
+		expect(foot.indexOf('data-action="copy"')).toBeLessThan(foot.indexOf('data-action="revert"'));
 	});
 
 	it("没有复制回调时不出现复制按钮", () => {
-		expect(render(twoTurns, true)).not.toContain("copy-btn");
+		expect(render(twoTurns, true)).not.toContain('data-action="copy"');
+	});
+
+	it("复制、回退、分叉是同一枚按钮", () => {
+		const html = render(twoTurns, true, [], { withCopy: true });
+		const tags = [...html.matchAll(/<button[^>]*data-action="(?:copy|revert|fork)"[^>]*>/g)].map(
+			(match) => match[0],
+		);
+		// 两条用户消息各一个复制（第一条没有回退）、第二条多一个回退，两轮收尾各一组复制 + 分叉
+		expect(tags.length).toBe(7);
+		for (const tag of tags) {
+			expect(tag).toContain('data-variant="ghost"');
+			expect(tag).toContain('data-size="sm"');
+			expect(tag).toContain('class="ui-icon-btn msg-action');
+		}
 	});
 
 	it("每一轮的收尾处也放一个复制按钮，紧挨在分叉左边", () => {
@@ -245,7 +259,9 @@ describe("复制原文", () => {
 		// 两轮各一个收尾动作区，复制在分叉之前
 		expect((html.match(/turn-actions/g) ?? []).length).toBe(2);
 		const actions = html.indexOf("turn-actions");
-		expect(html.indexOf("copy-btn", actions)).toBeLessThan(html.indexOf("fork-btn", actions));
+		expect(html.indexOf('data-action="copy"', actions)).toBeLessThan(
+			html.indexOf('data-action="fork"', actions),
+		);
 	});
 });
 

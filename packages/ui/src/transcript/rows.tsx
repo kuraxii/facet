@@ -21,7 +21,6 @@ import {
 	Wrench,
 } from "lucide-react";
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { IconButton } from "../common/IconButton.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { Markdown } from "../markdown/Markdown.tsx";
 import { ICON_SIZE } from "../styles/visual-contract.ts";
@@ -35,6 +34,7 @@ import {
 	reuseRows,
 	turnDurationText,
 } from "./group.ts";
+import { MessageAction } from "./message-action.tsx";
 import { foldOutput, type ToolCategory, toolDetail, toolKind, toolTarget } from "./tool-text.ts";
 
 /** 面板参数。 */
@@ -115,7 +115,15 @@ function textOf(parts: readonly Part[]): string {
  *
  * 复制成功之后对勾亮一小会儿再换回复制图标，避免连点时分不清是没反应还是已经复制过。
  */
-function CopyButton({ text, onCopy }: { text: string; onCopy: (text: string) => void }) {
+function CopyButton({
+	text,
+	onCopy,
+	isReveal,
+}: {
+	text: string;
+	onCopy: (text: string) => void;
+	isReveal?: boolean;
+}) {
 	const { t } = useI18n();
 	const [isDone, setIsDone] = useState(false);
 	useEffect(() => {
@@ -126,18 +134,18 @@ function CopyButton({ text, onCopy }: { text: string; onCopy: (text: string) => 
 		return () => clearTimeout(timer);
 	}, [isDone]);
 	return (
-		<IconButton
-			variant="ghost"
-			size="sm"
-			className={isDone ? "copy-btn is-done" : "copy-btn"}
-			aria-label={isDone ? t("transcript.copied") : t("transcript.copy")}
+		<MessageAction
+			action="copy"
+			label={isDone ? t("transcript.copied") : t("transcript.copy")}
+			isDone={isDone}
+			isReveal={isReveal === true}
 			onClick={() => {
 				onCopy(text);
 				setIsDone(true);
 			}}
 		>
 			{isDone ? <Check size={ICON_SIZE.md} /> : <Copy size={ICON_SIZE.md} />}
-		</IconButton>
+		</MessageAction>
 	);
 }
 
@@ -450,16 +458,14 @@ const RowView = memo(function RowView({
 						{onCopyText === undefined || forkText.length === 0 || row.isStreaming ? null : (
 							<CopyButton text={forkText} onCopy={onCopyText} />
 						)}
-						<IconButton
-							variant="ghost"
-							size="sm"
-							className="fork-btn"
-							aria-label={t("transcript.fork")}
+						<MessageAction
+							action="fork"
+							label={t("transcript.fork")}
 							disabled={fork.needsSettle && !canFork}
 							onClick={() => onFork(fork.beforeEntryId)}
 						>
 							<Split size={ICON_SIZE.md} />
-						</IconButton>
+						</MessageAction>
 					</div>
 					{turnDurationText(row, now, t).length === 0 ? null : (
 						<span className="turn-time">{turnDurationText(row, now, t)}</span>
@@ -545,17 +551,16 @@ const RowView = memo(function RowView({
 				</div>
 				{!canRevertThis && onCopyText === undefined ? null : (
 					<div className="user-foot">
-						{onCopyText === undefined ? null : <CopyButton text={text} onCopy={onCopyText} />}
+						{onCopyText === undefined ? null : <CopyButton text={text} onCopy={onCopyText} isReveal />}
 						{canRevertThis ? (
-							<IconButton
-								variant="ghost"
-								size="sm"
-								className="revert-btn"
-								aria-label={t("transcript.revert")}
+							<MessageAction
+								action="revert"
+								label={t("transcript.revert")}
+								isReveal
 								onClick={() => onRevert(entryId, text)}
 							>
 								<Undo2 size={ICON_SIZE.md} />
-							</IconButton>
+							</MessageAction>
 						) : null}
 					</div>
 				)}

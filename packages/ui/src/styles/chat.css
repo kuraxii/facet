@@ -344,6 +344,43 @@
 	border-color: var(--accent-fg);
 }
 
+/*
+ * 消息里的图片：一条消息的几张并排，排在正文上方。
+ *
+ * 一张一个正方形的缩略图，几何与输入区待发附件同一套（`--attach-thumb-radius` 圆角、
+ * `object-fit: cover` 铺满整格），只是边长换成 `--msg-image-size`。用户行靠右（与气泡同一侧），
+ * 助手行靠左。图在格子里是裁过的，点一张开全局预览看整张，所以指针是 `zoom-in`。
+ */
+.msg-images {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--attach-thumb-gap);
+	max-width: 100%;
+}
+
+.row.is-user .msg-images {
+	justify-content: flex-end;
+}
+
+.msg-image {
+	width: var(--msg-image-size);
+	height: var(--msg-image-size);
+	padding: 0;
+	border: 1px solid var(--border-subtle);
+	border-radius: var(--attach-thumb-radius);
+	background: var(--bg-elevated);
+	cursor: zoom-in;
+	overflow: hidden;
+}
+
+/* 图片铺满整格：比例对不上就裁，不出现留白 */
+.msg-image img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
 .user-foot {
 	display: flex;
 	justify-content: flex-end;

@@ -39,6 +39,8 @@ export { messageDisplayText, messageText, SessionStore } from "./store.ts";
 export type { AttachedTerminal, TerminalListener } from "./terminal-client.ts";
 export { TerminalClient } from "./terminal-client.ts";
 export type {
+	ImagePart,
+	MessageImage,
 	Part,
 	TextPart,
 	ThinkingPart,

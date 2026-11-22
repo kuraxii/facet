@@ -622,6 +622,18 @@
 	display: none;
 }
 
+/*
+ * 原生 `<dialog>` 的 UA 样式复位。
+ *
+ * 浏览器给弹层的默认样式会盖两件事：`border: solid`（`medium` 3px、`currentcolor`）画出
+ * 一圈 3px 描边，深色主题下是白的；`color: CanvasText` 让弹层不跟页面的前景色走。三个弹层
+ * 的轮廓都交给 `--shadow-modal` 自带的那条 1px 环与圆角，文字色跟页面同一套。
+ */
+dialog {
+	border: 0;
+	color: inherit;
+}
+
 * {
 	box-sizing: border-box;
 }

@@ -108,7 +108,7 @@
 	--composer-padding-right: 12px;
 	--composer-padding-bottom: 10px;
 	--composer-padding-left: 16px;
-	--composer-font-size: 14px;
+	--composer-font-size: var(--text-body);
 	--composer-line-height: 1.6;
 	/* 输入区富文本的缩进：引用块竖线到正文、列表标记到条目文字，以及行内代码的左右留白 */
 	--composer-quote-inset: 10px;
@@ -274,7 +274,7 @@
 	--commit-tip-band-padding-y: 8px;
 	--commit-tip-lead-gap: 10px;
 	--commit-tip-row-gap: 6px;
-	--commit-tip-text-size: 13px;
+	--commit-tip-text-size: var(--text-ui);
 	--commit-tip-line-height: 1.5;
 	--commit-tip-subject-lines: 2;
 	--commit-tip-body-lines: 6;

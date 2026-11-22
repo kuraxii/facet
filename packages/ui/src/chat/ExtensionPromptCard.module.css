@@ -20,9 +20,9 @@
 	user-select: text;
 	cursor: text;
 	margin: 0;
-	font-size: 15px;
+	font-size: var(--text-body);
 	font-weight: 500;
-	line-height: 1.5;
+	line-height: var(--leading-ui);
 	overflow-wrap: anywhere;
 }
 
@@ -31,19 +31,19 @@
 	cursor: text;
 	margin: 0;
 	color: var(--fg-default);
-	line-height: 1.6;
+	line-height: var(--leading-prose);
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 }
 
 .extension-chip {
 	justify-self: start;
-	padding: 2px 8px;
+	padding: var(--space-1) var(--space-4);
 	border: var(--extension-border-width) solid var(--border-default);
-	border-radius: 999px;
+	border-radius: var(--radius-pill);
 	color: var(--fg-muted);
-	font-size: 11px;
-	line-height: 1.5;
+	font-size: var(--text-xs);
+	line-height: var(--leading-ui);
 }
 
 .extension-preview {
@@ -57,8 +57,8 @@
 	background: var(--bg-elevated);
 	color: var(--fg-muted);
 	font-family: var(--font-mono);
-	font-size: 12px;
-	line-height: 1.5;
+	font-size: var(--text-xs);
+	line-height: var(--leading-ui);
 	white-space: pre-wrap;
 }
 
@@ -129,7 +129,7 @@
 	height: var(--extension-radio-size);
 	margin-top: 2px;
 	border: var(--extension-radio-border) solid var(--fg-subtle);
-	border-radius: 999px;
+	border-radius: var(--radius-pill);
 }
 
 .extension-option.is-custom .extension-radio {
@@ -143,13 +143,13 @@
 .extension-radio-dot {
 	width: var(--extension-radio-dot);
 	height: var(--extension-radio-dot);
-	border-radius: 999px;
+	border-radius: var(--radius-pill);
 	background: var(--accent-fg);
 }
 
 .extension-option-text {
 	display: grid;
-	gap: 2px;
+	gap: var(--space-1);
 }
 
 .extension-option-label {
@@ -187,12 +187,12 @@
 	user-select: text;
 	cursor: text;
 	color: var(--fg-muted);
-	font-size: 12px;
+	font-size: var(--text-xs);
 	overflow-wrap: anywhere;
 }
 
 .extension-radio.is-square {
-	border-radius: 4px;
+	border-radius: var(--radius-sm);
 }
 
 .extension-option:has(.extension-radio-input:checked) .extension-radio.is-square {
@@ -210,7 +210,7 @@
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	gap: 6px;
+	gap: var(--space-3);
 	height: var(--extension-tab-height);
 	padding: 0 var(--extension-tab-padding-x);
 	border: var(--extension-border-width) solid transparent;
@@ -218,7 +218,7 @@
 	background: transparent;
 	color: var(--fg-subtle);
 	font: inherit;
-	font-size: 12px;
+	font-size: var(--text-xs);
 }
 
 .extension-tab:hover {
@@ -243,7 +243,7 @@
 	width: 6px;
 	height: 6px;
 	border: var(--extension-border-width) solid var(--fg-subtle);
-	border-radius: 999px;
+	border-radius: var(--radius-pill);
 	opacity: 0.5;
 }
 
@@ -279,7 +279,7 @@
 .extension-card-error {
 	margin: 0;
 	color: var(--status-err-fg);
-	font-size: 13px;
+	font-size: var(--text-ui);
 }
 
 .extension-footer {
@@ -297,7 +297,7 @@
 .extension-action {
 	display: inline-flex;
 	align-items: center;
-	gap: 6px;
+	gap: var(--space-3);
 	height: var(--extension-action-height);
 	padding: 0 var(--extension-action-padding-x);
 	border: var(--extension-border-width) solid var(--border-default);
@@ -305,7 +305,7 @@
 	background: transparent;
 	color: var(--fg-muted);
 	font: inherit;
-	font-size: 13px;
+	font-size: var(--text-ui);
 }
 
 .extension-action:hover:not(:disabled) {

@@ -18,7 +18,7 @@
 	height: 32px;
 	transform: translateX(-50%);
 	border: 1px solid var(--border-default);
-	border-radius: 50%;
+	border-radius: var(--radius-pill);
 	background: var(--bg-elevated);
 	color: var(--fg-muted);
 	box-shadow: var(--shadow-popover);
@@ -32,7 +32,7 @@
 .footer-column {
 	display: flex;
 	flex-direction: column;
-	gap: 10px;
+	gap: var(--space-5);
 	max-width: var(--chat-column-max);
 	margin: 0 auto;
 }
@@ -42,7 +42,7 @@
 	padding: var(--composer-padding-top) var(--composer-padding-right) var(--composer-padding-bottom)
 		var(--composer-padding-left);
 	border: 1px solid var(--border-default);
-	border-radius: 16px;
+	border-radius: var(--radius-xl);
 	background: var(--bg-surface);
 }
 
@@ -135,7 +135,7 @@
 
 .composer-inline-code {
 	padding: 0 var(--composer-inline-code-padding-x);
-	border-radius: 4px;
+	border-radius: var(--radius-sm);
 	background: var(--bg-elevated);
 	color: var(--fg-muted);
 	font-family: var(--font-mono);
@@ -154,7 +154,7 @@
 .composer-mention,
 .composer-command {
 	padding: 0 var(--composer-inline-code-padding-x);
-	border-radius: 4px;
+	border-radius: var(--radius-sm);
 	color: var(--accent-fg);
 	font-size: calc(var(--composer-font-size) - 1px);
 	white-space: nowrap;
@@ -257,7 +257,7 @@
 	height: var(--attach-remove-size);
 	padding: 0;
 	border: 0;
-	border-radius: 50%;
+	border-radius: var(--radius-pill);
 	background: rgb(0 0 0 / 55%);
 	color: var(--fg-default);
 	cursor: pointer;
@@ -271,7 +271,7 @@
 .composer-note {
 	margin: 0 0 var(--attach-thumb-gap);
 	color: var(--fg-subtle);
-	font-size: 12px;
+	font-size: var(--text-xs);
 }
 
 /* 命令列表：贴在输入框上沿，最多八条，超出在列表内滚动 */
@@ -283,14 +283,14 @@
 	z-index: var(--z-popup);
 	display: flex;
 	flex-direction: column;
-	gap: 1px;
+	gap: var(--space-1);
 	max-height: 320px;
 	overflow-y: auto;
 	/* 超过八条才滚动，滚动条出现时每行宽度不变 */
 	scrollbar-gutter: stable;
-	padding: 6px;
+	padding: var(--space-3);
 	border: 1px solid var(--border-default);
-	border-radius: 12px;
+	border-radius: var(--radius-xl);
 	background: var(--bg-elevated);
 	box-shadow: var(--shadow-popover);
 }
@@ -298,13 +298,13 @@
 .cmd-row {
 	display: flex;
 	align-items: baseline;
-	gap: 8px;
-	padding: 5px 8px;
+	gap: var(--space-4);
+	padding: var(--space-2) var(--space-4);
 	border: 0;
-	border-radius: 7px;
+	border-radius: var(--radius-md);
 	background: transparent;
 	color: var(--fg-default);
-	font-size: 12.5px;
+	font-size: var(--text-ui);
 	text-align: left;
 	cursor: pointer;
 }
@@ -317,14 +317,14 @@
 	flex: none;
 	color: var(--fg-default);
 	font-family: var(--font-mono);
-	font-size: 12px;
+	font-size: var(--text-xs);
 }
 
 .cmd-hint {
 	flex: none;
 	color: var(--fg-subtle);
 	font-family: var(--font-mono);
-	font-size: 11.5px;
+	font-size: var(--text-xs);
 }
 
 .cmd-desc {
@@ -352,13 +352,13 @@
 .cmd-source {
 	flex: none;
 	color: var(--fg-subtle);
-	font-size: 11px;
+	font-size: var(--text-xs);
 }
 
 .composer-row {
 	display: flex;
 	align-items: center;
-	gap: 4px;
+	gap: var(--space-2);
 	margin-top: 4px;
 }
 
@@ -384,9 +384,9 @@
 .composer-row .chip {
 	height: 28px;
 	margin-left: 2px;
-	padding: 0 8px;
+	padding: 0 var(--space-4);
 	border: 0;
-	border-radius: 14px;
+	border-radius: var(--radius-pill);
 	background: transparent;
 	color: var(--fg-subtle);
 	transition:
@@ -403,7 +403,7 @@
 .composer-send {
 	display: flex;
 	align-items: center;
-	gap: 8px;
+	gap: var(--space-4);
 	margin-left: auto;
 }
 
@@ -415,7 +415,7 @@
 	height: 24px;
 	padding: 0;
 	border: 0;
-	border-radius: 6px;
+	border-radius: var(--radius-md);
 	background: transparent;
 	cursor: pointer;
 }
@@ -444,34 +444,34 @@
 .ctx-pop-title,
 .ctx-pop-value {
 	margin: 0;
-	padding: 0 6px;
+	padding: 0 var(--space-3);
 	color: var(--fg-default);
-	font-size: 13px;
+	font-size: var(--text-ui);
 	font-weight: 400;
-	line-height: 1.6;
+	line-height: var(--leading-ui);
 }
 
 .ctx-pop-title {
-	padding-top: 5px;
+	padding-top: var(--space-2);
 }
 
 .ctx-pop-detail {
 	margin: 0;
-	padding: 1px 6px 6px;
+	padding: var(--space-1) var(--space-3) var(--space-3);
 	color: var(--fg-subtle);
-	font-size: 12px;
-	line-height: 1.5;
+	font-size: var(--text-xs);
+	line-height: var(--leading-ui);
 	white-space: nowrap;
 }
 
 .ctx-pop-action {
 	margin-top: 2px;
-	padding: 5px 6px;
+	padding: var(--space-2) var(--space-3);
 	border: 0;
-	border-radius: 6px;
+	border-radius: var(--radius-md);
 	background: transparent;
 	color: var(--fg-default);
-	font-size: 12px;
+	font-size: var(--text-xs);
 	text-align: left;
 	cursor: pointer;
 }
@@ -515,15 +515,15 @@
 	z-index: var(--z-popup);
 	display: flex;
 	flex-direction: column;
-	gap: 2px;
+	gap: var(--space-1);
 	min-width: 240px;
 	max-height: 320px;
 	overflow-y: auto;
 	/* 超过这个高度才滚动，滚动条出现时每行宽度不变 */
 	scrollbar-gutter: stable;
-	padding: 6px;
+	padding: var(--space-3);
 	border: 1px solid var(--border-default);
-	border-radius: 10px;
+	border-radius: var(--radius-lg);
 	background: var(--bg-elevated);
 	box-shadow: var(--shadow-popover);
 }
@@ -535,24 +535,24 @@
 
 .chip-pop-item.is-row {
 	justify-content: flex-start;
-	gap: 8px;
+	gap: var(--space-4);
 }
 
 .chip-pop-group {
 	display: flex;
 	flex-direction: column;
-	gap: 1px;
+	gap: var(--space-1);
 }
 
 .chip-pop-head {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	gap: 8px;
+	gap: var(--space-4);
 	margin: 4px 0 2px;
-	padding: 0 8px;
+	padding: 0 var(--space-4);
 	color: var(--fg-subtle);
-	font-size: 11px;
+	font-size: var(--text-xs);
 }
 
 .chip-pop-note {
@@ -563,14 +563,14 @@
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	gap: 10px;
+	gap: var(--space-5);
 	height: 26px;
-	padding: 0 8px;
+	padding: 0 var(--space-4);
 	border: 0;
-	border-radius: 6px;
+	border-radius: var(--radius-md);
 	background: transparent;
 	color: var(--fg-muted);
-	font-size: 12px;
+	font-size: var(--text-xs);
 	text-align: left;
 }
 
@@ -593,13 +593,13 @@
 .chip-pop-meta {
 	flex: none;
 	color: var(--fg-subtle);
-	font-size: 10.5px;
+	font-size: var(--text-xs);
 }
 
 .chip-pop-empty {
 	margin: 4px 8px;
 	color: var(--fg-subtle);
-	font-size: 11.5px;
+	font-size: var(--text-xs);
 }
 
 /* 窄档：输入区收边 */

@@ -16,15 +16,17 @@ const ATTR = "data-window-resizing";
 
 let root: Root | undefined;
 
+/** 只跑这个 Hook 的组件；定义在外层，挂载时不会每次造一个新的组件类型。 */
+function Probe(): null {
+	useWindowResizeFreeze();
+	return null;
+}
+
 /** 挂一个只跑这个 Hook 的组件。 */
 function mount(): void {
 	const host = document.createElement("div");
 	document.body.append(host);
 	root = createRoot(host);
-	function Probe(): null {
-		useWindowResizeFreeze();
-		return null;
-	}
 	act(() => root?.render(createElement(Probe)));
 }
 

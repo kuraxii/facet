@@ -494,6 +494,12 @@ const RowView = memo(function RowView({
 	onCopyText,
 }: RowViewProps): ReactNode {
 	const { t } = useI18n();
+	/*
+	 * 收起体常驻 DOM 并标 `hidden="until-found"`：页内查找命中它时自动展开。
+	 * 这个 Hook 必须在所有分支之前无条件跑一遍——同一个位置的行会换种类，按分支调用会让
+	 * 两次渲染的 Hook 数量对不上。
+	 */
+	const groupBody = useUntilFound<HTMLDivElement>(!isCollapsed, () => onToggle(row));
 
 	if (row.kind === "fork") {
 		const fork = row.fork;
@@ -620,8 +626,6 @@ const RowView = memo(function RowView({
 
 	if (row.kind === "meta") {
 		// 收起时是一行图标加标题，展开时标题变成药丸底、左侧换成下箭头
-		// 折叠体常驻 DOM 并标 `hidden="until-found"`：页内查找命中它时自动展开
-		const groupBody = useUntilFound<HTMLDivElement>(!isCollapsed, () => onToggle(row));
 		return (
 			<Shell className="is-process" isStreaming={row.isStreaming}>
 				<div className="group">

@@ -96,7 +96,7 @@ function beforeMatch(node: Element): void {
 }
 
 describe("折叠体的页内查找", () => {
-	it("思考体收起时标 `hidden=\"until-found\"`，命中后自动展开", () => {
+	it('思考体收起时标 `hidden="until-found"`，命中后自动展开', () => {
 		const host = mount([thinkingItem()]);
 		const body = host.querySelector(".tr-think");
 		expect(body).not.toBeNull();
@@ -106,7 +106,7 @@ describe("折叠体的页内查找", () => {
 		expect(host.querySelector(".tr-think")?.hasAttribute("hidden")).toBe(false);
 	});
 
-	it("工具输出收起时标 `hidden=\"until-found\"`，命中后自动展开", () => {
+	it('工具输出收起时标 `hidden="until-found"`，命中后自动展开', () => {
 		const host = mount([toolItem()]);
 		const body = host.querySelector(".tr-out");
 		expect(body?.getAttribute("hidden")).toBe("until-found");

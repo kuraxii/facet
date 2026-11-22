@@ -33,10 +33,13 @@ export function GitPatch({ diff, wrapLines = false }: GitPatchProps): ReactNode 
 		<>
 			{diff.truncated ? <p className={styles.note}>{t("panel.truncatedDiff")}</p> : null}
 			<div className={`scroll-x ${styles.diffBody}`} data-wrap={wrapLines}>
-				{lines.map(({ key, line, number }) => (
-					<div key={key} className={`${styles.diffLine} ${lineClass(line)}`}>
-						<i>{number}</i>
-						<span>{line}</span>
+				{lines.map(({ key, line, oldNumber, newNumber, sign, text }) => (
+					<div key={key} className={`${styles.diffLine} ${lineClass(line)}`} data-sign={sign}>
+						{/* 四列固定：旧行号、新行号、记号、正文。增删行缺的那一格留空，但列宽不塌 */}
+						<span className={styles.lineNumber}>{oldNumber}</span>
+						<span className={styles.lineNumber}>{newNumber}</span>
+						<span className={styles.lineSign}>{sign}</span>
+						<span className={styles.lineText}>{text}</span>
 					</div>
 				))}
 			</div>

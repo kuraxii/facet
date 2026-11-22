@@ -218,11 +218,18 @@
 	border-bottom: 1px solid var(--border-subtle);
 }
 
+/*
+ * 文件头：吸顶一行，整行就是那个折叠开关。
+ *
+ * 高度统一到 `--control-lg`（40px），滚动时钉在面板上缘；`isolation: isolate` 让底部那枚
+ * 铺满整行的按钮与上面的内容各自成层，不需要再用裸 `z-index` 去压别的东西。
+ */
 .fileHeader {
 	position: sticky;
 	top: 0;
 	z-index: var(--z-content-local);
-	height: var(--changes-header-height);
+	isolation: isolate;
+	height: var(--control-lg);
 	border-bottom: 1px solid var(--border-subtle);
 	background: var(--bg-canvas);
 }
@@ -249,19 +256,24 @@
 	background: var(--bg-hover);
 }
 
+/* 文件名是这一行的主语：正常前景、中等字重 */
 .fileName {
 	flex: 0 1 auto;
 	min-width: 0;
 	overflow: hidden;
+	color: var(--fg-default);
+	font-weight: 500;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
+/* 路径前缀压一档：扫读时先认出文件名，再回去看它在哪个目录 */
 .fileDir {
 	flex: 1;
 	min-width: 0;
 	overflow: hidden;
-	color: var(--fg-subtle);
+	color: var(--fg-muted);
+	font-weight: 400;
 	font-size: var(--text-xs);
 	text-overflow: ellipsis;
 	white-space: nowrap;

@@ -38,31 +38,49 @@
 	overflow-x: hidden;
 }
 
+/*
+ * 一行补丁 = 四列固定网格：旧行号、新行号、记号、正文。
+ *
+ * 用网格而不是 flex + 宽度：增行缺旧行号、删行缺新行号，flex 下靠"留空 span"也能对，但只要
+ * 某一列忘了渲染（或换行算错），后面的列就整体左移；固定轨道让四列永远对齐，与内容无关。
+ * 正文列 `minmax(0, 1fr)`：`0` 是下限，超长 token 顶不破容器，横向滚动留给 `.scroll-x`。
+ *
+ * 等宽数字与 `tab-size` 由 `.diffBody` 给（整块共用一个文本度量）。
+ */
 .diffLine {
-	display: flex;
+	display: grid;
+	grid-template-columns:
+		var(--diff-gutter-old) var(--diff-gutter-new) var(--diff-gutter-sign)
+		minmax(0, 1fr);
 	width: max-content;
 	min-width: 100%;
-	padding: 0 var(--space-5);
 	box-sizing: border-box;
+	font-variant-numeric: tabular-nums;
 }
 
 .diffBody[data-wrap="true"] .diffLine {
 	width: auto;
 }
 
-.diffLine i {
-	flex: none;
-	width: var(--changes-line-number-width);
-	padding-right: var(--space-5);
+/* 行号列：右对齐、贴一条分隔线，行号与正文之间的那点空隙由内边距给 */
+.lineNumber {
+	padding-right: var(--space-3);
+	padding-left: var(--space-2);
 	color: var(--fg-subtle);
-	font-style: normal;
 	text-align: right;
 	user-select: none;
 }
 
-.diffLine span {
-	flex: 1;
-	min-width: 0;
+/* 记号列：跟正文同一个等宽字，增删各一枚 + / - */
+.lineSign {
+	color: var(--fg-subtle);
+	text-align: center;
+	user-select: none;
+}
+
+/* 正文列唯一的横向留白：右端给一格，长行滚到头时最后一个字符不贴边 */
+.lineText {
+	padding-right: var(--space-5);
 	white-space: pre;
 }
 
@@ -70,18 +88,87 @@
  * 行的性质由 `lineClass()` 给的全局类决定：增行铺一层淡绿底、删行淡红底，hunk 头与文件头
  * 用弱色。这一份必须留在这里——三处补丁都走 `GitPatch`，缺了它补丁就只剩一行行文字。
  */
+/*
+ * 增删行的层次由三样东西叠出来，缺一样就分不清：
+ *
+ * 1. 整行淡底（前景色 15% / 10% 混进来，深浅主题各自适配）；
+ * 2. 最左一条 3px 实色竖条——行号列在这个状态里是透明的，竖条因此直接贴在面板最左缘；
+ * 3. 行号列保持透明，底色一路贯通到边缘，不会被行号列截成两段。
+ *
+ * 前景色不跟着调：词级高亮只抬底色，深色主题下把文字也染成红绿会掉对比度。
+ */
+.diffLine:global(.is-add),
+.diffLine:global(.is-del) {
+	position: relative;
+	color: var(--fg-default);
+}
+
 .diffLine:global(.is-add) {
 	background: color-mix(in srgb, var(--diff-add-fg) 15%, transparent);
-	color: var(--diff-add-fg);
 }
 
 .diffLine:global(.is-del) {
 	background: color-mix(in srgb, var(--diff-del-fg) 10%, transparent);
-	color: var(--diff-del-fg);
+}
+
+.diffLine:global(.is-add)::before,
+.diffLine:global(.is-del)::before {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: 0;
+	width: 3px;
+	content: "";
+}
+
+.diffLine:global(.is-add)::before {
+	background: var(--diff-add-bar);
+}
+
+.diffLine:global(.is-del)::before {
+	background: var(--diff-del-bar);
+}
+
+/* 增删行的两个行号列都透明：底色贯通到最左缘，与竖条接得上 */
+.diffLine:global(.is-add) .lineNumber,
+.diffLine:global(.is-del) .lineNumber {
+	background: transparent;
+}
+
+/*
+ * 上下文行：行号列压一档底色，与代码区区分开——扫读时先看到"这两列是行号"，再看到正文。
+ * 悬停整行时行号列跟着一起变色，不留一条亮带。
+ */
+.diffLine:global(.is-ctx) .lineNumber {
+	background: var(--bg-subtle);
+}
+
+.diffLine:global(.is-ctx):hover .lineNumber {
+	background: var(--bg-hover);
 }
 
 .diffLine:global(.is-meta) {
 	color: var(--fg-subtle);
+}
+
+/* hunk 头这类元信息行没有行号，四列只留正文那一格 */
+.diffLine:global(.is-meta) .lineText {
+	grid-column: 1 / -1;
+	padding-left: var(--space-5);
+}
+
+/*
+ * 高对比度偏好下不单靠色相区分：给增删行补上下 1px 轮廓线。
+ *
+ * 连续的多行增删各自带上这两条线，块内相邻的线重叠成一条，块的首尾正好各一条——正是要的
+ * 效果，不需要再判断"块从哪开始、到哪结束"。
+ */
+@media (prefers-contrast: more) {
+	.diffLine:global(.is-add),
+	.diffLine:global(.is-del) {
+		border-top: 1px solid var(--border-default);
+		border-bottom: 1px solid var(--border-default);
+	}
 }
 
 .diffBody[data-wrap="true"] .diffLine {
@@ -89,9 +176,16 @@
 	min-width: 0;
 }
 
-.diffBody[data-wrap="true"] .diffLine span {
+.diffBody[data-wrap="true"] .lineText {
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
+	line-break: anywhere;
+}
+
+/* 折行时行号与记号不跟着涨高：它们各自钉在第一行，行号才不会被正文折行带歪 */
+.diffBody[data-wrap="true"] .lineNumber,
+.diffBody[data-wrap="true"] .lineSign {
+	line-height: var(--leading-code-block);
 }
 
 /* ---------- 文件行 ---------- */
@@ -157,7 +251,7 @@
 	flex: none;
 	gap: var(--changes-icon-gap);
 	align-items: center;
-	height: var(--changes-header-height);
+	height: var(--control-lg);
 	padding: 0 var(--changes-trailing) 0 var(--changes-row-padding-x);
 	border-bottom: 1px solid var(--border-subtle);
 }

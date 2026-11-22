@@ -47,6 +47,11 @@
 
 行高给 px 而不是倍数：13px 的字与 14px 的字落在同一条 20px 基线上，同一行里的控件才等高。
 
+**代码区是唯一例外**：`--leading-code-block`（`1.6667`）与 `--text-code-inline`（`0.9285em`）
+是比例值。等宽字体在小字号下需要比正文松一点，又必须跟着用户改的编辑器字号一起缩放——写死
+像素会让大字号下的代码挤成一片。围栏代码块、Mermaid 源码、Diff 代码区与输入区代码块共用它们，
+缩进宽度统一 `tab-size: 4`。
+
 ### 1.3 间距（10 档，4px 网格）
 
 `--space-1` `2` · `--space-2` `4` · `--space-3` `6` · `--space-4` `8` · `--space-5` `10` ·
@@ -84,13 +89,33 @@
 
 ### 1.7 动效
 
+时长按"变了什么"分四档，曲线按方向分五条：
+
 | 变量 | 值 | 用途 |
 | :--- | :--- | :--- |
-| `--ease-standard` | `cubic-bezier(0.2, 0.6, 0.3, 1)` | 全仓唯一曲线 |
 | `--dur-fast` | `120ms` | 颜色、透明度这类极快反馈 |
 | `--dur-slow` | `180ms` | 展开、折叠、位移 |
+| `--dur-enter` | `220ms` | 弹层、对话框的进出场 |
+| `--dur-structural` | `320ms` | 折叠区、面板展开收起这类结构性变化 |
+| `--ease-standard` | `cubic-bezier(0.2, 0.6, 0.3, 1)` | 通用：两头都收，位移或位移叠透明度 |
+| `--ease-out` | `cubic-bezier(0, 0, 0.2, 1)` | 出现：纯减速，起手快、落点稳 |
+| `--ease-in` | `cubic-bezier(0.4, 0, 1, 1)` | 退场：纯加速，离开要干脆 |
+| `--ease-enter` | `cubic-bezier(0.16, 1, 0.3, 1)` | 弹层进场：前段极快、后段长尾 |
+| `--ease-panel` | `cubic-bezier(0.65, 0, 0.35, 1)` | 面板展开收起：对称缓入缓出 |
 
-`data-motion="reduced"` 把两条时长清零，曲线不动；时长只认这两个变量，别处不写裸值。
+时长只认这四个变量、曲线只认这五条，别处不写裸值——`transition` 的写死值由门禁盯着。
+
+**减少动效**：`data-motion="reduced"` 与 `prefers-reduced-motion: reduce` 都把四档时长清零，
+曲线不动（曲线只决定形状，不产生时长）。
+
+**拖拽冻结**：拖窗口边缘或拖分栏期间，根节点上挂 `data-window-resizing`，四档时长同样清零。
+窗口那侧由外壳的 `useWindowResizeFreeze` 管（最后一次 `resize` 之后 150ms 摘掉），分栏那侧
+由 `PaneResizer` 在 `pointerdown` / `pointerup` 之间挂上。冻结走的是同一套变量，不需要一条
+`!important`，也不用遍历 DOM 打补丁。
+
+**弹层进场只动 `transform`**：顶层元素（原生 `<dialog>` 走 Top Layer）在无合成器的环境里动画
+时间线不推进，起始帧会原地冻住；若起始帧里带 `opacity: 0`，弹层就一直是透明的。所以进场用
+一次性 `animation`（不带 `fill-mode`，播完回自然值）且只动缩放位移，最坏情况是位置差 6px。
 
 ## 2. 颜色与主题
 
@@ -197,7 +222,32 @@
   反而丢掉这层关系。
 - `transition` 另算——抹掉 `var(...)` 之后还剩时间字面量或缓动关键字才算。
 
-## 6. 滚动条
+## 6. 滚动与折叠
+
+**滚动容器**：`.scroll-y` / `.scroll-x` / `.scroll-both` 三件套管行为，`--scrollbar-width` 由
+滚动条统一给。`.scroll` 另行显式声明 `scroll-behavior: auto`（交给原生惯性）与
+`overflow-anchor: none`（吸底由脚本按 `scrollTop` 管，不要让浏览器自己锚定）；`html, body`
+用 `overscroll-behavior-y: none` 关掉整窗回弹。
+
+**聊天视口**：`.chat-viewport` 包住滚动区，上下各一层 40px 的渐隐（`--z-content`、不接指针），
+按 `data-can-scroll-top` / `data-can-scroll-bottom` 淡入——滚到头就收掉，静止时不凭空压暗一条。
+输入区上方另有一条六阶渐变（`.footer::before`，全部由 `color-mix` 从 `--bg-canvas` 派生），
+消息滚到输入区边缘不再是一条硬切线。
+
+**消息行**：`content-visibility: auto` 配 `contain-intrinsic-size: auto 64px`，屏外的行跳过布局
+与绘制，`auto` 记住实测高度，滚动条长度不跳。用户消息行（导航竖轨按位置跳转）、流式行与末尾
+两行不参与裁剪。代价是拖选跨过视口边界时要现渲染，这是已知取舍。
+
+**滚动监听**一律显式声明 `passive`：不要 `preventDefault()` 的写 `true`，真要拦的（Mermaid 图
+的 Ctrl+滚轮缩放）写 `false`，漏写由 `visual-contract.test.ts` 拦下。
+
+**折叠体**：思考、工具输出与过程组收起时留在 DOM 里并标 `hidden="until-found"`，浏览器页内
+查找（`Ctrl+F`）命中时派 `beforematch`，我们据此展开。属性在 `useLayoutEffect` 里
+`setAttribute` 写入——React 把 `hidden` 当布尔属性，传字符串只会得到 `hidden=""`（那是
+`display: none`，正好把查找也关掉）。收起态由尺寸包含压到零高，边框与内边距另有一条规则收掉。
+展开箭头是一枚 chevron 转 90°（`--dur-slow` + `--ease-out`），与折叠体同一个节拍。
+
+## 7. 滚动条
 
 滚动条是全仓唯一一处"同一个外观要落到一堆动不了的容器上"的地方：`.scroll-y` / `.scroll-x` /
 `.scroll-both` 是我们自己的容器，CodeMirror 的 `.cm-scroller`、xterm 的 `.xterm-viewport`、
@@ -211,7 +261,7 @@ markstream 里画表格与代码块的节点是第三方的，DOM 不在手里�
 以及 `.scroll-row` 的右内边距——所以它必须等于实际画出来的宽度，这也是这里不用标准
 `scrollbar-width`（只有三档、画不出圆角拇指）而用伪元素的原因。
 
-## 7. 迁移状态
+## 8. 迁移状态
 
 四轮迁移已全部落地，全仓几何零存量：
 
@@ -221,6 +271,7 @@ markstream 里画表格与代码块的节点是第三方的，DOM 不在手里�
 | 2 | 颜色语义化 | `theme.css` 重写为 38 个角色键 × 6 套配色；阴影收成三档；焦点环画在盒子内侧；13 个死 token 删除 |
 | 3 | 控件原语与图标真值 | 五个原语接管按钮、图标按钮、输入框、列表行与徽标；图标尺寸收到 `12 / 14 / 16`，描边宽度只剩一处 |
 | 4 | 全仓几何清零 | 12 个样式表里最后 457 条写死数值迁到刻度；滚动条清单去重；门禁从"棘轮"升级为"全仓零债" |
+| 5 | 动效、滚动与 Diff | 动效补到四档时长 + 五条曲线、拖拽冻结、代码比例行高、聊天边缘渐隐、屏外跳绘、`hidden="until-found"` 折叠、Diff 四列网格与 3px 增删条 |
 
 增量的做法：真要调外观（不是迁移），另开一次提交，别混在结构收紧里——迁移只换取值来源，
 屏幕上应当看不出差别；调外观要能被一句提交说明讲清楚。

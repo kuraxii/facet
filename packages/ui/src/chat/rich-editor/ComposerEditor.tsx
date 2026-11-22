@@ -340,6 +340,10 @@ function KeyboardPlugin({
 					if (isSendCombo) {
 						// 发送键位即使此刻发不出去也不换行：空白内容不该因为按了回车多出一行
 						event.preventDefault();
+						// 长按回车会连续触发 keydown：重复的那几下既不该发出第二条，也不该补一个换行
+						if (event.repeat) {
+							return true;
+						}
 						if (current.canSend) {
 							current.onSend();
 						}

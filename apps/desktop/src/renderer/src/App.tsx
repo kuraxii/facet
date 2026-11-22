@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import { bridge } from "./bridge.ts";
 import { useHostConnection } from "./hooks/useHostConnection.ts";
 import { useHosts } from "./hooks/useHosts.ts";
+import { useWindowResizeFreeze } from "./hooks/useWindowResizeFreeze.ts";
 import { HostRuntimeProvider } from "./host-context.tsx";
 import { ToastProvider } from "./toast-provider.tsx";
 import { BootScreen } from "./views/boot-screen.tsx";
@@ -48,6 +49,8 @@ export function App(): React.JSX.Element {
 function AppView({ languageSetting, onLanguageChange }: AppViewProps) {
 	const hosts = useHosts();
 	const host = useHostConnection({ runtime: hosts.runtime, hosts });
+	// 拖窗口边缘期间把全仓过渡冻住：否则每一帧的尺寸变化会叠成一条追赶动画
+	useWindowResizeFreeze();
 
 	// 连不上与连接中各占一屏，主工作区只在可用之后渲染
 	if (host.phase !== "ready") {

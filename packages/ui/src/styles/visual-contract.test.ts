@@ -131,10 +131,19 @@ const SCALE_DECLARATIONS: readonly (readonly [string, string])[] = [
 	["--icon-sm", `${VISUAL_SCALE.icon.sm}px`],
 	["--icon-md", `${VISUAL_SCALE.icon.md}px`],
 	["--icon-lg", `${VISUAL_SCALE.icon.lg}px`],
+	// 代码区比例排版
+	["--leading-code-block", `${VISUAL_SCALE.code.lineHeight}`],
+	["--text-code-inline", `${VISUAL_SCALE.code.inlineScaleEm}em`],
 	// 动效
 	["--dur-fast", `${VISUAL_SCALE.motion.fastMs}ms`],
 	["--dur-slow", `${VISUAL_SCALE.motion.slowMs}ms`],
+	["--dur-enter", `${VISUAL_SCALE.motion.enterMs}ms`],
+	["--dur-structural", `${VISUAL_SCALE.motion.structuralMs}ms`],
 	["--ease-standard", VISUAL_SCALE.motion.ease],
+	["--ease-out", VISUAL_SCALE.motion.easeOut],
+	["--ease-in", VISUAL_SCALE.motion.easeIn],
+	["--ease-enter", VISUAL_SCALE.motion.easeEnter],
+	["--ease-panel", VISUAL_SCALE.motion.easePanel],
 	// 图标描边：界面图标（lucide 与自绘 `.ui-icon`）的唯一宽度
 	["--icon-stroke-width", `${ICON_STROKE_WIDTH}px`],
 ];

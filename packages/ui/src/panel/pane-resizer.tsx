@@ -21,6 +21,9 @@ import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef,
 import { createPortal, flushSync } from "react-dom";
 import { clampPaneWidth } from "./pane-width.ts";
 
+/** 拖动期间挂在根节点上的属性：`motion.css` 据此把四档过渡时长清零。 */
+const RESIZE_ATTR = "data-window-resizing";
+
 /** 一次拖动的现场。 */
 interface DragState {
 	/** 指针按下时的横坐标 */
@@ -113,6 +116,7 @@ export function PaneResizer({
 				return;
 			}
 			dragging.current = undefined;
+			document.documentElement.removeAttribute(RESIZE_ATTR);
 			draggingListener.current?.(false);
 			start.target?.style.setProperty(cssVar, `${start.startWidth}px`);
 			if (start.pending && collapsePreviewAttr !== undefined) {
@@ -134,6 +138,8 @@ export function PaneResizer({
 			};
 			event.currentTarget.setPointerCapture(event.pointerId);
 			setIsDragging(true);
+			// 拖动期间冻结全仓过渡：列宽每帧都在变，过渡会把它们叠成拖影
+			document.documentElement.setAttribute(RESIZE_ATTR, "");
 			draggingListener.current?.(true);
 		},
 		[width],
@@ -188,6 +194,7 @@ export function PaneResizer({
 			dragging.current = undefined;
 			setIsDragging(false);
 			setIsCollapsePending(false);
+			document.documentElement.removeAttribute(RESIZE_ATTR);
 			if (event.currentTarget.hasPointerCapture?.(event.pointerId) === true) {
 				event.currentTarget.releasePointerCapture(event.pointerId);
 			}

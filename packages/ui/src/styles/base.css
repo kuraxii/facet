@@ -41,6 +41,13 @@
 	--leading-ui: 20px; /* 控件、菜单、侧栏、普通正文 */
 	--leading-prose: 24px; /* Markdown 长文阅读区 */
 	--leading-display: 32px; /* 主标题 */
+	/*
+	 * 代码区的行高用倍数：等宽字体在小字号下需要比正文松一点（12px × 1.6667 ≈ 20px），
+	 * 又不能写死像素——用户改编辑器字号时代码块要跟着一起呼吸。
+	 */
+	--leading-code-block: 1.6667;
+	/* Markdown 行内代码相对正文的缩放：13px 档位下的那枚 12px 等宽字 */
+	--text-code-inline: 0.9285em;
 
 	/* 间距刻度（4px 网格，2px / 6px / 10px 是对齐到像素的半步） */
 	--space-1: 2px; /* 紧邻列表项、页签间隙 */
@@ -80,8 +87,16 @@
 	--text-size: var(--text-body);
 	/* 交互动效：极快反馈 120ms，展开折叠 180ms；`data-motion="reduced"` 把两者清零 */
 	--ease-standard: cubic-bezier(0.2, 0.6, 0.3, 1);
+	/* 三档时长：反馈（颜色、透明度）、展开（位移、折叠）、结构变化（面板、抽屉） */
 	--dur-fast: 120ms;
 	--dur-slow: 180ms;
+	--dur-enter: 220ms;
+	--dur-structural: 320ms;
+	/* 方向性曲线：出现用减速、退场用加速、浮层用强减速、面板用对称 */
+	--ease-out: cubic-bezier(0, 0, 0.2, 1);
+	--ease-in: cubic-bezier(0.4, 0, 1, 1);
+	--ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+	--ease-panel: cubic-bezier(0.65, 0, 0.35, 1);
 	/* 运行中动效的周期：文字呼吸、扫光与状态点共用同一个节拍 */
 	--live-cycle: 1.6s;
 	/* 顶部那条带的高度与每个窗口按钮的宽度 */
@@ -259,7 +274,6 @@
 	--changes-icon-gap: 8px;
 	--changes-stat-gap: 4px;
 	--changes-header-height: 28px;
-	--changes-line-height: 1.5;
 	--changes-line-number-width: 40px;
 	/*
 	 * 提交悬浮卡：卡片宽度，三个区段的左右留白与上下留白，段内行距与并列项之间的距离，

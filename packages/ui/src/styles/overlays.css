@@ -84,6 +84,35 @@ dialog.search-panel::backdrop {
 	text-align: center;
 }
 
+/*
+ * 弹层进场：一次性缩放位移，`--dur-enter` 配 `--ease-enter`（前段快、后段长尾）。
+ *
+ * 三种弹层（通用对话框、会话搜索层、设置窗）共用这一条。手法上刻意只动 `transform`，
+ * **不动 opacity**：这些元素在浏览器 Top Layer 里，顶层内容在无合成器的环境（含无头调试）
+ * 下动画时间线不推进，起始帧会原地冻住。如果起始帧里还带着 `opacity: 0`，弹层就一直是透明的；
+ * 只动 `transform` 时最坏情况也只是位置差 6px、缩放差 3%，看得见、点得着。
+ *
+ * 用 `animation` 而不是 `@starting-style` + `transition` 是同一个理由：动画不带 `fill-mode`，
+ * 播完即回到自然值；`@starting-style` 在起始样式没被换掉时会把元素永久钉在起始态。
+ *
+ * 减动效时 `--dur-enter` 被清零，动画当场跑完，等于没有。
+ */
+dialog.dialog[open],
+dialog.search-panel[open],
+dialog.set-page[open] {
+	animation: dialog-in var(--dur-enter) var(--ease-enter);
+}
+
+@keyframes dialog-in {
+	from {
+		transform: translateY(6px) scale(0.97);
+	}
+
+	to {
+		transform: none;
+	}
+}
+
 /* 对话框 */
 /*
  * 原生模态弹层。

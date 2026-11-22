@@ -87,7 +87,7 @@ export function WorkspacePanelControls({
 				size="sm"
 				className="chrome-toggle"
 				aria-label={t("panel.collapsePanel")}
-				onClick={shell.isPanelDrawerOpen ? shell.closePanelDrawer : shell.togglePanel}
+				onClick={shell.togglePanel}
 			>
 				<PanelRightClose size={ICON_SIZE.md} />
 			</IconButton>

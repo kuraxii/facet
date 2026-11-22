@@ -6,7 +6,6 @@
  */
 import type { FacetSettings } from "@facet/protocol";
 import type { CodeThemeValue, RightPanelState, RightPanelTab, SettingsSection } from "@facet/ui";
-import type { LayoutPane } from "../../resolve-layout.ts";
 import type { PanelPatch } from "./useWorkspacePanels.ts";
 
 /** 右栏那边由本 Hook 组合出的动作：窄档走抽屉，平铺态改意图位。 */
@@ -31,25 +30,19 @@ export interface ShellLayoutOptions {
 	panel: RightPanelState;
 	/** `⤢` 宽展开位 */
 	panelExpanded: boolean;
-	/** 中档预算保留哪一栏 */
-	priorityPane: LayoutPane;
-	/** 换优先级：手动开栏、调宽、切分页都算主动交互 */
-	onPriorityChange: (pane: LayoutPane) => void;
 	/** 右栏的原子动作，由 `useWorkspacePanels` 给 */
 	panelActions: ShellPanelActions;
-	/** 窄档抽屉：窄档下的两栏开关与工具切换都走它 */
+	/** 窄档的侧栏抽屉：窄档下左栏的开关走它 */
 	drawers: DrawerHandle;
 }
 
 /** 外壳布局对外给的东西。 */
 export interface ShellLayout {
-	/** 窄档：两栏都是抽屉 */
+	/** 窄档：左栏进抽屉，右栏继续占列 */
 	isNarrow: boolean;
 	/** 左抽屉开着 */
 	isDrawerOpen: boolean;
-	/** 右抽屉开着：窄档里的临时抽屉 */
-	isPanelDrawerOpen: boolean;
-	/** 右栏此刻看不看得见：抽屉开没开，或者占没占列 */
+	/** 右栏此刻看不看得见：占没占列 */
 	isPanelOpen: boolean;
 	/** `⤢` 宽展开是否生效 */
 	isPanelExpanded: boolean;
@@ -77,16 +70,14 @@ export interface ShellLayout {
 	updateSidebarWidth: (next: number) => void;
 	/** 分隔条开始/结束拖动：拖动期间锁住折叠 */
 	setPaneResizing: (dragging: boolean) => void;
-	/** 改右栏状态并写回本地；窄档下不接受宽度补丁 */
+	/** 改右栏状态并写回本地 */
 	updatePanel: (patch: PanelPatch) => void;
-	/** 开关右栏：窄档切抽屉，平铺态改意图位 */
+	/** 开关右栏：改意图位 */
 	togglePanel: () => void;
 	/** 打开一个工具并切过去 */
 	setPanelTab: (tab: RightPanelTab) => void;
 	/** 关掉一个工具标签 */
 	closePanelTab: (tab: RightPanelTab) => void;
-	/** 关掉右抽屉；平铺态下顺带收起右栏并退出宽展开 */
-	closePanelDrawer: () => void;
 	/** `⤢` 与 `⤡` */
 	togglePanelExpanded: () => void;
 	/** 收起左抽屉 */
@@ -94,24 +85,16 @@ export interface ShellLayout {
 }
 
 /**
- * 窄档抽屉：开合状态、动作，以及挂在上面的两处 Escape 与焦点行为。
+ * 窄档的侧栏抽屉：开合状态、动作，以及挂在上面的 Escape 与焦点行为。
  *
- * 抽屉是窄档的临时视图，不写回宽档的意图位：窗口拉宽后仍按 `panel.open` 与侧栏收起位平铺。
+ * 抽屉是窄档的临时视图，不写回宽档的意图位：窗口拉宽后仍按侧栏收起位平铺。
  */
 export interface DrawerHandle {
 	/** 左抽屉开着 */
 	isDrawerOpen: boolean;
-	/** 右抽屉开着：只有窄档才有 */
-	isPanelDrawerOpen: boolean;
 	/** 开关左抽屉 */
 	toggleSidebarDrawer: () => void;
-	/** 开关右抽屉 */
-	togglePanelDrawer: () => void;
-	/** 打开右抽屉（切工具标签时用） */
-	openPanelDrawer: () => void;
-	/** 收起右抽屉 */
-	closePanelDrawer: () => void;
-	/** 收起此刻开着的那个抽屉 */
+	/** 收起左抽屉 */
 	closeDrawer: () => void;
 }
 
@@ -129,9 +112,7 @@ export interface WorkspaceShell {
 	isSidebarCollapsed: boolean;
 	/** 侧栏此刻是否可见 */
 	isSidebarOpen: boolean;
-	/** 右抽屉是否开着：窄档下的临时抽屉 */
-	isPanelDrawerOpen: boolean;
-	/** 右栏此刻看不看得见：抽屉开没开，或者占没占列 */
+	/** 右栏此刻看不看得见：占没占列 */
 	isPanelOpen: boolean;
 	/** `⤢` 宽展开是否生效：左栏临时让位、右栏占满整行 */
 	isPanelExpanded: boolean;
@@ -190,16 +171,14 @@ export interface WorkspaceShell {
 	 * 的改动（见 `addPanelTab` / `removePanelTab`）。
 	 */
 	updatePanel: (patch: PanelPatch) => void;
-	/** 开关右栏：窄档切抽屉，未固定时展开或收起浮层，固定时改意图位 */
+	/** 开关右栏：改意图位 */
 	togglePanel: () => void;
-	/** 打开一个工具并切过去；窄档把抽屉调出来，中档被折起时把预算让给它 */
+	/** 打开一个工具并切过去；中档被折起时把预算让给它 */
 	setPanelTab: (tab: RightPanelTab) => void;
 	/** 关掉一个工具标签；最后一个关掉后右栏停在启动清单上，不跟着收起 */
 	closePanelTab: (tab: RightPanelTab) => void;
 	/** 改索引栏宽度并写回本地：拖动松手时提交一次 */
 	updateWorkspaceListWidth: (next: number) => void;
-	/** 打开或收起右抽屉（窄档的临时抽屉） */
-	closePanelDrawer: () => void;
 	/** `⤢` 与 `⤡`：进出宽展开 */
 	togglePanelExpanded: () => void;
 	/** 应用本机界面缩放 */

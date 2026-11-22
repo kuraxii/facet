@@ -1,20 +1,21 @@
 /**
- * 布局档位与中档预算折叠。
+ * 布局档位、右栏让位与中档预算折叠。
  *
  * 这里是三档语义与宽展开的唯一实现（口径见 `docs/layout.md` §2）：纯函数，不碰 DOM、不读
- * 窗口，输入是「视口宽 + 两个偏好宽 + 两个意图位 + 宽展开位 + 优先级」，输出是「哪一栏此刻
- * 该占列、是不是按宽展开排的」。
+ * 窗口，输入是「视口宽 + 两个偏好宽 + 两个意图位 + 宽展开位」，输出是「哪一栏此刻该占列、
+ * 右栏该多宽、是不是按宽展开排的」。
  *
  * 意图与结果分开：意图位记录用户想不想开，折叠只改结果，不回写意图。窗口拉宽之后按意图
  * 自动恢复，靠的就是这一点。
  *
- * 预算折叠不挤压列宽：夹紧能吸收的缺口有限，且会让拖动出的宽度与看到的宽度脱耦
- * （`docs/layout.md` §5.1、§5.2）。空间不够时折起一栏，另一栏保持它的偏好宽。
+ * 窗口变小时先让右栏、再让正文（{@link fitPanelWidth}）：右栏拿不到「正文的阅读上限 + 两侧
+ * 留白」时就先窄下去，窄到下限之后正文才开始缩。中档的预算折叠因此只剩一种结果——折起左栏：
+ * 右栏永远占列，它只缩不消失。
  */
 
-import { LAYOUT_PX } from "@facet/ui";
+import { LAYOUT_PX, PANEL_MIN_WIDTH, VISUAL_PX } from "@facet/ui";
 
-/** 窄档阈值（CSS px）：小于它是窄档，两栏都进抽屉。 */
+/** 窄档阈值（CSS px）：小于它是窄档，左栏进抽屉、右栏继续占列。 */
 export const LAYOUT_BREAKPOINT_PX = LAYOUT_PX.breakpoint.narrow;
 
 /**
@@ -33,6 +34,16 @@ export const LAYOUT_WIDE_BREAKPOINT_PX = LAYOUT_PX.breakpoint.wide;
  * `layout-contract.ts`（`docs/layout.md` §2「数值口径」）。
  */
 export const MAIN_MIN_WIDTH = LAYOUT_PX.mainMinWidth;
+
+/**
+ * 右栏让位的基准宽（CSS px）：主区「正文阅读上限 + 两侧导航轨留白」的宽度。
+ *
+ * 窗口缩小时先保这个数：右栏宁可窄下去，也不让正文掉到阅读上限以下。`840 + 52 × 2` 两个数
+ * 都来自样式契约（`--chat-column-max` 与 `--chat-rail-gutter`，后者取导航轨占位那一档），
+ * 100% 缩放下的值。
+ */
+export const MAIN_PREFERRED_WIDTH =
+	VISUAL_PX.readingColumnMax + (VISUAL_PX.outlineRail.width + VISUAL_PX.outlineRail.inset * 2) * 2;
 
 /** 两份布局结果是否等价；等价时调用方可以跳过重渲染。 */
 export function sameLayout(left: LayoutResolution, right: LayoutResolution): boolean {
@@ -65,14 +76,18 @@ export interface LayoutInput {
 	/** 用户想不想开右栏 */
 	readonly panelIntent: boolean;
 	/**
+	 * 右栏偏好宽是在多大的窗口下定下的；`undefined` 表示从没手动拖过宽。
+	 *
+	 * 窗口比它小多少，右栏就先让多少（见 {@link fitPanelWidth}）。
+	 */
+	readonly panelPrefViewport: number | undefined;
+	/**
 	 * 右栏是不是正处在 `⤢` 宽展开里。
 	 *
 	 * 它是临时视图状态，不落盘：命中时右栏**吃掉正文那一列**（最大化就是盖住主栏），左栏
 	 * 照旧按意图摆——这个位不动两侧的意图位与偏好宽（口径见 `docs/layout.md` §2「宽展开」）。
 	 */
 	readonly isPanelExpanded: boolean;
-	/** 两栏都想开而预算不够时保留哪一栏：最近一次被用户主动打开或调过宽的那一栏 */
-	readonly priorityPane: LayoutPane;
 }
 
 /** 一次布局判定的结果。 */
@@ -83,7 +98,7 @@ export interface LayoutResolution {
 	readonly viewportWidth: number;
 	/** 左栏此刻是否占列；窄档恒为 `false`，由抽屉接管 */
 	readonly sidebarVisible: boolean;
-	/** 右栏此刻是否占列；窄档恒为 `false`，由抽屉接管 */
+	/** 右栏此刻是否占列：它没有抽屉，任何档位都按意图占列 */
 	readonly panelVisible: boolean;
 	/** 被预算折起的那一栏；没有折叠时为 `undefined` */
 	readonly foldedPane: LayoutPane | undefined;
@@ -123,12 +138,12 @@ export function layoutTierOf(viewportWidth: number): LayoutTier {
 /**
  * 算出这一刻哪一栏占列。
  *
- * 判定顺序：窄档两栏都让给抽屉 → 宽展开（右栏盖住正文那一列，左栏照旧）→ 宽档只看意图 →
- * 中档先看意图，再在两栏都想开时核对预算（`侧栏宽 + 正文最小宽 + 右栏宽 <= 视口宽`），超了
- * 就把优先级低的那一栏折起。
+ * 判定顺序：窄档只把左栏让给抽屉（右栏永远占列）→ 宽展开（右栏盖住正文那一列，左栏照旧）
+ * → 宽档只看意图 → 中档先看意图，再在两栏都想开时核对预算
+ * （`侧栏宽 + 正文最小宽 + 右栏宽 <= 视口宽`），超了就把优先级低的那一栏折起。
  *
  * 宽展开只在右栏想开时生效：右栏都收起了，也就没有「展开它」这回事，那一帧照常按意图平铺。
- * 窄档忽略它——那里本来就是近满宽的抽屉。
+ * 窄档忽略它——那一列本来就已经被挤到接近视口宽了。
  */
 export function resolveLayout(input: LayoutInput): LayoutResolution {
 	const viewportWidth = usableViewport(input.viewportWidth);
@@ -140,7 +155,7 @@ export function resolveLayout(input: LayoutInput): LayoutResolution {
 			tier,
 			viewportWidth,
 			sidebarVisible: false,
-			panelVisible: false,
+			panelVisible: panelIntent,
 			foldedPane: undefined,
 			expanded: false,
 		};
@@ -186,8 +201,18 @@ export function resolveLayout(input: LayoutInput): LayoutResolution {
 		};
 	}
 
-	const budget = usableWidth(input.sidebarPref) + MAIN_MIN_WIDTH + usableWidth(input.panelPref);
-	if (budget <= viewportWidth) {
+	/*
+	 * 预算：右栏让到它能给的最窄之后，正文还放得下吗。放不下就折起左栏——右栏不折，它只缩
+	 * 不消失，所以这里没有「保留哪一栏」可争。
+	 */
+	const sidebarPref = usableWidth(input.sidebarPref);
+	const panelWidth = fitPanelWidth({
+		viewportWidth,
+		sidebarWidth: sidebarPref,
+		panelPref: input.panelPref,
+		panelPrefViewport: input.panelPrefViewport,
+	});
+	if (sidebarPref + MAIN_MIN_WIDTH + panelWidth <= viewportWidth) {
 		return {
 			tier,
 			viewportWidth,
@@ -198,15 +223,57 @@ export function resolveLayout(input: LayoutInput): LayoutResolution {
 		};
 	}
 
-	const keepSidebar = input.priorityPane === "sidebar";
 	return {
 		tier,
 		viewportWidth,
-		sidebarVisible: keepSidebar,
-		panelVisible: !keepSidebar,
-		foldedPane: keepSidebar ? "panel" : "sidebar",
+		sidebarVisible: false,
+		panelVisible: true,
+		foldedPane: "sidebar",
 		expanded: false,
 	};
+}
+
+/** 右栏实占宽的输入。 */
+export interface PanelFitInput {
+	/** 判定用的视口宽（CSS px） */
+	readonly viewportWidth: number;
+	/** 此刻与它并列的左栏宽度；左栏折起或进抽屉时传 0 */
+	readonly sidebarWidth: number;
+	/** 右栏偏好宽（CSS px） */
+	readonly panelPref: number;
+	/** 偏好宽定下时的视口宽；没手动拖过时是 `undefined` */
+	readonly panelPrefViewport: number | undefined;
+}
+
+/**
+ * 右栏此刻占多宽。
+ *
+ * 两级：
+ *
+ * 1. **没手动拖过**（`panelPrefViewport` 是 `undefined`）：右栏只拿主区放得下「正文阅读上限
+ *    + 两侧留白」之后剩下的部分。窗口越窄它越窄，窄到 `PANEL_MIN_WIDTH` 为止，之后正文
+ *    才开始跟着缩。
+ * 2. **手动拖过**：拖动优先——拖出来的宽度先照摆，窗口每少一像素右栏就还回一像素，直到
+ *    下限，之后正文才开始缩。窗口比定宽时更宽就按偏好宽长回去，不越过它。
+ *
+ * 两级最后都收在同一个上限上：正文不小于 `--main-min`（{@link paneMaxWidth} 的同一口径），
+ * 也就是分隔条能拖到的最大宽度。
+ */
+export function fitPanelWidth(input: PanelFitInput): number {
+	const viewport = usableViewport(input.viewportWidth);
+	const sidebar = usableWidth(input.sidebarWidth);
+	// 偏好宽读不懂（或读成 0）时按最窄那一档来，不让右栏凭空消失
+	const pref = Math.max(PANEL_MIN_WIDTH, usableWidth(input.panelPref));
+	// 拖到头也保不住正文时，宁可正文窄一点，也不再往下压右栏
+	const ceiling = Math.max(PANEL_MIN_WIDTH, viewport - sidebar - MAIN_MIN_WIDTH);
+	const body = Math.min(pref, Math.max(PANEL_MIN_WIDTH, viewport - sidebar - MAIN_PREFERRED_WIDTH));
+	// 基准读不懂就当没手动定过宽：按第一级算，不要拿一个瞎猜的视口去推收缩量
+	const prefViewport = input.panelPrefViewport;
+	if (prefViewport === undefined || !Number.isFinite(prefViewport) || prefViewport <= 0) {
+		return Math.min(body, ceiling);
+	}
+	const shrink = viewport - prefViewport;
+	return Math.max(PANEL_MIN_WIDTH, Math.min(pref + Math.min(0, shrink), pref, ceiling));
 }
 
 /** 「给正文留够地方」这个约束的输入。 */

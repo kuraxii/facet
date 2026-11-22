@@ -154,8 +154,8 @@
 /*
  * 容器窄于 640px 时把文字折起来，只剩图标、计数与关闭按钮。
  *
- * 查询容器是顶带右格与抽屉顶头（`chrome.css` 的 `.chrome-slot.is-panel`、本节的
- * `.panel-head`），量到的是整列宽。640 这个数同时写在 `workspace-tab-bar.tsx` 的
+ * 查询容器是顶带右格（`chrome.css` 的 `.chrome-slot.is-panel`），量到的是整列宽。640
+ * 这个数同时写在 `workspace-tab-bar.tsx` 的
  * `WORKSPACE_TAB_LABEL_BREAKPOINT_PX` 里：容器查询里不能写变量，两处由
  * `layout-contract.test.ts` 比对（真值在 `layout-contract.ts`）。
  *
@@ -190,8 +190,7 @@
 		display: none;
 	}
 
-	.chrome-slot-row,
-	.panel-head-row {
+	.chrome-slot-row {
 		gap: var(--space-1);
 	}
 }
@@ -844,40 +843,4 @@
 	font-size: var(--text-xs);
 	line-height: var(--leading-ui);
 	text-align: center;
-}
-
-/*
- * 抽屉态：窄档下右栏是一层停在窗口右缘的全高浮层，实占宽归零，宽度由样式定。
- * 它与左抽屉互斥，遮罩由外壳统一渲染。
- */
-.panel.is-drawer {
-	position: fixed;
-	inset: 0 0 0 auto;
-	z-index: var(--z-drawer);
-	width: min(var(--panel-width), 92vw);
-	box-shadow: var(--shadow-modal);
-}
-
-/*
- * 抽屉顶头：标签、`+` 与关闭按钮都在这一条 `--chrome-height` 里，右侧让出窗口按钮簇。
- * 只在抽屉态渲染（平铺时这些控件在顶带那一格）。宽展开在抽屉里没有意义，那一格不给它。
- *
- * 它自己是容器查询的容器，量到的是整条抽屉宽，所以这里 MUST NOT 留横向内边距：让出按钮
- * 簇的那 132px 落在里面那一行上，否则查询到的宽度会比抽屉窄一整簇。
- */
-.panel-head {
-	flex: none;
-	height: var(--chrome-height);
-	border-bottom: 1px solid var(--border-subtle);
-	container-type: inline-size;
-	-webkit-app-region: no-drag;
-}
-
-.panel-head-row {
-	display: flex;
-	gap: var(--space-2);
-	align-items: center;
-	height: 100%;
-	padding-left: var(--space-2);
-	padding-inline-end: var(--window-controls-width);
 }

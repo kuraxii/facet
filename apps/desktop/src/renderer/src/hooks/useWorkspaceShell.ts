@@ -7,18 +7,16 @@
  * 三块职责各在一个子 Hook 里：
  *
  * - `workspace-shell/useShellLayout`：档位、两栏宽度与抽屉开合（含拖动期间的折叠锁定）；
- * - `workspace-shell/useDrawerFocus`：两个抽屉的 Escape 与焦点归还；
+ * - `workspace-shell/useDrawerFocus`：侧栏抽屉的 Escape 与焦点归还；
  * - `workspace-shell/useWorkspacePanels`：右栏的标签集合、宽展开与落盘。
  *
  * 这里只做接线，外加不属那三块的壳状态：聊天 / 设置视图、设置分节、会话搜索、界面缩放、
  * 外观与代码主题。
  *
- * 右栏只在窄档走抽屉；宽档与中档一律占 Grid 第 3 列（中档超预算时与左栏互斥折叠）。
+ * 右栏在任何档位都占 Grid 第 3 列，窗口变小时先窄下去（中档超预算时折起的是左栏）。
  * `⤢` 宽展开是临时视图状态，不落盘：展开期间左栏让位、右栏整行，退出时按原偏好宽与
  * 意图位完整恢复（口径见 `docs/layout.md` §2）。
  */
-import { useState } from "react";
-import type { LayoutPane } from "../resolve-layout.ts";
 import type { WorkspaceShell, WorkspaceShellOptions } from "./workspace-shell/shell-types.ts";
 import { useDrawerFocus } from "./workspace-shell/useDrawerFocus.ts";
 import { useShellChrome } from "./workspace-shell/useShellChrome.ts";
@@ -30,21 +28,12 @@ export type { WorkspaceShell, WorkspaceShellOptions } from "./workspace-shell/sh
 export type { PanelPatch } from "./workspace-shell/useWorkspacePanels.ts";
 export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShell {
 	const { settings } = options;
-	/** 最近一次被用户主动打开或调宽的那一栏：中档预算不够时保留它 */
-	const [priorityPane, setPriorityPane] = useState<LayoutPane>("sidebar");
-
 	const chrome = useShellChrome(settings);
-	const panels = useWorkspacePanels({
-		onActivate: () => {
-			setPriorityPane("panel");
-		},
-	});
+	const panels = useWorkspacePanels();
 	const drawers = useDrawerFocus();
 	const layout = useShellLayout({
 		panel: panels.panel,
 		panelExpanded: panels.isPanelExpanded,
-		priorityPane,
-		onPriorityChange: setPriorityPane,
 		panelActions: panels,
 		drawers,
 	});
@@ -52,7 +41,6 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 	return {
 		isNarrow: layout.isNarrow,
 		isDrawerOpen: layout.isDrawerOpen,
-		isPanelDrawerOpen: layout.isPanelDrawerOpen,
 		isPanelOpen: layout.isPanelOpen,
 		isPanelExpanded: layout.isPanelExpanded,
 		isSidebarCollapsed: layout.isSidebarCollapsed,
@@ -72,7 +60,6 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 		togglePanel: layout.togglePanel,
 		setPanelTab: layout.setPanelTab,
 		closePanelTab: layout.closePanelTab,
-		closePanelDrawer: layout.closePanelDrawer,
 		togglePanelExpanded: layout.togglePanelExpanded,
 		panel: panels.panel,
 		workspaceListWidth: panels.workspaceListWidth,

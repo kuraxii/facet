@@ -1,26 +1,11 @@
 /**
- * 窄档抽屉的开关与 Escape 优先级。
+ * 窄档侧栏抽屉的开关与 Escape 优先级。
  *
- * 纯函数：只决定「此刻开哪一个抽屉」与「这次 Escape 归不归抽屉处理」，不碰 DOM。
+ * 纯函数：只决定「这次 Escape 归不归抽屉处理」，以及外壳该挂哪些类名，不碰 DOM。
  *
- * 窄档抽屉是临时视图：开关不写回宽档的意图位（`panel.open` 与侧栏收起位），窗口拉宽后
- * 仍按用户原来的意图平铺。
+ * 抽屉是临时视图：开关不写回宽档的意图位（侧栏收起位），窗口拉宽后仍按用户原来的意图平铺。
+ * 右栏没有抽屉——它在任何档位都占列，窄下去只是变窄。
  */
-
-/** 窄档里能开的那两个抽屉。 */
-export type NarrowDrawer = "sidebar" | "panel";
-
-/**
- * 切换抽屉：开一个就关另一个（互斥），再点同一个就全关。
- *
- * 互斥是纯状态推导，不靠两个布尔量的先后赋值：同一时刻最多只有一个抽屉被记着。
- */
-export function toggleNarrowDrawer(
-	current: NarrowDrawer | undefined,
-	next: NarrowDrawer,
-): NarrowDrawer | undefined {
-	return current === next ? undefined : next;
-}
 
 /** 判定抽屉该不该吃这次 Escape 的输入。 */
 export interface DrawerEscapeInput {

@@ -29,8 +29,16 @@ export interface RightPanelState {
 	openTabs: readonly RightPanelTab[];
 	/** 当前激活的标签；`openTabs` 为空时是 `null`，非空时一定是其中之一 */
 	activeTab: RightPanelTab | null;
-	/** 宽度，单位 px */
+	/** 偏好宽，单位 px */
 	width: number;
+	/**
+	 * 定下这个宽度时的视口宽，单位 px；从没手动拖过宽时是 `undefined`。
+	 *
+	 * 窗口缩小时右栏要先让位：有了这个数才知道「让多少」——窗口少了多少，右栏就跟着窄多少，
+	 * 直到下限为止，之后才轮到正文变窄。没有它就只能按阅读上限一刀切，手动拖出来的宽度
+	 * 会在窗口一动时就跳回自动值（口径见 `docs/layout.md` §3 约束 2）。
+	 */
+	widthViewport: number | undefined;
 }
 
 /**
@@ -59,6 +67,7 @@ export const DEFAULT_PANEL_STATE: RightPanelState = {
 	openTabs: [],
 	activeTab: null,
 	width: PANEL_DEFAULT_WIDTH,
+	widthViewport: undefined,
 };
 
 /** 合法的工具取值，读盘时用它判定；顺序即启动清单与 `+` 菜单的顺序。 */
@@ -69,6 +78,8 @@ const OPEN_KEY = "facet.panel.open";
 const TABS_KEY = "facet.panel.tabs";
 const ACTIVE_KEY = "facet.panel.active";
 const WIDTH_KEY = "facet.panel.width";
+/** 定下偏好宽时的视口宽；没拖过时这个键是空的。 */
+const WIDTH_VIEWPORT_KEY = "facet.panel.widthViewport";
 /**
  * 三栏时期的单标签键。
  *
@@ -174,7 +185,14 @@ export function readPanelState(storage: PanelStorage): RightPanelState {
 		openTabs,
 		activeTab: readActive(storage.getItem(ACTIVE_KEY)) ?? legacy,
 		width: clampPanelWidth(Number.parseFloat(storage.getItem(WIDTH_KEY) ?? "")),
+		widthViewport: readViewport(storage.getItem(WIDTH_VIEWPORT_KEY)),
 	});
+}
+
+/** 读视口宽：读不懂（空串、0、负数、非数字）就当没手动定过宽。 */
+function readViewport(raw: string | null): number | undefined {
+	const value = Number.parseFloat(raw ?? "");
+	return Number.isFinite(value) && value > 0 ? Math.round(value) : undefined;
 }
 
 /** 写入右栏状态。 */
@@ -183,4 +201,5 @@ export function writePanelState(storage: PanelStorage, state: RightPanelState): 
 	storage.setItem(TABS_KEY, JSON.stringify(state.openTabs));
 	storage.setItem(ACTIVE_KEY, state.activeTab ?? "");
 	storage.setItem(WIDTH_KEY, String(clampPanelWidth(state.width)));
+	storage.setItem(WIDTH_VIEWPORT_KEY, state.widthViewport === undefined ? "" : String(state.widthViewport));
 }

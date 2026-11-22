@@ -114,6 +114,16 @@ describe("readPanelState", () => {
 		expect(readPanelState(createStorage({ "facet.panel.tab": "图钉" })).openTabs).toEqual([]);
 	});
 
+	it("读回定宽时的视口基准；读不懂就不算手动定过宽", () => {
+		expect(readPanelState(createStorage({ "facet.panel.widthViewport": "1400" })).widthViewport).toBe(1400);
+		for (const bad of ["", "宽", "0", "-10"]) {
+			expect(
+				readPanelState(createStorage({ "facet.panel.widthViewport": bad })).widthViewport,
+				bad,
+			).toBeUndefined();
+		}
+	});
+
 	it("宽度没有上限，只收下限", () => {
 		// 上限由正文的最小宽现算，落盘里留用户拖出来的宽度
 		expect(readPanelState(createStorage({ "facet.panel.width": "9999" })).width).toBe(9999);
@@ -125,6 +135,13 @@ describe("readPanelState", () => {
 });
 
 describe("writePanelState", () => {
+	it("定宽时的视口基准一起落盘", () => {
+		const storage = createStorage();
+		writePanelState(storage, state({ width: 600, widthViewport: 1400 }));
+		expect(storage.data["facet.panel.widthViewport"]).toBe("1400");
+		expect(readPanelState(storage).widthViewport).toBe(1400);
+	});
+
 	it("写进去能读回来", () => {
 		const storage = createStorage();
 		const written = state({ openTabs: ["files", "changes"], activeTab: "changes", width: 600 });

@@ -3,15 +3,14 @@
  * 外壳布局：档位、两栏宽度与拖动锁定。
  *
  * `useShellLayout` 自己不持有面板状态，这里给一份固定的面板状态与一组记账用的动作，验三件
- * 事：右栏实占宽在平铺态被正文预算钳住、窄档直接用偏好宽；开关在窄档切抽屉、平铺态改意图
- * 位；拖动期间不重算档位。
+ * 事：右栏实占宽在三档里都被正文预算钳住（它没有抽屉，窄档也占列）；左栏在窄档走抽屉、
+ * 其余档位改意图位；拖动期间不重算档位。
  */
 
 import type { RightPanelState } from "@facet/ui";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { LayoutPane } from "../../resolve-layout.ts";
 import type { ShellLayout, ShellPanelActions } from "./shell-types.ts";
 import { useDrawerFocus } from "./useDrawerFocus.ts";
 import { useShellLayout } from "./useShellLayout.ts";
@@ -68,9 +67,9 @@ const media = vi.hoisted(() => {
 	return state;
 });
 
-/** 面板状态：开着、偏好宽 `width`。 */
-function panelOf(width: number): RightPanelState {
-	return { open: true, openTabs: ["files"], activeTab: "files", width };
+/** 面板状态：开着、偏好宽 `width`、没手动定过宽时的视口基准。 */
+function panelOf(width: number, widthViewport?: number): RightPanelState {
+	return { open: true, openTabs: ["files"], activeTab: "files", width, widthViewport };
 }
 
 /** 记账用的右栏动作。 */
@@ -103,7 +102,7 @@ let root: Root | undefined;
 let container: HTMLElement | undefined;
 let current: ShellLayout | undefined;
 /** 这一次挂载喂给 Hook 的输入 */
-let input: { panel: RightPanelState; actions: ShellPanelActions; priorityPane: LayoutPane };
+let input: { panel: RightPanelState; actions: ShellPanelActions };
 
 /** 挂载用的外壳：把 Hook 的结果交给用例，不渲染任何东西。 */
 function Harness(): ReactElement {
@@ -111,8 +110,6 @@ function Harness(): ReactElement {
 	current = useShellLayout({
 		panel: input.panel,
 		panelExpanded: false,
-		priorityPane: input.priorityPane,
-		onPriorityChange: () => undefined,
 		panelActions: input.actions,
 		drawers,
 	});
@@ -120,12 +117,8 @@ function Harness(): ReactElement {
 }
 
 /** 挂一棵树：抽屉 + 布局，面板状态与动作由用例给。 */
-function mount(
-	panel: RightPanelState,
-	actions: ShellPanelActions,
-	priorityPane: LayoutPane = "sidebar",
-): void {
-	input = { panel, actions, priorityPane };
+function mount(panel: RightPanelState, actions: ShellPanelActions): void {
+	input = { panel, actions };
 	container = document.createElement("div");
 	document.body.append(container);
 	root = createRoot(container);
@@ -175,37 +168,55 @@ afterEach(() => {
 });
 
 describe("右栏实占宽", () => {
-	it("平铺态被正文预算钳住，偏好宽本身不动", () => {
+	it("先让右栏：1400 里偏好宽 800 只拿到下限，正文留够阅读上限", () => {
 		const actions = actionsStub();
 		mount(panelOf(800), actions);
-		// 1400 − 正文最小 520 − 左栏 272 = 608
+		// 1400 − 左栏 272 − 正文基准 944 < 0，右栏停在下限
+		expect(layout().panelEffectiveWidth).toBe(300);
+		// 分隔条仍能拖到「正文只剩 520」那条线
 		expect(layout().panelMaxWidth).toBe(608);
-		expect(layout().panelEffectiveWidth).toBe(608);
 	});
 
-	it("窄档直接用偏好宽：抽屉盖在正文上，没有并列的正文要保护", async () => {
+	it("窗口再窄：右栏不再变，正文自己缩", async () => {
 		const actions = actionsStub();
 		mount(panelOf(800), actions);
 		await setNarrow(true);
-		expect(layout().panelEffectiveWidth).toBe(800);
+		await resizeTo(840);
+		expect(layout().panelEffectiveWidth).toBe(300);
+	});
+
+	it("手动拖过的宽度先照摆，窗口缩下去时右栏先还", async () => {
+		const actions = actionsStub();
+		// 1400 的窗口里定下 600
+		mount(panelOf(600, 1400), actions);
+		expect(layout().panelEffectiveWidth).toBe(600);
+
+		await resizeTo(1300);
+		expect(layout().panelEffectiveWidth).toBe(500);
+
+		await resizeTo(1100);
+		expect(layout().panelEffectiveWidth).toBe(300);
+
+		// 回到定宽时的窗口，按偏好宽长回去
+		await resizeTo(1400);
+		expect(layout().panelEffectiveWidth).toBe(600);
 	});
 });
 
 describe("两栏开关", () => {
-	it("窄档切抽屉，不动意图位", async () => {
+	it("窄档里左栏走抽屉、右栏照旧改意图位", async () => {
 		const actions = actionsStub();
 		mount(panelOf(420), actions);
 		await setNarrow(true);
-		// 进窄档会顺手退出宽展开，那一条不算这两下开关的账
+		// 进窄档会顺手退出宽展开，那一条不算这几下开关的账
 		actions.calls.length = 0;
 
 		act(() => layout().toggleSidebar());
 		expect(layout().isDrawerOpen).toBe(true);
 		act(() => layout().togglePanel());
-		expect(layout().isPanelDrawerOpen).toBe(true);
-		expect(layout().isDrawerOpen).toBe(false);
-		// 窄档的开关不写回面板状态
-		expect(actions.calls).toEqual([]);
+		expect(actions.calls).toEqual(["setOpen:false"]);
+		// 右栏没有抽屉，左抽屉不受它影响
+		expect(layout().isDrawerOpen).toBe(true);
 	});
 
 	it("平铺态改意图位", () => {
@@ -218,14 +229,12 @@ describe("两栏开关", () => {
 		expect(actions.calls).toEqual(["setOpen:false"]);
 	});
 
-	it("窄档下宽度补丁被丢掉", async () => {
+	it("窄档下宽度补丁照样提交：右栏在那里也是可拖的一列", async () => {
 		const actions = actionsStub();
 		mount(panelOf(420), actions);
 		await setNarrow(true);
 		actions.calls.length = 0;
 		act(() => layout().updatePanel({ width: 500 }));
-		expect(actions.calls).toEqual([]);
-		act(() => layout().updatePanel({ open: false }));
 		expect(actions.calls).toEqual(["update:patch"]);
 	});
 });

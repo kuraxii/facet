@@ -2,8 +2,8 @@
  * 右栏（工作区）的状态。
  *
  * 只管「开着哪几个标签、停在哪个上面、多宽、要不要整行铺开」这几件事，以及它们的落盘：
- * 不知道档位、不知道抽屉、也不碰焦点。窄档与平铺的差别（抽屉 / 意图位）由 `useShellLayout`
- * 组合，这里给出的都是与档位无关的原子动作。
+ * 不知道档位、也不碰焦点。空间怎么分（让位顺序、预算折叠）由 `useShellLayout` 组合，这里
+ * 给出的都是与档位无关的原子动作。
  */
 import {
 	openPanelTab as addPanelTab,
@@ -21,12 +21,6 @@ import { useCallback, useLayoutEffect, useState } from "react";
 
 /** 一次右栏改动：补丁，或者按当前状态算出下一份状态。 */
 export type PanelPatch = Partial<RightPanelState> | ((state: RightPanelState) => RightPanelState);
-
-/** 右栏状态的参数。 */
-export interface WorkspacePanelsOptions {
-	/** 用户主动开右栏、调宽或增删标签：中档预算不够时保留的应该是这一栏 */
-	onActivate: () => void;
-}
 
 /** 右栏状态与它的原子动作。 */
 export interface WorkspacePanels {
@@ -52,7 +46,7 @@ export interface WorkspacePanels {
 	updateWorkspaceListWidth: (next: number) => void;
 }
 
-export function useWorkspacePanels({ onActivate }: WorkspacePanelsOptions): WorkspacePanels {
+export function useWorkspacePanels(): WorkspacePanels {
 	const [panel, setPanel] = useState<RightPanelState>(() => readPanelState(localStorage));
 	const [isPanelExpanded, setIsPanelExpanded] = useState(false);
 	const [workspaceListWidth, setWorkspaceListWidth] = useState(() =>
@@ -69,22 +63,21 @@ export function useWorkspacePanels({ onActivate }: WorkspacePanelsOptions): Work
 		document.documentElement.style.setProperty("--workspace-list-width", `${workspaceListWidth}px`);
 	}, [workspaceListWidth]);
 
-	const update = useCallback(
-		(patch: PanelPatch) => {
-			// 手动打开、调宽、增减标签都算主动交互：优先级换到右栏，预算不够时折起左栏
-			if (typeof patch === "function" || patch.open === true || patch.width !== undefined) {
-				onActivate();
-			}
-			setPanel((current) => {
-				const next = normalizePanelState(
-					typeof patch === "function" ? patch(current) : { ...current, ...patch },
-				);
-				writePanelState(localStorage, next);
-				return next;
-			});
-		},
-		[onActivate],
-	);
+	const update = useCallback((patch: PanelPatch) => {
+		setPanel((current) => {
+			const next = normalizePanelState(
+				typeof patch === "function" ? patch(current) : { ...current, ...patch },
+			);
+			/*
+			 * 宽度变了就记下当时的窗口宽：此后窗口每少一像素，右栏先还回一像素（`fitPanelWidth`
+			 * 的「拖动优先」）。别的补丁不动这条基准，否则切个标签就把用户挑宽的基准冲掉了。
+			 */
+			const stamped =
+				next.width === current.width ? next : { ...next, widthViewport: Math.round(window.innerWidth) };
+			writePanelState(localStorage, stamped);
+			return stamped;
+		});
+	}, []);
 
 	const openTab = useCallback(
 		(tab: RightPanelTab) => {

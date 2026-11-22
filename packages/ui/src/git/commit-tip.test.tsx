@@ -16,8 +16,8 @@ const commit: GitCommit = {
 };
 
 /** 渲染一张提交悬浮卡。 */
-function render(webUrl: string | undefined): string {
-	return renderToStaticMarkup(createElement(CommitTip, { commit, webUrl }));
+function render(webUrl: string | undefined, extra: Partial<GitCommit> = {}): string {
+	return renderToStaticMarkup(createElement(CommitTip, { commit: { ...commit, ...extra }, webUrl }));
 }
 
 describe("提交悬浮卡", () => {
@@ -38,5 +38,25 @@ describe("提交悬浮卡", () => {
 		expect(linked).toContain(`href="https://github.com/ocean/facet/commit/${commit.sha}"`);
 		expect(linked).toContain("在 GitHub 上打开");
 		expect(render(undefined)).not.toContain("在 GitHub 上打开");
+	});
+
+	it("在改动规模下面列出 HEAD、分支与 Tag", () => {
+		const html = render(undefined, {
+			refs: [
+				{ name: "v0.3.0", kind: "tag" },
+				{ name: "ui-polish", kind: "branch" },
+				{ name: "HEAD", kind: "head" },
+			],
+		});
+		for (const name of ["v0.3.0", "ui-polish", "HEAD"]) {
+			expect(html).toContain(name);
+		}
+		// 顺序固定成 HEAD → 本地分支 → 远端分支 → Tag，与图谱行同一套
+		expect(html.indexOf("HEAD")).toBeLessThan(html.indexOf("ui-polish"));
+		expect(html.indexOf("ui-polish")).toBeLessThan(html.indexOf("v0.3.0"));
+	});
+
+	it("没有引用时整栏不出，不留一条空分隔线", () => {
+		expect(render(undefined)).not.toContain("HEAD");
 	});
 });

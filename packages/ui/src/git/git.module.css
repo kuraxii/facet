@@ -452,6 +452,21 @@
 	padding: var(--commit-tip-padding-y) var(--commit-tip-padding-x);
 }
 
+/*
+ * 引用栏：图谱行里那份胶囊贴右端、限宽 55%，那是给一行的摆法；卡片这一栏铺得开，
+ * 胶囊靠左排、排不下就换行，单条过长的名字仍按 `.ref` 自己的上限收成省略号。
+ */
+.commitTipRefs {
+	flex: 1;
+	min-width: 0;
+}
+
+.commitTipRefs .refs {
+	flex-wrap: wrap;
+	max-width: none;
+	overflow: visible;
+}
+
 .commitTipRemoved {
 	color: var(--diff-del-fg);
 }

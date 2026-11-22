@@ -22,6 +22,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Badge } from "../common/Badge.tsx";
+import { ListRow } from "../common/ListRow.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { ICON_SIZE, VISUAL_PX } from "../styles/visual-contract.ts";
 import type { WorkspaceTabId, WorkspaceTabItem } from "./workspace-tab-bar.tsx";
@@ -202,9 +203,10 @@ export function WorkspaceTabMenu({
 							onKeyDown={onMenuKeyDown}
 						>
 							{items.map((item) => (
-								<button
+								<ListRow
+									as="button"
 									key={item.id}
-									type="button"
+									variant="menu"
 									role="menuitem"
 									className="workspace-menu-item"
 									data-tab={item.id}
@@ -223,7 +225,7 @@ export function WorkspaceTabMenu({
 									{item.shortcut === undefined ? null : (
 										<span className="workspace-menu-key">{item.shortcut}</span>
 									)}
-								</button>
+								</ListRow>
 							))}
 						</div>,
 						document.body,

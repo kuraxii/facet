@@ -9,6 +9,7 @@
  * 弹出第二份菜单。
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ListRow } from "./common/ListRow.tsx";
 import { useI18n } from "./i18n/I18nProvider.tsx";
 import { VISUAL_PX } from "./styles/visual-contract.ts";
 
@@ -185,8 +186,9 @@ export function TextMenu({ onCopy, onQuote, quoteScope }: TextMenuProps): React.
 			style={{ left: placed?.left ?? menu.x, top: placed?.top ?? menu.y }}
 			onContextMenu={(event) => event.preventDefault()}
 		>
-			<button
-				type="button"
+			<ListRow
+				as="button"
+				variant="menu"
 				role="menuitem"
 				className="text-menu-item"
 				onClick={() => {
@@ -195,10 +197,11 @@ export function TextMenu({ onCopy, onQuote, quoteScope }: TextMenuProps): React.
 				}}
 			>
 				<span>{t("textMenu.copy")}</span>
-			</button>
+			</ListRow>
 			{menu.canQuote ? (
-				<button
-					type="button"
+				<ListRow
+					as="button"
+					variant="menu"
 					role="menuitem"
 					className="text-menu-item"
 					onClick={() => {
@@ -207,7 +210,7 @@ export function TextMenu({ onCopy, onQuote, quoteScope }: TextMenuProps): React.
 					}}
 				>
 					<span>{t("textMenu.quote")}</span>
-				</button>
+				</ListRow>
 			) : null}
 		</div>
 	);

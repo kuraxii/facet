@@ -62,7 +62,7 @@
 *   **代码配色 (Code Highlight)**：代码块与差异视图的语法高亮另有一套配色，可选 GitHub、Catppuccin、Dracula、Tokyo Night、One、Nord、Gruvbox、Solarized，浅深跟随界面主题。
 
 ### 1.1.1 图标 (Icons)
-界面图标与 lucide 一致：`lucide-react` 的 24 栅格线性图标，`size` 12 至 16，笔画 `1.5`，颜色跟随文字变量（`currentColor`）。只导入用到的图标，未用的不进入产物。侧栏页脚的设置入口即 `Settings`。
+界面图标与 lucide 一致：`lucide-react` 的 24 栅格线性图标，尺寸只有 `12 / 14 / 16` 三档（`ICON_SIZE.sm/md/lg`，对应 `--icon-sm/md/lg`），描边宽度只有 `--icon-stroke-width`（`1.8`）一处真值，颜色跟随文字变量（`currentColor`）。只导入用到的图标，未用的不进入产物。侧栏页脚的设置入口即 `Settings`。
 
 ### 1.2 排版规范 (Typography)
 *   **无衬线字体 (Sans-serif)**：`Inter` 与 `Noto Sans SC Variable`（都随构建打包）, 系统默认字体。Latin 与数字用 Inter，汉字与中文标点用 Noto Sans SC Variable。用于常规界面文本。
@@ -76,6 +76,7 @@
 ### 1.3 尺寸与圆角 (Sizing & Shape)
 *   **全局圆角**：五档（`4 / 6 / 8 / 12 / 999px`）的定义与用途见 `docs/visual-system.md`；小组件（按钮、标签）取 `--radius-md`，中等组件（弹窗、代码块）取 `--radius-lg`，大组件与输入区取 `--radius-xl`。
 *   **标准行高 (Row Height)**：列表项（工具条、菜单项）标准高度为 `--control-sm`（`28px`）。
+*   **控件几何 (Controls)**：按钮、图标按钮、输入框、列表行与徽标的变体、档位与尺寸矩阵见 `docs/visual-system.md` §3；业务样式表只覆盖外边距、定位与领域配色。
 
 ### 1.4 交互与动效 (Interaction & Motion)
 *   **焦点状态 (Focus Visible)**：所有可交互元素在键盘聚焦时，必须显示 `2px` 的 `Accent` 颜色外发光（Outline），且偏移 `2px`。

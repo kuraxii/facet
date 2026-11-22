@@ -94,11 +94,9 @@ dialog.set-page::backdrop {
 	background: var(--bg-surface);
 }
 
+/* 设置行：排布交给 `common/ListRow.tsx`，这里只把控件那一列推到右端 */
 .set-item {
-	display: flex;
-	align-items: center;
 	justify-content: space-between;
-	gap: 16px;
 }
 
 .set-item.is-stacked {
@@ -136,25 +134,9 @@ dialog.set-page::backdrop {
 	white-space: nowrap;
 }
 
+/* 分类导航：几何来自 `common/ListRow.tsx` 的 `sm` 档 */
 .set-nav-item {
-	height: 28px;
-	padding: 0 10px;
-	border: 0;
-	border-radius: 6px;
-	background: transparent;
-	color: var(--fg-muted);
-	font-size: 12.5px;
-	text-align: left;
-}
-
-.set-nav-item:hover {
-	background: var(--bg-hover);
-	color: var(--fg-default);
-}
-
-.set-nav-item.is-on {
-	background: var(--bg-active);
-	color: var(--fg-default);
+	padding-inline: var(--space-5);
 }
 
 .set-content {

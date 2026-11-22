@@ -11,6 +11,7 @@
 import type { GitFileChange, GitStatus } from "@facet/protocol";
 import { ChevronRight, FileText, PanelRightClose } from "lucide-react";
 import { type CSSProperties, type ReactNode, useCallback, useMemo, useState } from "react";
+import { ListRow } from "../common/ListRow.tsx";
 import { ChangeMark, changeStatusLabelKey } from "../git/git-status-mark.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { ICON_SIZE } from "../styles/visual-contract.ts";
@@ -46,8 +47,8 @@ function FolderRow({
 }): ReactNode {
 	return (
 		<li className={styles.item}>
-			<button
-				type="button"
+			<ListRow
+				as="button"
 				className={styles.row}
 				style={rowStyle(row.depth)}
 				data-open={!row.collapsed}
@@ -56,7 +57,7 @@ function FolderRow({
 			>
 				<ChevronRight className={styles.chevron} size={ICON_SIZE.md} data-open={!row.collapsed} />
 				<span className={styles.name}>{row.name}</span>
-			</button>
+			</ListRow>
 		</li>
 	);
 }
@@ -85,11 +86,11 @@ function FileRow({
 	}, [file, onOpenDiff, onSelect]);
 	return (
 		<li className={styles.item}>
-			<button
-				type="button"
+			<ListRow
+				as="button"
+				selected={isSelected}
 				className={styles.row}
 				style={rowStyle(row.depth)}
-				data-selected={isSelected}
 				{...tip.handlers(file.path)}
 				onClick={open}
 			>
@@ -106,7 +107,7 @@ function FileRow({
 				<span className={styles.change} data-status={file.status} role="img" aria-label={statusLabel}>
 					<ChangeMark status={file.status} />
 				</span>
-			</button>
+			</ListRow>
 			{tip.render()}
 		</li>
 	);

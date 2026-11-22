@@ -95,31 +95,11 @@
 	padding: 0;
 }
 
+/* 变更树的行：几何来自 `common/ListRow.tsx` 的 `sm` 档，这里只补层级缩进 */
 .row {
-	display: flex;
-	align-items: center;
 	gap: var(--changes-icon-gap);
-	width: 100%;
-	height: var(--changes-row-height);
-	padding-top: 0;
-	padding-right: var(--changes-trailing);
-	padding-bottom: 0;
 	padding-left: calc(var(--changes-row-padding-x) + var(--changes-depth, 0) * var(--changes-tree-indent));
-	border: 0;
-	background: transparent;
-	color: var(--fg-muted);
-	font-size: 13px;
-	text-align: left;
-}
-
-.row:hover {
-	background: var(--bg-hover);
-	color: var(--fg-default);
-}
-
-.row[data-selected="true"] {
-	background: var(--bg-active);
-	color: var(--fg-default);
+	padding-right: var(--changes-trailing);
 }
 
 .chevron {

@@ -126,7 +126,44 @@
   （`visual-contract.test.ts`）。豁免逐条写在测试里——遮罩只取 alpha、"跟随系统"色片要两种底色
   同屏、贴在图片上的移除按钮必须一直是深色。
 
-## 3. 配套基准
+## 3. 控件原语
+
+五个原语在 `packages/ui/src/common/`，外观在 `styles/primitives.css`（`index.css` 里紧跟
+`base.css`、排在所有业务样式表之前），样式与类型从 `@facet/ui/primitives` 一起出去。
+
+原语只决定"哪一种、多大"，用 `data-*` 属性表达；业务层要的外边距、定位、领域配色用同优先级的
+类盖上去即可——`primitives.css` 排在最前，后面的规则天然赢，不需要 `!important`。
+
+| 原语 | 维度 | 取值 |
+| :--- | :--- | :--- |
+| `Button` | `variant` | `primary`（`--accent-fill` 三态 + `--accent-on-fill`）、`secondary`（描边 + `--bg-hover`）、`ghost`（无边框，`--fg-muted`）、`danger`（`--status-err-fg`）；`armed` 表示两步确认的第一步 |
+| | `size` | `sm` 28 / `md` 32 / `lg` 40（`--control-*`） |
+| `IconButton` | `variant` | `ghost` / `outline` / `primary`；`active` 走 `--bg-active` |
+| | `size` | `xs` 24 / `sm` 28 / `md` 32；`radius="lg"` 单独放宽圆角（输入区的发送按钮） |
+| `Input` | `variant` | `default`（`--bg-elevated` + `--border-default`）/ `ghost`（无边框，嵌在带框容器里） |
+| | `size` | `sm` 28 / `md` 32 / `lg` 40；`invalid` 转错误色并带 `aria-invalid` |
+| `ListRow` | `as` | `div`（展示）/ `button`（可点，自动 `type="button"`）/ `li` |
+| | `size` | `xs` 24 / `sm` 28 / `md` 32 |
+| | `variant` | `list`（`--radius-md`）/ `menu`（`--radius-sm`）；`selected` / `active` 走 `--bg-active`，`interactive={false}` 不给悬停 |
+| `Badge` | `variant` | `neutral` / `accent` / `ok` / `warn` / `err` |
+| | `shape` | `pill`（`--radius-pill`）/ `tag`（`--radius-sm` + 描边）；字号固定 `--text-xs` |
+
+几条边界：
+
+- **不纳入原语**：多行富文本输入区 `.composer`（Lexical 有自己的编辑语义与滚动规则）、快捷键
+  `.kbd`、输入区胶囊 `.chip`、Git 图谱的引用 `.ref`——它们各自是一件事，塞进通用件反而要开
+  一堆口子。
+- **不在原语里写死间距**：外边距一律留在业务样式表。原语只管自身的内边距、行高与圆角。
+- **禁用态**：底色 `--bg-active`、文字 `--fg-subtle`、不再有任何悬停反馈；幽灵按钮保持透明，
+  只压暗文字。
+- **可访问名**：`IconButton` 要求 `aria-label` / `aria-labelledby` / `title` 至少一个，漏写在
+  编译期就红；`Button` 与 `ListRow`（`as="button"`）缺省 `type="button"`，不会误提交表单。
+
+即将来加一个控件，先问三句：它是按钮、输入、行还是徽标？几何上能不能只用 `--control-*` 与
+`--radius-*` 表达？业务差异是不是只有外边距与颜色？三句都"是"就用原语，否则先在原语里加一个
+维度，而不是在业务样式表里重写一遍几何。
+
+## 4. 配套基准
 
 - **零字距微调**：层级靠字号与字重（`400 / 500 / 600`）拉开，不写 `letter-spacing`。
 - **单向下边距**：正文与 Markdown 区块只用 `margin-bottom`，首尾由
@@ -134,9 +171,9 @@
 - **一个数一处定义**：脚本要读的长度进 `VISUAL_PX`，样式要用的进 `:root`，两边同名同值；
   不许在组件里再抄一份字面量。
 
-## 4. 门禁
+## 5. 门禁
 
-`visual-contract.test.ts` 跑五类断言：
+`visual-contract.test.ts` 跑六类断言：
 
 1. **刻度对齐**：`base.css` 的 `:root` 与 `VISUAL_SCALE` / `VISUAL_PX` 逐条相等。
 2. **纪律**：全仓样式表 `0` 处 `!important`、`0` 处裸 `z-index`、`0` 处 `prefers-*` 之外的
@@ -146,19 +183,23 @@
    记在 `VISUAL_DEBT_BASELINE` 里，只许降不许升；新增一个 CSS 文件必须先在基线里登记，否则
    用例会红。`box-shadow` 与 `transition` 已经全仓归零，单独一条断言压着不许回潮。
 5. **单入口**：旧名 `--ease` 不再出现，`--text-size` 只指向 `--text-body`。
+6. **图标**：全局 `svg` 规则里没有描边宽度，宽度只在 `.lucide` / `.ui-icon` 上按
+   `--icon-stroke-width` 落地；TSX 里不再写 `strokeWidth=`，`size` 只从 `ICON_SIZE` 的三档取，
+   也没有绕开样式表的内联 `fontSize`。
 
 棘轮的计数口径：一条声明里**一个 `var()` 都没有**就算写死（`calc(var(--a) - 1px)` 不算）；
 `transition` 另算——抹掉 `var(...)` 之后还剩时间字面量或缓动关键字才算。
 
-## 5. 迁移顺序
+## 6. 迁移顺序
 
-颜色、阴影、遮罩、动效时长与焦点环已经全仓迁移完毕（没有旧名残留）。剩下的是几何：字号、
-圆角、间距与内边距仍按文件分批搬，每迁完一个文件就把基线改小；顺序按收益排：
+颜色、阴影、遮罩、动效时长与焦点环已经全仓迁移完毕；按钮、图标按钮、输入框、徽标与七类列表行
+也已经收到原语上，几何不再散落在业务样式表里。剩下的是**对话流、Markdown 与三个 CSS Modules
+里还写死的字号、圆角、间距与内边距**，按文件分批搬，每迁完一个文件就把基线改小：
 
-1. `chrome.css`、`panel.css`（外壳与工具条，件数少、影响面小）
-2. `sidebar.css`、`overlays.css`（列表行与浮层，行高与圆角收益最大）
-3. `settings.css`、`composer.css`（表单与输入区）
-4. `chat.css`、`markdown.css`、`changes.css` 与三个 CSS Modules
+1. `chat.css`（对话流与过程组，件数最多）
+2. `markdown.css`（代码块与正文的排版）
+3. `settings.css`、`composer.css`（表单与输入区的剩余内边距）
+4. 三个 CSS Modules：`git.module.css`、`changes.module.css`、`ExtensionPromptCard.module.css`
 5. `packages/ui-terminal/src/terminal.css`、`packages/ui-editor`（读变量的一方）
 
 迁移只换取值来源，不改几何、不改交互：一个文件迁完，屏幕上应当看不出差别。真要调外观，另

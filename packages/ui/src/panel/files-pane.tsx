@@ -21,6 +21,7 @@ import {
 } from "react";
 import { FACET_FILE_DRAG_MIME } from "../common/file-drag.ts";
 import { IconButton } from "../common/IconButton.tsx";
+import { ListRow } from "../common/ListRow.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { ICON_SIZE } from "../styles/visual-contract.ts";
 import { useHoverTip } from "../tip.tsx";
@@ -280,8 +281,10 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath, onCollapse 
 					const isActive = entry.path === activePath;
 					return (
 						<div key={entry.path} className="tree-item">
-							<button
-								type="button"
+							<ListRow
+								as="button"
+								size="xs"
+								selected={isSelected}
 								ref={(node) => {
 									if (node === null) {
 										rowRefs.current.delete(entry.path);
@@ -289,7 +292,7 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath, onCollapse 
 										rowRefs.current.set(entry.path, node);
 									}
 								}}
-								className={isSelected ? "tree-row is-on" : "tree-row"}
+								className="tree-row"
 								style={{ "--files-depth": depth } as CSSProperties}
 								{...tip.handlers(entry.path)}
 								role="treeitem"
@@ -329,7 +332,7 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath, onCollapse 
 										{t("panel.readFailed")}
 									</span>
 								)}
-							</button>
+							</ListRow>
 						</div>
 					);
 				})}

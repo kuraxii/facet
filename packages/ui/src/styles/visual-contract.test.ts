@@ -176,7 +176,7 @@ const DEBT_PROPS: readonly (readonly [DebtKind, RegExp])[] = [
  * 这一行就是 0 且不会再长回去——阴影与过渡已经全仓归零，只剩字号、圆角、间距与内边距。
  */
 const VISUAL_DEBT_BASELINE: Readonly<Record<string, DebtCount>> = {
-	"ui-terminal/src/terminal.css": { fontSize: 4, radius: 3, gap: 5, padding: 8, shadow: 0, transition: 0 },
+	"ui-terminal/src/terminal.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
 	"ui/src/chat/ExtensionPromptCard.module.css": {
 		fontSize: 7,
 		radius: 5,
@@ -185,8 +185,8 @@ const VISUAL_DEBT_BASELINE: Readonly<Record<string, DebtCount>> = {
 		shadow: 0,
 		transition: 0,
 	},
-	"ui/src/git/git.module.css": { fontSize: 10, radius: 2, gap: 2, padding: 5, shadow: 0, transition: 0 },
-	"ui/src/panel/changes.module.css": { fontSize: 9, radius: 2, gap: 0, padding: 4, shadow: 0, transition: 0 },
+	"ui/src/git/git.module.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
+	"ui/src/panel/changes.module.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
 	"ui/src/styles/base.css": { fontSize: 0, radius: 1, gap: 0, padding: 0, shadow: 0, transition: 0 },
 	"ui/src/styles/changes.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
 	"ui/src/styles/chat.css": { fontSize: 18, radius: 12, gap: 18, padding: 11, shadow: 0, transition: 0 },
@@ -198,10 +198,10 @@ const VISUAL_DEBT_BASELINE: Readonly<Record<string, DebtCount>> = {
 	"ui/src/styles/markdown.css": { fontSize: 8, radius: 4, gap: 1, padding: 9, shadow: 0, transition: 0 },
 	"ui/src/styles/motion.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
 	"ui/src/styles/overlays.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
-	"ui/src/styles/panel.css": { fontSize: 9, radius: 7, gap: 7, padding: 11, shadow: 0, transition: 0 },
+	"ui/src/styles/panel.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
 	"ui/src/styles/primitives.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
 	"ui/src/styles/settings.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
-	"ui/src/styles/sidebar.css": { fontSize: 25, radius: 14, gap: 17, padding: 16, shadow: 0, transition: 0 },
+	"ui/src/styles/sidebar.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
 	"ui/src/styles/theme.css": { fontSize: 0, radius: 0, gap: 0, padding: 0, shadow: 0, transition: 0 },
 };
 

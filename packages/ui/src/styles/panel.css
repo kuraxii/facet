@@ -75,7 +75,7 @@
 	align-items: center;
 	min-width: 0;
 	height: var(--workspace-tab-height);
-	border-radius: 6px;
+	border-radius: var(--radius-md);
 	background: transparent;
 }
 
@@ -95,10 +95,10 @@
 	height: 100%;
 	padding: 0 2px 0 var(--workspace-tab-padding-x);
 	border: 0;
-	border-radius: 6px 0 0 6px;
+	border-radius: var(--radius-md) 0 0 var(--radius-md);
 	background: transparent;
 	color: var(--fg-subtle);
-	font-size: 12.5px;
+	font-size: var(--text-ui);
 	white-space: nowrap;
 	-webkit-app-region: no-drag;
 }
@@ -124,7 +124,7 @@
 	margin-inline-end: 3px;
 	padding: 0;
 	border: 0;
-	border-radius: 4px;
+	border-radius: var(--radius-sm);
 	background: transparent;
 	color: var(--fg-subtle);
 	opacity: 0.5;
@@ -179,12 +179,12 @@
  */
 @container (width < 420px) {
 	.workspace-tabs {
-		gap: 2px;
+		gap: var(--space-1);
 	}
 
 	.workspace-tab {
 		min-width: 0;
-		padding-inline: 5px;
+		padding-inline: var(--space-2);
 		overflow: hidden;
 	}
 
@@ -194,7 +194,7 @@
 
 	.chrome-slot-row,
 	.panel-head-row {
-		gap: 2px;
+		gap: var(--space-1);
 	}
 }
 
@@ -209,11 +209,11 @@
 	z-index: var(--z-popup);
 	display: flex;
 	flex-direction: column;
-	gap: 1px;
+	gap: var(--space-1);
 	min-width: var(--workspace-menu-min-width);
-	padding: 4px;
+	padding: var(--space-2);
 	border: 1px solid var(--border-default);
-	border-radius: 8px;
+	border-radius: var(--radius-lg);
 	background: var(--bg-surface);
 	box-shadow: var(--shadow-popover);
 }
@@ -252,7 +252,7 @@
 	flex: none;
 	color: var(--fg-subtle);
 	font-family: var(--font-mono);
-	font-size: 10.5px;
+	font-size: var(--text-xs);
 }
 
 /* 空态启动清单：右栏开着但一个标签都没开时，正文区居中给这三行 */
@@ -261,27 +261,27 @@
 	flex: 1;
 	place-content: center;
 	min-height: 0;
-	padding: 16px;
+	padding: var(--space-8);
 }
 
 .workspace-launcher-list {
 	display: flex;
 	flex-direction: column;
-	gap: 2px;
+	gap: var(--space-1);
 	width: var(--workspace-launcher-width);
 }
 
 .workspace-launcher-item {
 	display: flex;
-	gap: 8px;
+	gap: var(--space-4);
 	align-items: center;
 	height: var(--workspace-menu-row-height);
-	padding: 0 10px;
+	padding: 0 var(--space-5);
 	border: 0;
-	border-radius: 7px;
+	border-radius: var(--radius-md);
 	background: transparent;
 	color: var(--fg-muted);
-	font-size: 12.5px;
+	font-size: var(--text-ui);
 	text-align: left;
 }
 
@@ -317,12 +317,12 @@
 
 .workspace-launcher-badge {
 	flex: none;
-	padding: 0 4px;
-	border-radius: 999px;
+	padding: 0 var(--space-2);
+	border-radius: var(--radius-pill);
 	background: var(--bg-active);
 	color: var(--fg-muted);
 	font-family: var(--font-mono);
-	font-size: 10.5px;
+	font-size: var(--text-xs);
 	line-height: 14px;
 }
 
@@ -330,7 +330,7 @@
 	flex: none;
 	color: var(--fg-subtle);
 	font-family: var(--font-mono);
-	font-size: 10.5px;
+	font-size: var(--text-xs);
 }
 
 .panel-body {
@@ -339,7 +339,7 @@
 	overflow-y: auto;
 	/* 滚动条出现时不挤占内容：始终留出与滚动条等宽的沟槽，右侧内边距让出这部分 */
 	scrollbar-gutter: stable;
-	padding: 8px 0 8px 8px;
+	padding: var(--space-4) 0 var(--space-4) var(--space-4);
 }
 
 /*
@@ -708,12 +708,12 @@
 	gap: var(--workspace-head-gap);
 	align-items: center;
 	margin-bottom: 2px;
-	padding: 0 2px 2px;
+	padding: 0 var(--space-1) var(--space-1);
 }
 
 .tree-root {
 	color: var(--fg-subtle);
-	font-size: 11px;
+	font-size: var(--text-xs);
 }
 
 .tree-head-actions {
@@ -733,7 +733,7 @@
 /* 文件树自己滚：树顶固定，行在下面滚（滚动条样式来自 `.scroll-y`，与全仓同一套） */
 .file-tree > .tree {
 	flex: 1;
-	padding-bottom: 8px;
+	padding-bottom: var(--space-4);
 }
 
 /* 文件树的行：几何来自 `common/ListRow.tsx` 的 `xs` 档，这里只补层级缩进与紧凑的字号 */
@@ -760,7 +760,7 @@
 .tree-note {
 	margin-left: auto;
 	color: var(--fg-subtle);
-	font-size: 11px;
+	font-size: var(--text-xs);
 }
 
 .tree-note.is-error {
@@ -770,7 +770,7 @@
 /* 文件页的查看与编辑：标题行贴着预览区上缘，代码正文贴工作区边界 */
 .file-head {
 	display: flex;
-	gap: 6px;
+	gap: var(--space-3);
 	align-items: center;
 	min-width: 0;
 	height: var(--editor-head-height);
@@ -782,7 +782,7 @@
 	width: auto;
 	min-width: var(--editor-head-height);
 	height: var(--editor-head-height);
-	padding: 0 3px;
+	padding: 0 var(--space-1);
 }
 
 .file-path {
@@ -791,7 +791,7 @@
 	overflow: hidden;
 	color: var(--fg-muted);
 	font-family: var(--font-mono);
-	font-size: 11px;
+	font-size: var(--text-xs);
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
@@ -810,7 +810,7 @@
 	flex: none;
 	width: 6px;
 	height: 6px;
-	border-radius: 50%;
+	border-radius: var(--radius-pill);
 	background: var(--accent-fg);
 }
 
@@ -842,10 +842,10 @@
 /* 右栏里的占位说明：还没有接上内容时用 */
 .panel-empty {
 	margin: 0;
-	padding: 24px 12px;
+	padding: var(--space-12) var(--space-6);
 	color: var(--fg-subtle);
-	font-size: 12px;
-	line-height: 1.6;
+	font-size: var(--text-xs);
+	line-height: var(--leading-ui);
 	text-align: center;
 }
 
@@ -878,9 +878,9 @@
 
 .panel-head-row {
 	display: flex;
-	gap: 4px;
+	gap: var(--space-2);
 	align-items: center;
 	height: 100%;
-	padding-left: 4px;
+	padding-left: var(--space-2);
 	padding-inline-end: var(--window-controls-width);
 }

@@ -40,10 +40,11 @@
 	transform: translateY(-100%);
 }
 
+/* 回到底部：浮在消息流靠近输入区那一侧，抬多高由 `--to-bottom-lift` 定 */
 .to-bottom {
 	position: absolute;
 	left: 50%;
-	bottom: calc(100% + 2px);
+	bottom: calc(100% + var(--to-bottom-lift));
 	display: grid;
 	place-items: center;
 	width: 32px;

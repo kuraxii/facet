@@ -130,6 +130,11 @@
 	--composer-quote-rule: 2px;
 	/* 两枚胶囊的左右内边距：`@文件` 与 `/命令` 共用一份几何 */
 	--composer-chip-padding-x: 3px;
+	/*
+	 * 「回到底部」按钮的下缘到输入区上缘的距离。它浮在消息流之上，抬这么高才离开提示行与
+	 * 排队条，正落在输入区上方那片留白里。
+	 */
+	--to-bottom-lift: 32px;
 	/* 工具结果里的图片：收起时的最大高度，与多张之间的间距 */
 	--tool-image-height: 320px;
 	--tool-image-gap: 8px;

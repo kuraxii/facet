@@ -71,6 +71,8 @@ export interface UpstreamModel {
 	reasoning?: boolean;
 	/** 支持的思考档位，模型信息库写明了档位才有；按从低到高排列 */
 	thinkingLevels?: ThinkingLevel[];
+	/** 支持的输入模态，模型信息库说它收图片时才有 */
+	input?: InputModality[];
 }
 
 /**
@@ -122,6 +124,13 @@ export interface CustomModelInfo {
 	 * 一个会思考的档位都没有时，这个模型按不会思考处理。
 	 */
 	thinkingLevels?: ThinkingLevel[];
+	/**
+	 * 支持的输入模态。
+	 *
+	 * 界面上只有「收不收图片」一个开关：含 `image` 表示能发图片，只含 `text` 或不给表示只能发文字
+	 * （pi 对自定义模型的缺省就是 `["text"]`）。
+	 */
+	input?: InputModality[];
 	/** 上下文窗口 */
 	contextWindow?: number;
 	/** 单次最大输出 token */

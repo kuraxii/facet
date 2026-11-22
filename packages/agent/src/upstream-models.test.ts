@@ -57,7 +57,7 @@ function catalog(
 						reasoning: model.reasoning ?? false,
 						tool_call: true,
 						attachment: false,
-						modalities: { input: ["text"], output: ["text"] },
+						modalities: model.modalities ?? { input: ["text"], output: ["text"] },
 						limit: { context: model.limit?.context ?? 0, output: model.limit?.output ?? 0 },
 						...(model.canonical === undefined ? {} : { canonical_model_id: model.canonical }),
 						...(model.reasoningOptions === undefined ? {} : { reasoning_options: model.reasoningOptions }),
@@ -175,6 +175,34 @@ describe("目录补能力", () => {
 				thinkingLevels: ["off", "low", "high", "max"],
 			},
 			{ id: "deepseek-plain", name: "DeepSeek Plain", contextWindow: 128000, maxTokens: 8192 },
+		]);
+	});
+
+	it("信息库说收图片时补上 input，只收文字的不写", () => {
+		const index = buildCatalogIndex(
+			catalog([
+				{
+					provider: "deepseek",
+					models: {
+						"deepseek-flash": {
+							name: "DeepSeek V4.1 Flash",
+							modalities: { input: ["text", "image"], output: ["text"] },
+						},
+						"deepseek-v4-pro": {
+							name: "DeepSeek V4 Pro",
+							modalities: { input: ["text"], output: ["text"] },
+						},
+					},
+				},
+			]),
+		);
+		expect(enrichUpstreamModels([{ id: "deepseek-flash" }, { id: "deepseek-v4-pro" }], index)).toEqual([
+			{
+				id: "deepseek-flash",
+				name: "DeepSeek V4.1 Flash",
+				input: ["text", "image"],
+			},
+			{ id: "deepseek-v4-pro", name: "DeepSeek V4 Pro" },
 		]);
 	});
 

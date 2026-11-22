@@ -295,6 +295,7 @@ export const en = {
 		contextWindow: "Context window",
 		maxOutput: "Max output",
 		supportsThinking: "Thinking",
+		supportsImage: "Image",
 		remove: "Remove",
 		addModel: "Add model",
 		fetchModels: "Fetch from upstream",
@@ -320,6 +321,7 @@ export const en = {
 		modelContextLabel: "Model {{index}} context window",
 		modelOutputLabel: "Model {{index}} max output",
 		thinkingLevelsLabel: "Model {{index}} thinking levels",
+		supportsImageLabel: "Model {{index}} accepts images",
 	},
 	picker: {
 		title: "Add provider",
@@ -828,6 +830,7 @@ export const zhCN = {
 		contextWindow: "上下文窗口",
 		maxOutput: "最大输出",
 		supportsThinking: "思考",
+		supportsImage: "图片",
 		remove: "移除",
 		addModel: "添加模型",
 		fetchModels: "从上游获取",
@@ -852,6 +855,7 @@ export const zhCN = {
 		modelContextLabel: "模型 {{index}} 上下文窗口",
 		modelOutputLabel: "模型 {{index}} 最大输出",
 		thinkingLevelsLabel: "模型 {{index}} 的思考档位",
+		supportsImageLabel: "模型 {{index}} 收图片",
 	},
 	picker: {
 		title: "添加提供商",

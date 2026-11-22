@@ -69,6 +69,7 @@ export function ProviderModelTable({
 				<span>{t("providerForm.modelName")}</span>
 				<span>{t("providerForm.contextWindow")}</span>
 				<span>{t("providerForm.maxOutput")}</span>
+				<span>{t("providerForm.supportsImage")}</span>
 				<span>{t("providerForm.supportsThinking")}</span>
 				<span />
 			</div>
@@ -115,6 +116,19 @@ export function ProviderModelTable({
 								placeholder={t("providerForm.maxOutput")}
 								aria-label={t("providerForm.modelOutputLabel", { index: index + 1 })}
 							/>
+							{/* 收不收图片：pi 对自定义模型缺省只收文字，勾上才写 `input` */}
+							<label className="prov-flag">
+								<input
+									type="checkbox"
+									checked={model.input?.includes("image") === true}
+									onChange={(event) =>
+										onPatch(row.key, {
+											input: event.target.checked ? ["text", "image"] : ["text"],
+										})
+									}
+									aria-label={t("providerForm.supportsImageLabel", { index: index + 1 })}
+								/>
+							</label>
 							<ProviderThinkingLevels
 								levels={model.thinkingLevels ?? []}
 								onChange={(levels) => onPatch(row.key, { thinkingLevels: levels })}

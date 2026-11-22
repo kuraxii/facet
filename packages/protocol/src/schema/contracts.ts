@@ -56,6 +56,9 @@ const ThinkingLevel = Type.Union([
 	Type.Literal("max"),
 ]);
 
+/** 输入模态，与 `InputModality` 同一组取值。 */
+const InputModality = Type.Union([Type.Literal("text"), Type.Literal("image")]);
+
 /** 运行中投递方式，与 `StreamingBehavior` 同一组取值。 */
 const StreamingBehaviorSchema = Type.Union([Type.Literal("steer"), Type.Literal("followUp")]);
 
@@ -348,6 +351,8 @@ export const REQUEST_SCHEMAS = {
 						name: Type.Optional(Type.String()),
 						// 勾出来的那一组思考档位；空数组与不传都表示这个模型不会思考
 						thinkingLevels: Type.Optional(Type.Array(ThinkingLevel)),
+						// 模型支持的输入模态；不传表示只收文字（pi 的缺省）
+						input: Type.Optional(Type.Array(InputModality)),
 						contextWindow: Type.Optional(Type.Number()),
 						maxTokens: Type.Optional(Type.Number()),
 					}),

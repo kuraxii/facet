@@ -209,6 +209,11 @@ export function buildCatalogIndex(providers: Record<string, ModelInfoProvider> =
 	return { exact, alias };
 }
 
+/** 信息库的输入模态里有没有图片。 */
+function hasImageInput(modalities: readonly string[] | undefined): boolean {
+	return modalities?.includes("image") === true;
+}
+
 /** 用目录把能力字段补上：上游给了的以它为准，查不到就留空（空 = 让 pi 用 SDK 默认）。 */
 export function enrichUpstreamModels(raw: readonly UpstreamModel[], index: CatalogIndex): UpstreamModel[] {
 	return raw.map((model) => {
@@ -229,6 +234,8 @@ export function enrichUpstreamModels(raw: readonly UpstreamModel[], index: Catal
 		// 档位留空让用户自己勾，免得凭空造出一组上游并不认的取值
 		const levels = levelsFromCatalog(meta.reasoning_options);
 		const thinking = levels === undefined ? meta.reasoning : hasThinking(levels);
+		// 信息库说它收图片才写 input：只收文字的话不写，交给 pi 的缺省
+		const input = hasImageInput(meta.modalities?.input) ? (["text", "image"] as const) : undefined;
 		return {
 			...model,
 			...(model.name === undefined && meta.name !== undefined ? { name: meta.name } : {}),
@@ -236,6 +243,7 @@ export function enrichUpstreamModels(raw: readonly UpstreamModel[], index: Catal
 			...(maxTokens !== undefined && maxTokens > 0 ? { maxTokens } : {}),
 			...(thinking ? { reasoning: true } : {}),
 			...(levels !== undefined ? { thinkingLevels: levels } : {}),
+			...(input === undefined ? {} : { input: [...input] }),
 		};
 	});
 }

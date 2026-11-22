@@ -6,7 +6,7 @@
  */
 
 import { readFile, rename } from "node:fs/promises";
-import type { ThinkingLevel } from "@facet/protocol";
+import type { InputModality, ThinkingLevel } from "@facet/protocol";
 import { writeFileAtomic } from "./atomic-write.ts";
 import { hasThinking, levelsFromMap, levelsToMap, type ThinkingLevelMap } from "./thinking-levels.ts";
 
@@ -25,10 +25,13 @@ function modelEntry(model: CustomModelEntry): CustomModelEntry {
 	const thinking = model.thinkingLevels !== undefined;
 	const map = thinking ? levelsToMap(model.thinkingLevels ?? []) : model.thinkingLevelMap;
 	const reasoning = thinking ? hasThinking(model.thinkingLevels ?? []) : model.reasoning;
+	// 收图片才写 input：只收文字与不写等价（pi 的缺省就是 `["text"]`），写出来只是让文件更长
+	const input = normalizeInput(model.input);
 	return {
 		id: model.id,
 		...(name !== undefined && name.length > 0 ? { name } : {}),
 		...(api !== undefined && api.length > 0 ? { api } : {}),
+		...(input === undefined ? {} : { input }),
 		...(reasoning === undefined ? {} : { reasoning }),
 		...(map !== undefined && Object.keys(map).length > 0 ? { thinkingLevelMap: map } : {}),
 		...(model.contextWindow !== undefined && model.contextWindow > 0
@@ -36,6 +39,18 @@ function modelEntry(model: CustomModelEntry): CustomModelEntry {
 			: {}),
 		...(model.maxTokens !== undefined && model.maxTokens > 0 ? { maxTokens: model.maxTokens } : {}),
 	};
+}
+
+/**
+ * 收成 pi 认的输入模态：`text` 永远在里面，`image` 按需追加。
+ *
+ * 不收图片时返回 `undefined`——pi 对自定义模型的缺省就是只收文字，不写等同于写 `["text"]`。
+ */
+function normalizeInput(input: readonly InputModality[] | undefined): InputModality[] | undefined {
+	if (input === undefined || !input.includes("image")) {
+		return undefined;
+	}
+	return ["text", "image"];
 }
 
 /** 配置里一个模型的定义，字段与 models.json 一致，缺省项由运行时补。 */
@@ -52,6 +67,8 @@ export interface CustomModelEntry {
 	thinkingLevels?: ThinkingLevel[];
 	/** 原样的逐档映射，只在没有给 `thinkingLevels` 时透传 */
 	thinkingLevelMap?: ThinkingLevelMap;
+	/** 支持的输入模态，含 `image` 表示能发图片 */
+	input?: InputModality[];
 	/** 上下文窗口 */
 	contextWindow?: number;
 	/** 单次最大输出 token */
@@ -71,6 +88,7 @@ function readModelEntry(model: CustomModelEntry): CustomModelEntry {
 		...(model.name === undefined ? {} : { name: model.name }),
 		...(model.api === undefined ? {} : { api: model.api }),
 		...(thinkingLevels.length === 0 ? {} : { thinkingLevels }),
+		...(model.input === undefined ? {} : { input: [...model.input] }),
 		...(model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow }),
 		...(model.maxTokens === undefined ? {} : { maxTokens: model.maxTokens }),
 	};

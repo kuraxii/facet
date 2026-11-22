@@ -54,6 +54,9 @@
 	--diff-del-fg: #b91c1c;
 	--diff-add-bg: #15803d1f;
 	--diff-del-bg: #b91c1c1f;
+	/* 增删行的 3px 左缘条：不透明实色，深色主题更亮、浅色主题不掺灰 */
+	--diff-add-bar: var(--diff-add-fg);
+	--diff-del-bar: var(--diff-del-fg);
 	--code-bg: #f6f6f6;
 	--code-fg: #3f3f46;
 	/* 浅底靠一条压边撑起层次，不用大 alpha 的投影 */
@@ -102,6 +105,9 @@
 	--diff-del-fg: #ef4444;
 	--diff-add-bg: #4ade8029;
 	--diff-del-bg: #ef444429;
+	/* 增删行的 3px 左缘条：不透明实色，深色主题更亮、浅色主题不掺灰 */
+	--diff-add-bar: var(--diff-add-fg);
+	--diff-del-bar: var(--diff-del-fg);
 	--code-bg: #242427;
 	--code-fg: #d4d4d8;
 	/* 深色不用压边阴影，浮层靠一层描边轮廓与底色拉开 */
@@ -146,6 +152,9 @@
 	--diff-del-fg: #ef4444;
 	--diff-add-bg: #4ade8029;
 	--diff-del-bg: #ef444429;
+	/* 增删行的 3px 左缘条：不透明实色，深色主题更亮、浅色主题不掺灰 */
+	--diff-add-bar: var(--diff-add-fg);
+	--diff-del-bar: var(--diff-del-fg);
 	--code-bg: #222430;
 	--code-fg: #d4d4d8;
 	--shadow-control: none;
@@ -189,6 +198,9 @@
 	--diff-del-fg: #ef4444;
 	--diff-add-bg: #4ade8029;
 	--diff-del-bg: #ef444429;
+	/* 增删行的 3px 左缘条：不透明实色，深色主题更亮、浅色主题不掺灰 */
+	--diff-add-bar: var(--diff-add-fg);
+	--diff-del-bar: var(--diff-del-fg);
 	--code-bg: #2a2826;
 	--code-fg: #d4d4d8;
 	--shadow-control: none;
@@ -232,6 +244,9 @@
 	--diff-del-fg: #ef4444;
 	--diff-add-bg: #4ade8029;
 	--diff-del-bg: #ef444429;
+	/* 增删行的 3px 左缘条：不透明实色，深色主题更亮、浅色主题不掺灰 */
+	--diff-add-bar: var(--diff-add-fg);
+	--diff-del-bar: var(--diff-del-fg);
 	--code-bg: #323643;
 	--code-fg: #d4d4d8;
 	--shadow-control: none;
@@ -275,6 +290,9 @@
 	--diff-del-fg: #ef4444;
 	--diff-add-bg: #4ade8029;
 	--diff-del-bg: #ef444429;
+	/* 增删行的 3px 左缘条：不透明实色，深色主题更亮、浅色主题不掺灰 */
+	--diff-add-bar: var(--diff-add-fg);
+	--diff-del-bar: var(--diff-del-fg);
 	--code-bg: #0c0c0c;
 	--code-fg: #d4d4d8;
 	--shadow-control: none;

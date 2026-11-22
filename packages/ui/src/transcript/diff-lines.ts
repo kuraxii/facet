@@ -23,7 +23,8 @@ export function lineClass(line: string): string {
 	if (line.startsWith("-")) {
 		return "is-del";
 	}
-	return "";
+	// 上下文行：行号列在这三态里样式不同（上下文行有底色，增删行没有），所以要有自己的类
+	return "is-ctx";
 }
 
 /** 补丁里的一行。 */
@@ -32,8 +33,16 @@ export interface PatchLine {
 	key: string;
 	/** 原始行 */
 	line: string;
-	/** 行号；文件头与 hunk 头为空 */
+	/** 行号；文件头与 hunk 头为空。增行取新行号、删行取旧行号 */
 	number: string;
+	/** 旧文件行号：增行没有（留空），其余同 `number` */
+	oldNumber: string;
+	/** 新文件行号：删行没有（留空），其余同 `number` */
+	newNumber: string;
+	/** 行首记号：`+` / `-` / 空格；文件头与 hunk 头为空 */
+	sign: string;
+	/** 去掉记号之后的正文；文件头与 hunk 头保留原样 */
+	text: string;
 }
 
 /** 文件头与 git 元信息行的前缀；变更文档只保留 hunk 与正文。 */
@@ -74,6 +83,10 @@ export function patchLines(patch: string): readonly PatchLine[] {
 			newLine = Number(header[2]);
 		}
 		let number = "";
+		let oldNumber = "";
+		let newNumber = "";
+		let sign = "";
+		let text = line;
 		const isMeta =
 			header !== null ||
 			line.startsWith("+++ ") ||
@@ -83,18 +96,28 @@ export function patchLines(patch: string): readonly PatchLine[] {
 			line.startsWith("\\ ");
 		if (!isMeta) {
 			if (line.startsWith("-")) {
+				// 删行只有旧行号：新文件里没有这一行，那一格留空
 				number = String(oldLine);
+				oldNumber = number;
+				sign = "-";
 				oldLine += 1;
 			} else if (line.startsWith("+")) {
 				number = String(newLine);
+				newNumber = number;
+				sign = "+";
 				newLine += 1;
 			} else {
 				number = String(newLine);
+				oldNumber = String(oldLine);
+				newNumber = number;
+				sign = " ";
 				oldLine += 1;
 				newLine += 1;
 			}
+			// 记号占一个字符：去掉之后正文自己从第 0 列开始排
+			text = line.slice(1);
 		}
-		lines.push({ key: `at-${offset}`, line, number });
+		lines.push({ key: `at-${offset}`, line, number, oldNumber, newNumber, sign, text });
 		offset += line.length + 1;
 	}
 	return lines;

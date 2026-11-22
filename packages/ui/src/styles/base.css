@@ -273,7 +273,10 @@
 	--changes-icon-size: 14px;
 	--changes-icon-gap: 8px;
 	--changes-stat-gap: 4px;
-	--changes-header-height: 28px;
+	/* 补丁四列网格的轨道宽度：旧行号、新行号、记号；正文列吃剩下的 */
+	--diff-gutter-old: 48px;
+	--diff-gutter-new: 48px;
+	--diff-gutter-sign: 24px;
 	--changes-line-number-width: 40px;
 	/*
 	 * 提交悬浮卡：卡片宽度，三个区段的左右留白与上下留白，段内行距与并列项之间的距离，

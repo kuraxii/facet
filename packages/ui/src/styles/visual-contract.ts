@@ -209,4 +209,18 @@ export const VISUAL_PX = {
 	},
 	/** 文件预览标题行里，路径与操作之间的间距（`--editor-head-gap`）。 */
 	editorHeadGap: 4,
+	/**
+	 * 补丁四列网格的三条固定轨道。
+	 *
+	 * 行号最宽五位（6 位数的老仓库也放得下），记号列只放一个 `+` / `-`；三列定宽之后，
+	 * 增行缺旧行号、删行缺新行号，正文列的起点也不会跟着内容左右跳。
+	 */
+	diff: {
+		/** 旧文件行号列（`--diff-gutter-old`） */
+		gutterOld: 48,
+		/** 新文件行号列（`--diff-gutter-new`） */
+		gutterNew: 48,
+		/** 记号列（`--diff-gutter-sign`） */
+		gutterSign: 24,
+	},
 } as const;

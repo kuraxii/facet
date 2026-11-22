@@ -70,7 +70,9 @@
 *   **配置界面的字体**：设置窗与提供方弹窗里的输入字段一律用界面字体，包括标识、接口地址、密钥与数字；等宽只在只读展示上出现。同一张表单里输入框混着两种字体，看着像两种控件。
 *   **基础字号 (Base Size)**：六档字号与四档行高见 `docs/visual-system.md`。界面外壳 `13px`（`--text-ui`）；对话正文与用户气泡固定 `14px`（`--text-body`）；整体大小由本机界面缩放控制。
 *   **界面缩放 (Zoom)**：本机七档 `80 / 90 / 100 / 110 / 125 / 135 / 150` 百分比，默认 `100`；快捷键 `Mod+=`、`Mod+-`、`Mod+0` 调整，缩放变化后右上角短暂显示当前百分比。
-*   **行高 (Line Height)**：控件与普通正文落在 `20px` 基线（`--leading-ui`）；对话正文、气泡与 Markdown 长文都是 `24px`（`--leading-prose`）；标题 `32px`（`--leading-display`）。
+*   **行高 (Line Height)**：控件与普通正文落在 `20px` 基线（`--leading-ui`）；对话正文、气泡与 Markdown 长文都是 `24px`（`--leading-prose`）；标题 `32px`（`--leading-display`）。代码区例外，走比例行高 `--leading-code-block`（`1.6667`）与 `--text-code-inline`（`0.9285em`），跟着编辑器字号一起缩放。
+*   **动效 (Motion)**：四档时长（`--dur-fast` / `--dur-slow` / `--dur-enter` / `--dur-structural`）配五条方向性曲线（`--ease-standard` / `--ease-out` / `--ease-in` / `--ease-enter` / `--ease-panel`）；减少动效与拖窗口/拖分栏期间四档时长一起清零，全仓过渡退回瞬变。细则见 `docs/visual-system.md` §1.7 与 §6。
+*   **折叠体**：思考、工具输出与过程组收起时留在 DOM 里并标 `hidden="until-found"`，`Ctrl+F` 命中即自动展开；展开箭头是一枚 chevron 转 90°。
 *   **对话排版**：正文与气泡同字号同行高（`--text-body` / `--leading-prose`）。竖向节奏只走下边距：段落、列表、引用、表格与代码卡一律 `margin-bottom: var(--space-6)`，容器首尾用 `> :first-child` / `> :last-child` 贴边，相邻两块不叠加。行内代码 `0.8em`、`--bg-elevated` 底、`--radius-sm`、无边框；标题按 `1.6 / 1.4 / 1.2 / 1.1` 相对正文放大（保留 `em`，跟着正文缩放）。气泡 `--bg-active` 底、`--space-8` 内边距、`--radius-xl` 圆角，右上角收成 `--radius-sm`。
 
 ### 1.3 尺寸与圆角 (Sizing & Shape)
@@ -228,7 +230,29 @@
 *   **谁用它**：后台事件（主机侧的 `chat/notice`、pi 插件 `ctx.ui.notify`）与终端创建失败的说明。复制、引用这类瞬时动作自己给反馈（复制按钮的图标变对勾），不弹提示。需要用户决策的走弹层，需要一直看得见的走页脚，可重试的关键失败走错误条。
 *   **层级**：`--z-toast`（`200`），是 `:root` 里最高的一档，压在行内弹层（`--z-popup` `60`）、悬浮提示（`--z-tip` `90`）与拖拽遮罩（`--z-drag-overlay` `95`）之上；刻度与成员见 `docs/layout.md` §4。弹窗不走这组值——原生 `<dialog>` 在浏览器 Top Layer，轻提示被它压住时不弹。
 
-### 3.6 选中文字的右键菜单 (Selection Menu)
+### 3.6 Diff 面板的结构 (Diff Panel)
+
+补丁在变更页、提交详情与单文件视图里是同一份实现（`git-patch.tsx` + `diff-lines.ts`）。
+
+- **四列固定网格**：旧行号 `--diff-gutter-old`（48px）、新行号 `--diff-gutter-new`（48px）、
+  记号 `--diff-gutter-sign`（24px）、正文 `minmax(0, 1fr)`。增行缺旧行号、删行缺新行号，
+  缺的那格留空但列宽不塌，四列永远对齐。正文列下限是 `0`，超长 token 顶不破容器。
+- **三层视觉**：整行淡底（增 `--diff-add-fg` 15%、删 `--diff-del-fg` 10%）+ 最左一条 3px
+  实色竖条（`--diff-add-bar` / `--diff-del-bar`）+ 行号列在增删行里透明，底色一路贯通到面板
+  最左缘。上下文行的行号列压一档 `--bg-subtle`，悬停时整行与行号列一起切到 `--bg-hover`。
+- **前景色不跟着走**：增删行的文字仍是 `--fg-default`，词级高亮只抬底色——深色主题下把文字
+  也染成红绿会掉对比度。
+- **折行**：`data-wrap="true"` 时正文 `white-space: pre-wrap` + `line-break: anywhere`，
+  行号与记号列锁住 `--leading-code-block`，不跟着正文折行涨高；不折行时正文 `white-space: pre`，
+  横向滚动交给 `.scroll-x`。
+- **代码度量**：整块共用 `--text-xs` 字号、`--leading-code-block` 行高、`tabular-nums` 与
+  `tab-size: 4`。
+- **文件头**：`--control-lg`（40px）高、吸顶（`position: sticky; top: 0`）并 `isolation: isolate`；
+  整行就是折叠开关（一枚铺满的按钮，不用容器 `onClick` + `stopPropagation`）。文件名
+  `--fg-default` + `500`，路径前缀压到 `--fg-muted` + `400`。
+- **高对比度**：`prefers-contrast: more` 下增删行补 1px 上下轮廓线，不单靠色相区分。
+
+### 3.7 选中文字的右键菜单 (Selection Menu)
 正文里选中的文字右键时就地弹出一层小菜单，浮层层级与标签栏的右键菜单同档。
 
 *   **范围**：整棵工作区只挂一份，凡是能选中文字的地方都管；已经自带右键菜单的地方（侧栏行、标签栏）自己先拦下，不会叠出两份。

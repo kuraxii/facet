@@ -23,6 +23,23 @@ describe("diff-lines", () => {
 		]);
 	});
 
+	it("增行只有新行号、删行只有旧行号，上下文两列都有", () => {
+		const patch = [
+			"@@ -1,2 +1,3 @@",
+			" const value = 1;",
+			"-export { value };",
+			"+export { value, other };",
+			"+const other = 2;",
+		].join("\n");
+		const body = patchBodyLines(patch).slice(1);
+		expect(body.map((line) => [line.oldNumber, line.newNumber, line.sign, line.text])).toEqual([
+			["1", "1", " ", "const value = 1;"],
+			["2", "", "-", "export { value };"],
+			["", "2", "+", "export { value, other };"],
+			["", "3", "+", "const other = 2;"],
+		]);
+	});
+
 	it("新文件与重命名只留下改动正文", () => {
 		const patch = [
 			"diff --git a/a.txt b/b.txt",

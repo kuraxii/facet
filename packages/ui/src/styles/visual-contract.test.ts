@@ -162,6 +162,9 @@ const NAMED_DECLARATIONS: readonly (readonly [string, string])[] = [
 	["--tool-tip-gap", `${VISUAL_PX.popover.tipGap}px`],
 	["--text-menu-edge", `${VISUAL_PX.popover.textMenuEdge}px`],
 	["--editor-head-gap", `${VISUAL_PX.editorHeadGap}px`],
+	["--diff-gutter-old", `${VISUAL_PX.diff.gutterOld}px`],
+	["--diff-gutter-new", `${VISUAL_PX.diff.gutterNew}px`],
+	["--diff-gutter-sign", `${VISUAL_PX.diff.gutterSign}px`],
 ];
 
 /** 存量债的计数维度。 */

@@ -428,9 +428,6 @@ const COLOR_LITERAL_ALLOWLIST: readonly string[] = [
 	"mask-image: linear-gradient(to right, #000 0, #000 calc(100% - var(--sb-title-fade)), transparent 100%);",
 	// 「跟随系统」色片：深浅两半同时出现，天然是两个字面色
 	"background: linear-gradient(135deg, #f4f4f5 0 50%, #272a29 50% 100%);",
-	// 贴在图片上的移除按钮：底图可能是任意亮度的照片，底色必须一直是深色，不跟主题走
-	"background: rgb(0 0 0 / 55%);",
-	"background: rgb(0 0 0 / 75%);",
 ];
 
 describe("颜色只从主题来", () => {

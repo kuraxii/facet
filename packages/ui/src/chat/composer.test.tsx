@@ -183,6 +183,18 @@ describe("输入区", () => {
 		unmount();
 	});
 
+	it("占位提示挂在输入域外面那一圈上,有缩略图时跟着下移", async () => {
+		const attachment = { id: "a1", name: "shot.png", previewUrl: "data:image/png;base64,AA==" };
+		const { container, unmount } = await renderComposer({ attachments: [attachment] });
+
+		// 占位提示的定位基准必须是输入域那一圈，不是整个输入区：缩略图把输入域推下去时它也跟下去，
+		// 否则会压在缩略图上
+		const placeholder = container.querySelector(".composer-placeholder");
+		expect(placeholder?.closest(".composer-input")).not.toBeNull();
+		expect(placeholder?.closest(".composer")).not.toBeNull();
+		unmount();
+	});
+
 	it("换行发送时占位符写明 Shift+回车", async () => {
 		const { container, unmount } = await renderComposer({ value: "", shiftEnterToSend: true });
 		expect(container.innerHTML).toContain("Shift+回车发送");

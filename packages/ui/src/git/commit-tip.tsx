@@ -13,6 +13,7 @@ import { shortTime } from "../chat/sidebar-model.ts";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { ICON_SIZE } from "../styles/visual-contract.ts";
 import styles from "./git.module.css";
+import { GitRefs } from "./git-refs.tsx";
 
 export interface CommitTipProps {
 	/** 悬浮到的那条提交 */
@@ -149,6 +150,8 @@ export function CommitTip({ commit, webUrl }: CommitTipProps): ReactNode {
 	const date = new Date(commit.authorDate);
 	const relative = relativeTime(date.getTime(), locale, Date.now());
 	const stats = commit.stats;
+	// HEAD / 分支 / 远端分支 / Tag：没有引用时整栏不出，免得留一条空分隔线
+	const refs = commit.refs ?? [];
 
 	// 提交页的路径各平台一致（GitHub / GitLab / Gitea 都是 `<仓库>/commit/<sha>`）；
 	// 主机名认不出来时整条链接都不给
@@ -175,6 +178,14 @@ export function CommitTip({ commit, webUrl }: CommitTipProps): ReactNode {
 			{stats === undefined ? null : (
 				<div className={styles.commitTipBand}>
 					<Stats files={stats.filesChanged} insertions={stats.insertions} deletions={stats.deletions} />
+				</div>
+			)}
+			{refs.length === 0 ? null : (
+				<div className={styles.commitTipBand}>
+					{/* 图谱行里只放得下一两个，卡片的这一栏铺得开：换行排，不收起 */}
+					<div className={styles.commitTipRefs}>
+						<GitRefs refs={refs} max={8} />
+					</div>
 				</div>
 			)}
 			<div className={styles.commitTipBand}>

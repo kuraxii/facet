@@ -79,7 +79,7 @@
 | `packages/ui/src/git/git-graph-lanes.tsx` | 一行的 SVG 泳道 |
 | `packages/ui/src/git/git-graph-list.tsx` | 满宽图谱列表（工具栏、行、触底自动加载） |
 | `packages/ui/src/git/git-patch.tsx` | 补丁正文（变更页与提交详情共用） |
-| `packages/ui/src/git/git-status-mark.tsx` / `git-refs.tsx` / `commit-tip.tsx` | 状态图形、引用胶囊、提交悬浮卡（作者 / 时间 / 改动规模都在卡里） |
+| `packages/ui/src/git/git-status-mark.tsx` / `git-refs.tsx` / `commit-tip.tsx` | 状态图形、引用胶囊、提交悬浮卡（作者 / 时间 / 改动规模 / 引用胶囊都在卡里） |
 | `packages/ui/src/styles/changes.css` / `git-graph.css` / `panel.css` | 全局样式按领域拆：变更与补丁、图谱页、面板骨架与文件视图 |
 
 - **文件视图的文件树（只在 `files` 视图）**：编辑器与文件树是**同一个 flex 行里的两栏**——编辑器 `flex: 1 1 0; min-width: 0`，文件树 `flex: 0 0 auto`，互不覆盖。底色与文件内容相同（`--bg-canvas`）、无投影，只有左缘一条 `1px` 线。

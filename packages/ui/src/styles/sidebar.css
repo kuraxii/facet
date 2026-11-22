@@ -140,7 +140,6 @@
 	left: 0;
 	z-index: var(--z-popup);
 	padding: var(--space-3);
-	border: 1px solid var(--border-default);
 	border-radius: var(--radius-lg);
 	background: var(--bg-surface);
 	box-shadow: var(--shadow-popover);
@@ -539,7 +538,6 @@
 	z-index: var(--z-popup);
 	width: 248px;
 	padding: var(--space-3);
-	border: 1px solid var(--border-default);
 	border-radius: var(--radius-lg);
 	background: var(--bg-elevated);
 	box-shadow: var(--shadow-popover);

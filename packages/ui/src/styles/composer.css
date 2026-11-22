@@ -327,7 +327,6 @@
 	/* 超过八条才滚动，滚动条出现时每行宽度不变 */
 	scrollbar-gutter: stable;
 	padding: var(--space-3);
-	border: 1px solid var(--border-default);
 	border-radius: var(--radius-xl);
 	background: var(--bg-elevated);
 	box-shadow: var(--shadow-popover);
@@ -560,7 +559,6 @@
 	/* 超过这个高度才滚动，滚动条出现时每行宽度不变 */
 	scrollbar-gutter: stable;
 	padding: var(--space-3);
-	border: 1px solid var(--border-default);
 	border-radius: var(--radius-lg);
 	background: var(--bg-elevated);
 	box-shadow: var(--shadow-popover);

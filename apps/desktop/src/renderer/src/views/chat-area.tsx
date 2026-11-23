@@ -118,7 +118,11 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 	const outlineAttr = outlineActive ? "true" : "false";
 	return (
 		<>
-			<ChatOutline items={transcript.items} container={transcript.scrollElement} />
+			<ChatOutline
+				items={transcript.items}
+				container={transcript.scrollElement}
+				viewport={transcript.viewport}
+			/>
 			<div
 				className="chat-viewport"
 				data-can-scroll-top={transcript.edges.top ? "true" : "false"}
@@ -126,27 +130,28 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 				data-outline-active={outlineAttr}
 			>
 				<section className="scroll scroll-y-hidden" ref={transcript.scrollRef}>
-					{/* 正文打上标记：它里面的文字右键多一项「引用」 */}
-					<div className="column chat-grid" data-quote-source>
-						<ChatTranscript
-							items={transcript.items}
-							canFork={canFork}
-							onFork={(beforeEntryId) =>
-								session.withTrust(sessionCwd, () => {
-									void session.runSessionAction(async () => (await client.fork(beforeEntryId)).file);
-								})
-							}
-							canRevert={canFork}
-							onRevert={composer.revertTo}
-							maintenance={sessionView.state.maintenance}
-							isRunning={activity !== "idle"}
-							onRetryTurn={composer.retryTurn}
-							onCopyDetails={copyText}
-							onCopyText={copyText}
-							renames={chat?.renames}
-							emptyHint={t("app.emptyHint")}
-						/>
-					</div>
+					<ChatTranscript
+						// 换会话一律重挂：实测高度、待恢复的位置与收起状态都只属于某一个会话
+						key={openedSessionId ?? "session"}
+						items={transcript.items}
+						scrollElement={transcript.scrollElement}
+						viewportRef={transcript.viewport}
+						canFork={canFork}
+						onFork={(beforeEntryId) =>
+							session.withTrust(sessionCwd, () => {
+								void session.runSessionAction(async () => (await client.fork(beforeEntryId)).file);
+							})
+						}
+						canRevert={canFork}
+						onRevert={composer.revertTo}
+						maintenance={sessionView.state.maintenance}
+						isRunning={activity !== "idle"}
+						onRetryTurn={composer.retryTurn}
+						onCopyDetails={copyText}
+						onCopyText={copyText}
+						renames={chat?.renames}
+						emptyHint={t("app.emptyHint")}
+					/>
 				</section>
 				<div className="chat-fade is-top" aria-hidden="true" />
 				<div className="chat-fade is-bottom" aria-hidden="true" />

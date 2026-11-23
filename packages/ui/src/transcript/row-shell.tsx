@@ -1,13 +1,14 @@
 /**
  * 行外壳、行尾动作与计时用的小工具。
  *
- * 对话面板里每一行都长在同一只 `Shell` 上：外壳负责 `is-streaming` 与对话导航的定位键，
+ * 对话面板里每一行都长在同一只 `Shell` 上：外壳负责行标识与测量回调，
  * 行尾的复制按钮、正在计时的时长都挂在这一层。这里只有渲染与计时，不碰渲染单元的投影。
  */
 import type { Part } from "@facet/client-core";
 import { Check, Copy } from "lucide-react";
 import { type ReactNode, type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { TRANSCRIPT_DATA_ATTRS } from "../layout/layout-contract.ts";
 import { ICON_SIZE } from "../styles/visual-contract.ts";
 import type { DisplayRow } from "./group.ts";
 import { MessageAction } from "./message-action.tsx";
@@ -95,26 +96,30 @@ export function CopyButton({
 /**
  * 一行外壳。
  *
- * 正在流式写入的行带上 is-streaming：样式据此把它排除在视口裁剪之外，
- * 新增内容始终有真实的布局盒模型。
+ * 行的几何由虚拟化那一层决定：外层只负责行标识与测量回调，行的内容各画各的。
+ * 拖选跨行时要靠 `data-row-id` 把选区节点找回它属于哪一行，实测高度靠 `data-index`。
  */
 export function Shell({
 	className,
 	children,
-	outlineKey,
-	isStreaming = false,
+	rowId,
+	rowIndex,
+	measureRef,
 }: {
 	className: string;
 	children: ReactNode;
-	/** 对话导航的定位键，只在用户消息行上给 */
-	outlineKey?: string;
-	/** 这一行是否仍在增长 */
-	isStreaming?: boolean;
+	/** 行标识，与渲染单元的 id 一致 */
+	rowId: string;
+	/** 行在虚拟列表里的下标；不虚拟化时不给 */
+	rowIndex?: number | undefined;
+	/** 测量回调，虚拟化器按它回填实测高度；不虚拟化时不给 */
+	measureRef?: ((node: HTMLElement | null) => void) | undefined;
 }) {
 	return (
 		<div
-			className={isStreaming ? `row ${className} is-streaming` : `row ${className}`}
-			data-outline-key={outlineKey}
+			ref={measureRef}
+			className={`row ${className}`}
+			{...{ [TRANSCRIPT_DATA_ATTRS.rowId]: rowId, [TRANSCRIPT_DATA_ATTRS.rowIndex]: rowIndex }}
 		>
 			{children}
 		</div>

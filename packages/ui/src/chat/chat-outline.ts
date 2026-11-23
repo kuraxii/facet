@@ -8,7 +8,7 @@ import type { TranscriptItem } from "@facet/client-core";
 
 /** 导航条上的一项，对应一条用户消息。 */
 export interface OutlinePrompt {
-	/** 定位用的键，与正文行上的 data-outline-key 一致 */
+	/** 定位用的键：用户消息的条目 id（没有条目 id 的实时消息用视图标识），面板按它给出位置 */
 	key: string;
 	/** 悬浮预览里显示的文字 */
 	preview: string;

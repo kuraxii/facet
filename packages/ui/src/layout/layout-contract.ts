@@ -124,3 +124,19 @@ export const SHELL_DATA_ATTRS = {
 	/** 右栏拖到一半、准备关闭 */
 	panelDragCollapsed: "data-panel-drag-collapsed",
 } as const;
+
+/**
+ * 对话面板行上的两个属性名。
+ *
+ * 虚拟化之后行会滚动着挂载与卸载，这两个名字都被脚本按属性选择器读：
+ * - `rowIndex` 是虚拟化器认测量目标的约定名（`indexAttribute`），行的实测高度靠它回填；
+ * - `rowId` 用来从原生选区的节点往上找回它属于哪一行——拖选跨行时那一段必须钉在 DOM 里。
+ *
+ * 和上面那组一样，名字只能在这里定，别处不许再写裸字面量。
+ */
+export const TRANSCRIPT_DATA_ATTRS = {
+	/** 这一行在虚拟列表里的下标 */
+	rowIndex: "data-index",
+	/** 行标识，与渲染单元的 id 一致 */
+	rowId: "data-row-id",
+} as const;

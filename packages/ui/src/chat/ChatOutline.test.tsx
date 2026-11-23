@@ -6,7 +6,7 @@
  * （`--outline-slot`）兜着，所以窄视口下照旧渲染，只有空对话与单条消息时收起。
  */
 import type { TranscriptItem } from "@facet/client-core";
-import { act } from "react";
+import { act, createRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
 import { I18nProvider } from "../i18n/I18nProvider.tsx";
@@ -46,7 +46,7 @@ function mount(items: TranscriptItem[]): HTMLElement {
 	act(() => {
 		root?.render(
 			<I18nProvider language="zh-CN">
-				<ChatOutline items={items} container={null} />
+				<ChatOutline items={items} container={null} viewport={createRef()} />
 			</I18nProvider>,
 		);
 	});

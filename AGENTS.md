@@ -64,6 +64,10 @@
 - 推标签的那一轮在门禁与两个平台的包都出来之后，会额外建一个同名 GitHub Release 并挂上
   三个平台的产物；手动 dispatch 只验证流水线，不建 Release。
 - 进 `main` 的 PR 会跑同一套门禁（`pr.yml` → `gates.yml`），不打包也不建 Release。
+- 夜间构建由 `build.yml` 的 `schedule` 承担：每天 `18:00 UTC`（本地 02:00）拿 `main` 的当前
+  提交出一份**预发布**，标签与标题都是滚动的同一个 `nightly`，每晚覆盖，旧的连 tag 一起删掉；
+  上一份指向的提交没变时整套跳过。它用 `--prerelease --latest=false`，永不抢 Latest，也不碰
+  `v*` 标签。想手动核对这条路径：`gh workflow run build.yml -f nightly=true`。
 
 # 注释规范
 

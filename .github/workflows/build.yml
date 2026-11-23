@@ -5,7 +5,13 @@
 # 直接用 arm runner 走同一条 `npm ci` → `@electron/rebuild` 的路径更省事；Windows 也一样，
 # 自带的 Node 运行时与 Electron 二进制都按 runner 的平台下载。
 #
-# 产物既作为 workflow artifact 留 90 天，也在推标签时挂到同名的 GitHub Release 上。
+# 三条触发方式：
+# - 推 `v*` 标签：发一个正式版本，产物挂到同名 GitHub Release 上；
+# - 每天定时（本地 02:00）：拿 main 的当前提交出一份 **夜间预发布**（`nightly`，每晚覆盖同一份），
+#   上一份指向的提交没变时整套跳过，不给同一棵树重复打三个平台的包；
+# - 手动 dispatch：只验证流水线；`nightly` 输入为真时按夜间构建处理，用来核对这条路径。
+#
+# 产物既作为 workflow artifact 保留（标签 90 天、夜间 7 天），也挂到上面那两个发布里。
 
 name: build
 
@@ -13,10 +19,18 @@ on:
   push:
     tags:
       - "v*"
+  # 夜间构建：02:00（UTC+8）= 前一天 18:00 UTC，趁没人用的时候打
+  schedule:
+    - cron: "0 18 * * *"
   # 手动跑一次也能出包，用来验证流水线本身
   workflow_dispatch:
+    inputs:
+      nightly:
+        description: 按夜间构建处理（建或更新 nightly 预发布）
+        type: boolean
+        default: false
 
-# 建 Release 要写权限；其余 job 只用得上读
+# 建发布要写权限；其余 job 只用得上读
 permissions:
   contents: read
 
@@ -36,9 +50,50 @@ jobs:
     name: gates
     uses: ./.github/workflows/gates.yml
 
+  # 先判断这次要不要打。夜间构建看一眼 main 有没有新提交：上一份 nightly 就指在同一个提交
+  # 上时整套跳过；标签构建与手动构建不查，直接继续。
+  preflight:
+    name: preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      # 本次是否按夜间构建处理（建或更新 nightly 预发布）
+      nightly: ${{ steps.mode.outputs.nightly }}
+      # 为真时后续 job 全部跳过
+      skip: ${{ steps.mode.outputs.skip }}
+    steps:
+      - name: 判断这次要不要打
+        id: mode
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # 定时当然算夜间；手动 dispatch 只有勾了 `nightly` 才算。夜间那一路读的是
+        # `nightly` 预发布当前指的提交——没有这个发布时按“要打”处理。
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event.inputs.nightly }}" = "true" ]; then
+            echo "nightly=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "nightly=false" >> "$GITHUB_OUTPUT"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          current="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/nightly" --jq '.targetCommitish' 2>/dev/null || true)"
+          echo "nightly 当前指向: ${current:-<还没有>}；本次提交: $GITHUB_SHA"
+          if [ "$current" = "$GITHUB_SHA" ]; then
+            echo "main 自上次夜间构建以来没有新提交，跳过"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
   linux:
     name: linux ${{ matrix.arch }}
-    needs: gates
+    needs:
+      - gates
+      - preflight
+    # 夜间构建碰上「没有新提交」时整套跳过（标签与手动构建的 skip 恒为 false）
+    if: needs.preflight.outputs.skip != 'true'
     strategy:
       # 一个架构挂了不要把另一个也取消掉，两个都要看到结果
       fail-fast: false
@@ -125,13 +180,17 @@ jobs:
             apps/desktop/dist/*.tar.gz
           # 六个包一次传完，任缺其一就当失败
           if-no-files-found: error
-          retention-days: 90
+          # 夜间构建每天都传一次，只留一周；标签构建留 90 天
+          retention-days: ${{ needs.preflight.outputs.nightly == 'true' && 7 || 90 }}
 
   # Windows 只出 x64 的 NSIS 安装包：arm64 要另一套 Electron 二进制与 win32-arm64 的 Node
   # 运行时，等有需求再补一台 arm64 runner
   windows:
     name: windows x64
-    needs: gates
+    needs:
+      - gates
+      - preflight
+    if: needs.preflight.outputs.skip != 'true'
     runs-on: windows-latest
     # 自带 Node 运行时、Electron 与 NSIS 工具链都要下，压缩安装包本身也要几分钟
     timeout-minutes: 60
@@ -197,15 +256,20 @@ jobs:
           name: facet-windows-x64
           path: apps/desktop/dist/*-setup.exe
           if-no-files-found: error
-          retention-days: 90
+          # 夜间构建每天都传一次，只留一周；标签构建留 90 天
+          retention-days: ${{ needs.preflight.outputs.nightly == 'true' && 7 || 90 }}
 
-  # 只在推标签时把三份产物挂到 GitHub Release；手动 dispatch 只验证流水线，不建版本
+  # 推标签时建同名正式发布；夜间构建改建（覆盖）那份 `nightly` 预发布。
+  # 手动 dispatch 只在勾了 `nightly` 时才走夜间这一路。
   release:
     name: release
     needs:
+      - preflight
       - linux
       - windows
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: >-
+      needs.preflight.outputs.skip != 'true' &&
+      (startsWith(github.ref, 'refs/tags/v') || needs.preflight.outputs.nightly == 'true')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -213,6 +277,9 @@ jobs:
     steps:
       # 版本号来自仓库里的 package.json，与打标签前那次发版提交一致
       - uses: actions/checkout@v4
+        with:
+          # 夜间构建的说明要列「上次标签以来」的提交，得拿到完整历史与标签
+          fetch-depth: 0
 
       - uses: actions/download-artifact@v4
         with:
@@ -232,15 +299,49 @@ jobs:
             fi
           done
 
-      - name: 建 Release 并上传产物
+      - name: 建发布并上传产物
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NIGHTLY: ${{ needs.preflight.outputs.nightly }}
         # 只挂六个 Linux 包与 Windows 安装包；blockmap 与 latest.yml 是自动更新用的，
-        # 应用里没有更新功能，不往 Release 上放
+        # 应用里没有更新功能，不往 Release 上放。
+        #
+        # 两个分支：
+        # - 标签构建：同名正式发布，`--generate-notes` 自动写变更；
+        # - 夜间构建：同一个 `nightly` 标签与预发布每晚 **覆盖** 一份，旧的连 tag 一起删掉，
+        #   所以不会越攒越多；`--prerelease --latest=false` 保证它永远不抢 Latest，
+        #   `--target $GITHUB_SHA` 让「上一份指在哪个提交」可直接查。
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            dist/*.rpm dist/*.deb dist/*.tar.gz dist/*-setup.exe \
+          files=(dist/*.rpm dist/*.deb dist/*.tar.gz dist/*-setup.exe)
+          if [ "$NIGHTLY" != "true" ]; then
+            gh release create "$GITHUB_REF_NAME" "${files[@]}" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "facet ${GITHUB_REF_NAME#v}" \
+              --generate-notes \
+              --verify-tag
+            exit 0
+          fi
+          tag=nightly
+          gh release delete "$tag" --yes --cleanup-tag >/dev/null 2>&1 || true
+          {
+            echo "main 上的夜间构建：每晚覆盖同一份预发布，安装包未经完整验证，稳定版看带版本号的发布。"
+            echo
+            echo "- 提交：\`${GITHUB_SHA}\`"
+            echo "- 构建时间：$(date -u '+%Y-%m-%d %H:%M UTC')"
+            last="$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)"
+            if [ -n "$last" ]; then
+              echo
+              echo "\`$last\` 以来合并进 main 的提交："
+              echo
+              echo '```'
+              git log --no-merges --pretty='%h %s' "$last..HEAD" | head -n 30
+              echo '```'
+            fi
+          } > nightly-notes.md
+          gh release create "$tag" "${files[@]}" \
             --repo "$GITHUB_REPOSITORY" \
-            --title "facet ${GITHUB_REF_NAME#v}" \
-            --generate-notes \
-            --verify-tag
+            --target "$GITHUB_SHA" \
+            --title "facet nightly ($(date -u '+%Y-%m-%d'))" \
+            --notes-file nightly-notes.md \
+            --prerelease \
+            --latest=false

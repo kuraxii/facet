@@ -83,6 +83,7 @@ export function useTranscript(options: TranscriptOptions): Transcript {
 			return;
 		}
 		release();
+		// 标识迁移（离开期间一轮可能结束并提升为历史消息）由面板按当前映射现算，这里存原样
 		viewport.current?.restore(saved.anchor);
 	}, [activeFile, release, scrollToBottom]);
 

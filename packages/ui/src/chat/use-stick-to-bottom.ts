@@ -43,11 +43,17 @@ export interface StickToBottom {
 	release: () => void;
 }
 
-/** 键盘上能让视口往上走的键。 */
-const SCROLL_UP_KEYS = new Set(["ArrowUp", "PageUp", "Home"]);
+/** 键盘上能让视口往上走的键。定位接口也用这一份判断用户是不是自己接管了位置。 */
+export const SCROLL_UP_KEYS: ReadonlySet<string> = new Set(["ArrowUp", "PageUp", "Home"]);
 
-/** 位置往后走了这么多像素就算用户离开了底部（`scrollTop` 只会因为主动滚动而变小）。 */
-const UPWARD_EPSILON = 1;
+/**
+ * 位置往后走了这么多像素就算用户离开了底部。
+ *
+ * `scrollTop` 只会因为主动滚动而变小（内容变矮时浏览器把它夹小，那种情况仍贴着底，`gap` 为 0，
+ * 由下面的判据排除）。取 2 而不是 1：HiDPI 缩放下触控板会给出 1px 上下的亚像素抖动，
+ * 按 1px 判定会在静止时误判成"用户往上翻了"。
+ */
+const UPWARD_EPSILON = 2;
 
 /**
  * 贴底写入之后的收尾窗口。
@@ -209,9 +215,11 @@ export function useStickToBottom(contentKey: unknown, options: StickToBottomOpti
 				return;
 			}
 			const distance = element.scrollHeight - top - element.clientHeight;
-			if (delta < -UPWARD_EPSILON && distance > PIN_THRESHOLD) {
-				// 位置变小且已经离开底部：用户往上翻，或者点了导航轨跳走。
-				// 只是内容变矮（估高换成实测、行被收起）时浏览器会把它夹小，那时仍贴着底，不算离开。
+			if (delta < -UPWARD_EPSILON && distance > UPWARD_EPSILON) {
+				// 位置变小且真的离开了底部：用户往上翻，或者点了导航轨跳走。
+				// 判据取 2px 而不是贴底阈值那一档——只往上挪 10px 也算他要走，
+				// 否则收尾窗口会把他拽回底部。内容变矮时浏览器把位置夹小、但仍贴着底（distance≈0），
+				// 那一种不会被算成离开。
 				release();
 				return;
 			}
@@ -230,8 +238,13 @@ export function useStickToBottom(contentKey: unknown, options: StickToBottomOpti
 				release();
 			}
 		};
+		// 触摸没有滚轮也没有键盘：手指一按上去就当场脱钩，不等位置变化
+		const onTouchMove = (): void => {
+			release();
+		};
 		element.addEventListener("scroll", onScroll, { passive: true });
 		element.addEventListener("wheel", onWheel, { passive: true });
+		element.addEventListener("touchmove", onTouchMove, { passive: true });
 		element.addEventListener("keydown", onKeyDown);
 		const content = element.firstElementChild;
 		const observer = new ResizeObserver(() => {
@@ -247,6 +260,7 @@ export function useStickToBottom(contentKey: unknown, options: StickToBottomOpti
 		return () => {
 			element.removeEventListener("scroll", onScroll);
 			element.removeEventListener("wheel", onWheel);
+			element.removeEventListener("touchmove", onTouchMove);
 			element.removeEventListener("keydown", onKeyDown);
 			observer.disconnect();
 		};

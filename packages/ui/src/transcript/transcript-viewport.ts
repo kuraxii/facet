@@ -17,18 +17,23 @@
  */
 import type { useVirtualizer } from "@tanstack/react-virtual";
 import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import { TRANSCRIPT_DATA_ATTRS } from "../layout/layout-contract.ts";
+import { VISUAL_SCALE } from "../styles/visual-contract.ts";
 import type { DisplayRow } from "./group.ts";
 import { calibrateRow } from "./scroll-calibrate.ts";
 import { useScrollDriver, useScrollInterrupt } from "./scroll-driver.ts";
 import { resolveAnchorRowId, type TranscriptAnchor } from "./virtual-anchor.ts";
 
 /**
- * 跳到某一行时在它上面留出的空隙（px），别让那一条贴着视口上沿的渐隐。
+ * 跳到某一行时在它上面留出的空隙（px）：整条顶部渐隐的高度。
+ *
+ * 视口上沿压着一层渐暗（`.chat-fade.is-top`，高 `--control-lg`），落点贴着上沿的话，跳过去
+ * 的第一行正好被那层暗色压住；留这么多空间，行顶边就落在渐隐的下边缘。
  *
  * 同一个数也交给虚拟化器的 `scrollPaddingStart`，这样 `scrollToIndex(align: "start")` 与
  * `getOffsetForIndex("start")` 用的是同一份口径，量位置时不必各算一遍。
  */
-export const JUMP_LEAD = 12;
+export const JUMP_LEAD = VISUAL_SCALE.control.lg;
 
 /** 虚拟化器的实例类型，只用到定位那几个方法。 */
 type VirtualList = ReturnType<typeof useVirtualizer<HTMLElement, HTMLElement>>;
@@ -168,16 +173,25 @@ export function useTranscriptViewport(options: TranscriptViewportOptions): void 
 				userIntent.current += 1;
 				const scroller = latest.current.virtualizer;
 				/*
-				 * 每帧重读目标行的位置：落点是按估高算的，动画期间目标附近的行才陆续测量，
-				 * 坐标会动。读的是行的虚拟顶边（`getOffsetForIndex("start")` 已扣掉跳转留白），
-				 * 与导航量位置用同一套口径，落点因此与"当前轮次"的判定对得上。
+				 * 每帧重读目标行的位置：落点是按估高算的，动画期间目标附近的行才陆续测量，坐标会动。
+				 * 行一旦挂载就按它的**真实矩形**算（视口里那几行量出来的高度和估高有偏差，
+				 * 只按虚拟坐标落位会让行顶边压进顶部渐隐里），没挂载时退回虚拟顶边——每帧
+				 * 重读的意义就在于让落点收敛到真实位置，而不是收在估算上。
+				 *
+				 * 行标识先抓住：补历史会让下标整体后移，按标识重新认下标才不会跳错行。
 				 */
 				const rowId = latest.current.rows[target]?.id;
 				const readLive = (): number => {
+					const element = latest.current.scrollElement;
 					const index = rowId === undefined ? target : (latest.current.rowIndexById.get(rowId) ?? target);
-					return (
-						scroller.getOffsetForIndex(index, "start")?.[0] ?? latest.current.scrollElement?.scrollTop ?? 0
-					);
+					if (element !== null) {
+						const row = element.querySelector<HTMLElement>(`[${TRANSCRIPT_DATA_ATTRS.rowIndex}="${index}"]`);
+						if (row !== null) {
+							const offset = row.getBoundingClientRect().top - element.getBoundingClientRect().top;
+							return element.scrollTop + offset - JUMP_LEAD;
+						}
+					}
+					return scroller.getOffsetForIndex(index, "start")?.[0] ?? element?.scrollTop ?? 0;
 				};
 				if (prefersReducedMotion()) {
 					// 系统要求减少动效：一步落位，再按落点那一行的实际矩形校准一次

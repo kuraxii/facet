@@ -10,6 +10,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { VISUAL_SCALE } from "../styles/visual-contract.ts";
+import { JUMP_LEAD } from "./transcript-viewport.ts";
 import { VIRTUAL_ROW_GAP, VIRTUAL_SCROLL_MARGIN } from "./virtual-anchor.ts";
 
 const chat = readFileSync(join(import.meta.dirname, "..", "styles", "chat.css"), "utf8");
@@ -39,6 +40,12 @@ describe("虚拟化的几何与样式表同源", () => {
 	it("列表起点等于 `.scroll` 的上内边距", () => {
 		expect(block(styles, ".scroll")).toContain("padding: var(--space-12) 0 var(--space-6)");
 		expect(VIRTUAL_SCROLL_MARGIN).toBe(VISUAL_SCALE.space.s12);
+	});
+
+	it("跳转留白等于顶部渐隐的高度", () => {
+		// 落点贴着上沿的话，跳过去的第一行会被那层渐暗压住
+		expect(block(styles, ".chat-fade")).toContain("height: var(--control-lg)");
+		expect(JUMP_LEAD).toBe(VISUAL_SCALE.control.lg);
 	});
 
 	it("行上不再做屏外裁剪：挂载哪些行由虚拟化决定", () => {

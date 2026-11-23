@@ -7,10 +7,10 @@
  *
  * 距离分三档处理：
  * - 位移 ≤ `MOTION_EPSILON`：直接落位，没有动画；
- * - 短距离（不到 1.5 个视口）：一次 `easeOutCubic`，180ms 到位；
- * - 长距离：拆三段。**起步** 50ms 朝目标方向挪 `DEPART_DISTANCE`，给一点物理感又不至于把
+ * - 短距离（不到 1.5 个视口）：一次 `easeOutCubic`，260ms 到位；
+ * - 长距离：拆三段。**起步** 60ms 朝目标方向挪 `DEPART_DISTANCE`，给一点物理感又不至于把
  *   下一屏的行全挂上；**瞬移**：起步结束的那一帧直接跳到落点来向侧 `APPROACH_DISTANCE` 处，
- *   这一段没有视觉过程，挂载与测量就发生在这里；**落地缓入** 160ms，每帧重读目标坐标，
+ *   这一段没有视觉过程，挂载与测量就发生在这里；**落地缓入** 300ms，每帧重读目标坐标，
  *   把瞬移后头一两帧测量出来的估算残差（几十像素量级）吸收在减速段里。
  *
  * 这里只有几何与时间，不碰 DOM、不碰 React：给定起点、目标、视口高度与可滚上限，返回某一
@@ -23,11 +23,15 @@ export const SHORT_JUMP_VIEWPORTS = 1.5;
 /** 位移小于它就算原地：动画看不出来，直接落位。 */
 export const MOTION_EPSILON = 1;
 
-/** 短距离的到位时间。 */
-export const SHORT_ARRIVE_MS = 180;
+/**
+ * 短距离的到位时间。
+ *
+ * 稍慢一点：跳过去之后视口里那几行会陆续量出真实高度，落点跟着微调，太快就显成一次抖动。
+ */
+export const SHORT_ARRIVE_MS = 260;
 
 /** 长距离起步阶段的时长。 */
-export const DEPART_MS = 50;
+export const DEPART_MS = 60;
 
 /** 起步阶段朝目标方向移动的距离。 */
 export const DEPART_DISTANCE = 48;
@@ -35,8 +39,13 @@ export const DEPART_DISTANCE = 48;
 /** 瞬移落在目标来向侧多远的地方：留出缓入的减速距离。 */
 export const APPROACH_DISTANCE = 180;
 
-/** 长距离落地缓入的时长。 */
-export const ARRIVE_MS = 160;
+/**
+ * 长距离落地缓入的时长。
+ *
+ * 减速段拉长一些，把瞬移后头几帧测出来的估算残差分摊到更多帧里，看起来是平滑靠站而不是
+ * 一次位移。
+ */
+export const ARRIVE_MS = 300;
 
 /** 缓出：起步快、落点稳，位移的大部分在头三成时间里走完。 */
 export function easeOutCubic(progress: number): number {

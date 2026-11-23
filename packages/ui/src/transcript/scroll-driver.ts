@@ -48,6 +48,14 @@ export interface ScrollDriverOptions {
 	readonly getElement: () => HTMLElement | null;
 	/** 系统是否要求减少动效（`prefers-reduced-motion`） */
 	readonly prefersReducedMotion: () => boolean;
+	/**
+	 * 曲线开始与结束时各通知一次。
+	 *
+	 * 调用方用它停掉虚拟化器的尺寸补偿：补偿每次量到高度变化都会写一次 `scrollTop`，与曲线的
+	 * 每帧写入抢同一帧，画面就会在两者之间抖一下。曲线本来就每帧按目标行的真实矩形重算落点，
+	 * 这些高度变化已经被吃掉了；跑完再让补偿恢复默认。
+	 */
+	readonly onRunningChange?: ((running: boolean) => void) | undefined;
 }
 
 /** 一次进行中的滚动。 */
@@ -76,7 +84,10 @@ export function useScrollDriver(options: ScrollDriverOptions): ScrollDriver {
 			window.cancelAnimationFrame(frame.current);
 			frame.current = 0;
 		}
-		running.current = null;
+		if (running.current !== null) {
+			running.current = null;
+			latest.current.onRunningChange?.(false);
+		}
 	}, []);
 
 	const run = useCallback(
@@ -101,6 +112,7 @@ export function useScrollDriver(options: ScrollDriverOptions): ScrollDriver {
 			}
 			const state: Running = { readLive, onSettle, startedAt: 0, plan };
 			running.current = state;
+			latest.current.onRunningChange?.(true);
 
 			const step = (now: number): void => {
 				frame.current = 0;
@@ -120,6 +132,7 @@ export function useScrollDriver(options: ScrollDriverOptions): ScrollDriver {
 				target.scrollTop = clampScroll(sample.scrollTop, bound);
 				if (sample.phase === "done") {
 					running.current = null;
+					latest.current.onRunningChange?.(false);
 					current.onSettle?.();
 					return;
 				}

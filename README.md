@@ -335,7 +335,10 @@ Release；同一 PR 反复推送只留最新一轮。门禁本身抽成可复用
 5. 推标签时再跑一个 `release` job：把三份 artifact 解到同一个目录，用 `gh release create` 建同名的
    GitHub Release 并挂上六个 Linux 包与 Windows 安装包（手动 dispatch 不建 Release）；
 6. Windows job 缓存 Electron、自带 Node 运行时与 NSIS 工具链，缓存键跟着 `package-lock.json` 与 `.node-version` 走；
-7. 版本号取自仓库里的 `package.json`，与打标签前那次发版提交一致，流水线不反填。
+7. 版本号取自仓库里的 `package.json`，与打标签前那次发版提交一致，流水线不反填；
+8. 同一条 `build.yml` 每天 `18:00 UTC`（本地 02:00）还会被 `schedule` 触发一次：拿 `main` 的当前提交出
+   一份 `nightly` **预发布**（`--prerelease --latest=false`，标签与标题滚动、每晚覆盖，旧的连 tag 一起删），
+   上一份指向的提交没变时整套跳过；手动核对这条路：`gh workflow run build.yml -f nightly=true`。
 
 macOS 不在流水线里，也没有适配。
 

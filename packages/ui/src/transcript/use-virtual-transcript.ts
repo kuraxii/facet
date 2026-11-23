@@ -19,9 +19,10 @@
  */
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useCallback, useMemo } from "react";
+import { JUMP_LEAD } from "../chat/chat-outline.ts";
 import { TRANSCRIPT_DATA_ATTRS } from "../layout/layout-contract.ts";
 import type { DisplayRow } from "./group.ts";
-import { JUMP_LEAD, type TranscriptViewport, useTranscriptViewport } from "./transcript-viewport.ts";
+import { type TranscriptViewport, useTranscriptViewport } from "./transcript-viewport.ts";
 import type { SelectionPin } from "./use-selection-pin.ts";
 import {
 	buildGridPlan,
@@ -101,6 +102,17 @@ export function useVirtualTranscript(options: VirtualTranscriptOptions): Virtual
 		count: rows.length,
 		getScrollElement: () => scrollElement,
 		getItemKey: (index) => rows[index]?.id ?? `row-missing:${index}`,
+		/*
+		 * 行的"占用高度"要含上下外边距：`.row.is-fork` 用 `margin-top: -6px` 让分叉行贴近上一轮，
+		 * 只按边框盒量的话，每个分叉行都会在窗口里凭空多出 6px，一路累加下去——跳转落点会比
+		 * 目标高十几像素，竖轨判当前轮次也就跟着错一格。虚拟化器的坐标只认"盒 + 固定行距"，
+		 * 所以外边距必须折进行高。
+		 */
+		measureElement: (element) => {
+			const style = getComputedStyle(element);
+			const margin = (Number.parseFloat(style.marginTop) || 0) + (Number.parseFloat(style.marginBottom) || 0);
+			return Math.round(element.getBoundingClientRect().height + margin);
+		},
 		estimateSize: (index) => {
 			const row = rows[index];
 			return row === undefined ? 0 : estimateRowHeight(row, isCollapsed(row));

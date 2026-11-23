@@ -8,9 +8,9 @@
  * 距离分三档处理：
  * - 位移 ≤ `MOTION_EPSILON`：直接落位，没有动画；
  * - 短距离（不到 1.5 个视口）：一次 `easeOutCubic`，260ms 到位；
- * - 长距离：拆三段。**起步** 60ms 朝目标方向挪 `DEPART_DISTANCE`，给一点物理感又不至于把
+ * - 长距离：拆三段。**起步** 70ms 朝目标方向挪 `DEPART_DISTANCE`，给一点物理感又不至于把
  *   下一屏的行全挂上；**瞬移**：起步结束的那一帧直接跳到落点来向侧 `APPROACH_DISTANCE` 处，
- *   这一段没有视觉过程，挂载与测量就发生在这里；**落地缓入** 300ms，每帧重读目标坐标，
+ *   这一段没有视觉过程，挂载与测量就发生在这里；**落地缓入** 270ms，每帧重读目标坐标，
  *   把瞬移后头一两帧测量出来的估算残差（几十像素量级）吸收在减速段里。
  *
  * 这里只有几何与时间，不碰 DOM、不碰 React：给定起点、目标、视口高度与可滚上限，返回某一
@@ -31,13 +31,13 @@ export const MOTION_EPSILON = 1;
 export const SHORT_ARRIVE_MS = 260;
 
 /** 长距离起步阶段的时长。 */
-export const DEPART_MS = 60;
+export const DEPART_MS = 70;
 
 /** 起步阶段朝目标方向移动的距离。 */
-export const DEPART_DISTANCE = 48;
+export const DEPART_DISTANCE = 56;
 
 /** 瞬移落在目标来向侧多远的地方：留出缓入的减速距离。 */
-export const APPROACH_DISTANCE = 180;
+export const APPROACH_DISTANCE = 260;
 
 /**
  * 长距离落地缓入的时长。
@@ -45,7 +45,18 @@ export const APPROACH_DISTANCE = 180;
  * 减速段拉长一些，把瞬移后头几帧测出来的估算残差分摊到更多帧里，看起来是平滑靠站而不是
  * 一次位移。
  */
-export const ARRIVE_MS = 300;
+export const ARRIVE_MS = 270;
+
+/**
+ * 每帧朝最新目标靠拢的比例。
+ *
+ * 目标坐标是每帧重读的，而 `ResizeObserver` 回填高度往往是"这一帧多出 60px"这种台阶：直接
+ * 拿它当目标，曲线会在那一帧陡一下（速度折角）。按比例追过去，台阶被摊成几帧的斜坡。
+ */
+export const TARGET_TRACK_FACTOR = 0.35;
+
+/** 缓入走到这个进度时，追踪值直接对齐最新目标：落点必须是精确的，不能差一个尾巴。 */
+export const TARGET_SNAP_PROGRESS = 0.85;
 
 /** 缓出：起步快、落点稳，位移的大部分在头三成时间里走完。 */
 export function easeOutCubic(progress: number): number {
@@ -108,6 +119,8 @@ export interface ScrollMotionSample {
 	readonly scrollTop: number;
 	/** 是否已经越过瞬移点（落点是瞬移后的缓入段） */
 	readonly didTeleport: boolean;
+	/** 阻尼追踪之后的目标坐标，下一帧原样传回来 */
+	readonly trackedTarget: number;
 }
 
 /** 规划一次滚动。`to` 与结果都会被夹进 `[0, maxScroll]`。 */
@@ -140,43 +153,80 @@ export function planScrollMotion(input: {
 	};
 }
 
-/** 按经过的毫秒数采样这一帧的位置。`liveTarget` 由调用方每帧重新读。 */
+/**
+ * 按经过的毫秒数采样这一帧的位置。
+ *
+ * `liveTarget` 由调用方每帧重新读；`trackedTarget` 是上一帧的返回值（首次不传），阻尼追踪就靠
+ * 它把台阶式的高度回填摊平——曲线本身仍然只是输入的函数。
+ */
 export function sampleScrollMotion(
 	plan: ScrollMotionPlan,
 	elapsedMs: number,
 	liveTarget: number,
 	maxScroll: number,
+	trackedTarget?: number,
 ): ScrollMotionSample {
 	if (plan.mode === "instant") {
-		return { phase: "done", scrollTop: plan.target, didTeleport: false };
+		const target = clampScroll(plan.target, Math.max(0, maxScroll));
+		return { phase: "done", scrollTop: target, didTeleport: false, trackedTarget: target };
 	}
 	const bound = Math.max(0, maxScroll);
 	const target = clampScroll(liveTarget, bound);
 	if (plan.mode === "short") {
 		const progress = clamp01(elapsedMs / SHORT_ARRIVE_MS);
+		const tracked = trackTarget(trackedTarget, target, progress);
 		if (progress >= 1) {
-			return { phase: "done", scrollTop: target, didTeleport: false };
+			return { phase: "done", scrollTop: tracked, didTeleport: false, trackedTarget: tracked };
 		}
-		const scrollTop = plan.from + (target - plan.from) * easeOutCubic(progress);
-		return { phase: "arrive", scrollTop: clampScroll(scrollTop, bound), didTeleport: false };
+		const scrollTop = plan.from + (tracked - plan.from) * easeOutCubic(progress);
+		return {
+			phase: "arrive",
+			scrollTop: clampScroll(scrollTop, bound),
+			didTeleport: false,
+			trackedTarget: tracked,
+		};
 	}
 	// 长距离：起步段走完之前不瞬移
 	if (elapsedMs < DEPART_MS) {
 		const progress = clamp01(elapsedMs / DEPART_MS);
 		const scrollTop = plan.from + (plan.departTo - plan.from) * easeInQuad(progress);
-		return { phase: "depart", scrollTop: clampScroll(scrollTop, bound), didTeleport: false };
+		return {
+			phase: "depart",
+			scrollTop: clampScroll(scrollTop, bound),
+			didTeleport: false,
+			trackedTarget: target,
+		};
 	}
+	const progress = clamp01((elapsedMs - DEPART_MS) / ARRIVE_MS);
+	const tracked = trackTarget(trackedTarget, target, progress);
 	/*
 	 * 目标已经跑到瞬移点的"身后"：估算误差大过缓入距离，再从瞬移点滑过去就是先反向弹回。
 	 * 这种情况直接收敛到目标，有界、不越界、也不来回摆。
 	 */
-	if ((target - plan.approachPoint) * plan.direction <= 0) {
-		return { phase: "done", scrollTop: target, didTeleport: true };
+	if ((tracked - plan.approachPoint) * plan.direction <= 0) {
+		return { phase: "done", scrollTop: tracked, didTeleport: true, trackedTarget: tracked };
 	}
-	const progress = clamp01((elapsedMs - DEPART_MS) / ARRIVE_MS);
 	if (progress >= 1) {
-		return { phase: "done", scrollTop: target, didTeleport: true };
+		return { phase: "done", scrollTop: tracked, didTeleport: true, trackedTarget: tracked };
 	}
-	const scrollTop = plan.approachPoint + (target - plan.approachPoint) * easeOutCubic(progress);
-	return { phase: "arrive", scrollTop: clampScroll(scrollTop, bound), didTeleport: true };
+	const scrollTop = plan.approachPoint + (tracked - plan.approachPoint) * easeOutCubic(progress);
+	return {
+		phase: "arrive",
+		scrollTop: clampScroll(scrollTop, bound),
+		didTeleport: true,
+		trackedTarget: tracked,
+	};
+}
+
+/**
+ * 阻尼追踪目标坐标。
+ *
+ * 首次（还没有上一帧）直接跟到最新值；缓入快结束时（`p >= TARGET_SNAP_PROGRESS`）也对齐过去，
+ * 免得落点停在"还差一点点"上。中间每帧只走 `TARGET_TRACK_FACTOR` 的比例。
+ */
+function trackTarget(previous: number | undefined, target: number, progress: number): number {
+	if (previous === undefined || progress >= TARGET_SNAP_PROGRESS) {
+		return target;
+	}
+	return previous + (target - previous) * TARGET_TRACK_FACTOR;
 }

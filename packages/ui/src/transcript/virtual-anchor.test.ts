@@ -53,12 +53,10 @@ describe("estimateRowHeight", () => {
 		expect(expanded).toBeGreaterThan(collapsed * 4);
 	});
 
-	it("一行字的分隔、分叉与重试行共用一档", () => {
-		const heights = (["divider", "fork", "error"] as const).map((kind) =>
-			estimateRowHeight(row(kind), false),
-		);
-		expect(new Set(heights).size).toBe(1);
-		expect(heights[0]).toBe(28);
+	it("分隔与重试行是一行字的高度，分叉行再矮一档（它带 -6px 上外边距）", () => {
+		expect(estimateRowHeight(row("divider"), false)).toBe(28);
+		expect(estimateRowHeight(row("error"), false)).toBe(28);
+		expect(estimateRowHeight(row("fork"), false)).toBe(22);
 	});
 });
 

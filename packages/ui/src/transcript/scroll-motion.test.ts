@@ -157,17 +157,42 @@ describe("sampleScrollMotion：长距离两段式", () => {
 
 	it("目标坐标在中途漂移：曲线跟着走，落点精确，不反向", () => {
 		const jump = plan(1000, 9000);
-		const times = [DEPART_MS, DEPART_MS + 15, DEPART_MS + 30, DEPART_MS + 60, DEPART_MS + 120];
-		const drifted = times.map((ms) => {
-			// 30ms 之后目标被实测修正了 56px
-			const live = ms >= DEPART_MS + 30 ? 9000 + 56 : 9000;
-			return sampleScrollMotion(jump, ms, live, MAX).scrollTop;
-		});
-		for (let index = 1; index < drifted.length; index += 1) {
-			expect(drifted[index] as number).toBeGreaterThanOrEqual(drifted[index - 1] as number);
+		/** 逐帧串起来跑：追踪值是上一帧的返回值，与驱动的用法一致 */
+		const run = (liveOf: (ms: number) => number, frames: number): number[] => {
+			const tops: number[] = [];
+			let tracked: number | undefined;
+			for (let frame = 0; frame <= frames; frame += 1) {
+				const ms = (frame * (DEPART_MS + ARRIVE_MS)) / frames;
+				const sample = sampleScrollMotion(jump, ms, liveOf(ms), MAX, tracked);
+				tracked = sample.trackedTarget;
+				tops.push(sample.scrollTop);
+			}
+			return tops;
+		};
+		// 缓入开始 30ms 之后目标被实测修正了 56px
+		const tops = run((ms) => (ms >= DEPART_MS + 30 ? 9000 + 56 : 9000), 40);
+		for (let index = 1; index < tops.length; index += 1) {
+			expect(tops[index] as number).toBeGreaterThanOrEqual(tops[index - 1] as number);
 		}
-		expect(sampleScrollMotion(jump, DEPART_MS + ARRIVE_MS, 9000 + 56, MAX).scrollTop).toBe(9000 + 56);
+		// 落点精确：终点就是漂移后的目标
+		let tracked: number | undefined;
+		const last = sampleScrollMotion(jump, DEPART_MS + ARRIVE_MS, 9000 + 56, MAX, tracked);
+		tracked = last.trackedTarget;
+		expect(last.scrollTop).toBe(9000 + 56);
+		expect(tracked).toBe(9000 + 56);
 		expect(sampleScrollMotion(jump, DEPART_MS + ARRIVE_MS, 9000 - 56, MAX).scrollTop).toBe(9000 - 56);
+	});
+
+	it("台阶式的高度回填被摊成几帧，不在单帧上陡一下", () => {
+		const jump = plan(1000, 9000);
+		// 第一帧把追踪值定在 9000，第二帧目标突然变成 9060
+		const first = sampleScrollMotion(jump, DEPART_MS, 9000, MAX);
+		const stepped = sampleScrollMotion(jump, DEPART_MS + 16, 9000 + 60, MAX, first.trackedTarget);
+		// 只有 35% 的台阶被这一帧吃掉
+		expect(stepped.trackedTarget).toBeCloseTo(9000 + 60 * 0.35, 5);
+		// 缓入快结束时直接对齐，落点不带尾巴
+		const near = sampleScrollMotion(jump, DEPART_MS + ARRIVE_MS * 0.9, 9000 + 60, MAX, 9000);
+		expect(near.trackedTarget).toBe(9000 + 60);
 	});
 
 	it("漂移大到越过瞬移点：直接收敛，不先往回弹，也不越界", () => {

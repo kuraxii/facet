@@ -97,7 +97,7 @@ export const RowView = memo(function RowView({
 		}
 		// 收在这一轮的末尾：复制、分叉，右边是这一轮工作了多久；悬停才显形
 		return (
-			<Shell className="is-fork" rowId={row.id}>
+			<Shell className="is-fork" rowId={row.id} rowIndex={rowIndex} measureRef={measureRef}>
 				<div className="turn-foot">
 					<div className="turn-actions">
 						{onCopyText === undefined || forkText.length === 0 || row.isStreaming ? null : (
@@ -128,7 +128,7 @@ export const RowView = memo(function RowView({
 		const label =
 			row.items[0]?.kind === "compaction" ? t("transcript.compactionSummary") : t("transcript.branchSummary");
 		return (
-			<Shell className="is-divider" rowId={row.id}>
+			<Shell className="is-divider" rowId={row.id} rowIndex={rowIndex} measureRef={measureRef}>
 				<details className="context-summary">
 					<summary className="divider">
 						<span className="line" />
@@ -154,7 +154,7 @@ export const RowView = memo(function RowView({
 		const canRetry = onRetryTurn !== undefined && canRevert && retryEntryId !== undefined;
 		// 一条带色底的提示：图标固定在左上，正文自己换行，动作是文字按钮
 		return (
-			<Shell className="is-error" rowId={row.id}>
+			<Shell className="is-error" rowId={row.id} rowIndex={rowIndex} measureRef={measureRef}>
 				<div className="error-line" role="alert">
 					<CircleAlert className="error-mark" size={ICON_SIZE.lg} />
 					<div className="error-body">

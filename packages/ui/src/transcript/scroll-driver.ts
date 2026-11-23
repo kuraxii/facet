@@ -66,6 +66,8 @@ interface Running {
 	startedAt: number;
 	/** 位移规划，首帧建立 */
 	plan: ReturnType<typeof planScrollMotion> | undefined;
+	/** 阻尼追踪后的目标坐标，上一帧的采样值原样带回来 */
+	tracked: number | undefined;
 }
 
 /**
@@ -110,7 +112,7 @@ export function useScrollDriver(options: ScrollDriverOptions): ScrollDriver {
 				onSettle?.();
 				return;
 			}
-			const state: Running = { readLive, onSettle, startedAt: 0, plan };
+			const state: Running = { readLive, onSettle, startedAt: 0, plan, tracked: undefined };
 			running.current = state;
 			latest.current.onRunningChange?.(true);
 
@@ -128,7 +130,14 @@ export function useScrollDriver(options: ScrollDriverOptions): ScrollDriver {
 					return;
 				}
 				const bound = Math.max(0, target.scrollHeight - target.clientHeight);
-				const sample = sampleScrollMotion(current.plan, now - current.startedAt, current.readLive(), bound);
+				const sample = sampleScrollMotion(
+					current.plan,
+					now - current.startedAt,
+					current.readLive(),
+					bound,
+					current.tracked,
+				);
+				current.tracked = sample.trackedTarget;
 				target.scrollTop = clampScroll(sample.scrollTop, bound);
 				if (sample.phase === "done") {
 					running.current = null;

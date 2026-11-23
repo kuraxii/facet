@@ -6,8 +6,10 @@
 import type { TranscriptItem } from "@facet/client-core";
 import { describe, expect, it } from "vitest";
 import {
+	ACTIVE_OFFSET,
 	activeOutlineIndex,
 	createOutlineHoverIntent,
+	JUMP_LEAD,
 	OUTLINE_MAGNIFY_RADIUS,
 	outlinePrompts,
 	outlineTickMagnification,
@@ -70,6 +72,13 @@ describe("activeOutlineIndex", () => {
 	it("取最后一个越过视口上沿的条目", () => {
 		expect(activeOutlineIndex([-400, -120, 60, 300], 32)).toBe(1);
 		expect(activeOutlineIndex([-400, -120, 30, 300], 32)).toBe(2);
+	});
+
+	it("跳转落点处的条目就算当前轮次：阈值不小于跳转留白", () => {
+		// 点第 2 项停稳后，第 2 项顶边正好在 JUMP_LEAD 处；阈值比它小就会高亮成第 1 项
+		expect(ACTIVE_OFFSET).toBeGreaterThanOrEqual(JUMP_LEAD);
+		expect(activeOutlineIndex([-400, JUMP_LEAD], ACTIVE_OFFSET)).toBe(1);
+		expect(activeOutlineIndex([-400, JUMP_LEAD - 1], ACTIVE_OFFSET)).toBe(1);
 	});
 
 	it("都还在上沿以下时取第一条", () => {

@@ -9,8 +9,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { JUMP_LEAD } from "../chat/chat-outline.ts";
 import { VISUAL_SCALE } from "../styles/visual-contract.ts";
-import { JUMP_LEAD } from "./transcript-viewport.ts";
 import { VIRTUAL_ROW_GAP, VIRTUAL_SCROLL_MARGIN } from "./virtual-anchor.ts";
 
 const chat = readFileSync(join(import.meta.dirname, "..", "styles", "chat.css"), "utf8");

@@ -17,23 +17,12 @@
  */
 import type { useVirtualizer } from "@tanstack/react-virtual";
 import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import { JUMP_LEAD } from "../chat/chat-outline.ts";
 import { TRANSCRIPT_DATA_ATTRS } from "../layout/layout-contract.ts";
-import { VISUAL_SCALE } from "../styles/visual-contract.ts";
 import type { DisplayRow } from "./group.ts";
 import { calibrateRow } from "./scroll-calibrate.ts";
 import { useScrollDriver, useScrollInterrupt } from "./scroll-driver.ts";
 import { resolveAnchorRowId, type TranscriptAnchor } from "./virtual-anchor.ts";
-
-/**
- * 跳到某一行时在它上面留出的空隙（px）：整条顶部渐隐的高度。
- *
- * 视口上沿压着一层渐暗（`.chat-fade.is-top`，高 `--control-lg`），落点贴着上沿的话，跳过去
- * 的第一行正好被那层暗色压住；留这么多空间，行顶边就落在渐隐的下边缘。
- *
- * 同一个数也交给虚拟化器的 `scrollPaddingStart`，这样 `scrollToIndex(align: "start")` 与
- * `getOffsetForIndex("start")` 用的是同一份口径，量位置时不必各算一遍。
- */
-export const JUMP_LEAD = VISUAL_SCALE.control.lg;
 
 /** 虚拟化器的实例类型，只用到定位那几个方法。 */
 type VirtualList = ReturnType<typeof useVirtualizer<HTMLElement, HTMLElement>>;

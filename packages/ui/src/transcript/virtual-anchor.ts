@@ -36,13 +36,15 @@ export const VIRTUAL_OVERSCAN = 6;
 export const MAX_SELECTION_PIN_SPAN = 60;
 
 /**
- * 没有实测高度时的分型初估。
+ * 没有实测高度时的分型初估：量的是行的**占用高度**（盒子加外边距），行距另算。
  *
  * 只影响第一次滚动条长度：行一挂载就会换成实测高度。差异化的初值比一刀切少抖一截。
  */
 const ESTIMATED_HEIGHT = {
-	/** 压缩、分叉、重试：一行字的高度 */
+	/** 一行字的高度（压缩、重试） */
 	line: 28,
+	/** 分叉行：盒子一行字高，但带 `margin-top: -6px`，占用高度比盒子矮一档 */
+	fork: 22,
 	/** 收起的工具过程组 */
 	collapsed: 44,
 	/** 展开的工具过程组：标题加几段输出 */
@@ -62,6 +64,8 @@ export function estimateRowHeight(row: Pick<DisplayRow, "kind">, isCollapsed: bo
 			return ESTIMATED_HEIGHT.assistant;
 		case "meta":
 			return isCollapsed ? ESTIMATED_HEIGHT.collapsed : ESTIMATED_HEIGHT.expanded;
+		case "fork":
+			return ESTIMATED_HEIGHT.fork;
 		default:
 			return ESTIMATED_HEIGHT.line;
 	}

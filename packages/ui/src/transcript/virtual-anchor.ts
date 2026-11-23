@@ -26,8 +26,14 @@ export const VIRTUAL_SCROLL_MARGIN = VISUAL_SCALE.space.s12;
  */
 export const VIRTUAL_OVERSCAN = 6;
 
-/** 一次拖选最多钉住多少行；再长只钉两端，避免全选把几百行重新挂上。 */
-export const MAX_SELECTION_PIN_SPAN = 120;
+/**
+ * 一次拖选最多钉住多少行。
+ *
+ * 拖到视口外时浏览器会自动滚动、选区跟着变长，钉住的行会**同时**挂载，而一行里可能有
+ * Markdown、代码高亮与 Mermaid。60 行（约两屏不错的中等长度正文）在常见拖选里够用，
+ * 再长只钉两端：选区中间照样会断，但不会因为一次长拖把上百行重内容一次挂上。
+ */
+export const MAX_SELECTION_PIN_SPAN = 60;
 
 /**
  * 没有实测高度时的分型初估。
@@ -197,6 +203,28 @@ export function extractPinnedRange(input: RangeExtractInput): number[] {
 		}
 	}
 	return [...indexes].sort((left, right) => left - right);
+}
+
+/** 标识迁移最多跟几跳：实时消息提升为历史消息只换一次，留几跳余量防脏数据成环。 */
+const MAX_RENAME_HOPS = 4;
+
+/**
+ * 把记下的行标识换成当前的模样。
+ *
+ * 滚动记忆按行标识存，而实时消息在「一轮结束、提升为历史消息」时会换标识（`client-core` 的
+ * `renames` 就是不断累加的旧→新映射）。人离开标签页的时候一轮可能正好结束，回来时记下的还是
+ * 那个旧标识；恢复前先按映射走一趟，位置才不会因为换过标识而丢掉。
+ */
+export function resolveAnchorRowId(rowId: string, renames: Readonly<Record<string, string>>): string {
+	let current = rowId;
+	for (let hop = 0; hop < MAX_RENAME_HOPS; hop += 1) {
+		const next = renames[current];
+		if (next === undefined || next === current) {
+			return current;
+		}
+		current = next;
+	}
+	return current;
 }
 
 /** 切会话时要恢复到哪儿：按行标识记，不按像素记。 */

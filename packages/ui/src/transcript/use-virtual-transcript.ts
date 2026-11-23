@@ -13,49 +13,30 @@
  * - **贴底**：已经在底部时内容变高，按总高差值跟到底。
  *
  * 这边补它不认的三件事：拖选跨行时要钉住一段连续的行（`extractPinnedRange`）、切会话时按
- * （行标识, 行内偏移）记住并恢复位置，以及把「滚到底」这类程序化滚动也交给它写——绕开它直接写
- * `scrollTop` 会让它以为视口被别人挪走，之后的补偿全按旧位置算。
+ * （行标识, 行内偏移）记住并恢复位置（定位接口在 `transcript-viewport.ts`），以及把「滚到底」
+ * 这类程序化滚动也交给它写——绕开它直接写 `scrollTop` 会让它以为视口被别人挪走，之后的补偿
+ * 全按旧位置算。
  */
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import { useCallback, useMemo } from "react";
 import { TRANSCRIPT_DATA_ATTRS } from "../layout/layout-contract.ts";
 import type { DisplayRow } from "./group.ts";
+import { JUMP_LEAD, type TranscriptViewport, useTranscriptViewport } from "./transcript-viewport.ts";
 import type { SelectionPin } from "./use-selection-pin.ts";
 import {
 	buildGridPlan,
 	estimateRowHeight,
 	extractPinnedRange,
 	type GridPlan,
-	type TranscriptAnchor,
 	VIRTUAL_OVERSCAN,
 	VIRTUAL_ROW_GAP,
 	VIRTUAL_SCROLL_MARGIN,
 } from "./virtual-anchor.ts";
 
-/** 跳到某一行时在它上面留出的空隙（px），别让那一条贴着视口上沿的渐隐。 */
-const JUMP_LEAD = 12;
+export type { TranscriptViewport } from "./transcript-viewport.ts";
 
-/** 落位校准最多等多少帧（平滑滚动 + 目标行测量）。 */
-const SETTLE_FRAMES = 60;
-
-/**
- * 面板对外的定位接口。
- *
- * 对话导航（竖轨）与切会话的滚动记忆都走这里：它们只需要「某一行在哪」与「跳到某一行」，
- * 不该知道虚拟化器怎么算。行没挂载也能量到位置——这正是虚拟化要解决的矛盾。
- */
-export interface TranscriptViewport {
-	/** 一行（按导航键）的顶边相对视口上沿的偏移；没有这一行时返回 `undefined` */
-	offsetOf(key: string): number | undefined;
-	/** 把一行滚到视口顶部附近 */
-	jumpTo(key: string): void;
-	/** 滚到最底部；写入交给虚拟化器，它才知道这次滚动是自己做的 */
-	scrollToEnd(behavior?: ScrollBehavior): void;
-	/** 记下视口顶部那一行与行内偏移；没有内容时返回 `null` */
-	capture(): TranscriptAnchor | null;
-	/** 恢复到记下的位置；行还没到齐时先挂着，等行到齐再落位 */
-	restore(anchor: TranscriptAnchor): void;
-}
+/** 没有标识迁移时共用这一份空表。 */
+const NO_RENAMES: Readonly<Record<string, string>> = {};
 
 /** 虚拟化之后面板需要的东西。 */
 export interface VirtualTranscript {
@@ -74,13 +55,17 @@ export interface VirtualTranscriptOptions {
 	readonly scrollElement: HTMLElement | null;
 	/** 拖选跨过的两行 */
 	readonly selection: SelectionPin;
+	/** 实时消息提升为历史消息时的标识迁移，位置恢复要按它认亲 */
+	readonly renames: Readonly<Record<string, string>> | undefined;
 	/** 定位接口交给调用方，它据此驱动对话导航与位置恢复 */
 	readonly viewportRef: { current: TranscriptViewport | null };
+	/** 位置恢复失败（那一行已经不在窗口里）时的落点，通常是回到底部 */
+	readonly onRestoreLost?: (() => void) | undefined;
 }
 
 /** 建一次虚拟化器与定位接口。`rows` 换一帧就跟着重算可见窗口。 */
 export function useVirtualTranscript(options: VirtualTranscriptOptions): VirtualTranscript {
-	const { rows, isCollapsed, scrollElement, selection, viewportRef } = options;
+	const { rows, isCollapsed, scrollElement, selection, renames, viewportRef, onRestoreLost } = options;
 
 	/** 行标识到下标：拖选钉行与按标识定位都查它 */
 	const rowIndexById = useMemo(() => {
@@ -112,7 +97,7 @@ export function useVirtualTranscript(options: VirtualTranscriptOptions): Virtual
 		[rowIndexById],
 	);
 
-	const virtualizer = useVirtualizer({
+	const virtualizer = useVirtualizer<HTMLElement, HTMLElement>({
 		count: rows.length,
 		getScrollElement: () => scrollElement,
 		getItemKey: (index) => rows[index]?.id ?? `row-missing:${index}`,
@@ -124,7 +109,7 @@ export function useVirtualTranscript(options: VirtualTranscriptOptions): Virtual
 		gap: VIRTUAL_ROW_GAP,
 		// 列表从 `.scroll` 的上内边距之后开始排，虚拟坐标与 DOM 偏移差这一档
 		scrollMargin: VIRTUAL_SCROLL_MARGIN,
-		// 跳转落点上方留一点空隙，同上「留白」，横向滚动的对齐也用它
+		// 跳转落点上方留出的空隙，与定位接口量位置时用同一个数
 		scrollPaddingStart: JUMP_LEAD,
 		overscan: VIRTUAL_OVERSCAN,
 		// 头部插入的新行按 key 锚回原位；已经在底部时按总高差值跟到底
@@ -142,139 +127,16 @@ export function useVirtualTranscript(options: VirtualTranscriptOptions): Virtual
 		scrollMargin: VIRTUAL_SCROLL_MARGIN,
 	});
 
-	/**
-	 * 定位接口只建一次：对话导航在滚动里逐帧读它，身份一变就要重挂监听。
-	 * 会变的东西（行、虚拟化器、滚动容器）都从 ref 里现取。
-	 */
-	const latest = useRef({ rows, virtualizer, scrollElement, outlineIndex, rowIndexById });
-	latest.current = { rows, virtualizer, scrollElement, outlineIndex, rowIndexById };
-	/** 还没落位的位置恢复，等那一行出现 */
-	const pendingRestore = useRef<TranscriptAnchor | null>(null);
-
-	/**
-	 * 落位之后按真实 DOM 再对一次。
-	 *
-	 * 还没测量过的行只有估高，长距离跳转的落点会差出一小段；等到位置不再变化（平滑滚动走完、
-	 * 目标行也挂上了），按那一行的实际矩形补一次差，偏差在 2px 以内就不动。
-	 */
-	const calibrate = useCallback((index: number, lead: number) => {
-		let frames = 0;
-		let stable = 0;
-		let lastTop = Number.NaN;
-		const step = (): void => {
-			frames += 1;
-			const element = latest.current.scrollElement;
-			if (element === null) {
-				return;
-			}
-			const top = element.scrollTop;
-			stable = Math.abs(top - lastTop) < 0.5 ? stable + 1 : 0;
-			lastTop = top;
-			if (stable >= 2 || frames > SETTLE_FRAMES) {
-				const row = element.querySelector<HTMLElement>(`[${TRANSCRIPT_DATA_ATTRS.rowIndex}="${index}"]`);
-				if (row !== null) {
-					const offset = row.getBoundingClientRect().top - element.getBoundingClientRect().top;
-					if (Math.abs(offset - lead) > 2) {
-						latest.current.virtualizer.scrollToOffset(top + (offset - lead), { behavior: "auto" });
-					}
-				}
-				return;
-			}
-			window.requestAnimationFrame(step);
-		};
-		window.requestAnimationFrame(step);
-	}, []);
-
-	const applyRestore = useCallback(
-		(anchor: TranscriptAnchor): boolean => {
-			const { virtualizer: scroller, rowIndexById: index } = latest.current;
-			const target = index.get(anchor.rowId);
-			if (target === undefined) {
-				return false;
-			}
-			const offset = scroller.getOffsetForIndex(target, "start");
-			if (offset === undefined) {
-				return false;
-			}
-			// `getOffsetForIndex("start")` 已经扣掉跳转留白；这里要的是行顶边，得加回来
-			scroller.scrollToOffset(offset[0] + JUMP_LEAD + anchor.offsetInRow, { behavior: "auto" });
-			calibrate(target, anchor.offsetInRow);
-			return true;
-		},
-		[calibrate],
-	);
-
-	const viewport = useMemo<TranscriptViewport>(
-		() => ({
-			offsetOf(key) {
-				const { virtualizer: scroller, outlineIndex: index, scrollElement: element } = latest.current;
-				const target = index.get(key);
-				if (target === undefined) {
-					return undefined;
-				}
-				const offset = scroller.getOffsetForIndex(target, "start");
-				if (offset === undefined) {
-					return undefined;
-				}
-				// 量位置要的是行顶边到视口上沿的距离：扣掉的留白加回来
-				return offset[0] + JUMP_LEAD - (element?.scrollTop ?? 0);
-			},
-			jumpTo(key) {
-				const target = latest.current.outlineIndex.get(key);
-				if (target === undefined) {
-					return;
-				}
-				// 平滑滚动期间只测量落点附近的行，长距离跳转不会一路抖过去
-				latest.current.virtualizer.scrollToIndex(target, { align: "start", behavior: "smooth" });
-				calibrate(target, JUMP_LEAD);
-			},
-			scrollToEnd(behavior = "auto") {
-				const { virtualizer: scroller, scrollElement: element } = latest.current;
-				if (element === null) {
-					return;
-				}
-				// 按元素自己的 scrollHeight 算：`.scroll` 的底部内边距也算进可滚高度
-				scroller.scrollToOffset(Math.max(0, element.scrollHeight - element.clientHeight), { behavior });
-			},
-			capture() {
-				const { rows: current, virtualizer: scroller, scrollElement: element } = latest.current;
-				if (element === null || current.length === 0) {
-					return null;
-				}
-				const item = scroller.getVirtualItemForOffset(element.scrollTop);
-				const row = item === undefined ? undefined : current[item.index];
-				if (item === undefined || row === undefined) {
-					return null;
-				}
-				return { rowId: row.id, offsetInRow: element.scrollTop - item.start };
-			},
-			restore(anchor) {
-				if (!applyRestore(anchor)) {
-					pendingRestore.current = anchor;
-				}
-			},
-		}),
-		[applyRestore, calibrate],
-	);
-
-	useLayoutEffect(() => {
-		viewportRef.current = viewport;
-		return () => {
-			if (viewportRef.current === viewport) {
-				viewportRef.current = null;
-			}
-		};
-	}, [viewport, viewportRef]);
-
-	// 位置恢复可能比数据早到：行到齐之后再看一眼。
-	// rows 只当归位的信号，不参与计算，所以不进依赖表。
-	// biome-ignore lint/correctness/useExhaustiveDependencies: 同上
-	useLayoutEffect(() => {
-		const pending = pendingRestore.current;
-		if (pending !== null && applyRestore(pending)) {
-			pendingRestore.current = null;
-		}
-	}, [applyRestore, rows]);
+	useTranscriptViewport({
+		rows,
+		scrollElement,
+		outlineIndex,
+		rowIndexById,
+		renames: renames ?? NO_RENAMES,
+		virtualizer,
+		onRestoreLost,
+		viewportRef,
+	});
 
 	return { plan, measureRow: virtualizer.measureElement };
 }

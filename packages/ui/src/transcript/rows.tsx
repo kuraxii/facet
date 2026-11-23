@@ -62,6 +62,8 @@ export interface ChatTranscriptProps {
 	scrollElement?: HTMLElement | null | undefined;
 	/** 定位接口交出去：对话导航与切会话的位置恢复都走它 */
 	viewportRef?: { current: TranscriptViewport | null } | undefined;
+	/** 位置恢复失败（那一行已经不在窗口里）时的落点，通常是回到底部 */
+	onRestoreLost?: (() => void) | undefined;
 }
 
 /**
@@ -82,6 +84,7 @@ export function ChatTranscript({
 	isRunning = false,
 	scrollElement = null,
 	viewportRef,
+	onRestoreLost,
 }: ChatTranscriptProps) {
 	const { t } = useI18n();
 	// 分组每帧都会重算，内容没变的行沿用上一帧的对象，行组件据此跳过重渲染
@@ -185,7 +188,9 @@ export function ChatTranscript({
 		isCollapsed: (row) => overrides.get(row.id) ?? isCollapsedByDefault(row.kind),
 		scrollElement,
 		selection,
+		renames,
 		viewportRef: viewportRef ?? ownViewport,
+		onRestoreLost,
 	});
 
 	if (rows.length === 0 && maintenance === undefined) {

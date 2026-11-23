@@ -5,6 +5,7 @@ import {
 	estimateRowHeight,
 	extractPinnedRange,
 	MAX_SELECTION_PIN_SPAN,
+	resolveAnchorRowId,
 	VIRTUAL_ROW_GAP,
 	VIRTUAL_SCROLL_MARGIN,
 	type VirtualSpan,
@@ -133,6 +134,55 @@ describe("buildGridPlan", () => {
 		expect((all[1]?.start as number) - (all[0]?.end as number)).toBe(VIRTUAL_ROW_GAP);
 	});
 
+	it("只有一两行的短会话：不留多余空白，顶边就是列表起点", () => {
+		const short = spans([113]);
+		const total = VIRTUAL_SCROLL_MARGIN + 113;
+		const plan = buildGridPlan({
+			items: short,
+			totalSize: total,
+			gap: VIRTUAL_ROW_GAP,
+			scrollMargin: VIRTUAL_SCROLL_MARGIN,
+		});
+		expect(plan.segments).toEqual([{ kind: "row", index: 0 }]);
+		// 内容比视口矮时上下都不该有留白，否则会凭空多出可滚的余量
+		expect(plan.paddingTop).toBe(0);
+		expect(plan.paddingBottom).toBe(0);
+	});
+
+	it("相邻两行之间只隔一个 row-gap，没有 spacer", () => {
+		const pair = spans([80, 120]);
+		const total = VIRTUAL_SCROLL_MARGIN + 80 + VIRTUAL_ROW_GAP + 120;
+		const plan = buildGridPlan({
+			items: pair,
+			totalSize: total,
+			gap: VIRTUAL_ROW_GAP,
+			scrollMargin: VIRTUAL_SCROLL_MARGIN,
+		});
+		expect(plan.segments.some((segment) => segment.kind === "spacer")).toBe(false);
+		expect(plan.paddingBottom).toBe(0);
+	});
+
+	it("跳过的行比一个 row-gap 还矮时 spacer 被夹到 0（现网不可达，最小行高 28）", () => {
+		// 两行相距只有一个 gap 的一半：这种间距在真实行表里不会出现（每行至少 28px），
+		// 这里只把钳制的行为写死，免得日后有人以为漏算了
+		const tight: VirtualSpan[] = [
+			{ index: 0, start: VIRTUAL_SCROLL_MARGIN, end: VIRTUAL_SCROLL_MARGIN + 100 },
+			{
+				index: 3,
+				start: VIRTUAL_SCROLL_MARGIN + 100 + VIRTUAL_ROW_GAP / 2,
+				end: VIRTUAL_SCROLL_MARGIN + 200,
+			},
+		];
+		const plan = buildGridPlan({
+			items: tight,
+			totalSize: VIRTUAL_SCROLL_MARGIN + 200,
+			gap: VIRTUAL_ROW_GAP,
+			scrollMargin: VIRTUAL_SCROLL_MARGIN,
+		});
+		const spacer = plan.segments[1];
+		expect(spacer?.kind === "spacer" ? spacer.height : -1).toBe(0);
+	});
+
 	it("空窗口给空计划", () => {
 		expect(
 			buildGridPlan({ items: [], totalSize, gap: VIRTUAL_ROW_GAP, scrollMargin: VIRTUAL_SCROLL_MARGIN }),
@@ -204,8 +254,46 @@ describe("extractPinnedRange", () => {
 		expect(extractPinnedRange({ range: range(2, 3, 0), selection: null, rowIndexOf })).toEqual([2, 3]);
 	});
 
+	it("跨度刚好等于上限时整段钉住，超一行就只钉两端", () => {
+		const many = Array.from({ length: 100 }, (_, at) => `r${at}`);
+		const index = new Map(many.map((id, at) => [id, at]));
+		const rowIndexOfMany = (id: string): number | undefined => index.get(id);
+		const at = (span: number): number[] =>
+			extractPinnedRange({
+				range: { startIndex: 90, endIndex: 90, overscan: 0, count: many.length },
+				selection: ["r0", `r${span}`],
+				rowIndexOf: rowIndexOfMany,
+			});
+		// 0..60 是个闭区间，跨度 60 行 = 61 个下标，正好等于上限
+		expect(at(MAX_SELECTION_PIN_SPAN).length).toBe(MAX_SELECTION_PIN_SPAN + 2);
+		expect(at(MAX_SELECTION_PIN_SPAN + 1)).toEqual([0, MAX_SELECTION_PIN_SPAN + 1, 90]);
+	});
+
 	it("一行都没有时返回空", () => {
 		expect(extractPinnedRange({ range: range(0, 0, 2, 0), selection: null, rowIndexOf })).toEqual([]);
+	});
+});
+
+describe("resolveAnchorRowId", () => {
+	it("换过一次标识就换到新的", () => {
+		expect(resolveAnchorRowId("m1", { m1: "e:e9" })).toBe("e:e9");
+	});
+
+	it("连着换过几次也能跟到底", () => {
+		expect(resolveAnchorRowId("m1", { m1: "m2", m2: "e:e9" })).toBe("e:e9");
+	});
+
+	it("没记过的标识原样返回", () => {
+		expect(resolveAnchorRowId("e:e9", { m1: "e:e9" })).toBe("e:e9");
+	});
+
+	it("映射到自己时不会绕圈", () => {
+		expect(resolveAnchorRowId("m1", { m1: "m1" })).toBe("m1");
+	});
+
+	it("脏数据成环时按跳数上限收手", () => {
+		const resolved = resolveAnchorRowId("m1", { m1: "m2", m2: "m1" });
+		expect(["m1", "m2"]).toContain(resolved);
 	});
 });
 

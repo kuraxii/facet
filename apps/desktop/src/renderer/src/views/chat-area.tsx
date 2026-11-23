@@ -136,6 +136,7 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 						items={transcript.items}
 						scrollElement={transcript.scrollElement}
 						viewportRef={transcript.viewport}
+						onRestoreLost={transcript.scrollToBottom}
 						canFork={canFork}
 						onFork={(beforeEntryId) =>
 							session.withTrust(sessionCwd, () => {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { ModelInfo, ModelInfoProvider, ModelInfoReasoningOption } from "./model-catalog.ts";
 import {
 	buildCatalogIndex,
+	type CatalogModel,
 	catalogLookupKeys,
 	enrichUpstreamModels,
 	fetchUpstreamModels,
@@ -32,41 +32,27 @@ function fakeFetch(handler: (url: string) => unknown) {
 	return { impl, seen };
 }
 
-/** 造一份小目录：同一个标识挂在两个 provider 下，厂商官方那条才算正主。 */
+/**
+ * 造一份小目录。
+ *
+ * 形状照 pi 运行时目录里的 chat 模型，只留预填用得到的字段：同一个标识可以挂在多个 provider
+ * 下，用来验证「多来源时挑哪一条」。
+ */
 function catalog(
-	entries: {
-		provider: string;
-		models: Record<
-			string,
-			Partial<ModelInfo> & { canonical?: string; reasoningOptions?: ModelInfoReasoningOption[] }
-		>;
-	}[],
-): Record<string, ModelInfoProvider> {
-	const providers: Record<string, ModelInfoProvider> = {};
-	for (const { provider, models } of entries) {
-		providers[provider] = {
-			id: provider,
-			name: provider,
-			env: [],
-			models: Object.fromEntries(
-				Object.entries(models).map(([id, model]) => [
-					id,
-					{
-						id,
-						name: model.name ?? id,
-						reasoning: model.reasoning ?? false,
-						tool_call: true,
-						attachment: false,
-						modalities: model.modalities ?? { input: ["text"], output: ["text"] },
-						limit: { context: model.limit?.context ?? 0, output: model.limit?.output ?? 0 },
-						...(model.canonical === undefined ? {} : { canonical_model_id: model.canonical }),
-						...(model.reasoningOptions === undefined ? {} : { reasoning_options: model.reasoningOptions }),
-					} satisfies ModelInfo,
-				]),
-			),
-		};
-	}
-	return providers;
+	entries: { provider: string; models: Record<string, Partial<CatalogModel>> }[],
+): CatalogModel[] {
+	return entries.flatMap(({ provider, models }) =>
+		Object.entries(models).map(([id, model]) => ({
+			id,
+			provider,
+			name: model.name ?? id,
+			contextWindow: model.contextWindow ?? 0,
+			maxTokens: model.maxTokens ?? 0,
+			reasoning: model.reasoning ?? false,
+			...(model.thinkingLevelMap === undefined ? {} : { thinkingLevelMap: model.thinkingLevelMap }),
+			input: model.input ?? ["text"],
+		})),
+	);
 }
 
 describe("列表地址", () => {
@@ -130,7 +116,8 @@ describe("目录补能力", () => {
 						"gpt-6-astra": {
 							name: "GPT-6 Astra",
 							reasoning: true,
-							limit: { context: 1050000, output: 128000 },
+							contextWindow: 1050000,
+							maxTokens: 128000,
 						},
 					},
 				},
@@ -148,7 +135,7 @@ describe("目录补能力", () => {
 		]);
 	});
 
-	it("信息库写了思考档位就一起补上", () => {
+	it("目录写了思考档位就一起补上", () => {
 		const index = buildCatalogIndex(
 			catalog([
 				{
@@ -157,10 +144,11 @@ describe("目录补能力", () => {
 						"deepseek-flash": {
 							name: "DeepSeek V4.1 Flash",
 							reasoning: true,
-							reasoningOptions: [{ type: "toggle" }, { type: "effort", values: ["low", "high", "max"] }],
-							limit: { context: 1048576, output: 393216 },
+							thinkingLevelMap: { minimal: null, low: "low", medium: null, high: "high", max: "max" },
+							contextWindow: 1048576,
+							maxTokens: 393216,
 						},
-						"deepseek-plain": { name: "DeepSeek Plain", limit: { context: 128000, output: 8192 } },
+						"deepseek-plain": { name: "DeepSeek Plain", contextWindow: 128000, maxTokens: 8192 },
 					},
 				},
 			]),
@@ -172,26 +160,37 @@ describe("目录补能力", () => {
 				contextWindow: 1048576,
 				maxTokens: 393216,
 				reasoning: true,
+				// 映射里没写 off，按 pi 的规则「不写就是可用」；minimal 与 medium 写了 null 才排除
 				thinkingLevels: ["off", "low", "high", "max"],
 			},
-			{ id: "deepseek-plain", name: "DeepSeek Plain", contextWindow: 128000, maxTokens: 8192 },
+			{
+				id: "deepseek-plain",
+				name: "DeepSeek Plain",
+				contextWindow: 128000,
+				maxTokens: 8192,
+				// 目录说它不会思考：给空数组，保存时才会写 reasoning: false
+				thinkingLevels: [],
+			},
 		]);
 	});
 
-	it("信息库说收图片时补上 input，只收文字的不写", () => {
+	it("会思考但目录没写映射时档位留空,不猜也不关掉思考", () => {
+		const index = buildCatalogIndex(
+			catalog([{ provider: "amazon-bedrock", models: { "claude-x": { reasoning: true } } }]),
+		);
+		expect(enrichUpstreamModels([{ id: "claude-x" }], index)).toEqual([
+			{ id: "claude-x", name: "claude-x", reasoning: true },
+		]);
+	});
+
+	it("目录说收图片时补上 input，只收文字的不写", () => {
 		const index = buildCatalogIndex(
 			catalog([
 				{
 					provider: "deepseek",
 					models: {
-						"deepseek-flash": {
-							name: "DeepSeek V4.1 Flash",
-							modalities: { input: ["text", "image"], output: ["text"] },
-						},
-						"deepseek-v4-pro": {
-							name: "DeepSeek V4 Pro",
-							modalities: { input: ["text"], output: ["text"] },
-						},
+						"deepseek-flash": { name: "DeepSeek V4.1 Flash", input: ["text", "image"] },
+						"deepseek-v4-pro": { name: "DeepSeek V4 Pro", input: ["text"] },
 					},
 				},
 			]),
@@ -201,8 +200,9 @@ describe("目录补能力", () => {
 				id: "deepseek-flash",
 				name: "DeepSeek V4.1 Flash",
 				input: ["text", "image"],
+				thinkingLevels: [],
 			},
-			{ id: "deepseek-v4-pro", name: "DeepSeek V4 Pro" },
+			{ id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", thinkingLevels: [] },
 		]);
 	});
 
@@ -213,24 +213,60 @@ describe("目录补能力", () => {
 		expect(enrichUpstreamModels([{ id: "gpt-6-astra", name: "我的名字" }], index)[0]?.name).toBe("我的名字");
 	});
 
-	it("同一标识多来源时优先厂商官方条目", () => {
-		const index = buildCatalogIndex(
-			catalog([
-				{
-					provider: "opencode",
-					models: {
-						"claude-x": { canonical: "anthropic/claude-x", limit: { context: 1000000, output: 64000 } },
-					},
-				},
-				{
-					provider: "anthropic",
-					models: {
-						"claude-x": { canonical: "anthropic/claude-x", limit: { context: 200000, output: 64000 } },
-					},
-				},
-			]),
-		);
+	it("同一标识多来源时优先本次要拉的那个提供方", () => {
+		const models = catalog([
+			{ provider: "opencode", models: { "claude-x": { contextWindow: 1000000, maxTokens: 64000 } } },
+			{ provider: "anthropic", models: { "claude-x": { contextWindow: 200000, maxTokens: 64000 } } },
+		]);
+		const index = buildCatalogIndex(models, "anthropic");
 		expect(enrichUpstreamModels([{ id: "claude-x" }], index)[0]?.contextWindow).toBe(200000);
+	});
+
+	it("没有同名提供方时挑档位写得最全的那条", () => {
+		const models = catalog([
+			{ provider: "amazon-bedrock", models: { "claude-x": { contextWindow: 200000, reasoning: true } } },
+			{
+				provider: "openrouter",
+				models: {
+					"claude-x": {
+						contextWindow: 200000,
+						reasoning: true,
+						thinkingLevelMap: { off: null, xhigh: "xhigh", max: "max" },
+					},
+				},
+			},
+		]);
+		const index = buildCatalogIndex(models);
+		// 两家上下文一样，但 openrouter 那条写了档位，预填时更有用
+		expect(enrichUpstreamModels([{ id: "claude-x" }], index)[0]?.thinkingLevels).toEqual([
+			"minimal",
+			"low",
+			"medium",
+			"high",
+			"xhigh",
+			"max",
+		]);
+	});
+
+	it("同分时按 provider 名兜底,同样的输入永远挑到同一条", () => {
+		const models = catalog([
+			{ provider: "zeta", models: { "m-1": { contextWindow: 111 } } },
+			{ provider: "alpha", models: { "m-1": { contextWindow: 222 } } },
+		]);
+		expect(enrichUpstreamModels([{ id: "m-1" }], buildCatalogIndex(models))[0]?.contextWindow).toBe(222);
+		expect(
+			enrichUpstreamModels([{ id: "m-1" }], buildCatalogIndex([...models].reverse()))[0]?.contextWindow,
+		).toBe(222);
+	});
+
+	it("拉取时把目录传进去才会补字段", async () => {
+		const { impl } = fakeFetch(() => ({ data: [{ id: "gpt-6-astra" }] }));
+		const result = await fetchUpstreamModels({
+			baseUrl: "https://relay.example.com/v1",
+			fetchImpl: impl,
+			catalog: catalog([{ provider: "openai", models: { "gpt-6-astra": { contextWindow: 400000 } } }]),
+		});
+		expect(result.models[0]?.contextWindow).toBe(400000);
 	});
 });
 

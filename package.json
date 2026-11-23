@@ -20,9 +20,7 @@
 		"lint": "biome check .",
 		"dist": "npm run build:server && npm run dist -w @facet/desktop",
 		"build:server": "node scripts/build-server.mjs",
-		"mock:check": "node tools/mock-server/check.ts",
-		"catalog:update": "node tools/model-catalog/fetch-models.mjs",
-		"catalog:check": "node tools/model-catalog/fetch-models.mjs --check"
+		"mock:check": "node tools/mock-server/check.ts"
 	},
 	"engines": {
 		"node": ">=26"

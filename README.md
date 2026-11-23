@@ -171,15 +171,6 @@ npm run lint        # biome
 npm run test        # vitest，所有工作区
 ```
 
-模型信息库是人工维护的数据快照，不参与上述检查：
-
-```bash
-npm run catalog:update  # 从 models.dev/api.json 抓一次，覆盖 tools/model-catalog/models.json
-npm run catalog:check   # 只比较，库落后于上游时退出码 1
-```
-
-口径见 `tools/model-catalog/README.md`。
-
 ## 打包
 
 ```bash
@@ -200,7 +191,6 @@ npm run dist -w @facet/desktop # 出安装包
 | `packages/transport` | WebSocket 传输 |
 | `packages/ui` | 界面组件，不碰文件系统与 Node |
 | `packages/services`、`packages/ui-editor`、`packages/ui-terminal` | 预留的几个包 |
-| `tools/model-catalog` | 模型信息库的抓取脚本与说明；数据落在 `packages/agent/data/models.json`，人工更新 |
 
 依赖方向单向：`protocol ← services / agent / client-core / transport ← ui ← apps`。
 

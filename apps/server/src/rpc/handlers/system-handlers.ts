@@ -249,6 +249,9 @@ export const systemHandlers: Pick<RequestHandlerMap, SystemMethod> = {
 			api: params.api,
 			apiKey: auth?.apiKey,
 			headers: auth !== undefined && "headers" in auth ? auth.headers : undefined,
+			// 补能力字段用 pi 的运行时目录，同一标识多来源时优先这个提供方自己那条
+			catalog: context.factory.catalogModels(),
+			providerId: params.providerId,
 		});
 	},
 

@@ -1,11 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-	hasThinking,
-	levelsFromCatalog,
-	levelsFromMap,
-	levelsToMap,
-	normalizeLevels,
-} from "./thinking-levels.ts";
+import { hasThinking, levelsFromMap, levelsToMap, normalizeLevels } from "./thinking-levels.ts";
 
 describe("档位集合与 models.json 的映射", () => {
 	it("可用的低档不写、不可用的一律写 null，xhigh 与 max 必须显式写值", () => {
@@ -70,38 +64,5 @@ describe("档位集合与 models.json 的映射", () => {
 
 	it("顺序与去重都按七档规范来", () => {
 		expect(normalizeLevels(["max", "off", "max", "high"])).toEqual(["off", "high", "max"]);
-	});
-});
-
-describe("模型信息库的思考选项", () => {
-	it("effort 给了清单就照抄，none 当作 off", () => {
-		expect(levelsFromCatalog([{ type: "effort", values: ["none", "low", "high"] }])).toEqual([
-			"off",
-			"low",
-			"high",
-		]);
-		expect(
-			levelsFromCatalog([{ type: "effort", values: ["low", "medium", "high", "xhigh", "max"] }]),
-		).toEqual(["low", "medium", "high", "xhigh", "max"]);
-	});
-
-	it("带 toggle 时补上 off", () => {
-		expect(
-			levelsFromCatalog([{ type: "toggle" }, { type: "effort", values: ["low", "high", "max"] }]),
-		).toEqual(["off", "low", "high", "max"]);
-	});
-
-	it("只有 toggle 时给 off 与 high", () => {
-		expect(levelsFromCatalog([{ type: "toggle" }])).toEqual(["off", "high"]);
-	});
-
-	it("只写了 token 预算时不造档位", () => {
-		expect(levelsFromCatalog([{ type: "budget_tokens", max: 32000 }])).toBeUndefined();
-		expect(levelsFromCatalog([])).toBeUndefined();
-		expect(levelsFromCatalog(undefined)).toBeUndefined();
-	});
-
-	it("库里写了不认识的取值就丢掉", () => {
-		expect(levelsFromCatalog([{ type: "effort", values: ["low", "ultra"] }])).toEqual(["low"]);
 	});
 });

@@ -45,7 +45,6 @@ export {
 export type { ThinkingLevelMap, ThinkingLevelMapValue } from "./thinking-levels.ts";
 export {
 	hasThinking,
-	levelsFromCatalog,
 	levelsFromMap,
 	levelsToMap,
 	normalizeLevels,
@@ -54,6 +53,7 @@ export {
 export type * from "./types.ts";
 export type {
 	CatalogIndex,
+	CatalogModel,
 	FetchUpstreamModelsOptions,
 	FetchUpstreamModelsResult,
 } from "./upstream-models.ts";

@@ -48,6 +48,7 @@ import { normalizeProjectPath, type SessionProject, scanSessionProjects } from "
 import { ProviderLoginService, type ProviderLoginUpdate } from "./provider-login.ts";
 import { SessionCatalog } from "./session-catalog.ts";
 import { readSessionHeader } from "./session-scan.ts";
+import type { CatalogModel } from "./upstream-models.ts";
 
 /** 工厂的进程级配置。 */
 export interface PiAgentFactoryOptions {
@@ -545,6 +546,25 @@ export class PiAgentFactory {
 	/** 目录里的全部模型，含未配置凭证的模型，是否可用由调用方判断。 */
 	models(providerId?: string): ModelInfo[] {
 		return this.modelRuntime.getModels(providerId).map(toModelInfo);
+	}
+
+	/**
+	 * 拉上游模型时用来补能力字段的目录。
+	 *
+	 * 就是 pi 运行时目录里的 chat 模型（内置目录 + `models.json`），只取预填用得上的那几项：
+	 * 与真正发请求用的是同一份数据，不另存快照，免得两处说法不一致。
+	 */
+	catalogModels(): CatalogModel[] {
+		return this.modelRuntime.getModelsOfType("chat").map((model) => ({
+			id: model.id,
+			provider: model.provider,
+			name: model.name,
+			contextWindow: model.contextWindow,
+			maxTokens: model.maxTokens,
+			reasoning: model.reasoning,
+			...(model.thinkingLevelMap === undefined ? {} : { thinkingLevelMap: model.thinkingLevelMap }),
+			input: model.input,
+		}));
 	}
 
 	/** 已配置凭证的模型，用于模型选择器的可选项。 */

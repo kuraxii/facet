@@ -286,6 +286,11 @@
 `prefers-reduced-motion: reduce` 时退回一步落位。鼠标滚轮与触控板的惯性是浏览器自己的，不受
 影响；任何滚轮、触摸、指针按下或翻页键都会**当场**取消曲线。
 
+**代码高亮排期**：围栏代码块先出纯文本，分词（`markdown/highlighter.ts`）排进空闲时间，
+一次空闲只跑一块（`markdown/highlight-queue.ts`）。跳到一个没去过的地方时，落点那一窗的代码卡
+会一起挂载，同步分词正好压在最卡的那一帧上；排期之后颜色晚几帧到，但那一帧不再被按住。
+内容变了（流式追加）、配色变了或组件卸载时，排着的那一块会被取消并从队列里摘掉。
+
 **滚动监听**一律显式声明 `passive`：不要 `preventDefault()` 的写 `true`，真要拦的（Mermaid 图
 的 Ctrl+滚轮缩放）写 `false`，漏写由 `visual-contract.test.ts` 拦下。
 

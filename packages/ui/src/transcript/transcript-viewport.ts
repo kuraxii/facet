@@ -181,8 +181,14 @@ export function useTranscriptViewport(options: TranscriptViewportOptions): void 
 				// 用户已经自己换了位置，挂着的恢复与正在进行的校准都不该再抢
 				pendingRestore.current = null;
 				userIntent.current += 1;
-				// 平滑滚动期间只测量落点附近的行，长距离跳转不会一路抖过去
-				latest.current.virtualizer.scrollToIndex(target, { align: "start", behavior: "smooth" });
+				/*
+				 * 一步到位，不做平滑动画。
+				 *
+				 * 跳转目标是按估高算的，落点附近的行要等挂载、渲染、测量之后才是真高度；边滚边改
+				 * 目标的表现就是"一边加载一边抖"。直接落位只抖一次，落位后按真实矩形校准一下
+				 * （`calibrate`）就稳住了。鼠标滚轮是浏览器自己的惯性滚动，不受这里影响。
+				 */
+				latest.current.virtualizer.scrollToIndex(target, { align: "start" });
 				calibrate(target, JUMP_LEAD);
 			},
 			scrollToEnd(behavior = "auto") {

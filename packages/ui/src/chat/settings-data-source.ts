@@ -46,7 +46,7 @@ export interface SettingsDataSource {
 	respondProviderLogin: (loginId: string, promptId: string, value: string | null) => Promise<boolean>;
 	/** 中止一条登录 */
 	cancelProviderLogin: (loginId: string) => Promise<boolean>;
-	/** 从上游拉模型清单（能力字段已用模型信息库补过）；没给 apiKey 时主机用该提供方已存下的密钥 */
+	/** 从上游拉模型清单（能力字段已用 pi 的模型目录补过）；没给 apiKey 时主机用该提供方已存下的密钥 */
 	fetchProviderModels: (input: {
 		baseUrl: string;
 		providerId?: string;

@@ -61,17 +61,17 @@ export interface ModelInfo extends ModelRef {
 export interface UpstreamModel {
 	/** 模型标识 */
 	id: string;
-	/** 展示名：上游给了用上游的，没给时从模型信息库补 */
+	/** 展示名：上游给了用上游的，没给时从 pi 的模型目录补 */
 	name?: string;
-	/** 上下文窗口，模型信息库里查得到才有 */
+	/** 上下文窗口，pi 的模型目录里查得到才有 */
 	contextWindow?: number;
-	/** 单次输出上限，模型信息库里查得到才有 */
+	/** 单次输出上限，pi 的模型目录里查得到才有 */
 	maxTokens?: number;
-	/** 是否思考模型，模型信息库里查得到才有 */
+	/** 是否思考模型，pi 的模型目录里查得到才有 */
 	reasoning?: boolean;
-	/** 支持的思考档位，模型信息库写明了档位才有；按从低到高排列 */
+	/** 支持的思考档位，pi 的模型目录写明了档位才有；按从低到高排列 */
 	thinkingLevels?: ThinkingLevel[];
-	/** 支持的输入模态，模型信息库说它收图片时才有 */
+	/** 支持的输入模态，pi 的模型目录说它收图片时才有 */
 	input?: InputModality[];
 }
 

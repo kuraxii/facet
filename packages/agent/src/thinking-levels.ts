@@ -15,7 +15,6 @@
  * 自己目录里的形状一致（例如只列 `xhigh` 与 `max` 的那两条）。
  */
 import type { ThinkingLevel } from "@facet/protocol";
-import type { ModelInfoReasoningOption } from "./model-catalog.ts";
 
 /** 七档，从低到高。界面、配置与补全都按这个顺序排。 */
 export const THINKING_LEVELS: readonly ThinkingLevel[] = [
@@ -92,36 +91,4 @@ export function levelsFromMap(
 		const value = map?.[level];
 		return EXPLICIT_LEVELS.includes(level) ? value !== undefined && value !== null : value !== null;
 	});
-}
-
-/**
- * 模型信息库里的思考选项 → 档位集合。
- *
- * 库里给的是三种形态，按它们能说清多少来填：
- *
- * - `effort` 给了档位清单（`low`、`high`…，`none` 在这里就是 `off`）→ 照抄；
- * - 有 `toggle` 说明思考能开关：清单里还没有 `off` 时补上；只有 `toggle` 时给 `off` 与 `high`
- *   （上游只认开关、不认档位，`high` 是 pi 自己目录里同类模型的口径）；
- * - 只有 `budget_tokens` → 库里没写档位，返回 `undefined` 让用户自己勾，别凭空造。
- */
-export function levelsFromCatalog(
-	options: readonly ModelInfoReasoningOption[] | undefined,
-): ThinkingLevel[] | undefined {
-	if (options === undefined || options.length === 0) {
-		return undefined;
-	}
-	const values = (options.find((option) => option.type === "effort")?.values ?? []).map((value) =>
-		value === "none" ? "off" : value,
-	);
-	const known = values.filter((value): value is ThinkingLevel =>
-		(THINKING_LEVELS as readonly string[]).includes(value),
-	);
-	if (known.length > 0) {
-		const toggle = options.some((option) => option.type === "toggle");
-		return normalizeLevels(toggle && !known.includes("off") ? [...known, "off"] : known);
-	}
-	if (options.some((option) => option.type === "toggle")) {
-		return ["off", "high"];
-	}
-	return undefined;
 }

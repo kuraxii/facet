@@ -1,17 +1,42 @@
 /**
- * 从上游拉模型清单，并用 facet 的模型信息库补齐能力字段。
+ * 从上游拉模型清单，并用 pi 的运行时目录补齐能力字段。
  *
  * 各家 `/models` 并不统一：地址可能要不要 `/v1`、认证头按协议分叉（OpenAI 兼容是
  * `Authorization: Bearer`，Anthropic 是 `x-api-key` + 版本头）。更重要的是 New API 这类中转站
  * 对未知路径回 **200 + 前端 HTML 首页**，只看状态码会被一张首页骗过去，所以响应还要判形状。
  *
- * 上游通常只给模型标识（个别带展示名），上下文窗口、最大输出、是否思考这些它不给；这些字段从
- * `packages/agent/data/models.json`（models.dev 快照）里补，补的是**预填**，用户可以改。
+ * 上游通常只给模型标识（个别带展示名），上下文窗口、最大输出、是否思考这些它不给；这些字段用
+ * pi 运行时目录（`ModelRuntime` 里那份内置目录 + `models.json`）同标识的条目补，补的是**预填**，
+ * 用户可以改。选这份而不是另存一份快照：预填值与真正发请求时用的值同源，不会出现两套说法。
  * 请求由主机发出：渲染进程在沙箱里，跨域直接打上游会被拦。
  */
-import type { UpstreamModel } from "@facet/protocol";
-import { type ModelInfo, type ModelInfoProvider, modelCatalog } from "./model-catalog.ts";
-import { hasThinking, levelsFromCatalog } from "./thinking-levels.ts";
+import type { ThinkingLevel, UpstreamModel } from "@facet/protocol";
+import { hasThinking, levelsFromMap, type ThinkingLevelMap } from "./thinking-levels.ts";
+
+/**
+ * 预填要用到的能力字段，取自 pi 运行时目录里的 chat 模型。
+ *
+ * 只要这几项：拉回来的清单要补的就是展示名、上下文、输出上限、思考档位与图片输入；其余字段
+ * （协议、baseUrl、价格、compat…）写进用户配置没有意义。
+ */
+export interface CatalogModel {
+	/** 模型标识，与上游清单里的 id 对得上 */
+	id: string;
+	/** 出自哪个 provider，同一标识多来源时靠它挑最可信的一条 */
+	provider: string;
+	/** 展示名 */
+	name: string;
+	/** 上下文窗口，单位 token */
+	contextWindow: number;
+	/** 单次输出上限，单位 token */
+	maxTokens: number;
+	/** 是否能思考 */
+	reasoning: boolean;
+	/** 逐档映射；缺省表示按 provider 默认，不等于“没有档位” */
+	thinkingLevelMap?: ThinkingLevelMap;
+	/** 输入模态 */
+	input: readonly string[];
+}
 
 /** 请求超时：上游不通时不让弹窗一直转。 */
 const UPSTREAM_TIMEOUT_MS = 10_000;
@@ -36,6 +61,10 @@ export interface FetchUpstreamModelsOptions {
 	fetchImpl?: typeof fetch;
 	/** 测试里换掉超时 */
 	timeoutMs?: number;
+	/** 补齐能力字段用的目录，取自 pi 的运行时目录；不给时只回上游给的东西 */
+	catalog?: readonly CatalogModel[];
+	/** 正在编辑的提供方标识，用来在同一标识多来源时挑它自己那条 */
+	providerId?: string;
 }
 
 /** 拉取结果。 */
@@ -139,21 +168,28 @@ export function parseUpstreamModels(payload: unknown): UpstreamModel[] {
 /** 目录索引：精确标识与退化别名分开存，精确的优先。 */
 export interface CatalogIndex {
 	/** 原标识 → 目录条目 */
-	exact: Map<string, { provider: string; model: ModelInfo }>;
+	exact: Map<string, CatalogModel>;
 	/** 退化标识（去厂商前缀、去日期后缀）→ 目录条目 */
-	alias: Map<string, { provider: string; model: ModelInfo }>;
+	alias: Map<string, CatalogModel>;
 }
 
 /**
- * 目录条目的可信度排序。
+ * 两条目录条目里该挑哪一条。
  *
- * 同一个标识会挂在多个 provider 下（`azure`、`openrouter`、`github-copilot`…），能力与思考档位
- * 各家并不一致；`canonical_model_id` 形如 `anthropic/claude-…`，前缀对上 provider id 的那条就是
- * 厂商官方条目，优先用它，免得把转售方的语义当成模型本身的能力。
+ * 同一个标识会挂在多个 provider 下（`anthropic`、`openrouter`、`github-copilot`…），各家的能力
+ * 字段并不完全一致，预填只能挑一条：先看是不是本次要拉的那个提供方（编辑内置提供方时正好对上），
+ * 再看信息完整度（写了思考档位的比没写的更值得抄），最后按 provider 名兜底，保证同样的输入
+ * 永远挑到同一条。
  */
-function rank(providerId: string, model: ModelInfo): number {
-	const canonical = readString(model.canonical_model_id)?.toLowerCase();
-	return canonical?.startsWith(`${providerId.toLowerCase()}/`) === true ? 2 : 1;
+function preferredModelOf(a: CatalogModel, b: CatalogModel, provider: string | undefined): CatalogModel {
+	const score = (model: CatalogModel): number =>
+		(provider !== undefined && model.provider === provider ? 2 : 0) +
+		(model.thinkingLevelMap === undefined ? 0 : 1);
+	const gap = score(a) - score(b);
+	if (gap !== 0) {
+		return gap > 0 ? a : b;
+	}
+	return a.provider <= b.provider ? a : b;
 }
 
 /** 退化键：去厂商前缀（`vendor/model`）、去日期后缀（`-261017`）。 */
@@ -176,48 +212,53 @@ export function catalogLookupKeys(id: string): string[] {
 	return [...keys];
 }
 
-/** 建一次目录索引；默认用随包分发的 models.dev 快照。 */
-export function buildCatalogIndex(providers: Record<string, ModelInfoProvider> = modelCatalog): CatalogIndex {
+/**
+ * 建一次目录索引。
+ *
+ * `models` 是 pi 运行时目录里的 chat 模型，`provider` 是本次要拉的那个提供方（可选，用来在多
+ * 来源里挑它自己那条）。
+ */
+export function buildCatalogIndex(models: readonly CatalogModel[], provider?: string): CatalogIndex {
 	const exact: CatalogIndex["exact"] = new Map();
 	const alias: CatalogIndex["alias"] = new Map();
-	const put = (
-		target: Map<string, { provider: string; model: ModelInfo }>,
-		key: string,
-		providerId: string,
-		model: ModelInfo,
-	): void => {
+	const put = (target: Map<string, CatalogModel>, key: string, model: CatalogModel): void => {
 		const existing = target.get(key);
-		if (existing === undefined || rank(providerId, model) > rank(existing.provider, existing.model)) {
-			target.set(key, { provider: providerId, model });
+		if (existing === undefined || preferredModelOf(model, existing, provider) === model) {
+			target.set(key, model);
 		}
 	};
-	for (const [providerId, provider] of Object.entries(providers)) {
-		for (const [modelId, model] of Object.entries(provider.models)) {
-			put(exact, modelId.trim().toLowerCase(), providerId, model);
-		}
+	for (const model of models) {
+		put(exact, model.id.trim().toLowerCase(), model);
 	}
 	// 别名只补精确里没有的键，不能把后面的精确模型顶掉
-	for (const [providerId, provider] of Object.entries(providers)) {
-		for (const [modelId, model] of Object.entries(provider.models)) {
-			for (const key of catalogLookupKeys(modelId)) {
-				if (!exact.has(key)) {
-					put(alias, key, providerId, model);
-				}
+	for (const model of models) {
+		for (const key of catalogLookupKeys(model.id)) {
+			if (!exact.has(key)) {
+				put(alias, key, model);
 			}
 		}
 	}
 	return { exact, alias };
 }
 
-/** 信息库的输入模态里有没有图片。 */
-function hasImageInput(modalities: readonly string[] | undefined): boolean {
-	return modalities?.includes("image") === true;
+/**
+ * 目录条目 → 预填的档位集合。
+ *
+ * 三态必须分清：不会思考给空数组（保存时写 `reasoning: false` 是对的）；会思考且逐档写明就照抄；
+ * 会思考但没写映射表示“按 provider 默认”，返回 `undefined` 留空让用户自己勾——猜一组档位会盖掉
+ * pi 的默认，猜空数组更会把思考直接关掉。
+ */
+function thinkingLevelsOf(model: CatalogModel): ThinkingLevel[] | undefined {
+	if (!model.reasoning) {
+		return [];
+	}
+	return model.thinkingLevelMap === undefined ? undefined : levelsFromMap(model.thinkingLevelMap, true);
 }
 
 /** 用目录把能力字段补上：上游给了的以它为准，查不到就留空（空 = 让 pi 用 SDK 默认）。 */
 export function enrichUpstreamModels(raw: readonly UpstreamModel[], index: CatalogIndex): UpstreamModel[] {
 	return raw.map((model) => {
-		let hit: { provider: string; model: ModelInfo } | undefined;
+		let hit: CatalogModel | undefined;
 		for (const key of catalogLookupKeys(model.id)) {
 			hit = index.exact.get(key) ?? index.alias.get(key);
 			if (hit !== undefined) {
@@ -227,22 +268,21 @@ export function enrichUpstreamModels(raw: readonly UpstreamModel[], index: Catal
 		if (hit === undefined) {
 			return model;
 		}
-		const { model: meta } = hit;
-		const contextWindow = meta.limit?.context;
-		const maxTokens = meta.limit?.output;
-		// 信息库写明了档位就照它填；只说了「会思考」而没说档位时（例如只有 token 预算的那类），
-		// 档位留空让用户自己勾，免得凭空造出一组上游并不认的取值
-		const levels = levelsFromCatalog(meta.reasoning_options);
-		const thinking = levels === undefined ? meta.reasoning : hasThinking(levels);
-		// 信息库说它收图片才写 input：只收文字的话不写，交给 pi 的缺省
-		const input = hasImageInput(meta.modalities?.input) ? (["text", "image"] as const) : undefined;
+		const contextWindow = hit.contextWindow > 0 ? hit.contextWindow : undefined;
+		const maxTokens = hit.maxTokens > 0 ? hit.maxTokens : undefined;
+		// 目录写明了档位就照它填；只说了“会思考”而没写映射时（按 provider 默认），档位留空让用户
+		// 自己勾，免得凭空造出一组 provider 并不认的取值
+		const levels = thinkingLevelsOf(hit);
+		const thinking = levels === undefined ? hit.reasoning : hasThinking(levels);
+		// 目录说它收图片才写 input：只收文字的话不写，交给 pi 的缺省
+		const input = hit.input.includes("image") ? (["text", "image"] as const) : undefined;
 		return {
 			...model,
-			...(model.name === undefined && meta.name !== undefined ? { name: meta.name } : {}),
-			...(contextWindow !== undefined && contextWindow > 0 ? { contextWindow } : {}),
-			...(maxTokens !== undefined && maxTokens > 0 ? { maxTokens } : {}),
+			...(model.name === undefined && hit.name.length > 0 ? { name: hit.name } : {}),
+			...(contextWindow === undefined ? {} : { contextWindow }),
+			...(maxTokens === undefined ? {} : { maxTokens }),
 			...(thinking ? { reasoning: true } : {}),
-			...(levels !== undefined ? { thinkingLevels: levels } : {}),
+			...(levels === undefined ? {} : { thinkingLevels: levels }),
 			...(input === undefined ? {} : { input: [...input] }),
 		};
 	});
@@ -314,7 +354,7 @@ export async function fetchUpstreamModels(
 	const candidates = modelListCandidates(baseUrl);
 	const settled = await Promise.allSettled(candidates.map((candidate) => requestModels(candidate, options)));
 
-	const index = buildCatalogIndex();
+	const index = buildCatalogIndex(options.catalog ?? [], options.providerId);
 	for (const [position, result] of settled.entries()) {
 		if (result.status === "fulfilled") {
 			const endpoint = candidates[position] ?? `${baseUrl}/models`;

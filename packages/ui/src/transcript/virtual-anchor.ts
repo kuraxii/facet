@@ -27,6 +27,15 @@ export const VIRTUAL_SCROLL_MARGIN = VISUAL_SCALE.space.s12;
 export const VIRTUAL_OVERSCAN = 6;
 
 /**
+ * 跳转过程中的 overscan。
+ *
+ * 跳到一个没去过的地方时，落点那一窗的行要一次性全部挂载，一行里可能有 Markdown、代码高亮
+ * 与图——这是首跳那一下卡顿的主要来源。动画期间只留 1 行余量，落位后再放回 `VIRTUAL_OVERSCAN`：
+ * 少挂十来行重内容，卡顿那一帧的活儿直接少一截。
+ */
+export const VIRTUAL_JUMP_OVERSCAN = 1;
+
+/**
  * 一次拖选最多钉住多少行。
  *
  * 拖到视口外时浏览器会自动滚动、选区跟着变长，钉住的行会**同时**挂载，而一行里可能有

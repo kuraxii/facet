@@ -13,7 +13,7 @@
  */
 import { useCallback, useEffect, useRef } from "react";
 import { SCROLL_UP_KEYS } from "../chat/use-stick-to-bottom.ts";
-import { clampScroll, planScrollMotion, sampleScrollMotion } from "./scroll-motion.ts";
+import { advanceMotionClock, clampScroll, planScrollMotion, sampleScrollMotion } from "./scroll-motion.ts";
 
 /**
  * 会自己改变滚动位置的按键。
@@ -62,8 +62,10 @@ export interface ScrollDriverOptions {
 interface Running {
 	readonly readLive: () => number;
 	readonly onSettle: (() => void) | undefined;
-	/** 首帧的时间戳，用来算经过了多少毫秒 */
-	startedAt: number;
+	/** 上一帧的时间戳，用来算这一帧花了多久 */
+	lastFrameAt: number;
+	/** 动画自己的时钟：卡顿的帧不计入，见 `advanceMotionClock` */
+	animatedMs: number;
 	/** 位移规划，首帧建立 */
 	plan: ReturnType<typeof planScrollMotion> | undefined;
 	/** 阻尼追踪后的目标坐标，上一帧的采样值原样带回来 */
@@ -112,7 +114,7 @@ export function useScrollDriver(options: ScrollDriverOptions): ScrollDriver {
 				onSettle?.();
 				return;
 			}
-			const state: Running = { readLive, onSettle, startedAt: 0, plan, tracked: undefined };
+			const state: Running = { readLive, onSettle, lastFrameAt: 0, animatedMs: 0, plan, tracked: undefined };
 			running.current = state;
 			latest.current.onRunningChange?.(true);
 
@@ -123,16 +125,18 @@ export function useScrollDriver(options: ScrollDriverOptions): ScrollDriver {
 				if (current === null || target === null) {
 					return;
 				}
-				if (current.startedAt === 0) {
-					current.startedAt = now;
-				}
 				if (current.plan === undefined) {
 					return;
 				}
+				// 首帧没有"上一帧"，这一帧只用来定基准；之后按帧间隔推进动画时钟
+				if (current.lastFrameAt !== 0) {
+					current.animatedMs = advanceMotionClock(current.animatedMs, now - current.lastFrameAt);
+				}
+				current.lastFrameAt = now;
 				const bound = Math.max(0, target.scrollHeight - target.clientHeight);
 				const sample = sampleScrollMotion(
 					current.plan,
-					now - current.startedAt,
+					current.animatedMs,
 					current.readLive(),
 					bound,
 					current.tracked,

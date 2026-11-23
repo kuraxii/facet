@@ -258,9 +258,10 @@
 输入区上方另有一条六阶渐变（`.footer::before`，全部由 `color-mix` 从 `--bg-canvas` 派生），
 消息滚到输入区边缘不再是一条硬切线。
 
-**消息行**：`content-visibility: auto` 配 `contain-intrinsic-size: auto 64px`，屏外的行跳过布局
-与绘制，`auto` 记住实测高度，滚动条长度不跳。用户消息行（导航竖轨按位置跳转）、流式行与末尾
-两行不参与裁剪。代价是拖选跨过视口边界时要现渲染，这是已知取舍。
+**消息行**：不做视口裁剪（`content-visibility: auto` 已撤掉），只用 `contain: layout style` 做
+布局隔离。裁剪会给屏外的行一个占位高度，滚到时换成真实高度，滚动总高跟着长；`.scroll` 上是
+`overflow-anchor: none`（吸底由脚本按 `scrollTop` 管），浏览器不替我们校准，结果就是上滚时内容
+被顶下去、看着像跳了一截，下滚又被顶回来。拖选跨视口边界时也还要现渲染才能算选区。
 
 **滚动监听**一律显式声明 `passive`：不要 `preventDefault()` 的写 `true`，真要拦的（Mermaid 图
 的 Ctrl+滚轮缩放）写 `false`，漏写由 `visual-contract.test.ts` 拦下。

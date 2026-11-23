@@ -5,9 +5,8 @@
  * 在答复上方。点一张开全局预览，组内可以左右翻——与工具结果里的图、正文 Markdown 里的图同一套
  * 预览。
  *
- * 数据就是消息里的 base64，这里拼成 `data:` URL 直接交给 `<img>`，不落盘也不走网络。行本身
- * 已经按视口裁剪（`content-visibility`），所以不再另做占位框：先挂一个空盒子，图到齐之前高度
- * 会错一次，反倒闪。
+ * 数据就是消息里的 base64，这里拼成 `data:` URL 直接交给 `<img>`，不落盘也不走网络。不另做
+ * 占位框：解码就在本进程里，空盒子先占一次高度再换成真实高度，反倒闪一下。
  */
 import type { MessageImage, Part, TranscriptItem } from "@facet/client-core";
 import { type ReactNode, useMemo } from "react";

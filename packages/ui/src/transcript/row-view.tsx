@@ -216,7 +216,7 @@ export const RowView = memo(function RowView({
 	if (row.kind === "meta") {
 		// 收起时是一行图标加标题，展开时标题变成药丸底、左侧换成下箭头
 		return (
-			<Shell className="is-process" isStreaming={row.isStreaming}>
+			<Shell className="is-process">
 				<div className="group">
 					<button
 						type="button"
@@ -246,7 +246,7 @@ export const RowView = memo(function RowView({
 	}
 
 	return (
-		<Shell className="is-assistant" isStreaming={row.isStreaming}>
+		<Shell className="is-assistant">
 			<MessageImages id={row.id} items={row.items} />
 			<div className="assistant-body">
 				{bodyOf(row)}

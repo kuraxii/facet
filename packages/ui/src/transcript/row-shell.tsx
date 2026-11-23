@@ -1,7 +1,7 @@
 /**
  * 行外壳、行尾动作与计时用的小工具。
  *
- * 对话面板里每一行都长在同一只 `Shell` 上：外壳负责 `is-streaming` 与对话导航的定位键，
+ * 对话面板里每一行都长在同一只 `Shell` 上：外壳负责行容器与对话导航的定位键，
  * 行尾的复制按钮、正在计时的时长都挂在这一层。这里只有渲染与计时，不碰渲染单元的投影。
  */
 import type { Part } from "@facet/client-core";
@@ -92,30 +92,19 @@ export function CopyButton({
 	);
 }
 
-/**
- * 一行外壳。
- *
- * 正在流式写入的行带上 is-streaming：样式据此把它排除在视口裁剪之外，
- * 新增内容始终有真实的布局盒模型。
- */
+/** 一行外壳。 */
 export function Shell({
 	className,
 	children,
 	outlineKey,
-	isStreaming = false,
 }: {
 	className: string;
 	children: ReactNode;
 	/** 对话导航的定位键，只在用户消息行上给 */
 	outlineKey?: string;
-	/** 这一行是否仍在增长 */
-	isStreaming?: boolean;
 }) {
 	return (
-		<div
-			className={isStreaming ? `row ${className} is-streaming` : `row ${className}`}
-			data-outline-key={outlineKey}
-		>
+		<div className={`row ${className}`} data-outline-key={outlineKey}>
 			{children}
 		</div>
 	);

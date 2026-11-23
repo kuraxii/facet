@@ -241,26 +241,18 @@
 
 .row {
 	/*
-	 * 屏外跳过绘制：一行滚出视口之后，浏览器不再为它做布局与绘制，长对话滚动因此只看得到
-	 * 视口里那几行。`contain-intrinsic-size: auto 64px` 里的 `auto` 是关键——滚过去一次就
-	 * 记住那一行的真实高度，回来时按记忆的高度占位，滚动条长度不跳。
+	 * 只做布局与样式隔离，不做视口裁剪。
 	 *
-	 * 代价写在明处：拖选跨过视口边界时，浏览器要现渲染那些子树才能算选区。为此用户消息行
-	 * （对话导航按它的位置跳转）、正在流式写入的行与末尾两行都不参与裁剪——前者的高度一变，
-	 * 竖轨与滚动总高都跟着抖；后者是"刚出来的内容"，延迟渲染会让贴底跟随看见高度反复切换。
+	 * 视口裁剪给屏外的行一个占位高度（`contain-intrinsic-size`），滚到它时才换成真实高度：
+	 * 滚动总高跟着长，而 `.scroll` 的 `overflow-anchor` 是 `none`（吸底由脚本按 scrollTop 管），
+	 * 浏览器不会替我们校准，于是上滚时正在看的内容被顶下去、看着像跳到了别处，下滚又被顶回来。
+	 * 行高本来就随内容变（图片解码、折叠体展开、流式追加），占位高度只能瞎猜，猜错的差值一律
+	 * 落在滚动位置上。拖选跨过视口边界时也还要现渲染才能算选区，选区跟不上指针。
 	 */
 	contain: layout style;
-	content-visibility: auto;
-	contain-intrinsic-size: auto 64px;
 	display: flex;
 	flex-direction: column;
 	gap: var(--space-4);
-}
-
-.row[data-outline-key],
-.row.is-streaming,
-.row:nth-last-child(-n + 2) {
-	content-visibility: visible;
 }
 
 .row.is-user {

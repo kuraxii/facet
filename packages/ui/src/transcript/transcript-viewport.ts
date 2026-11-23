@@ -57,6 +57,8 @@ export interface TranscriptViewportOptions {
 	readonly virtualizer: VirtualList;
 	/** 位置恢复失败（那一行已经不在窗口里）时的落点 */
 	readonly onRestoreLost?: (() => void) | undefined;
+	/** 曲线开始与结束时各通知一次，面板据此收窄/放开 overscan */
+	readonly onMotionRunningChange?: ((running: boolean) => void) | undefined;
 	/** 接口交出去的位置，由面板转给对话导航与位置记忆 */
 	readonly viewportRef: { current: TranscriptViewport | null };
 }

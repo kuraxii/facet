@@ -58,6 +58,35 @@ export const TARGET_TRACK_FACTOR = 0.35;
 /** 缓入走到这个进度时，追踪值直接对齐最新目标：落点必须是精确的，不能差一个尾巴。 */
 export const TARGET_SNAP_PROGRESS = 0.85;
 
+/**
+ * 单帧最多推进多少动画时间。
+ *
+ * 掉一帧（33ms 以上）不该把动画整体快进：按两帧算，剩下的时间在后面的帧里补回来。
+ */
+export const MAX_FRAME_MS = 32;
+
+/**
+ * 一帧耗时超过它就算"卡了一下"。
+ *
+ * 跳到没去过的地方时，目标那一窗的行要一次性挂载、渲染、测量，那一帧常常几十上百毫秒。
+ * 卡完的下一帧如果照墙钟时间采样，曲线会一次跨过去一大段，看起来就是"猛地一跳"；这里把这一
+ * 帧的等待**不计入**动画时间，位置先摁住，等画面跟上来再接着走，落点仍然是原来的时间线。
+ */
+export const HITCH_MS = 80;
+
+/**
+ * 推进动画时钟：卡顿的那一帧原地不动，正常帧按实际耗时（上限 `MAX_FRAME_MS`）累加。
+ *
+ * 动画进度只看这个累加值，不直接看墙钟，所以一次长卡顿只会让整段动画变长一点，不会让它跳帧。
+ */
+export function advanceMotionClock(animatedMs: number, frameMs: number): number {
+	const elapsed = Number.isFinite(animatedMs) && animatedMs > 0 ? animatedMs : 0;
+	if (!Number.isFinite(frameMs) || frameMs <= 0 || frameMs > HITCH_MS) {
+		return elapsed;
+	}
+	return elapsed + Math.min(frameMs, MAX_FRAME_MS);
+}
+
 /** 缓出：起步快、落点稳，位移的大部分在头三成时间里走完。 */
 export function easeOutCubic(progress: number): number {
 	const p = clamp01(progress);

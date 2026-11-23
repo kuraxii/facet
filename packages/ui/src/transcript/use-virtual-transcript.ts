@@ -18,7 +18,7 @@
  * 全按旧位置算。
  */
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { JUMP_LEAD } from "../chat/chat-outline.ts";
 import { TRANSCRIPT_DATA_ATTRS } from "../layout/layout-contract.ts";
 import type { DisplayRow } from "./group.ts";
@@ -29,6 +29,7 @@ import {
 	estimateRowHeight,
 	extractPinnedRange,
 	type GridPlan,
+	VIRTUAL_JUMP_OVERSCAN,
 	VIRTUAL_OVERSCAN,
 	VIRTUAL_ROW_GAP,
 	VIRTUAL_SCROLL_MARGIN,
@@ -98,6 +99,9 @@ export function useVirtualTranscript(options: VirtualTranscriptOptions): Virtual
 		[rowIndexById],
 	);
 
+	/** 曲线是否在跑：跑的这段时间只挂落点那一窗附近的行，落位后再放开 */
+	const [isMoving, setIsMoving] = useState(false);
+
 	const virtualizer = useVirtualizer<HTMLElement, HTMLElement>({
 		count: rows.length,
 		getScrollElement: () => scrollElement,
@@ -123,7 +127,7 @@ export function useVirtualTranscript(options: VirtualTranscriptOptions): Virtual
 		scrollMargin: VIRTUAL_SCROLL_MARGIN,
 		// 跳转落点上方留出的空隙，与定位接口量位置时用同一个数
 		scrollPaddingStart: JUMP_LEAD,
-		overscan: VIRTUAL_OVERSCAN,
+		overscan: isMoving ? VIRTUAL_JUMP_OVERSCAN : VIRTUAL_OVERSCAN,
 		// 头部插入的新行按 key 锚回原位；已经在底部时按总高差值跟到底
 		anchorTo: "end",
 		indexAttribute: TRANSCRIPT_DATA_ATTRS.rowIndex,
@@ -145,6 +149,7 @@ export function useVirtualTranscript(options: VirtualTranscriptOptions): Virtual
 		outlineIndex,
 		rowIndexById,
 		renames: renames ?? NO_RENAMES,
+		onMotionRunningChange: setIsMoving,
 		virtualizer,
 		onRestoreLost,
 		viewportRef,

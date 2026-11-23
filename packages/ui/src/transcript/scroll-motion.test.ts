@@ -3,8 +3,11 @@ import { describe, expect, it } from "vitest";
 import {
 	APPROACH_DISTANCE,
 	ARRIVE_MS,
+	advanceMotionClock,
 	DEPART_DISTANCE,
 	DEPART_MS,
+	HITCH_MS,
+	MAX_FRAME_MS,
 	MOTION_EPSILON,
 	planScrollMotion,
 	type ScrollMotionPlan,
@@ -79,6 +82,29 @@ describe("planScrollMotion", () => {
 		}
 		expect(toEnd.to).toBe(MAX);
 		expect(toEnd.approachPoint).toBeLessThanOrEqual(MAX);
+	});
+});
+
+describe("advanceMotionClock", () => {
+	it("正常帧按实际耗时累加", () => {
+		expect(advanceMotionClock(100, 16)).toBe(116);
+		expect(advanceMotionClock(0, 16)).toBe(16);
+	});
+
+	it("单帧再长也只推进两帧的量，剩下的留给后面的帧", () => {
+		expect(advanceMotionClock(100, MAX_FRAME_MS + 20)).toBe(100 + MAX_FRAME_MS);
+		expect(advanceMotionClock(100, HITCH_MS - 1)).toBe(100 + MAX_FRAME_MS);
+	});
+
+	it("卡顿的那一帧原地不动：动画只因它变长，不会跳帧", () => {
+		expect(advanceMotionClock(100, HITCH_MS + 1)).toBe(100);
+		expect(advanceMotionClock(100, 400)).toBe(100);
+	});
+
+	it("乱序或负数的时间差不会被算进去", () => {
+		expect(advanceMotionClock(100, -8)).toBe(100);
+		expect(advanceMotionClock(100, Number.NaN)).toBe(100);
+		expect(advanceMotionClock(Number.NaN, 16)).toBe(16);
 	});
 });
 

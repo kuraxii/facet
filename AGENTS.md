@@ -61,8 +61,10 @@
 - 发版顺序固定：维护者先指定版本 → 改版本号 → 提交一次发布提交（`chore(release): <版本>`）
   → 在这条提交上打 `v<版本>` 标签。标签 MUST 指向带该版本号的提交，否则产物名与源码对不上。
 - 推标签会触发发行流水线，属于「不得主动触发 CI」的范围：只在发版时由用户明确要求才做。
-- 推标签的那一轮在门禁与两个平台的包都出来之后，会额外建一个同名 GitHub Release 并挂上
-  三个平台的产物；手动 dispatch 只验证流水线，不建 Release。
+- 推标签的那一轮在门禁与两个平台的包都出来之后，会额外建一个同名 GitHub **预发布**
+  （Pre-release，`--prerelease --latest=false`）并挂上三个平台的产物。验证过的版本由维护者
+  手动提升为正式版：`gh release edit <tag> --latest`；流水线自己不认定 Latest。
+  手动 dispatch 只验证流水线，不建 Release。
 - 进 `main` 的 PR 会跑同一套门禁（`pr.yml` → `gates.yml`），不打包也不建 Release。
 
 # 注释规范

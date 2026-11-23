@@ -332,8 +332,9 @@ Release；同一 PR 反复推送只留最新一轮。门禁本身抽成可复用
    产物的 glibc 底线不超过 2.31；
 3. `windows-latest` 上先核对 server 产物里是 `bin/node.exe`，再出 x64 的 NSIS 安装包（`--publish never`，只留本机）；
 4. 产物按平台作为 workflow artifact 上传（Linux 六个包、Windows 一份 `facet-<版本>-x64-setup.exe`），保留 90 天；
-5. 推标签时再跑一个 `release` job：把三份 artifact 解到同一个目录，用 `gh release create` 建同名的
-   GitHub Release 并挂上六个 Linux 包与 Windows 安装包（手动 dispatch 不建 Release）；
+5. 推标签时再跑一个 `release` job：把三份 artifact 解到同一个目录，用 `gh release create --prerelease --latest=false`
+   建同名的 GitHub **预发布**并挂上六个 Linux 包与 Windows 安装包——流水线自己不认定 Latest，
+   验证过的版本由维护者手动提升（`gh release edit <tag> --latest`）；手动 dispatch 不建 Release；
 6. Windows job 缓存 Electron、自带 Node 运行时与 NSIS 工具链，缓存键跟着 `package-lock.json` 与 `.node-version` 走；
 7. 版本号取自仓库里的 `package.json`，与打标签前那次发版提交一致，流水线不反填。
 

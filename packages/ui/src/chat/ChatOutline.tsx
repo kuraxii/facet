@@ -6,12 +6,16 @@
  *
  * 只在"没有可跳的条目"时不画（见 `outlineIsActive`）：位置由三列网格的右轨
  * （`--outline-slot`）保证，与窗口宽度无关，窄屏也不隐藏、不与正文重叠。
+ *
+ * 位置与跳转都走面板给的定位接口（`TranscriptViewport`）：正文按行虚拟化之后，绝大多数
+ * 用户消息根本没有挂载，量不到 DOM；接口能给出每一行的虚拟坐标，跳转也交给它去做。
  */
 
 import type { TranscriptItem } from "@facet/client-core";
-import type { CSSProperties } from "react";
+import type { CSSProperties, RefObject } from "react";
 import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import type { TranscriptViewport } from "../transcript/use-virtual-transcript.ts";
 import {
 	activeOutlineIndex,
 	createOutlineHoverIntent,
@@ -21,25 +25,19 @@ import {
 	outlineTickMagnification,
 } from "./chat-outline.ts";
 
-/** 跳转后这条消息距视口上沿留多少像素，避免贴着顶部。 */
-const JUMP_OFFSET = 12;
-
 /** 判断当前轮次时，视口上沿再往下算多少像素。 */
 const ACTIVE_OFFSET = 32;
 
 export interface ChatOutlineProps {
 	/** 渲染单元，只取其中的用户消息 */
 	items: readonly TranscriptItem[];
-	/** 正文所在的滚动容器，用来定位与跳转 */
+	/** 正文所在的滚动容器：只用来听滚动与尺寸变化 */
 	container: HTMLElement | null;
+	/** 面板的定位接口：给每一行的位置，也接手跳转 */
+	viewport: RefObject<TranscriptViewport | null>;
 }
 
-/** 量一个锚点相对滚动容器上沿的偏移。 */
-function offsetInContainer(element: Element, container: HTMLElement): number {
-	return element.getBoundingClientRect().top - container.getBoundingClientRect().top;
-}
-
-export function ChatOutline({ items, container }: ChatOutlineProps) {
+export function ChatOutline({ items, container, viewport }: ChatOutlineProps) {
 	const { t } = useI18n();
 	const prompts = useMemo(
 		() => outlinePrompts(items, (index) => t("outline.fallback", { index })),
@@ -48,25 +46,17 @@ export function ChatOutline({ items, container }: ChatOutlineProps) {
 	const [activeIndex, setActiveIndex] = useState<number | null>(null);
 	const [attentionIndex, setAttentionIndex] = useState<number | null>(null);
 
-	/** 取一条消息对应的正文行。 */
-	const anchorOf = useCallback(
-		(key: string): Element | null =>
-			container === null ? null : container.querySelector(`[data-outline-key="${CSS.escape(key)}"]`),
-		[container],
-	);
-
 	/** 按滚动位置算出当前读到的轮次。 */
 	const measure = useCallback(() => {
-		if (container === null || prompts.length === 0) {
+		const api = viewport.current;
+		if (api === null || prompts.length === 0) {
 			setActiveIndex(null);
 			return;
 		}
-		const tops = prompts.map((prompt) => {
-			const anchor = anchorOf(prompt.key);
-			return anchor === null ? Number.POSITIVE_INFINITY : offsetInContainer(anchor, container);
-		});
+		// 行没挂载也能拿到位置：接口按虚拟坐标给，不在视口里的行同样是准的
+		const tops = prompts.map((prompt) => api.offsetOf(prompt.key) ?? Number.POSITIVE_INFINITY);
 		setActiveIndex(activeOutlineIndex(tops, ACTIVE_OFFSET));
-	}, [anchorOf, container, prompts]);
+	}, [prompts, viewport]);
 
 	// 滚动与尺寸变化时重算当前轮次。逐帧测量比按滚动事件直接算重一点，用 rAF 收一收。
 	useEffect(() => {
@@ -125,20 +115,12 @@ export function ChatOutline({ items, container }: ChatOutlineProps) {
 	);
 	const handleRailLeave = useCallback(() => hoverIntent.leave(), [hoverIntent]);
 
-	/** 跳到一条消息：滚到它的顶部，留一点空隙。 */
+	/** 跳到一条消息：交给面板的定位接口，留白由它按同一份口径给。 */
 	const jumpTo = useCallback(
 		(key: string) => {
-			const anchor = anchorOf(key);
-			const scroll = container;
-			if (anchor === null || scroll === null) {
-				return;
-			}
-			scroll.scrollTo({
-				top: scroll.scrollTop + offsetInContainer(anchor, scroll) - JUMP_OFFSET,
-				behavior: "smooth",
-			});
+			viewport.current?.jumpTo(key);
 		},
-		[anchorOf, container],
+		[viewport],
 	);
 
 	// 唯一的隐藏条件：没有可跳的条目。宽度由网格兜着，不参与判断

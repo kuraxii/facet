@@ -25,6 +25,10 @@ import { CopyButton, Shell, textOf, useUntilFound } from "./row-shell.tsx";
 export interface RowViewProps {
 	/** 这一行 */
 	row: DisplayRow;
+	/** 行在虚拟列表里的下标；不虚拟化时不给 */
+	rowIndex?: number | undefined;
+	/** 测量回调，虚拟化器按它回填实测高度；不虚拟化时不给 */
+	measureRef?: ((node: HTMLElement | null) => void) | undefined;
 	/** 用户收起过这一行，缺省按行的种类决定 */
 	isCollapsed: boolean;
 	/** 第一条用户消息的行标识，它前面没有可回退的轮次 */
@@ -60,6 +64,8 @@ export interface RowViewProps {
  */
 export const RowView = memo(function RowView({
 	row,
+	rowIndex,
+	measureRef,
 	isCollapsed,
 	firstUserRowId,
 	forkText,
@@ -91,7 +97,7 @@ export const RowView = memo(function RowView({
 		}
 		// 收在这一轮的末尾：复制、分叉，右边是这一轮工作了多久；悬停才显形
 		return (
-			<Shell className="is-fork">
+			<Shell className="is-fork" rowId={row.id}>
 				<div className="turn-foot">
 					<div className="turn-actions">
 						{onCopyText === undefined || forkText.length === 0 || row.isStreaming ? null : (
@@ -122,7 +128,7 @@ export const RowView = memo(function RowView({
 		const label =
 			row.items[0]?.kind === "compaction" ? t("transcript.compactionSummary") : t("transcript.branchSummary");
 		return (
-			<Shell className="is-divider">
+			<Shell className="is-divider" rowId={row.id}>
 				<details className="context-summary">
 					<summary className="divider">
 						<span className="line" />
@@ -148,7 +154,7 @@ export const RowView = memo(function RowView({
 		const canRetry = onRetryTurn !== undefined && canRevert && retryEntryId !== undefined;
 		// 一条带色底的提示：图标固定在左上，正文自己换行，动作是文字按钮
 		return (
-			<Shell className="is-error">
+			<Shell className="is-error" rowId={row.id}>
 				<div className="error-line" role="alert">
 					<CircleAlert className="error-mark" size={ICON_SIZE.lg} />
 					<div className="error-body">
@@ -186,7 +192,7 @@ export const RowView = memo(function RowView({
 		// 第一条用户消息之前没有可回退的轮次
 		const canRevertThis = canRevert && entryId !== undefined && row.id !== firstUserRowId;
 		return (
-			<Shell className="is-user" outlineKey={entryId ?? row.id}>
+			<Shell className="is-user" rowId={row.id} rowIndex={rowIndex} measureRef={measureRef}>
 				<MessageImages id={row.id} items={row.items} />
 				{/* 只有图片没有文字时不出空气泡 */}
 				{text.length === 0 ? null : (
@@ -216,7 +222,7 @@ export const RowView = memo(function RowView({
 	if (row.kind === "meta") {
 		// 收起时是一行图标加标题，展开时标题变成药丸底、左侧换成下箭头
 		return (
-			<Shell className="is-process" isStreaming={row.isStreaming}>
+			<Shell className="is-process" rowId={row.id} rowIndex={rowIndex} measureRef={measureRef}>
 				<div className="group">
 					<button
 						type="button"
@@ -246,7 +252,7 @@ export const RowView = memo(function RowView({
 	}
 
 	return (
-		<Shell className="is-assistant" isStreaming={row.isStreaming}>
+		<Shell className="is-assistant" rowId={row.id} rowIndex={rowIndex} measureRef={measureRef}>
 			<MessageImages id={row.id} items={row.items} />
 			<div className="assistant-body">
 				{bodyOf(row)}

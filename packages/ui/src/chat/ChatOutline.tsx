@@ -17,6 +17,7 @@ import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import type { TranscriptViewport } from "../transcript/use-virtual-transcript.ts";
 import {
+	ACTIVE_OFFSET,
 	activeOutlineIndex,
 	createOutlineHoverIntent,
 	OUTLINE_MAGNIFY_RADIUS,
@@ -24,9 +25,6 @@ import {
 	outlinePrompts,
 	outlineTickMagnification,
 } from "./chat-outline.ts";
-
-/** 判断当前轮次时，视口上沿再往下算多少像素。 */
-const ACTIVE_OFFSET = 32;
 
 export interface ChatOutlineProps {
 	/** 渲染单元，只取其中的用户消息 */

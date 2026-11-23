@@ -108,6 +108,12 @@ export function useTranscriptViewport(options: TranscriptViewportOptions): void 
 	const driver = useScrollDriver({
 		getElement: () => latest.current.scrollElement,
 		prefersReducedMotion,
+		// 曲线期间让虚拟化器停掉尺寸补偿：它也在写 scrollTop，两边抢同一帧就会抖
+		onRunningChange: (running) => {
+			latest.current.virtualizer.shouldAdjustScrollPositionOnItemSizeChange = running
+				? () => false
+				: undefined;
+		},
 	});
 
 	/** 还没落位的位置恢复，等那一行出现 */

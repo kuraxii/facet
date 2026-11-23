@@ -38,7 +38,9 @@ describe("虚拟化的几何与样式表同源", () => {
 	});
 
 	it("列表起点等于 `.scroll` 的上内边距", () => {
-		expect(block(styles, ".scroll")).toContain("padding: var(--space-12) 0 var(--space-6)");
+		const padding = /padding: ([^;]+);/.exec(block(styles, ".scroll"))?.[1] ?? "";
+		// 只钉第一位：下内边距是让开输入区上方那条过渡带的距离，另有单测看着
+		expect(padding.split(" ")[0]).toBe("var(--space-12)");
 		expect(VIRTUAL_SCROLL_MARGIN).toBe(VISUAL_SCALE.space.s12);
 	});
 

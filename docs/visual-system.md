@@ -256,7 +256,9 @@
 **聊天视口**：`.chat-viewport` 包住滚动区，上下各一层 40px 的渐隐（`--z-content`、不接指针），
 按 `data-can-scroll-top` / `data-can-scroll-bottom` 淡入——滚到头就收掉，静止时不凭空压暗一条。
 输入区上方另有一条六阶渐变（`.footer::before`，全部由 `color-mix` 从 `--bg-canvas` 派生），
-消息滚到输入区边缘不再是一条硬切线。
+消息滚到输入区边缘不再是一条硬切线。它永远可见，所以滚动区的下内边距取
+`--transcript-bottom-clearance`（= 过渡带高度 + 一档呼吸）：滚到最底时最后一行连同它的
+复制 / 回退 / 分叉都落在带子上面，不会被渐变压住。
 
 **消息行**：面板按行虚拟化（`@tanstack/react-virtual`，接线在
 `transcript/use-virtual-transcript.ts`）：只挂视口附近的行，滚出去的收掉，行的位置由

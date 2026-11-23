@@ -180,10 +180,9 @@
 	/* 交给原生惯性；吸底由脚本按 scrollTop 管，不让浏览器自己锚定 */
 	scroll-behavior: auto;
 	overflow-anchor: none;
-	padding: var(--space-12) 0 var(--space-6);
+	padding: var(--space-12) 0 var(--transcript-bottom-clearance);
 	/*
-	 * 底部留白与渐隐层等高再多一档：滚到最后一条消息时，它与渐隐区之间留出呼吸区，
-	 * 回到底部（`scrollToBottom`）也不会把最后一行压在渐隐里。
+	 * 同一档距离也给 `scrollIntoView`：竖轨跳转与页内查找把行带进视口时，别把它贴在过渡带里。
 	 */
 	scroll-padding-bottom: var(--control-lg);
 }

@@ -47,6 +47,10 @@ export interface FacetBridge extends HostChannelBridge {
 	close?: () => void;
 	/** 订阅最大化状态；浏览器端没有 */
 	onWindowState?: (listener: (maximized: boolean) => void) => () => void;
+	/** 弹一条系统通知；浏览器端没有 */
+	notify?: (request: { file: string; body: string }) => Promise<boolean>;
+	/** 订阅「点了某条系统通知」；浏览器端没有 */
+	onNotifyClick?: (listener: (file: string) => void) => () => void;
 }
 
 declare global {

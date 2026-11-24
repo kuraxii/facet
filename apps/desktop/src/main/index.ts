@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import { createI18n, readLanguageSetting, resolveLanguage, translate } from "@facet/i18n";
-import { app, BrowserWindow, dialog, ipcMain, screen, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Notification, screen, shell } from "electron";
 import { HostChannels, LOCAL_TARGET } from "./host-channel.ts";
 import {
 	findRunningHost,
@@ -24,6 +24,7 @@ import {
 	type WindowBounds,
 	writeLocalSettings,
 } from "./local-settings.ts";
+import { createNotifier } from "./notify.ts";
 import { SshHostError } from "./ssh-host.ts";
 
 // 用户配置目录按应用名落到 facet 下；桌面包名带作用域，不改名会建出 @facet 这样的目录
@@ -392,6 +393,48 @@ ipcMain.handle("facet:save-text", async (event, suggestedName: string, text: str
 	}
 	await writeFile(result.filePath, text, "utf8");
 	return true;
+});
+
+/** 通知标题用的产品名，与 `electron-builder.yml` 的 `productName` 一致 */
+const PRODUCT_NAME = "Facet";
+
+/**
+ * 系统通知：界面只发「哪个会话、什么状态词」，标题与「窗口在前台就不弹」的判断留在这里。
+ * 点通知先把窗口拉回前台（最小化的先还原），再把会话文件发回界面切过去。
+ */
+const notifier = createNotifier({
+	// Linux 上没装通知守护进程时 isSupported() 为假，那一类桌面就当没有这个能力
+	createNotification: Notification.isSupported() ? (options) => new Notification(options) : undefined,
+	onClick: (file) => {
+		// facet 只有一扇窗口，取第一扇即可；窗口已经关掉时什么都不做
+		const target = BrowserWindow.getAllWindows()[0];
+		if (target === undefined) {
+			return;
+		}
+		if (target.isMinimized()) {
+			target.restore();
+		}
+		target.show();
+		target.focus();
+		target.webContents.send("facet:notify-click", file);
+	},
+	title: PRODUCT_NAME,
+});
+
+ipcMain.handle("facet:notify", (event, request: unknown) => {
+	const window = BrowserWindow.fromWebContents(event.sender);
+	if (window === null) {
+		return false;
+	}
+	// 入站按不可信处理：只认这两个字符串字段，别的形状一律当没发
+	if (typeof request !== "object" || request === null) {
+		return false;
+	}
+	const { file, body } = request as { file?: unknown; body?: unknown };
+	if (typeof file !== "string" || typeof body !== "string") {
+		return false;
+	}
+	return notifier.show({ file, body }, { focused: window.isFocused() });
 });
 
 /** 自绘标题栏的三个按钮：界面只管发指令，窗口动作留在主进程。 */

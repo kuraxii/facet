@@ -17,6 +17,7 @@ import type { HostConnection } from "../hooks/useHostConnection.ts";
 import { useMentionFiles } from "../hooks/useMentionFiles.ts";
 import { useNoticeBridge } from "../hooks/useNoticeBridge.ts";
 import { useSessionLifecycle } from "../hooks/useSessionLifecycle.ts";
+import { useSystemNotifications } from "../hooks/useSystemNotifications.ts";
 import { useTerminalPanel } from "../hooks/useTerminalPanel.ts";
 import { useReadMarker, useTranscript } from "../hooks/useTranscript.ts";
 import { useWorkspaceDocs } from "../hooks/useWorkspaceDocs.ts";
@@ -62,6 +63,10 @@ export function HostWorkspace({
 		snapshot: runtime.workspace,
 		onSessionRemoved,
 	});
+
+	// 系统通知只订阅这台主机的会话：换主机时这棵子树整份卸载，订阅也跟着换；
+	// 点通知后切到那个会话，走的是侧栏同一个入口
+	useSystemNotifications({ client, onOpen: session.selectSession });
 
 	// 续订回不来（会话文件已经不在了）时退回没有会话的状态，连接本身照常可用
 	useEffect(() => {

@@ -6,7 +6,7 @@
  */
 import type { Part } from "@facet/client-core";
 import { Check, Copy } from "lucide-react";
-import { type ReactNode, type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { ICON_SIZE } from "../styles/visual-contract.ts";
 import type { DisplayRow } from "./group.ts";
@@ -129,33 +129,58 @@ export function Shell({
  * 内容查找看不见，这也是不用条件渲染的原因。
  *
  * 属性用 `setAttribute` 直接写而不是走 JSX：React 把 `hidden` 当布尔属性，传字符串只会得到
- * `hidden=""`（那是 `display: none`，正好把查找也一起关掉）。写在 `useLayoutEffect` 里是为了
- * 赶在首次绘制之前——晚一帧的话，收起的折叠体会先亮一下再消失。
+ * `hidden=""`（那是 `display: none`，正好把查找也一起关掉）。
+ *
+ * 返回**回调 ref** 而不是 `useRef` 的对象：收起体可能在"收起"状态下才挂上来——工具输出后到
+ * （`body` 从空变成有内容）、行被重挂、标识从实时换成历史——只认 `isOpen` 的 effect 那时已经
+ * 跑过了，新节点上不会有 `hidden`，看着就是"没点它自己展开了"。回调 ref 在节点落上来的那一刻
+ * 就把属性写好，赶在绘制之前。
  */
 export function useUntilFound<T extends HTMLElement>(
 	isOpen: boolean,
 	reveal: () => void,
-): RefObject<T | null> {
-	const ref = useRef<T>(null);
+): (node: T | null) => void {
+	const node = useRef<T | null>(null);
 	// 回调用 ref 兜住：调用方多半是内联箭头函数，每次渲染都换引用，不该因此重绑监听
 	const revealRef = useRef(reveal);
 	revealRef.current = reveal;
+	/** 回调用的是挂载那一刻的 `isOpen`，靠这个 ref 现取最新的 */
+	const openRef = useRef(isOpen);
+	openRef.current = isOpen;
+	const detach = useRef<(() => void) | null>(null);
+
+	const ref = useCallback((next: T | null) => {
+		detach.current?.();
+		detach.current = null;
+		node.current = next;
+		if (next === null) {
+			return;
+		}
+		if (openRef.current) {
+			next.removeAttribute("hidden");
+		} else {
+			next.setAttribute("hidden", "until-found");
+			const onBeforeMatch = (): void => {
+				revealRef.current();
+			};
+			// `beforematch` 只有 Chromium 系覆盖；别的引擎里折叠体仍是普通收起，不影响其它功能
+			next.addEventListener("beforematch", onBeforeMatch);
+			detach.current = () => next.removeEventListener("beforematch", onBeforeMatch);
+		}
+	}, []);
+
+	// 展开与收起时补一次：回调 ref 只在节点换人时被调用。
+	// `isOpen` 只作触发信号，函数体里读的是 ref 里的最新值
+	// biome-ignore lint/correctness/useExhaustiveDependencies: 同上
 	useLayoutEffect(() => {
-		const node = ref.current;
-		if (node === null) {
-			return;
+		const target = node.current;
+		if (target !== null) {
+			ref(target);
 		}
-		if (isOpen) {
-			node.removeAttribute("hidden");
-			return;
-		}
-		node.setAttribute("hidden", "until-found");
-		const onBeforeMatch = (): void => {
-			revealRef.current();
-		};
-		// `beforematch` 只有 Chromium 系覆盖；别的引擎里折叠体仍是普通收起，不影响其它功能
-		node.addEventListener("beforematch", onBeforeMatch);
-		return () => node.removeEventListener("beforematch", onBeforeMatch);
-	}, [isOpen]);
+	}, [isOpen, ref]);
+
+	// 卸载时把监听收掉（React 也会用 `null` 回调一次，这里兜一层）
+	useEffect(() => () => detach.current?.(), []);
+
 	return ref;
 }

@@ -38,8 +38,8 @@ function thinkingItem(): TranscriptItem {
 	};
 }
 
-/** 一条带工具调用的消息：输出体默认收起。 */
-function toolItem(): TranscriptItem {
+/** 一条带工具调用的消息：输出体默认收起。输出为空时这一行还没有输出体。 */
+function toolItem(output = "a.txt\nb.txt"): TranscriptItem {
 	return {
 		kind: "message",
 		id: "e:tool",
@@ -52,25 +52,22 @@ function toolItem(): TranscriptItem {
 				partId: "tool:0",
 				callId: "call-1",
 				name: "bash",
-				status: "done",
+				status: output.length === 0 ? "running" : "done",
 				input: { command: "ls" },
-				output: "a.txt\nb.txt",
+				output,
 				durationMs: undefined,
 				details: undefined,
 				images: [],
 			},
 		],
-		isStreaming: false,
+		isStreaming: output.length === 0,
 		startedAt: 3,
-		endedAt: 4,
+		endedAt: output.length === 0 ? undefined : 4,
 	};
 }
 
-/** 挂一棵对话，返回容器。 */
-function mount(items: TranscriptItem[]): HTMLElement {
-	const host = document.createElement("div");
-	document.body.append(host);
-	root = createRoot(host);
+/** 用同一个 root 再渲染一棵对话：行不卸载，等价于流式更新。 */
+function rerender(items: TranscriptItem[]): void {
 	act(() => {
 		root?.render(
 			<I18nProvider language="zh-CN">
@@ -85,6 +82,14 @@ function mount(items: TranscriptItem[]): HTMLElement {
 			</I18nProvider>,
 		);
 	});
+}
+
+/** 挂一棵对话，返回容器。 */
+function mount(items: TranscriptItem[]): HTMLElement {
+	const host = document.createElement("div");
+	document.body.append(host);
+	root = createRoot(host);
+	rerender(items);
 	return host;
 }
 
@@ -122,5 +127,18 @@ describe("折叠体的页内查找", () => {
 		// 展开之后再派一次事件也不该把它收起
 		beforeMatch(host.querySelector(".tr-think") as Element);
 		expect(host.querySelector(".tr-think")?.hasAttribute("hidden")).toBe(false);
+	});
+});
+
+describe("收起体后挂上来", () => {
+	it("工具输出后到时，新挂上的输出体也是收起的", () => {
+		// 输出为空时这一行还没有 `.tr-out`；输出到了之后节点才挂上来。
+		// 只认 `isOpen` 的 effect 那时早跑过了，属性必须在节点落上来的那一刻就写好，
+		// 否则这一块会以"展开"的样子出现——看着就像没点它自己开了。
+		const host = mount([toolItem("")]);
+		expect(host.querySelector(".tr-out")).toBeNull();
+
+		rerender([toolItem()]);
+		expect(host.querySelector(".tr-out")?.getAttribute("hidden")).toBe("until-found");
 	});
 });

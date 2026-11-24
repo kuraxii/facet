@@ -89,16 +89,20 @@ export function outlineTickMagnification(distance: number): number {
  * 都还没到（比如停在最顶部）时取第一条。
  */
 export function activeOutlineIndex(tops: readonly number[], viewportTop: number): number | null {
-	if (tops.length === 0) {
-		return null;
-	}
+	let hasPosition = false;
 	let active = 0;
 	for (let index = 0; index < tops.length; index += 1) {
-		if ((tops[index] ?? Number.POSITIVE_INFINITY) <= viewportTop) {
+		const top = tops[index] ?? Number.POSITIVE_INFINITY;
+		// 量不到位置（那一行还没进虚拟化器的账本）时不当成"在上沿以上"，否则高亮会先落第一项
+		if (!Number.isFinite(top)) {
+			continue;
+		}
+		hasPosition = true;
+		if (top <= viewportTop) {
 			active = index;
 		}
 	}
-	return active;
+	return hasPosition ? active : null;
 }
 
 /** 首次进入时要停留多久才展开预览，毫秒。 */

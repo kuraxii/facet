@@ -68,6 +68,9 @@
   提交出一份**预发布**，标签与标题都是滚动的同一个 `nightly`，每晚覆盖，旧的连 tag 一起删掉；
   上一份指向的提交没变时整套跳过。它用 `--prerelease --latest=false`，永不抢 Latest，也不碰
   `v*` 标签。想手动核对这条路径：`gh workflow run build.yml -f nightly=true`。
+- 夜间包的版本号是 `<仓库版本>-<短 sha>-nightly`：`preflight` 算一次，两个打包 job 各自用
+  `sync-version.mjs` 把仓库文件改成它再构建，所以产物名与「关于」里的版本都能对上是哪棵树。
+  这只是构建机工作区里的改动，不进仓库，也不改变发版时的 `<版本>` 口径。
 
 # 注释规范
 

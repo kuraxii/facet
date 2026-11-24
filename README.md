@@ -328,7 +328,8 @@ Release；同一 PR 反复推送只留最新一轮。门禁本身抽成可复用
 7. 版本号取自仓库里的 `package.json`，与打标签前那次发版提交一致，流水线不反填；
 8. 同一条 `build.yml` 每天 `18:00 UTC`（本地 02:00）还会被 `schedule` 触发一次：拿 `main` 的当前提交出
    一份 `nightly` **预发布**（`--prerelease --latest=false`，标签与标题滚动、每晚覆盖，旧的连 tag 一起删），
-   上一份指向的提交没变时整套跳过；手动核对这条路：`gh workflow run build.yml -f nightly=true`。
+   上一份指向的提交没变时整套跳过；夜间包的版本号是 `<仓库版本>-<短 sha>-nightly`，产物名与「关于」里的
+   版本都能对上是哪棵树。手动核对这条路：`gh workflow run build.yml -f nightly=true`。
 
 macOS 不在流水线里，也没有适配。
 

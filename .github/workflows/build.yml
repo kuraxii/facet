@@ -8,7 +8,8 @@
 # 三条触发方式：
 # - 推 `v*` 标签：发一个正式版本，产物挂到同名 GitHub Release 上；
 # - 每天定时（本地 02:00）：拿 main 的当前提交出一份 **夜间预发布**（`nightly`，每晚覆盖同一份），
-#   上一份指向的提交没变时整套跳过，不给同一棵树重复打三个平台的包；
+#   上一份指向的提交没变时整套跳过，不给同一棵树重复打三个平台的包；版本号带短 commit id
+#   （`<仓库版本>-<短 sha>-nightly`），产物名与 `app.getVersion()` 都能对上是哪一棵树；
 # - 手动 dispatch：只验证流水线；`nightly` 输入为真时按夜间构建处理，用来核对这条路径。
 #
 # 产物既作为 workflow artifact 保留（标签 90 天、夜间 7 天），也挂到上面那两个发布里。
@@ -63,7 +64,11 @@ jobs:
       nightly: ${{ steps.mode.outputs.nightly }}
       # 为真时后续 job 全部跳过
       skip: ${{ steps.mode.outputs.skip }}
+      # 构建用的版本号：夜间是 `<仓库版本>-<短 sha>-nightly`，其余留空（按仓库里的版本走）
+      version: ${{ steps.mode.outputs.version }}
     steps:
+      # 夜间那份版本号要读仓库里的版本，这里也 checkout 一次；浅克隆够用
+      - uses: actions/checkout@v4
       - name: 判断这次要不要打
         id: mode
         env:
@@ -73,9 +78,13 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event.inputs.nightly }}" = "true" ]; then
             echo "nightly=true" >> "$GITHUB_OUTPUT"
+            # 夜间包的版本号带上短 commit id：产物名（`facet-${version}-…`）与 `app.getVersion()`
+            # 都取 `apps/desktop/package.json` 的版本，两个打包 job 都按这个值改仓库文件再构建
+            echo "version=$(jq -r .version apps/desktop/package.json)-${GITHUB_SHA:0:7}-nightly" >> "$GITHUB_OUTPUT"
           else
             echo "nightly=false" >> "$GITHUB_OUTPUT"
             echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "version=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           current="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/nightly" --jq '.targetCommitish' 2>/dev/null || true)"
@@ -137,6 +146,14 @@ jobs:
             '
           # 容器里以 root 写的 node_modules 交回 runner 用户，后续步骤才写得动
           sudo chown -R "$(id -u):$(id -g)" node_modules
+
+      # 夜间包的版本号里带上短 commit id：产物名（`facet-${version}-…`）与 `app.getVersion()`
+      # 都取 `apps/desktop/package.json`，所以先按 preflight 算好的版本改仓库文件再构建。
+      # `shell: bash` 让 Windows 那个 job 与这里跑同一条命令。
+      - name: 夜间版本号带上短 commit id
+        if: needs.preflight.outputs.version != ''
+        shell: bash
+        run: node scripts/sync-version.mjs "${{ needs.preflight.outputs.version }}"
 
       # 先打 server 再让 electron-builder 动 node_modules：node-pty 是 N-API 模块，同一份
       # .node 在 Node 与 Electron 下都能加载，但顺序固定下来，将来换成 ABI 相关的原生模块
@@ -218,6 +235,12 @@ jobs:
             windows-downloads-
 
       - run: npm ci
+
+      # 与 linux job 同一步：夜间包的版本号带上短 commit id（命令相同，靠 `shell: bash` 统一）
+      - name: 夜间版本号带上短 commit id
+        if: needs.preflight.outputs.version != ''
+        shell: bash
+        run: node scripts/sync-version.mjs "${{ needs.preflight.outputs.version }}"
 
       # 顺序与 linux job 一致：先打 server 产物
       - name: 打独立的 server 产物
@@ -303,6 +326,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NIGHTLY: ${{ needs.preflight.outputs.nightly }}
+          VERSION: ${{ needs.preflight.outputs.version }}
         # 只挂六个 Linux 包与 Windows 安装包；blockmap 与 latest.yml 是自动更新用的，
         # 应用里没有更新功能，不往 Release 上放。
         #
@@ -326,6 +350,7 @@ jobs:
           {
             echo "main 上的夜间构建：每晚覆盖同一份预发布，安装包未经完整验证，稳定版看带版本号的发布。"
             echo
+            echo "- 版本：\`${VERSION}\`（产物名里的那一串，对应下面这个提交）"
             echo "- 提交：\`${GITHUB_SHA}\`"
             echo "- 构建时间：$(date -u '+%Y-%m-%d %H:%M UTC')"
             last="$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)"
@@ -341,7 +366,7 @@ jobs:
           gh release create "$tag" "${files[@]}" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
-            --title "facet nightly ($(date -u '+%Y-%m-%d'))" \
+            --title "facet nightly ${VERSION} ($(date -u '+%Y-%m-%d'))" \
             --notes-file nightly-notes.md \
             --prerelease \
             --latest=false

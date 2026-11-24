@@ -233,6 +233,11 @@ export const en = {
 		failed: "Failed",
 		done: "Done",
 	},
+	notification: {
+		settled: "Reply finished",
+		needsInput: "Waiting for your answer",
+		failed: "Turn failed",
+	},
 	extension: {
 		questions: "Questions",
 		close: "Close",
@@ -768,6 +773,11 @@ export const zhCN = {
 		attention: "有结果",
 		failed: "失败",
 		done: "已完成",
+	},
+	notification: {
+		settled: "回复结束",
+		needsInput: "需要你回答",
+		failed: "出错",
 	},
 	extension: {
 		questions: "题目",

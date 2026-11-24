@@ -108,6 +108,10 @@ flowchart BT
 - **精确核销**：`pendingSend` 存在各自的会话槽位里，按 `clientSeq` 索引，不绑定到隐式的 `this.active` 单槽；收到带 `origin.clientSeq` 的确认帧时只核销对应那一条。
 - **引用透明与按需重绘**：`reduceSession` 与 `reduceChat` 在状态没有实际变化时原样返回入参引用；`SessionStore.apply()` 只在视图引用或乐观发送状态变化时调用 `markChanged()`。
 - **按主机隔离**：每台主机一套运行时（`host-runtime.ts`：传输、会话客户端、终端客户端与连接链路，按端点存在注册表里）。界面里同时只挂当前主机的一份工作区，切走即卸载、切回按工作区快照（标签、文件内容、选中会话、落地目录）重建；后台主机的连接不停，只有显式断开才退订、关连接并丢掉它的快照。
+- **系统通知是主进程的事**：渲染层只把「哪个会话、什么状态词」发过来（`main/notify.ts`），
+  「窗口在不在前台」的判断、通知对象与点击回传都留在主进程；点通知先把窗口拉回前台，再把会话
+  文件发回界面走侧栏同一个入口切过去。状态到通知的换算在 `notification-events.ts` 里，只有
+  收尾时刻变了或从没人等变成有人等才弹。
 - **前端 Hooks 单向**：`App.tsx` 只挑当前主机的运行时并把工作区摆出来，其余状态逻辑在工作区内部按 `useHostConnection`（底层）→ `useSessionLifecycle` / `useTerminalPanel` / `useComposer` / `useWorkspaceShell`（中上层）单向依赖，禁止跨 Hook 双向同步与 `useEffect` 乒乓依赖。
 
 ## 5. 高频场景开发步骤

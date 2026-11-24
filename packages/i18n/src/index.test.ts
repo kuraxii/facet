@@ -69,4 +69,28 @@ describe("translate", () => {
 		expect(t("panel.filesCount", { count: 2 })).toBe("2 files");
 		expect(t("panel.filesCount", { count: 1 })).toBe("1 file");
 	});
+
+	it("同一键与选项只问一次 i18next，换语言后重取", async () => {
+		const instance = createI18n("en");
+		const t = translate(instance);
+		let asked = 0;
+		const original = instance.t.bind(instance);
+		// 只换一层计数器：包住实例自身的 t，其余行为不变
+		(instance as unknown as { t: (key: string, options?: Record<string, unknown>) => string }).t = (
+			key,
+			options,
+		) => {
+			asked += 1;
+			return String(original(key as never, options as never));
+		};
+		expect(t("settings.language")).toBe("Language");
+		expect(t("settings.language")).toBe("Language");
+		expect(asked).toBe(1);
+		// 插值不同就是不同的条目，不能共用结果
+		expect(t("panel.filesCount", { count: 2 })).toBe("2 files");
+		expect(t("panel.filesCount", { count: 1 })).toBe("1 file");
+		expect(asked).toBe(3);
+		await instance.changeLanguage("zh-CN");
+		expect(t("settings.language")).toBe("语言");
+	});
 });

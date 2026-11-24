@@ -25,6 +25,13 @@ import { LAYOUT_PX } from "../layout/layout-contract.ts";
 import { PaneResizer } from "./pane-resizer.tsx";
 import { WORKSPACE_LIST_MIN_WIDTH, workspaceListMaxWidth } from "./workspace-list-state.ts";
 
+/**
+ * 尺寸停稳多久之后才把这一层的宽度提交给 React，毫秒。
+ *
+ * 拖分隔条时宽度每帧都在变，而它只用来算拖动上限；每帧提交会把 `detail` 整棵子树带进重渲。
+ */
+const RESIZE_SETTLE_MS = 150;
+
 /** 单栏钻取停在哪一层。 */
 export type WorkspaceSplitView = "list" | "detail";
 
@@ -73,11 +80,22 @@ export function WorkspaceSplit({
 		if (node === null) {
 			return;
 		}
+		/*
+		 * 宽度只在尺寸停稳之后提交一次。拖分隔条时这一层每帧都在变，而它只是"拖动上限"的输入：
+		 * 每帧 setState 会把 `detail` 整棵子树带进重渲，钱花在了和上限无关的行上。
+		 */
+		let timer = 0;
 		const read = (): void => setContainerWidth(node.clientWidth);
 		read();
-		const observer = new ResizeObserver(read);
+		const observer = new ResizeObserver(() => {
+			window.clearTimeout(timer);
+			timer = window.setTimeout(read, RESIZE_SETTLE_MS);
+		});
 		observer.observe(node);
-		return () => observer.disconnect();
+		return () => {
+			window.clearTimeout(timer);
+			observer.disconnect();
+		};
 	}, []);
 
 	const classes = ["workspace-split", isListCollapsed ? "is-list-collapsed" : undefined, className]

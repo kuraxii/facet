@@ -11,6 +11,14 @@ const PIN_THRESHOLD = 24;
 /** 平滑回底的动画时长估计，动画期间不按位置判断跟随状态。 */
 const SMOOTH_MS = 500;
 
+/**
+ * 尺寸变化停下来多久之后才重新读一次几何，毫秒。
+ *
+ * 拖窗口 / 拉分隔条时尺寸每帧都在变，每帧读一次 `scrollHeight / scrollTop / clientHeight` 会把
+ * 尚未结算的布局逼成同步布局。等手停下来再读一次；中间那点渐隐状态不变也看不出来。
+ */
+const RESIZE_SETTLE_MS = 150;
+
 /** 切回会话时要恢复的滚动位置。 */
 export interface ScrollRestore {
 	/** 距内容顶部的像素 */
@@ -129,32 +137,60 @@ export function useStickToBottom(
 		if (!element) {
 			return;
 		}
-		const measureEdges = (): void => {
+		/** 排着的几何帧：同一帧里的多次滚动事件只读一次 */
+		let frame = 0;
+		/**
+		 * 一帧只读一次几何。
+		 *
+		 * `scroll` 事件与内容尺寸回填常常落在同一帧：在事件里直接读
+		 * `scrollTop / scrollHeight / clientHeight`，每次读都可能撞上尚未结算的布局，一帧里多 flush
+		 * 好几次。排进 rAF 后，同一帧的多次滚动合并成一次读。
+		 */
+		const readGeometry = (): void => {
+			frame = 0;
 			const distance = element.scrollHeight - element.scrollTop - element.clientHeight;
-			applyEdges({ top: element.scrollTop > PIN_THRESHOLD, bottom: distance > PIN_THRESHOLD });
-		};
-		const onScroll = () => {
 			// 边缘状态与跟随状态无关：平滑回底期间也要更新，否则渐隐会停在上一态
-			measureEdges();
+			applyEdges({ top: element.scrollTop > PIN_THRESHOLD, bottom: distance > PIN_THRESHOLD });
 			if (animatingRef.current) {
 				return;
 			}
-			const distance = element.scrollHeight - element.scrollTop - element.clientHeight;
 			applyPinned(distance <= PIN_THRESHOLD);
 		};
+		const scheduleRead = (): void => {
+			if (frame === 0) {
+				frame = requestAnimationFrame(readGeometry);
+			}
+		};
+		const onScroll = (): void => scheduleRead();
 		element.addEventListener("scroll", onScroll, { passive: true });
 		const content = element.firstElementChild;
+		/*
+		 * 尺寸变化（拖窗口、拉分隔条、换布局）不立即读几何：那次读会连上尚未结算的布局，而拖拽
+		 * 时尺寸每帧都在变——等于每帧多一次样式重算 + 布局。贴底时补一次写就够了，其余等尺寸
+		 * 稳定下来再读一次。
+		 */
+		let settleTimer = 0;
+		const scheduleSettledRead = (): void => {
+			window.clearTimeout(settleTimer);
+			settleTimer = window.setTimeout(readGeometry, RESIZE_SETTLE_MS);
+		};
 		const observer = new ResizeObserver(() => {
 			if (pinnedRef.current) {
 				jumpToBottom();
 			}
-			measureEdges();
+			scheduleSettledRead();
 		});
 		if (content) {
 			observer.observe(content);
 		}
-		measureEdges();
+		// 刚挂上时先量一次基线，之后都走帧批处理
+		readGeometry();
 		return () => {
+			if (frame !== 0) {
+				cancelAnimationFrame(frame);
+				frame = 0;
+			}
+			window.clearTimeout(settleTimer);
 			element.removeEventListener("scroll", onScroll);
 			observer.disconnect();
 		};

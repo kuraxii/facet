@@ -85,16 +85,65 @@ export function outlineTickMagnification(distance: number): number {
 /**
  * 视口上沿所在的轮次。
  *
- * tops 是按顺序量到的每条用户消息相对视口上沿的偏移，取最后一个已经越过上沿的；
- * 都还没到（比如停在最顶部）时取第一条。
+ * `topOf` 按序号给出「这一条相对视口上沿的偏移」，量不到时为 `undefined`；顶边随序号单调递增
+ * （用户消息在正文里按出现顺序排列）。
+ *
+ * 滚动里每帧都要算一次，长会话上百条，所以按单调性二分：**每探一次才调一次 `topOf`**，量到的
+ * 次数是 log N 而不是 N——后者每帧要为每条消息各读一次布局。
  */
-export function activeOutlineIndex(tops: readonly number[], viewportTop: number): number | null {
-	let hasPosition = false;
+export function activeOutlineIndex(
+	count: number,
+	topOf: (index: number) => number | undefined,
+	viewportTop: number,
+): number | null {
+	// 尾部量不到的先切掉（没有位置或位置不是有限值）：它们不可能是答案，也让二分区间两端都有位置
+	let end = count - 1;
+	while (end >= 0) {
+		const top = topOf(end);
+		if (top !== undefined && Number.isFinite(top)) {
+			break;
+		}
+		end -= 1;
+	}
+	if (end < 0) {
+		return null;
+	}
+	let low = 0;
+	let high = end;
+	let active = -1;
+	while (low <= high) {
+		const middle = (low + high) >> 1;
+		const top = topOf(middle);
+		if (top === undefined || !Number.isFinite(top)) {
+			// 中间夹着还没量出来的条目时单调前提不成立，二分不再可靠：退回线性扫描，宁可慢一次也不猜
+			return scanActiveOutlineIndex(end, topOf, viewportTop);
+		}
+		if (top <= viewportTop) {
+			active = middle;
+			low = middle + 1;
+		} else {
+			high = middle - 1;
+		}
+	}
+	// 一条都还没越过上沿（比如停在最顶部）：当前轮次就是第一条
+	return Math.max(0, active);
+}
+
+/**
+ * `activeOutlineIndex` 的线性兜底。
+ *
+ * 只在位置中间有缺口时用：这时顶边不再单调，二分的前提没了。结果与逐条比较一致。
+ */
+function scanActiveOutlineIndex(
+	end: number,
+	topOf: (index: number) => number | undefined,
+	viewportTop: number,
+): number {
 	let active = 0;
-	for (let index = 0; index < tops.length; index += 1) {
-		const top = tops[index] ?? Number.POSITIVE_INFINITY;
-		// 量不到位置（那一行还没进虚拟化器的账本）时不当成"在上沿以上"，否则高亮会先落第一项
-		if (!Number.isFinite(top)) {
+	let hasPosition = false;
+	for (let index = 0; index <= end; index += 1) {
+		const top = topOf(index);
+		if (top === undefined || !Number.isFinite(top)) {
 			continue;
 		}
 		hasPosition = true;
@@ -102,7 +151,7 @@ export function activeOutlineIndex(tops: readonly number[], viewportTop: number)
 			active = index;
 		}
 	}
-	return hasPosition ? active : null;
+	return hasPosition ? active : 0;
 }
 
 /** 首次进入时要停留多久才展开预览，毫秒。 */

@@ -67,23 +67,76 @@ describe("outlinePrompts", () => {
 });
 
 describe("activeOutlineIndex", () => {
+	/** 用一组固定偏移造一个 `topOf`，并记下被问到的次数 */
+	function tops(list: readonly (number | undefined)[]) {
+		const asked: number[] = [];
+		const topOf = (index: number): number | undefined => {
+			asked.push(index);
+			return list[index];
+		};
+		return { asked, count: list.length, topOf };
+	}
+
 	it("取最后一个越过视口上沿的条目", () => {
-		expect(activeOutlineIndex([-400, -120, 60, 300], 32)).toBe(1);
-		expect(activeOutlineIndex([-400, -120, 30, 300], 32)).toBe(2);
+		const a = tops([-400, -120, 60, 300]);
+		expect(activeOutlineIndex(a.count, a.topOf, 32)).toBe(1);
+		const b = tops([-400, -120, 30, 300]);
+		expect(activeOutlineIndex(b.count, b.topOf, 32)).toBe(2);
 	});
 
 	it("都还在上沿以下时取第一条", () => {
-		expect(activeOutlineIndex([80, 200], 32)).toBe(0);
+		const a = tops([80, 200]);
+		expect(activeOutlineIndex(a.count, a.topOf, 32)).toBe(0);
 	});
 
 	it("没有条目时为空", () => {
-		expect(activeOutlineIndex([], 32)).toBeNull();
+		const a = tops([]);
+		expect(activeOutlineIndex(a.count, a.topOf, 32)).toBeNull();
 	});
 
 	it("量不到位置时为空，不默认成第一条", () => {
 		// 面板刚挂上、行的位置还没量出来时全是无穷：这时候落第一项，切会话就会看见高亮从顶上闪过去
-		expect(activeOutlineIndex([Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY], 32)).toBeNull();
-		expect(activeOutlineIndex([Number.NaN, 90], 32)).toBe(0);
+		const a = tops([Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY]);
+		expect(activeOutlineIndex(a.count, a.topOf, 32)).toBeNull();
+		const b = tops([Number.NaN, 90]);
+		expect(activeOutlineIndex(b.count, b.topOf, 32)).toBe(0);
+	});
+
+	it("尾部缺失的条目不参与判定", () => {
+		const a = tops([-400, -120, undefined, undefined]);
+		expect(activeOutlineIndex(a.count, a.topOf, 32)).toBe(1);
+	});
+
+	it("中间有缺口时退回线性扫描，结果与逐条比较一致", () => {
+		const a = tops([-400, undefined, -120, 300]);
+		expect(activeOutlineIndex(a.count, a.topOf, 32)).toBe(2);
+		const b = tops([undefined, -120, 60]);
+		expect(activeOutlineIndex(b.count, b.topOf, 5)).toBe(1);
+	});
+
+	it("长会话里二分结果与线性扫描一致，且量位置的次数远少于条目数", () => {
+		// 200+ 条：不能为了算一次高亮把每条消息都读一遍布局
+		const list = Array.from({ length: 260 }, (_, index) => index * 40 - 4000);
+		const reference = (viewportTop: number): number => {
+			let active = 0;
+			let hasPosition = false;
+			for (let index = 0; index < list.length; index += 1) {
+				const top = list[index];
+				if (top === undefined || !Number.isFinite(top)) {
+					continue;
+				}
+				hasPosition = true;
+				if (top <= viewportTop) {
+					active = index;
+				}
+			}
+			return hasPosition ? active : 0;
+		};
+		for (const viewportTop of [-5000, -4001, -4000, -3999, 0, 32, 1000, 6360, 6361, 9000]) {
+			const a = tops(list);
+			expect(activeOutlineIndex(a.count, a.topOf, viewportTop)).toBe(reference(viewportTop));
+			expect(a.asked.length).toBeLessThanOrEqual(Math.ceil(Math.log2(list.length)) + 3);
+		}
 	});
 });
 

@@ -1,0 +1,261 @@
+/**
+ * 滚动动效的数学模型。
+ *
+ * 面板里有两种「程序化滚动」：点导航竖轨跳到某一行、点「回到底部」。它们都可能一次移动上千
+ * 像素，而落点附近的行要等挂载、渲染、测量之后才有真高度，所以不能交给浏览器的
+ * `behavior: "smooth"`——它中途改不了目标，也看不出哪些行还没量过，表现就是「一边加载一边抖」。
+ *
+ * 距离分三档处理：
+ * - 位移 ≤ `MOTION_EPSILON`：直接落位，没有动画；
+ * - 短距离（不到 1.5 个视口）：一次 `easeOutCubic`，260ms 到位；
+ * - 长距离：拆三段。**起步** 70ms 朝目标方向挪 `DEPART_DISTANCE`，给一点物理感又不至于把
+ *   下一屏的行全挂上；**瞬移**：起步结束的那一帧直接跳到落点来向侧 `APPROACH_DISTANCE` 处，
+ *   这一段没有视觉过程，挂载与测量就发生在这里；**落地缓入** 270ms，每帧重读目标坐标，
+ *   把瞬移后头一两帧测量出来的估算残差（几十像素量级）吸收在减速段里。
+ *
+ * 这里只有几何与时间，不碰 DOM、不碰 React：给定起点、目标、视口高度与可滚上限，返回某一
+ * 时刻该写什么 `scrollTop`。真正的 rAF 循环在 `scroll-driver.ts`。
+ */
+
+/** 短/长距离的分界，单位是视口高度。 */
+export const SHORT_JUMP_VIEWPORTS = 1.5;
+
+/** 位移小于它就算原地：动画看不出来，直接落位。 */
+export const MOTION_EPSILON = 1;
+
+/**
+ * 短距离的到位时间。
+ *
+ * 稍慢一点：跳过去之后视口里那几行会陆续量出真实高度，落点跟着微调，太快就显成一次抖动。
+ */
+export const SHORT_ARRIVE_MS = 260;
+
+/** 长距离起步阶段的时长。 */
+export const DEPART_MS = 70;
+
+/** 起步阶段朝目标方向移动的距离。 */
+export const DEPART_DISTANCE = 56;
+
+/** 瞬移落在目标来向侧多远的地方：留出缓入的减速距离。 */
+export const APPROACH_DISTANCE = 260;
+
+/**
+ * 长距离落地缓入的时长。
+ *
+ * 减速段拉长一些，把瞬移后头几帧测出来的估算残差分摊到更多帧里，看起来是平滑靠站而不是
+ * 一次位移。
+ */
+export const ARRIVE_MS = 270;
+
+/**
+ * 每帧朝最新目标靠拢的比例。
+ *
+ * 目标坐标是每帧重读的，而 `ResizeObserver` 回填高度往往是"这一帧多出 60px"这种台阶：直接
+ * 拿它当目标，曲线会在那一帧陡一下（速度折角）。按比例追过去，台阶被摊成几帧的斜坡。
+ */
+export const TARGET_TRACK_FACTOR = 0.35;
+
+/** 缓入走到这个进度时，追踪值直接对齐最新目标：落点必须是精确的，不能差一个尾巴。 */
+export const TARGET_SNAP_PROGRESS = 0.85;
+
+/**
+ * 单帧最多推进多少动画时间。
+ *
+ * 掉一帧（33ms 以上）不该把动画整体快进：按两帧算，剩下的时间在后面的帧里补回来。
+ */
+export const MAX_FRAME_MS = 32;
+
+/**
+ * 一帧耗时超过它就算"卡了一下"。
+ *
+ * 跳到没去过的地方时，目标那一窗的行要一次性挂载、渲染、测量，那一帧常常几十上百毫秒。
+ * 卡完的下一帧如果照墙钟时间采样，曲线会一次跨过去一大段，看起来就是"猛地一跳"；这里把这一
+ * 帧的等待**不计入**动画时间，位置先摁住，等画面跟上来再接着走，落点仍然是原来的时间线。
+ */
+export const HITCH_MS = 80;
+
+/**
+ * 推进动画时钟：卡顿的那一帧原地不动，正常帧按实际耗时（上限 `MAX_FRAME_MS`）累加。
+ *
+ * 动画进度只看这个累加值，不直接看墙钟，所以一次长卡顿只会让整段动画变长一点，不会让它跳帧。
+ */
+export function advanceMotionClock(animatedMs: number, frameMs: number): number {
+	const elapsed = Number.isFinite(animatedMs) && animatedMs > 0 ? animatedMs : 0;
+	if (!Number.isFinite(frameMs) || frameMs <= 0 || frameMs > HITCH_MS) {
+		return elapsed;
+	}
+	return elapsed + Math.min(frameMs, MAX_FRAME_MS);
+}
+
+/** 缓出：起步快、落点稳，位移的大部分在头三成时间里走完。 */
+export function easeOutCubic(progress: number): number {
+	const p = clamp01(progress);
+	return 1 - (1 - p) ** 3;
+}
+
+/** 缓入：起步慢，挪头几十像素时不至于像被弹了一下。 */
+export function easeInQuad(progress: number): number {
+	const p = clamp01(progress);
+	return p * p;
+}
+
+/** 把进度夹到 `[0, 1]`。 */
+function clamp01(value: number): number {
+	if (!Number.isFinite(value) || value <= 0) {
+		return 0;
+	}
+	return Math.min(value, 1);
+}
+
+/** 把滚动位置夹进容器的可滚范围。 */
+export function clampScroll(value: number, maxScroll: number): number {
+	if (!Number.isFinite(value) || value <= 0) {
+		return 0;
+	}
+	return value >= maxScroll ? Math.max(0, maxScroll) : value;
+}
+
+/** 一次程序化滚动怎么走。 */
+export type ScrollMotionPlan =
+	/** 立即落位（`reducedMotion`、或者几乎没位移） */
+	| { readonly mode: "instant"; readonly target: number }
+	/** 一次缓出到位 */
+	| {
+			readonly mode: "short";
+			readonly from: number;
+			readonly to: number;
+			readonly maxScroll: number;
+	  }
+	/** 起步 → 瞬移 → 缓入 */
+	| {
+			readonly mode: "teleport";
+			readonly from: number;
+			readonly to: number;
+			readonly maxScroll: number;
+			/** 起步阶段的终点（已夹进可滚范围） */
+			readonly departTo: number;
+			/** 瞬移落在哪里（已夹进可滚范围） */
+			readonly approachPoint: number;
+			/** 行进方向：`1` 往下滚，`-1` 往上滚 */
+			readonly direction: 1 | -1;
+	  };
+
+/** 某一时刻的采样结果。 */
+export interface ScrollMotionSample {
+	/** 当前处在哪一段；`done` 表示已经到达，不再需要下一帧 */
+	readonly phase: "depart" | "arrive" | "done";
+	/** 这一帧该写到 `scrollTop` 的值 */
+	readonly scrollTop: number;
+	/** 是否已经越过瞬移点（落点是瞬移后的缓入段） */
+	readonly didTeleport: boolean;
+	/** 阻尼追踪之后的目标坐标，下一帧原样传回来 */
+	readonly trackedTarget: number;
+}
+
+/** 规划一次滚动。`to` 与结果都会被夹进 `[0, maxScroll]`。 */
+export function planScrollMotion(input: {
+	readonly from: number;
+	readonly to: number;
+	readonly clientHeight: number;
+	readonly maxScroll: number;
+	readonly reducedMotion?: boolean | undefined;
+}): ScrollMotionPlan {
+	const maxScroll = Math.max(0, input.maxScroll);
+	const from = clampScroll(input.from, maxScroll);
+	const to = clampScroll(input.to, maxScroll);
+	const distance = Math.abs(to - from);
+	if (input.reducedMotion === true || distance <= MOTION_EPSILON) {
+		return { mode: "instant", target: to };
+	}
+	if (distance <= Math.max(0, input.clientHeight) * SHORT_JUMP_VIEWPORTS) {
+		return { mode: "short", from, to, maxScroll };
+	}
+	const direction: 1 | -1 = to > from ? 1 : -1;
+	return {
+		mode: "teleport",
+		from,
+		to,
+		maxScroll,
+		departTo: clampScroll(from + direction * DEPART_DISTANCE, maxScroll),
+		approachPoint: clampScroll(to - direction * APPROACH_DISTANCE, maxScroll),
+		direction,
+	};
+}
+
+/**
+ * 按经过的毫秒数采样这一帧的位置。
+ *
+ * `liveTarget` 由调用方每帧重新读；`trackedTarget` 是上一帧的返回值（首次不传），阻尼追踪就靠
+ * 它把台阶式的高度回填摊平——曲线本身仍然只是输入的函数。
+ */
+export function sampleScrollMotion(
+	plan: ScrollMotionPlan,
+	elapsedMs: number,
+	liveTarget: number,
+	maxScroll: number,
+	trackedTarget?: number,
+): ScrollMotionSample {
+	if (plan.mode === "instant") {
+		const target = clampScroll(plan.target, Math.max(0, maxScroll));
+		return { phase: "done", scrollTop: target, didTeleport: false, trackedTarget: target };
+	}
+	const bound = Math.max(0, maxScroll);
+	const target = clampScroll(liveTarget, bound);
+	if (plan.mode === "short") {
+		const progress = clamp01(elapsedMs / SHORT_ARRIVE_MS);
+		const tracked = trackTarget(trackedTarget, target, progress);
+		if (progress >= 1) {
+			return { phase: "done", scrollTop: tracked, didTeleport: false, trackedTarget: tracked };
+		}
+		const scrollTop = plan.from + (tracked - plan.from) * easeOutCubic(progress);
+		return {
+			phase: "arrive",
+			scrollTop: clampScroll(scrollTop, bound),
+			didTeleport: false,
+			trackedTarget: tracked,
+		};
+	}
+	// 长距离：起步段走完之前不瞬移
+	if (elapsedMs < DEPART_MS) {
+		const progress = clamp01(elapsedMs / DEPART_MS);
+		const scrollTop = plan.from + (plan.departTo - plan.from) * easeInQuad(progress);
+		return {
+			phase: "depart",
+			scrollTop: clampScroll(scrollTop, bound),
+			didTeleport: false,
+			trackedTarget: target,
+		};
+	}
+	const progress = clamp01((elapsedMs - DEPART_MS) / ARRIVE_MS);
+	const tracked = trackTarget(trackedTarget, target, progress);
+	/*
+	 * 目标已经跑到瞬移点的"身后"：估算误差大过缓入距离，再从瞬移点滑过去就是先反向弹回。
+	 * 这种情况直接收敛到目标，有界、不越界、也不来回摆。
+	 */
+	if ((tracked - plan.approachPoint) * plan.direction <= 0) {
+		return { phase: "done", scrollTop: tracked, didTeleport: true, trackedTarget: tracked };
+	}
+	if (progress >= 1) {
+		return { phase: "done", scrollTop: tracked, didTeleport: true, trackedTarget: tracked };
+	}
+	const scrollTop = plan.approachPoint + (tracked - plan.approachPoint) * easeOutCubic(progress);
+	return {
+		phase: "arrive",
+		scrollTop: clampScroll(scrollTop, bound),
+		didTeleport: true,
+		trackedTarget: tracked,
+	};
+}
+
+/**
+ * 阻尼追踪目标坐标。
+ *
+ * 首次（还没有上一帧）直接跟到最新值；缓入快结束时（`p >= TARGET_SNAP_PROGRESS`）也对齐过去，
+ * 免得落点停在"还差一点点"上。中间每帧只走 `TARGET_TRACK_FACTOR` 的比例。
+ */
+function trackTarget(previous: number | undefined, target: number, progress: number): number {
+	if (previous === undefined || progress >= TARGET_SNAP_PROGRESS) {
+		return target;
+	}
+	return previous + (target - previous) * TARGET_TRACK_FACTOR;
+}

@@ -5,10 +5,28 @@
  * 距离放大，悬浮时在旁边给出那一条的开头。点一下跳到那一条。
  */
 import type { TranscriptItem } from "@facet/client-core";
+import { VISUAL_SCALE } from "../styles/visual-contract.ts";
+
+/**
+ * 跳到某一行时在它上面留出的空隙（px）：整条顶部渐隐的高度。
+ *
+ * 视口上沿压着一层渐暗（`.chat-fade.is-top`，高 `--control-lg`），落点贴着上沿的话，跳过去
+ * 的第一行正好被那层暗色压住；留这么多空间，行顶边就落在渐隐的下边缘。虚拟化器的
+ * `scrollPaddingStart` 也用这个数，一步落位与曲线落位因此是同一份口径。
+ */
+export const JUMP_LEAD = VISUAL_SCALE.control.lg;
+
+/**
+ * 判「当前读到哪一轮」时，视口上沿再往下算多少像素。
+ *
+ * 与跳转留白取同一个数：点第 N 项停稳之后，第 N 项正好顶在 `JUMP_LEAD` 处，阈值只要比它小，
+ * 就会把当前轮次判成第 N-1 项（竖轨高亮错一格）。
+ */
+export const ACTIVE_OFFSET = JUMP_LEAD;
 
 /** 导航条上的一项，对应一条用户消息。 */
 export interface OutlinePrompt {
-	/** 定位用的键，与正文行上的 data-outline-key 一致 */
+	/** 定位用的键：用户消息的条目 id（没有条目 id 的实时消息用视图标识），面板按它给出位置 */
 	key: string;
 	/** 悬浮预览里显示的文字 */
 	preview: string;

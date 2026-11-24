@@ -180,10 +180,9 @@
 	/* 交给原生惯性；吸底由脚本按 scrollTop 管，不让浏览器自己锚定 */
 	scroll-behavior: auto;
 	overflow-anchor: none;
-	padding: var(--space-12) 0 var(--space-6);
+	padding: var(--space-12) 0 var(--transcript-bottom-clearance);
 	/*
-	 * 底部留白与渐隐层等高再多一档：滚到最后一条消息时，它与渐隐区之间留出呼吸区，
-	 * 回到底部（`scrollToBottom`）也不会把最后一行压在渐隐里。
+	 * 同一档距离也给 `scrollIntoView`：竖轨跳转与页内查找把行带进视口时，别把它贴在过渡带里。
 	 */
 	scroll-padding-bottom: var(--control-lg);
 }
@@ -241,26 +240,15 @@
 
 .row {
 	/*
-	 * 屏外跳过绘制：一行滚出视口之后，浏览器不再为它做布局与绘制，长对话滚动因此只看得到
-	 * 视口里那几行。`contain-intrinsic-size: auto 64px` 里的 `auto` 是关键——滚过去一次就
-	 * 记住那一行的真实高度，回来时按记忆的高度占位，滚动条长度不跳。
-	 *
-	 * 代价写在明处：拖选跨过视口边界时，浏览器要现渲染那些子树才能算选区。为此用户消息行
-	 * （对话导航按它的位置跳转）、正在流式写入的行与末尾两行都不参与裁剪——前者的高度一变，
-	 * 竖轨与滚动总高都跟着抖；后者是"刚出来的内容"，延迟渲染会让贴底跟随看见高度反复切换。
+	 * 一行一盒：`contain` 把每行的布局与样式影响圈在自己的子树里，量高度时不会被别处的
+	 * 继承与浮动带偏。屏外裁剪交给虚拟化——挂载哪些行由脚本按视口算，滚出去的行直接不渲染，
+	 * 所以这里 MUST NOT 再写 `content-visibility`：那会让刚进视口的行先按占位高度参与布局，
+	 * 与虚拟化算出来的坐标打架。
 	 */
 	contain: layout style;
-	content-visibility: auto;
-	contain-intrinsic-size: auto 64px;
 	display: flex;
 	flex-direction: column;
 	gap: var(--space-4);
-}
-
-.row[data-outline-key],
-.row.is-streaming,
-.row:nth-last-child(-n + 2) {
-	content-visibility: visible;
 }
 
 .row.is-user {

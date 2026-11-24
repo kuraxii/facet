@@ -4,6 +4,9 @@
  * 库自带的代码卡把正文渲染在 shadow root 里,字号、折行、配色都无法用样式覆盖,
  * 也不便按行上色,所以这里换成自绘卡片:shiki 分词、按行输出,长行折行不横向滚动。
  * 标题栏常态隐身,悬浮或聚焦时才出现复制按钮。
+ *
+ * 分词排在空闲时间跑（`highlight-queue.ts`），第一帧先出纯文本：跳到远处时这一窗的代码块
+ * 会一起挂载，同步分词正好压在最卡的那一帧上。
  */
 
 import { Check, Copy } from "lucide-react";
@@ -15,6 +18,7 @@ import { codeThemeName } from "../theme.ts";
 import { shouldShowCodeBlock } from "./code-block-state.ts";
 import { resolveCodeLang } from "./code-lang.ts";
 import { useCodeTheme } from "./code-theme.tsx";
+import { scheduleHighlight } from "./highlight-queue.ts";
 import { getHighlighterFor, type HighlightLine, highlightLines } from "./highlighter.ts";
 
 /** 自定义组件从库里拿到的参数,只取用得到的部分。 */
@@ -123,22 +127,29 @@ function CodeCard({ code, language }: { code: string; language: string }) {
 
 	useEffect(() => {
 		let cancelled = false;
-		void getHighlighterFor(codeTheme.theme, codeTheme.isDark).then(
-			(instance) => {
-				if (cancelled) {
-					return;
-				}
-				const source = trimTrailingNewline(code);
-				setLines(highlightLines(instance, source, language, theme) ?? plainLines(code));
-			},
-			() => {
-				if (!cancelled) {
-					setLines(plainLines(code));
-				}
-			},
-		);
+		/*
+		 * 分词排到空闲时，一次只跑一块：代码块跟着正文一起挂载时正是"跳过去那一帧"，
+		 * 几十块同时分词会把这一帧按住几十毫秒。排期期间显示纯文本，颜色随后补上。
+		 */
+		const cancel = scheduleHighlight(() => {
+			void getHighlighterFor(codeTheme.theme, codeTheme.isDark).then(
+				(instance) => {
+					if (cancelled) {
+						return;
+					}
+					const source = trimTrailingNewline(code);
+					setLines(highlightLines(instance, source, language, theme) ?? plainLines(code));
+				},
+				() => {
+					if (!cancelled) {
+						setLines(plainLines(code));
+					}
+				},
+			);
+		});
 		return () => {
 			cancelled = true;
+			cancel();
 		};
 	}, [code, language, theme, codeTheme.theme, codeTheme.isDark]);
 

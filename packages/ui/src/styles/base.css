@@ -144,6 +144,12 @@
 	 * 排队条，正落在输入区上方那片留白里。
 	 */
 	--to-bottom-lift: 32px;
+	/*
+	 * 滚到底部时正文要让出的距离：输入区上方那条过渡带盖住视口最后 40px，若只留一档内边距，
+	 * 最后一行连同它的复制 / 回退 / 分叉就坐在带子里，滚到头看着仍是被压住的。
+	 * 值 = 过渡带高度（`--control-lg`）+ 呼吸一档（`--space-6`）。
+	 */
+	--transcript-bottom-clearance: calc(var(--control-lg) + var(--space-6));
 	/* 工具结果里的图片：收起时的最大高度，与多张之间的间距 */
 	--tool-image-height: 320px;
 	--tool-image-gap: 8px;

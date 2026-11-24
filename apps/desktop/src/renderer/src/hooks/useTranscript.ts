@@ -6,9 +6,9 @@
  */
 import type { SessionClient } from "@facet/client-core";
 import { createTranscriptCache, toTranscript } from "@facet/client-core";
-import type { ScrollEdges, ScrollRestore } from "@facet/ui";
+import type { ScrollEdges, TranscriptAnchor, TranscriptViewport } from "@facet/ui";
 import { useStickToBottom } from "@facet/ui";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 
 export interface TranscriptOptions {
 	/** 会话客户端 */
@@ -19,6 +19,14 @@ export interface TranscriptOptions {
 	activeFile: string | undefined;
 	/** 当前会话标识，换会话时重置补历史的闸门 */
 	openedSessionId: string | undefined;
+}
+
+/** 切回会话时要回到哪儿：贴在底部，或者回到某一行。 */
+interface ScrollSnapshot {
+	/** 上次离开时是不是贴着底部 */
+	readonly atBottom: boolean;
+	/** 视口顶部那一行与行内偏移；贴在底部时为 `null` */
+	readonly anchor: TranscriptAnchor | null;
 }
 
 export interface Transcript {
@@ -33,33 +41,51 @@ export interface Transcript {
 	edges: ScrollEdges;
 	/** 滚到底部 */
 	scrollToBottom: (behavior?: ScrollBehavior) => void;
+	/** 面板的定位接口：对话导航与位置记忆都读它 */
+	viewport: { current: TranscriptViewport | null };
 	/** 忘掉某个会话的滚动位置 */
 	forgetScroll: (file: string) => void;
 }
 
 export function useTranscript(options: TranscriptOptions): Transcript {
 	const { client, chat, activeFile, openedSessionId } = options;
-	/** 每个会话文件上次的滚动位置，切回标签时恢复 */
-	const scrollPositions = useRef(new Map<string, ScrollRestore>());
+	/** 每个会话文件上次停在哪，切回标签时恢复；按（行标识, 行内偏移）记，不按像素 */
+	const snapshots = useRef(new Map<string, ScrollSnapshot>());
+	/** 面板的定位接口，由面板在挂载后写进来 */
+	const viewport = useRef<TranscriptViewport | null>(null);
 
 	// 投影缓存按条目对象记忆：流式期间每帧只有末尾那条消息换新，其余条目直接沿用
 	const transcriptCache = useRef(createTranscriptCache());
 	const items = useMemo(() => (chat ? toTranscript(chat, transcriptCache.current) : []), [chat]);
 
-	const restoreScroll = useCallback(
-		(key: unknown): ScrollRestore | undefined =>
-			typeof key === "string" ? scrollPositions.current.get(key) : undefined,
-		[],
-	);
 	const {
 		scrollRef,
 		element: scrollElement,
 		isPinned,
 		edges,
 		scrollToBottom,
-	} = useStickToBottom(items, activeFile, {
-		restore: restoreScroll,
+		release,
+	} = useStickToBottom(items, {
+		// 贴底写入交给面板：虚拟化器要知道这次滚动是自己做的，否则后续补偿会按旧位置算
+		scrollToEnd: useCallback((behavior: ScrollBehavior) => {
+			const api = viewport.current;
+			if (api === null) return false;
+			api.scrollToEnd(behavior);
+			return true;
+		}, []),
 	});
+
+	// 切会话：原来贴底就继续贴底，否则按记下的那一行摆回去
+	useLayoutEffect(() => {
+		const saved = activeFile === undefined ? undefined : snapshots.current.get(activeFile);
+		if (saved === undefined || saved.atBottom || saved.anchor === null) {
+			scrollToBottom("auto");
+			return;
+		}
+		release();
+		// 标识迁移（离开期间一轮可能结束并提升为历史消息）由面板按当前映射现算，这里存原样
+		viewport.current?.restore(saved.anchor);
+	}, [activeFile, release, scrollToBottom]);
 
 	// 记住每个会话的滚动位置，切回标签时恢复
 	useEffect(() => {
@@ -67,9 +93,10 @@ export function useTranscript(options: TranscriptOptions): Transcript {
 		if (element === null || activeFile === undefined) return;
 		const save = (): void => {
 			const distance = element.scrollHeight - element.scrollTop - element.clientHeight;
-			scrollPositions.current.set(activeFile, {
-				top: element.scrollTop,
+			const anchor = viewport.current?.capture() ?? null;
+			snapshots.current.set(activeFile, {
 				atBottom: distance <= 24,
+				anchor: distance <= 24 ? null : anchor,
 			});
 		};
 		save();
@@ -77,7 +104,8 @@ export function useTranscript(options: TranscriptOptions): Transcript {
 		return () => element.removeEventListener("scroll", save);
 	}, [activeFile, scrollElement]);
 
-	// 滚动到顶部时自动补更早的历史；已经在贴底时不触发，避免刚打开就连环加载
+	// 滚动到顶部时自动补更早的历史；已经在贴底时不触发，避免刚打开就连环加载。
+	// 补进来的历史由虚拟化器按行锚回原位，这里不用再算像素差。
 	const loadingOlder = useRef(false);
 	useEffect(() => {
 		if (openedSessionId !== undefined) loadingOlder.current = false;
@@ -88,17 +116,9 @@ export function useTranscript(options: TranscriptOptions): Transcript {
 		const loadOlder = (): void => {
 			if (element.scrollTop > 96 || loadingOlder.current || !client.hasMore) return;
 			loadingOlder.current = true;
-			const distanceFromBottom = element.scrollHeight - element.scrollTop;
 			void client.loadOlder().then(
-				({ loaded }) => {
-					if (loaded === 0) {
-						loadingOlder.current = false;
-						return;
-					}
-					requestAnimationFrame(() => {
-						element.scrollTop = element.scrollHeight - distanceFromBottom;
-						loadingOlder.current = false;
-					});
+				() => {
+					loadingOlder.current = false;
 				},
 				() => {
 					loadingOlder.current = false;
@@ -112,10 +132,10 @@ export function useTranscript(options: TranscriptOptions): Transcript {
 	}, [client, isPinned, scrollElement]);
 
 	const forgetScroll = useCallback((file: string) => {
-		scrollPositions.current.delete(file);
+		snapshots.current.delete(file);
 	}, []);
 
-	return { items, scrollRef, scrollElement, isPinned, edges, scrollToBottom, forgetScroll };
+	return { items, scrollRef, scrollElement, isPinned, edges, scrollToBottom, viewport, forgetScroll };
 }
 
 export interface ReadMarkerOptions {

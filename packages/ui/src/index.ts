@@ -86,7 +86,7 @@ export {
 	stepUiScale,
 	UI_SCALE_STEPS,
 } from "./chat/ui-scale.ts";
-export type { ScrollEdges, ScrollRestore, StickToBottom } from "./chat/use-stick-to-bottom.ts";
+export type { ScrollEdges, StickToBottom } from "./chat/use-stick-to-bottom.ts";
 export { useStickToBottom } from "./chat/use-stick-to-bottom.ts";
 export type { BadgeProps, BadgeShape, BadgeVariant } from "./common/Badge.tsx";
 export { Badge } from "./common/Badge.tsx";
@@ -237,3 +237,5 @@ export { ArrowDownIcon } from "./transcript/icons.tsx";
 export type { ChatTranscriptProps } from "./transcript/rows.tsx";
 export { ChatTranscript } from "./transcript/rows.tsx";
 export { foldOutput, toolStatusText, toolTarget } from "./transcript/tool-text.ts";
+export type { TranscriptViewport } from "./transcript/use-virtual-transcript.ts";
+export type { TranscriptAnchor } from "./transcript/virtual-anchor.ts";

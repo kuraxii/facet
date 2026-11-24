@@ -47,6 +47,13 @@ describe("代码块", () => {
 		expect(codeLineCount(render("```ts\nconst a = 1;\nconst b = 2;\n```"))).toBe(2);
 	});
 
+	it("首帧只出纯文本，分词排到空闲时再做", () => {
+		// 高亮是异步补上的：跳转时这一窗的代码块一起挂载，同步分词正好压在最卡的那一帧
+		const html = render("```ts\nconst a = 1;\n```");
+		expect(codeLineCount(html)).toBe(1);
+		expect(html).not.toContain('style="color:');
+	});
+
 	it("复制按钮用图标，带无障碍名", () => {
 		const html = render("```ts\nconst a = 1;\n```");
 		expect(html).toContain('aria-label="复制代码"');

@@ -16,13 +16,13 @@
  *   既不是原位置、也不是最近内容的地方。
  */
 import type { useVirtualizer } from "@tanstack/react-virtual";
-import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { JUMP_LEAD } from "../chat/chat-outline.ts";
 import { TRANSCRIPT_DATA_ATTRS } from "../layout/layout-contract.ts";
 import type { DisplayRow } from "./group.ts";
 import { calibrateRow } from "./scroll-calibrate.ts";
 import { useScrollDriver, useScrollInterrupt } from "./scroll-driver.ts";
-import { resolveAnchorRowId, type TranscriptAnchor } from "./virtual-anchor.ts";
+import { resolveAnchorRowId, shouldStopSizeAdjustment, type TranscriptAnchor } from "./virtual-anchor.ts";
 
 /** 虚拟化器的实例类型，只用到定位那几个方法。 */
 type VirtualList = ReturnType<typeof useVirtualizer<HTMLElement, HTMLElement>>;
@@ -59,6 +59,8 @@ export interface TranscriptViewportOptions {
 	readonly onRestoreLost?: (() => void) | undefined;
 	/** 曲线开始与结束时各通知一次，面板据此收窄/放开 overscan */
 	readonly onMotionRunningChange?: ((running: boolean) => void) | undefined;
+	/** 此刻是否贴着底：贴底时底部由跟随逻辑守，虚拟化器不许自己挪位置 */
+	readonly pinned: boolean;
 	/** 接口交出去的位置，由面板转给对话导航与位置记忆 */
 	readonly viewportRef: { current: TranscriptViewport | null };
 }
@@ -78,6 +80,7 @@ export function useTranscriptViewport(options: TranscriptViewportOptions): void 
 		virtualizer,
 		onRestoreLost,
 		viewportRef,
+		pinned,
 	} = options;
 
 	const latest = useRef({
@@ -91,6 +94,34 @@ export function useTranscriptViewport(options: TranscriptViewportOptions): void 
 	});
 	latest.current = { rows, virtualizer, scrollElement, outlineIndex, rowIndexById, renames, onRestoreLost };
 
+	/** 曲线是不是在跑：与「正贴着底」一起决定虚拟化器要不要自己挪位置 */
+	const motionRunning = useRef(false);
+	/** 每帧更新，供 `applySizeAdjustment` 现取 */
+	const pinnedNow = useRef(pinned);
+	pinnedNow.current = pinned;
+
+	/**
+	 * 把「要不要让虚拟化器自己挪位置」写回去。
+	 *
+	 * 只在需要拦的时候挂一个恒假的回调，其余时候还给它默认实现——默认那套「保持同一批行可见」
+	 * 在非贴底状态下正是我们要的（向上补历史时不动画面）。
+	 */
+	const applySizeAdjustment = useCallback(() => {
+		latest.current.virtualizer.shouldAdjustScrollPositionOnItemSizeChange = shouldStopSizeAdjustment({
+			moving: motionRunning.current,
+			pinned: pinnedNow.current,
+		})
+			? () => false
+			: undefined;
+	}, []);
+
+	// 贴底状态翻面时同步一次：从贴底翻走要立刻把默认补偿还回去。
+	// `applySizeAdjustment` 从 ref 里现取贴底状态，所以依赖里只写它
+	// biome-ignore lint/correctness/useExhaustiveDependencies: 同上，pinned 经 ref 读到
+	useEffect(() => {
+		applySizeAdjustment();
+	}, [applySizeAdjustment, pinned]);
+
 	/** 统一曲线的滚动器：跳转与「回到底部」共用，新的调用会打断旧的 */
 	const prefersReducedMotion = useCallback(
 		() => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false,
@@ -101,9 +132,8 @@ export function useTranscriptViewport(options: TranscriptViewportOptions): void 
 		prefersReducedMotion,
 		// 曲线期间让虚拟化器停掉尺寸补偿：它也在写 scrollTop，两边抢同一帧就会抖
 		onRunningChange: (running) => {
-			latest.current.virtualizer.shouldAdjustScrollPositionOnItemSizeChange = running
-				? () => false
-				: undefined;
+			motionRunning.current = running;
+			applySizeAdjustment();
 		},
 	});
 

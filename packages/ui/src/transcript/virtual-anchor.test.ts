@@ -6,6 +6,7 @@ import {
 	extractPinnedRange,
 	MAX_SELECTION_PIN_SPAN,
 	resolveAnchorRowId,
+	shouldStopSizeAdjustment,
 	VIRTUAL_ROW_GAP,
 	VIRTUAL_SCROLL_MARGIN,
 	type VirtualSpan,
@@ -296,3 +297,14 @@ describe("resolveAnchorRowId", () => {
 });
 
 type RangeExtractInput = Parameters<typeof extractPinnedRange>[0];
+
+describe("shouldStopSizeAdjustment", () => {
+	it("曲线在跑或者正贴着底时，虚拟化器都不许自己挪位置", () => {
+		expect(shouldStopSizeAdjustment({ moving: true, pinned: false })).toBe(true);
+		expect(shouldStopSizeAdjustment({ moving: false, pinned: true })).toBe(true);
+	});
+
+	it("两者都不是时把默认补偿还给它：向上补历史时画面要稳住", () => {
+		expect(shouldStopSizeAdjustment({ moving: false, pinned: false })).toBe(false);
+	});
+});

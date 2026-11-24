@@ -75,7 +75,10 @@ export function useTranscript(options: TranscriptOptions): Transcript {
 		}, []),
 	});
 
-	// 切会话：原来贴底就继续贴底，否则按记下的那一行摆回去
+	// 切会话：原来贴底就继续贴底，否则按记下的那一行摆回去。
+	// `openedSessionId` 也在依赖里：面板按会话标识重挂，重挂那一下是一个新的虚拟化器，
+	// 得在这次提交之后再摆一次位，否则只有"点会话"那一下的定位，重挂之后无人接手。
+	// biome-ignore lint/correctness/useExhaustiveDependencies: 重挂本身就是要重摆一次的信号，函数体里不读它
 	useLayoutEffect(() => {
 		const saved = activeFile === undefined ? undefined : snapshots.current.get(activeFile);
 		if (saved === undefined || saved.atBottom || saved.anchor === null) {
@@ -85,7 +88,7 @@ export function useTranscript(options: TranscriptOptions): Transcript {
 		release();
 		// 标识迁移（离开期间一轮可能结束并提升为历史消息）由面板按当前映射现算，这里存原样
 		viewport.current?.restore(saved.anchor);
-	}, [activeFile, release, scrollToBottom]);
+	}, [activeFile, openedSessionId, release, scrollToBottom]);
 
 	// 记住每个会话的滚动位置，切回标签时恢复
 	useEffect(() => {

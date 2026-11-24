@@ -63,11 +63,14 @@ export interface VirtualTranscriptOptions {
 	readonly viewportRef: { current: TranscriptViewport | null };
 	/** 位置恢复失败（那一行已经不在窗口里）时的落点，通常是回到底部 */
 	readonly onRestoreLost?: (() => void) | undefined;
+	/** 此刻是否贴着底：贴底时底部由跟随逻辑守，虚拟化器不许自己挪位置 */
+	readonly pinned: boolean;
 }
 
 /** 建一次虚拟化器与定位接口。`rows` 换一帧就跟着重算可见窗口。 */
 export function useVirtualTranscript(options: VirtualTranscriptOptions): VirtualTranscript {
-	const { rows, isCollapsed, scrollElement, selection, renames, viewportRef, onRestoreLost } = options;
+	const { rows, isCollapsed, scrollElement, selection, renames, viewportRef, onRestoreLost, pinned } =
+		options;
 
 	/** 行标识到下标：拖选钉行与按标识定位都查它 */
 	const rowIndexById = useMemo(() => {
@@ -125,6 +128,12 @@ export function useVirtualTranscript(options: VirtualTranscriptOptions): Virtual
 		gap: VIRTUAL_ROW_GAP,
 		// 列表从 `.scroll` 的上内边距之后开始排，虚拟坐标与 DOM 偏移差这一档
 		scrollMargin: VIRTUAL_SCROLL_MARGIN,
+		/*
+		 * 起点取容器此刻的 `scrollTop`。虚拟化器只在滚动事件里读位置（`observeElementOffset`
+		 * 不回调初值），而面板会随会话重挂、容器却停在原处：不给起点的话它以为自己在 0，
+		 * 于是画顶部那一窗，而容器没动、也不会再派滚动事件，进会话就停在最上面。
+		 */
+		initialOffset: () => scrollElement?.scrollTop ?? 0,
 		// 跳转落点上方留出的空隙，与定位接口量位置时用同一个数
 		scrollPaddingStart: JUMP_LEAD,
 		overscan: isMoving ? VIRTUAL_JUMP_OVERSCAN : VIRTUAL_OVERSCAN,
@@ -151,6 +160,7 @@ export function useVirtualTranscript(options: VirtualTranscriptOptions): Virtual
 		renames: renames ?? NO_RENAMES,
 		onMotionRunningChange: setIsMoving,
 		virtualizer,
+		pinned,
 		onRestoreLost,
 		viewportRef,
 	});

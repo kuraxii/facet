@@ -246,22 +246,47 @@ export function useStickToBottom(contentKey: unknown, options: StickToBottomOpti
 		element.addEventListener("wheel", onWheel, { passive: true });
 		element.addEventListener("touchmove", onTouchMove, { passive: true });
 		element.addEventListener("keydown", onKeyDown);
-		const content = element.firstElementChild;
 		const observer = new ResizeObserver(() => {
 			if (pinnedRef.current) {
 				followToBottom();
 			}
 			measureEdges();
 		});
-		if (content) {
-			observer.observe(content);
-		}
+		/** 正在观察的内容节点；换会话时面板整份重挂，这里要跟着换 */
+		let content: Element | null = null;
+		const watchContent = (): void => {
+			const next = element.firstElementChild;
+			if (next === content) {
+				return;
+			}
+			if (content !== null) {
+				observer.unobserve(content);
+			}
+			content = next;
+			if (next !== null) {
+				observer.observe(next);
+				// 新面板刚挂上时高度还没量出来：先按贴底跟一次，别等下一次尺寸变化
+				if (pinnedRef.current) {
+					followToBottom();
+				}
+			}
+			measureEdges();
+		};
+		watchContent();
+		/*
+		 * 内容节点只在换会话时被换掉（面板按会话重挂），流式追加只改它内部的子节点。
+		 * 不盯着这一层的话，观察器会一直看着那个已经被移除的旧节点：换过一次会话之后，
+		 * 尺寸变化再也收不到回调，进会话就停在顶部那一窗。
+		 */
+		const watcher = new MutationObserver(watchContent);
+		watcher.observe(element, { childList: true });
 		measureEdges();
 		return () => {
 			element.removeEventListener("scroll", onScroll);
 			element.removeEventListener("wheel", onWheel);
 			element.removeEventListener("touchmove", onTouchMove);
 			element.removeEventListener("keydown", onKeyDown);
+			watcher.disconnect();
 			observer.disconnect();
 		};
 	}, [element, applyEdges, applyPinned, followToBottom, release]);

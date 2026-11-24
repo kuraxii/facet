@@ -143,6 +143,17 @@ const api = {
 	/** 用系统的保存窗口把一段文本写到文件,取消时返回 false */
 	saveText: (suggestedName: string, text: string): Promise<boolean> =>
 		ipcRenderer.invoke("facet:save-text", suggestedName, text),
+	/** 弹一条系统通知；窗口在前台时主进程直接丢掉，返回 false */
+	notify: (request: { file: string; body: string }): Promise<boolean> =>
+		ipcRenderer.invoke("facet:notify", request) as Promise<boolean>,
+	/** 订阅「点了某条系统通知」：参数是会话文件，界面据此切过去 */
+	onNotifyClick: (listener: (file: string) => void): (() => void) => {
+		const handler = (_event: unknown, file: string): void => listener(file);
+		ipcRenderer.on("facet:notify-click", handler);
+		return () => {
+			ipcRenderer.off("facet:notify-click", handler);
+		};
+	},
 };
 
 contextBridge.exposeInMainWorld("facet", api);

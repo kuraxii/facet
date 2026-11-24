@@ -13,7 +13,14 @@
 
 import type { TranscriptItem } from "@facet/client-core";
 import type { CSSProperties, RefObject } from "react";
-import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useState } from "react";
+import {
+	type PointerEvent as ReactPointerEvent,
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useState,
+} from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import type { TranscriptViewport } from "../transcript/use-virtual-transcript.ts";
 import {
@@ -56,8 +63,12 @@ export function ChatOutline({ items, container, viewport }: ChatOutlineProps) {
 		setActiveIndex(activeOutlineIndex(tops, ACTIVE_OFFSET));
 	}, [prompts, viewport]);
 
-	// 滚动与尺寸变化时重算当前轮次。逐帧测量比按滚动事件直接算重一点，用 rAF 收一收。
-	useEffect(() => {
+	/*
+	 * 滚动与尺寸变化时重算当前轮次。逐帧测量比按滚动事件直接算重一点，用 rAF 收一收。
+	 * 首次测量走 `useLayoutEffect`：换会话时面板整份重挂，若等绘制完再量，第一帧会先画成
+	 * "没有高亮"或上一轮的旧位置，看着就是从上面闪一下再落到下面。
+	 */
+	useLayoutEffect(() => {
 		if (container === null) {
 			return;
 		}

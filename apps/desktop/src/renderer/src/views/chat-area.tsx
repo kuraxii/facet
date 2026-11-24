@@ -119,6 +119,8 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 	return (
 		<>
 			<ChatOutline
+				// 换会话重挂：高亮状态属于某一个会话，留着上一轮的索引会先闪一下旧位置
+				key={openedSessionId ?? "session"}
 				items={transcript.items}
 				container={transcript.scrollElement}
 				viewport={transcript.viewport}
@@ -137,6 +139,8 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 						scrollElement={transcript.scrollElement}
 						viewportRef={transcript.viewport}
 						onRestoreLost={transcript.scrollToBottom}
+						// 贴底时由跟随逻辑守底部，虚拟化器不要自己挪位置（否则会被当成用户上翻而脱钩）
+						pinned={transcript.isPinned}
 						canFork={canFork}
 						onFork={(beforeEntryId) =>
 							session.withTrust(sessionCwd, () => {

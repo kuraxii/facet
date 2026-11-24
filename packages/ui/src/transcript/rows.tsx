@@ -64,6 +64,8 @@ export interface ChatTranscriptProps {
 	viewportRef?: { current: TranscriptViewport | null } | undefined;
 	/** 位置恢复失败（那一行已经不在窗口里）时的落点，通常是回到底部 */
 	onRestoreLost?: (() => void) | undefined;
+	/** 此刻是否贴着底：贴底时底部由跟随逻辑守，虚拟化器不许自己挪位置 */
+	pinned?: boolean | undefined;
 }
 
 /**
@@ -85,6 +87,7 @@ export function ChatTranscript({
 	scrollElement = null,
 	viewportRef,
 	onRestoreLost,
+	pinned = false,
 }: ChatTranscriptProps) {
 	const { t } = useI18n();
 	// 分组每帧都会重算，内容没变的行沿用上一帧的对象，行组件据此跳过重渲染
@@ -191,6 +194,7 @@ export function ChatTranscript({
 		renames,
 		viewportRef: viewportRef ?? ownViewport,
 		onRestoreLost,
+		pinned,
 	});
 
 	if (rows.length === 0 && maintenance === undefined) {

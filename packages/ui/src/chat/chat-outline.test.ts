@@ -88,6 +88,12 @@ describe("activeOutlineIndex", () => {
 	it("没有条目时为空", () => {
 		expect(activeOutlineIndex([], 32)).toBeNull();
 	});
+
+	it("量不到位置时为空，不默认成第一条", () => {
+		// 面板刚挂上、行还没进账本时全是无穷：这时候落第一项，切会话就会看见高亮从顶上闪过去
+		expect(activeOutlineIndex([Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY], 32)).toBeNull();
+		expect(activeOutlineIndex([Number.NaN, 90], 32)).toBe(0);
+	});
 });
 
 describe("outlineTickMagnification", () => {

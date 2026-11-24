@@ -65,6 +65,22 @@ const ESTIMATED_HEIGHT = {
 } as const;
 
 /** 估一行有多高，只需要种类与是否收起。 */
+/**
+ * 虚拟化器此刻该不该自己挪滚动位置（`shouldAdjustScrollPositionOnItemSizeChange`）。
+ *
+ * 两种情况都要它闭嘴，位置由别人决定：
+ * - 曲线在跑：每帧按真实矩形重算落点，它再插一手就是两边抢同一帧；
+ * - 正贴着底：底部由跟随逻辑（写入 + 1 秒收尾窗口）守着。行一测出来就跟后面几行的估高对不上，
+ *   它按"保持同一批行可见"挪 scrollTop，看着就是自己往上跳——而这批挪动本来会被当成"用户往上翻"，
+ *   一次脱钩之后再也不跟，进会话就停在半路（`notification` 那次之外的老问题）。
+ */
+export function shouldStopSizeAdjustment(state: {
+	readonly moving: boolean;
+	readonly pinned: boolean;
+}): boolean {
+	return state.moving || state.pinned;
+}
+
 export function estimateRowHeight(row: Pick<DisplayRow, "kind">, isCollapsed: boolean): number {
 	switch (row.kind) {
 		case "user":

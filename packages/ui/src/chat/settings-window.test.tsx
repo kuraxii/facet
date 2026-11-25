@@ -26,6 +26,7 @@ const markup = renderToStaticMarkup(
 				loadModels: async () => [],
 				loadProviders: async () => [],
 				testModel: async () => ({ ok: true, latencyMs: 0 }),
+				loadTerminalProfiles: async () => [],
 				loadAgentDefaults: async () => ({}),
 				saveAgentDefaults: async () => ({}),
 				diagnostics: async () => "",

@@ -38,6 +38,7 @@ import type {
 	SessionSnapshot,
 	SessionSummary,
 	SlashCommand,
+	TerminalProfileInfo,
 	ThinkingLevel,
 	UiResponse,
 	UpstreamModel,
@@ -806,6 +807,12 @@ export class SessionClient {
 	async saveSettings(settings: FacetSettings): Promise<FacetSettings> {
 		const result = await this.transport.request("updateSettings", { settings });
 		return result.settings;
+	}
+
+	/** 读主机上可用的终端，顺序即「更可能是用户想要的」。 */
+	async listTerminalProfiles(): Promise<TerminalProfileInfo[]> {
+		const result = await this.transport.request("listTerminalProfiles", {});
+		return result.profiles;
 	}
 
 	/** 在主机的文件管理器里打开项目目录。 */

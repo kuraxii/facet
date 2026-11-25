@@ -118,7 +118,12 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 	const outlineAttr = outlineActive ? "true" : "false";
 	return (
 		<>
-			<ChatOutline items={transcript.items} container={transcript.scrollElement} />
+			<ChatOutline
+				items={transcript.items}
+				container={transcript.scrollElement}
+				canLoadOlder={transcript.hasMore}
+				onLoadOlder={transcript.loadOlderNow}
+			/>
 			<div
 				className="chat-viewport"
 				data-can-scroll-top={transcript.edges.top ? "true" : "false"}
@@ -143,6 +148,7 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 							onRetryTurn={composer.retryTurn}
 							onCopyDetails={copyText}
 							onCopyText={copyText}
+							scrollElement={transcript.scrollElement}
 							renames={chat?.renames}
 							emptyHint={t("app.emptyHint")}
 						/>

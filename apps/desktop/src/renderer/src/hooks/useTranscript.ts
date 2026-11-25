@@ -8,7 +8,7 @@ import type { SessionClient } from "@facet/client-core";
 import { createTranscriptCache, toTranscript } from "@facet/client-core";
 import type { ScrollEdges, ScrollRestore } from "@facet/ui";
 import { useStickToBottom } from "@facet/ui";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export interface TranscriptOptions {
 	/** 会话客户端 */
@@ -35,6 +35,10 @@ export interface Transcript {
 	scrollToBottom: (behavior?: ScrollBehavior) => void;
 	/** 忘掉某个会话的滚动位置 */
 	forgetScroll: (file: string) => void;
+	/** 还有没有更早的历史可补 */
+	hasMore: boolean;
+	/** 补一页更早的历史（只由竖轨顶端的「…」调用，滚动位置不触发） */
+	loadOlderNow: () => void;
 }
 
 export function useTranscript(options: TranscriptOptions): Transcript {
@@ -77,45 +81,55 @@ export function useTranscript(options: TranscriptOptions): Transcript {
 		return () => element.removeEventListener("scroll", save);
 	}, [activeFile, scrollElement]);
 
-	// 滚动到顶部时自动补更早的历史；已经在贴底时不触发，避免刚打开就连环加载
+	// 补页只由竖轨顶端的「…」触发，滚动位置不参与：滚到顶部本身不加载任何东西
 	const loadingOlder = useRef(false);
+	/** `client.hasMore` 是运行期游标上的取值，补完页不会引起投影变化，所以本地留一份用于重画 */
+	const [hasMore, setHasMore] = useState(() => client.hasMore);
+	/*
+	 * 游标要到首屏那一页回来之后才有值，补完最后一页又归零。这两种变化都不投影到 chat view，
+	 * 不在这里每次渲染对一下的话，刚打开的会话里「补一页」会一直灰着（值停在挂载那一刻的 false）。
+	 */
 	useEffect(() => {
-		if (openedSessionId !== undefined) loadingOlder.current = false;
+		if (hasMore !== client.hasMore) {
+			setHasMore(client.hasMore);
+		}
+	});
+	// 换会话时清掉翻页闸门
+	useEffect(() => {
+		if (openedSessionId === undefined) return;
+		loadingOlder.current = false;
 	}, [openedSessionId]);
-	useEffect(() => {
-		const element = scrollElement;
-		if (element === null || isPinned) return;
-		const loadOlder = (): void => {
-			if (element.scrollTop > 96 || loadingOlder.current || !client.hasMore) return;
-			loadingOlder.current = true;
-			const distanceFromBottom = element.scrollHeight - element.scrollTop;
-			void client.loadOlder().then(
-				({ loaded }) => {
-					if (loaded === 0) {
-						loadingOlder.current = false;
-						return;
-					}
-					requestAnimationFrame(() => {
-						element.scrollTop = element.scrollHeight - distanceFromBottom;
-						loadingOlder.current = false;
-					});
-				},
-				() => {
-					loadingOlder.current = false;
-				},
-			);
-		};
-		element.addEventListener("scroll", loadOlder, { passive: true });
-		// 用户上一帧已经停在顶部时不会再触发 scroll，挂上监听后补一次判断
-		loadOlder();
-		return () => element.removeEventListener("scroll", loadOlder);
-	}, [client, isPinned, scrollElement]);
+
+	/** 补一页，并把"还有没有"的结论同步到本地 */
+	const loadOlderNow = useCallback((): void => {
+		if (loadingOlder.current || !client.hasMore) return;
+		loadingOlder.current = true;
+		void client.loadOlder().then(
+			(result) => {
+				loadingOlder.current = false;
+				setHasMore(result.hasMore);
+			},
+			() => {
+				loadingOlder.current = false;
+			},
+		);
+	}, [client]);
 
 	const forgetScroll = useCallback((file: string) => {
 		scrollPositions.current.delete(file);
 	}, []);
 
-	return { items, scrollRef, scrollElement, isPinned, edges, scrollToBottom, forgetScroll };
+	return {
+		items,
+		scrollRef,
+		scrollElement,
+		isPinned,
+		edges,
+		scrollToBottom,
+		forgetScroll,
+		hasMore,
+		loadOlderNow,
+	};
 }
 
 export interface ReadMarkerOptions {

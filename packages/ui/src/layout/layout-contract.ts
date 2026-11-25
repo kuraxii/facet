@@ -68,23 +68,6 @@ export const LAYOUT_PX = {
 		/** 再宽也要给编辑器留下的宽度 */
 		editorKeepWidth: 120,
 	},
-	/** 工作区「预览 + 索引」两栏里索引栏的宽度：左边永远给预览留住 `detailKeepWidth`。 */
-	workspaceList: {
-		/** 拖到最窄 */
-		minWidth: 200,
-		/** 没拖过时的宽度 */
-		defaultWidth: 320,
-		/** 拖到最宽 */
-		maxWidth: 480,
-		/** 再宽也要给预览留下的宽度 */
-		detailKeepWidth: 280,
-	},
-	/**
-	 * 变更视图「单栏钻取 / 宽阈双子栏」的容器折点。
-	 *
-	 * 与档位断点无关：它量的是右栏正文那一层的宽度，`panel.css` 用它写 `@container`。
-	 */
-	workspaceSplitWideWidth: 680,
 	/** 右栏顶栏的标签：两个容器折点。 */
 	workspaceTabBar: {
 		/** 容器窄于它时标签只剩图标（容器查询里写成字面量） */

@@ -7,17 +7,14 @@
  */
 import {
 	openPanelTab as addPanelTab,
-	clampWorkspaceListWidth,
 	normalizePanelState,
 	type RightPanelState,
 	type RightPanelTab,
 	readPanelState,
-	readWorkspaceListWidth,
 	closePanelTab as removePanelTab,
 	writePanelState,
-	writeWorkspaceListWidth,
 } from "@facet/ui";
-import { useCallback, useLayoutEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
 /** 一次右栏改动：补丁，或者按当前状态算出下一份状态。 */
 export type PanelPatch = Partial<RightPanelState> | ((state: RightPanelState) => RightPanelState);
@@ -28,8 +25,6 @@ export interface WorkspacePanels {
 	panel: RightPanelState;
 	/** `⤢` 宽展开：临时视图位，不落盘 */
 	isPanelExpanded: boolean;
-	/** 变更页两栏里索引的偏好宽 */
-	workspaceListWidth: number;
 	/** 改状态并写回本地存储 */
 	update: (patch: PanelPatch) => void;
 	/** 打开一个工具并切过去（不看档位） */
@@ -42,27 +37,11 @@ export interface WorkspacePanels {
 	toggleExpanded: () => void;
 	/** 退出宽展开（进窄档、右栏收起时用） */
 	collapseExpanded: () => void;
-	/** 改索引栏宽度并落盘：拖动松手时提交一次 */
-	updateWorkspaceListWidth: (next: number) => void;
 }
 
 export function useWorkspacePanels(): WorkspacePanels {
 	const [panel, setPanel] = useState<RightPanelState>(() => readPanelState(localStorage));
 	const [isPanelExpanded, setIsPanelExpanded] = useState(false);
-	const [workspaceListWidth, setWorkspaceListWidth] = useState(() =>
-		readWorkspaceListWidth(window.localStorage),
-	);
-
-	/*
-	 * 索引栏的偏好宽写在根节点上。
-	 *
-	 * 拖动期间分隔条把同一个变量写在 `.app` 上——更近的祖先赢，拖动即时、不经过渲染；松手
-	 * 提交之后这里把根节点对齐到同一个值，两者不会打架。
-	 */
-	useLayoutEffect(() => {
-		document.documentElement.style.setProperty("--workspace-list-width", `${workspaceListWidth}px`);
-	}, [workspaceListWidth]);
-
 	const update = useCallback((patch: PanelPatch) => {
 		setPanel((current) => {
 			const next = normalizePanelState(
@@ -108,22 +87,14 @@ export function useWorkspacePanels(): WorkspacePanels {
 		setIsPanelExpanded(false);
 	}, []);
 
-	const updateWorkspaceListWidth = useCallback((next: number) => {
-		const width = clampWorkspaceListWidth(next);
-		setWorkspaceListWidth(width);
-		writeWorkspaceListWidth(window.localStorage, width);
-	}, []);
-
 	return {
 		panel,
 		isPanelExpanded,
-		workspaceListWidth,
 		update,
 		openTab,
 		closeTab,
 		setOpen,
 		toggleExpanded,
 		collapseExpanded,
-		updateWorkspaceListWidth,
 	};
 }

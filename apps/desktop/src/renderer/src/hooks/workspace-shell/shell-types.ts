@@ -142,8 +142,6 @@ export interface WorkspaceShell {
 	settingsSection: SettingsSection;
 	/** 右栏的状态：展开、开着哪些标签、宽度 */
 	panel: RightPanelState;
-	/** 变更页两栏里索引的偏好宽（落盘 `facet.workspace.listWidth`） */
-	workspaceListWidth: number;
 	/** 本机界面缩放百分比 */
 	uiScale: number;
 	/** 缩放变化后短暂显示的百分比浮层 */
@@ -178,7 +176,6 @@ export interface WorkspaceShell {
 	/** 关掉一个工具标签；最后一个关掉后右栏停在启动清单上，不跟着收起 */
 	closePanelTab: (tab: RightPanelTab) => void;
 	/** 改索引栏宽度并写回本地：拖动松手时提交一次 */
-	updateWorkspaceListWidth: (next: number) => void;
 	/** `⤢` 与 `⤡`：进出宽展开 */
 	togglePanelExpanded: () => void;
 	/** 应用本机界面缩放 */

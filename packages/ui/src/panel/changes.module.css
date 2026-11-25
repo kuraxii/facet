@@ -116,13 +116,6 @@
 	transform: rotate(90deg);
 }
 
-.fileIcon {
-	flex: none;
-	width: var(--changes-icon-size);
-	height: var(--changes-icon-size);
-	color: var(--fg-subtle);
-}
-
 .name {
 	flex: 1;
 	min-width: 0;

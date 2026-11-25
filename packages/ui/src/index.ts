@@ -143,8 +143,6 @@ export { Markdown } from "./markdown/Markdown.tsx";
 export { markdownImages } from "./markdown/markdown-images.ts";
 export type { ChangesDocumentProps } from "./panel/changes-document.tsx";
 export { ChangesDocument } from "./panel/changes-document.tsx";
-export type { ChangesPaneProps } from "./panel/changes-pane.tsx";
-export { ChangesPane } from "./panel/changes-pane.tsx";
 export type { FileTreeStorage } from "./panel/file-tree-state.ts";
 export {
 	clampFileTreeWidth,
@@ -184,20 +182,6 @@ export { formatShortcut } from "./panel/shortcuts.ts";
 export { PanelToggle, SidebarToggle } from "./panel/top-bar.tsx";
 export type { WorkspaceLauncherProps } from "./panel/workspace-launcher.tsx";
 export { WorkspaceLauncher } from "./panel/workspace-launcher.tsx";
-export type { WorkspaceListStorage } from "./panel/workspace-list-state.ts";
-export {
-	clampWorkspaceListWidth,
-	readWorkspaceListWidth,
-	WORKSPACE_DETAIL_KEEP_WIDTH,
-	WORKSPACE_LIST_DEFAULT_WIDTH,
-	WORKSPACE_LIST_MAX_WIDTH,
-	WORKSPACE_LIST_MIN_WIDTH,
-	WORKSPACE_LIST_WIDTH_BOUNDS,
-	workspaceListMaxWidth,
-	writeWorkspaceListWidth,
-} from "./panel/workspace-list-state.ts";
-export type { WorkspaceSplitProps, WorkspaceSplitView } from "./panel/workspace-split.tsx";
-export { WORKSPACE_SPLIT_WIDE_WIDTH_PX, WorkspaceSplit } from "./panel/workspace-split.tsx";
 export type {
 	WorkspaceTabBarProps,
 	WorkspaceTabId,

@@ -36,10 +36,6 @@ export interface WorkspaceBodyProps {
 	sessionCwd: string | undefined;
 	/** 终端标签要显示的那个终端；主机上没有终端时为空 */
 	terminalId: string | undefined;
-	/** 变更与图谱两栏里索引的偏好宽 */
-	listWidth: number;
-	/** 松手时提交索引栏宽度 */
-	onListWidthChange: (width: number) => void;
 }
 
 /** 一个标签的外壳：显隐只靠类名，内容一直留在 DOM 里。 */
@@ -50,7 +46,6 @@ function TabView({ isActive, children }: { isActive: boolean; children: ReactNod
 /** 工作区正文。 */
 export function WorkspaceBody(props: WorkspaceBodyProps): ReactNode {
 	const { openTabs, activeTab, items, onOpenTab, docs, terminal, sessionCwd, terminalId } = props;
-	const { listWidth, onListWidthChange } = props;
 	if (activeTab === null) {
 		return <WorkspaceLauncher items={items} onPick={onOpenTab} />;
 	}
@@ -63,12 +58,7 @@ export function WorkspaceBody(props: WorkspaceBodyProps): ReactNode {
 			) : null}
 			{openTabs.includes("changes") ? (
 				<TabView isActive={activeTab === "changes"}>
-					<ChangesTab
-						docs={docs}
-						sessionCwd={sessionCwd}
-						listWidth={listWidth}
-						onListWidthChange={onListWidthChange}
-					/>
+					<ChangesTab docs={docs} sessionCwd={sessionCwd} />
 				</TabView>
 			) : null}
 			{openTabs.includes("git-graph") ? (

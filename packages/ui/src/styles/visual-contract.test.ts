@@ -307,8 +307,6 @@ const RUNTIME_SET_VARS: readonly string[] = [
 	// 滚动容器：`ScrollArea` 关掉沟槽时写 `auto`，行自己给横向留白（`scroll-area.tsx`）
 	"--scroll-gutter",
 	"--scroll-inset",
-	// 工作区索引栏的偏好宽：`useWorkspacePanels` 写在根节点上
-	"--workspace-list-width",
 ];
 
 describe("变量都有定义", () => {

@@ -31,8 +31,7 @@
  * 折行（`ChangesDocument` 的 `toolbarLeading` + `title`）。没有中间的文件列表，也没有单独的
  * 概览块——作者、时间、改动规模在列表里悬停那条提交就能看到（`CommitTip`）。
  *
- * 退回图谱那枚箭头（`.workspace-back`）在变更页是「单栏钻取才有」的，图谱这边是唯一的退路，
- * 所以这里强制任何宽度都显示。
+ * 退回图谱那枚箭头（`.workspace-back`）是详情唯一的退路，任何宽度都显示。
  */
 .git-graph-view .workspace-back {
 	display: grid;

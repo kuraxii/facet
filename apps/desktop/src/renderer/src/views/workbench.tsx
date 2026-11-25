@@ -477,8 +477,6 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 								terminal={terminal}
 								sessionCwd={sessionCwd}
 								terminalId={terminalId}
-								listWidth={shell.workspaceListWidth}
-								onListWidthChange={shell.updateWorkspaceListWidth}
 							/>
 						</RightPanel>
 					) : null}

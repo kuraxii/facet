@@ -62,8 +62,6 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 		closePanelTab: layout.closePanelTab,
 		togglePanelExpanded: layout.togglePanelExpanded,
 		panel: panels.panel,
-		workspaceListWidth: panels.workspaceListWidth,
-		updateWorkspaceListWidth: panels.updateWorkspaceListWidth,
 		isSearchOpen: chrome.isSearchOpen,
 		view: chrome.view,
 		settingsSection: chrome.settingsSection,

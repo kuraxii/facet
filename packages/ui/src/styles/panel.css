@@ -461,93 +461,8 @@
 }
 
 /*
- * 预览 + 索引：变更视图用这一套（文件视图是上面的「编辑器 + 文件树」并排）。
- *
- * 两栏态（右栏宽到 `>= 680px`）：左边预览、右边索引。DOM 顺序就是视觉顺序，所以这里只排
- * 方向，不反转。索引那一栏的分隔线画在它的左缘：外层左侧本来就有一条分隔条
- * （`.panel-resizer`），窗口右缘是纯边界，两条线各在一侧，不会叠成双线。
- *
- * `position: relative` 是给两栏之间那条拖拽条当定位祖先用的（与 `.file-tree` 同一个路子）。
- *
- * 单栏态（更窄）：一次只显示一层，另一层整层不占位（规则在同一节末尾的 `@container` 里）。
+ * 文件视图的「编辑器 + 文件树」并排时，树收起之后那块空位里的开关居中。
  */
-.workspace-split {
-	position: relative;
-	display: flex;
-	flex: 1;
-	min-height: 0;
-}
-
-.workspace-split-detail {
-	display: flex;
-	flex: 1;
-	flex-direction: column;
-	min-width: 0;
-	min-height: 0;
-}
-
-/*
- * 索引栏的宽度。
- *
- * 三层：界面按本地存储写的偏好宽（`--workspace-list-width`，`workspace-list-state.ts`），拖动
- * 期间分隔条把它临时写在 `.app` 上（更近的祖先赢，不经过渲染），最后这条 `clamp()` 兜底——
- * 容器窄时索引自己收住，预览始终留得下 `--workspace-detail-keep-width`。四个数都是 `:root`
- * 变量，真值在 `layout-contract.ts`，由 `layout-contract.test.ts` 对齐。
- */
-.workspace-split-list {
-	display: flex;
-	flex: 0 0
-		clamp(
-			var(--workspace-list-min),
-			var(--workspace-list-width, var(--workspace-list-default)),
-			min(var(--workspace-list-max), calc(100% - var(--workspace-detail-keep-width)))
-		);
-	flex-direction: column;
-	min-width: 0;
-	min-height: 0;
-	/* 滚动交给 `scroll-y`（类在组件里）：细滚动条 + 始终预留沟槽 */
-	border-inline-start: 1px solid var(--border-subtle);
-}
-
-/* 收起：索引整栏不占位，预览向右长满（左缘不动，它就是工作区边界） */
-.workspace-split.is-list-collapsed .workspace-split-list {
-	display: none;
-}
-
-/*
- * 两栏之间的拖拽条。
- *
- * 与文件树那条同一个路子：透明命中区，跨半个命中宽压在索引栏左缘上——索引栏自己那条
- * `border-inline-start` 就是分界线，高亮时只染它的颜色，不额外叠线、不改宽度，内容不跳。
- */
-.workspace-list-resizer {
-	position: absolute;
-	inset-block: 0;
-	inset-inline-end: calc(
-		var(--workspace-list-width, var(--workspace-list-default)) -
-		var(--divider-hit-width) /
-		2
-	);
-	z-index: var(--z-content-local);
-	width: var(--divider-hit-width);
-	margin: 0;
-	border: 0;
-	cursor: col-resize;
-	background: transparent;
-}
-
-/* 悬停或拖动时染颜色，目标包在 `:where()` 里：不与档位规则比权重 */
-.app:has(.workspace-list-resizer:hover) :where(.workspace-split-list),
-.app:has(.workspace-list-resizer:active) :where(.workspace-split-list) {
-	border-inline-start-color: var(--divider-highlight);
-}
-
-/* 收起时没有边界可拖；单栏态那条规则在同一节末尾的 `@container` 里 */
-.workspace-split.is-list-collapsed .workspace-list-resizer {
-	display: none;
-}
-
-/* 预览区还没有内容时的卡片：只放一个动作，不写说明文字 */
 .workspace-split-empty {
 	display: grid;
 	flex: 1;
@@ -555,63 +470,8 @@
 	place-items: center;
 }
 
-/*
- * 单栏钻取的两个入口。
- *
- * 「返回列表」只在单栏态出现：那时索引整层不在屏幕上，预览顶栏左端这枚左箭头是唯一的退路。
- * 「收起索引」「展开索引」反过来只在两栏态有，单栏态藏起来——那里没有「收起」这回事。
- */
-/* 退回图谱的箭头：只在面板视图里出现，其余宽度由原语给 */
 .workspace-back {
 	display: none;
-}
-
-.workspace-back:hover {
-	background: var(--bg-hover);
-	color: var(--fg-default);
-}
-
-/*
- * 容器窄于 680px：两栏放不下（预览只剩一条窄缝、索引也只有一百来像素），改成单栏钻取。
- *
- * 680 这个数同时写在 `workspace-split.tsx` 的 `WORKSPACE_SPLIT_WIDE_WIDTH_PX` 里：容器查询
- * 里不能写变量，两处由 `layout-contract.test.ts` 比对（真值在 `layout-contract.ts`）。
- */
-@container (width < 680px) {
-	.workspace-split-detail,
-	.workspace-split-list {
-		display: flex;
-		flex: 1;
-		height: 100%;
-		border-inline-start: 0;
-	}
-
-	.workspace-split[data-view="detail"] .workspace-split-list {
-		display: none;
-	}
-
-	.workspace-split[data-view="list"] .workspace-split-detail {
-		display: none;
-	}
-
-	/* 单栏态没有「收起索引」这回事：钻取的那一层已经占满整宽 */
-	.workspace-split.is-list-collapsed .workspace-split-list {
-		display: flex;
-	}
-
-	/* 单栏态两栏不并存，也就没有边界可拖 */
-	.workspace-list-resizer {
-		display: none;
-	}
-
-	.workspace-collapse-list,
-	.workspace-restore-list {
-		display: none;
-	}
-
-	.workspace-back {
-		display: grid;
-	}
 }
 
 /*

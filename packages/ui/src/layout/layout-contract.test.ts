@@ -39,18 +39,10 @@ describe("样式表与布局契约一致", () => {
 		expect(panel).toContain(`@container (width < ${LAYOUT_PX.workspaceTabBar.tight}px)`);
 	});
 
-	it("变更视图的单栏 / 两栏折点", () => {
-		expect(panel).toContain(`@container (width < ${LAYOUT_PX.workspaceSplitWideWidth}px)`);
-	});
-
 	it("样式表里没有契约之外的容器折点", () => {
 		// 新增一个折点必须先进契约再改样式，否则这里会红
 		expect(new Set(containerBreakpoints(panel))).toEqual(
-			new Set([
-				LAYOUT_PX.workspaceTabBar.labelBreakpoint,
-				LAYOUT_PX.workspaceTabBar.tight,
-				LAYOUT_PX.workspaceSplitWideWidth,
-			]),
+			new Set([LAYOUT_PX.workspaceTabBar.labelBreakpoint, LAYOUT_PX.workspaceTabBar.tight]),
 		);
 	});
 
@@ -75,18 +67,10 @@ describe("样式表与布局契约一致", () => {
 		expect(rootPx(base, "--editor-keep-width")).toBe(LAYOUT_PX.fileTree.editorKeepWidth);
 	});
 
-	it("索引栏的边界与缺省宽是同一组数", () => {
-		expect(rootPx(base, "--workspace-list-min")).toBe(LAYOUT_PX.workspaceList.minWidth);
-		expect(rootPx(base, "--workspace-list-default")).toBe(LAYOUT_PX.workspaceList.defaultWidth);
-		expect(rootPx(base, "--workspace-list-max")).toBe(LAYOUT_PX.workspaceList.maxWidth);
-		expect(rootPx(base, "--workspace-detail-keep-width")).toBe(LAYOUT_PX.workspaceList.detailKeepWidth);
-	});
-
 	it("两侧栏的上下限与缺省宽是同一组数", () => {
 		expect(rootPx(base, "--sidebar-width")).toBe(LAYOUT_PX.sidebar.defaultWidth);
 		// 左右栏的下限不写在样式里，只在脚本里用；这里只把「样式里有对应变量」的那几条对齐
 		expect(panel).toContain("var(--file-tree-min)");
-		expect(panel).toContain("var(--workspace-list-min)");
 	});
 
 	it("拖拽折叠的属性名在样式里只出现契约里的这两个", () => {

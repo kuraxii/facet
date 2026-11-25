@@ -6,7 +6,7 @@
  */
 import { readFile, rename, stat } from "node:fs/promises";
 import { isAbsolute } from "node:path";
-import { normalizeProjectPath, projectIdOf, writeFileAtomic } from "@facet/agent";
+import { normalizeProjectPath, projectIdOf, projectPathKey, writeFileAtomic } from "@facet/agent";
 
 /** 清单文件格式版本，读取时按它判断能否兼容。 */
 const FILE_VERSION = 1;
@@ -139,7 +139,9 @@ export class ProjectStore {
 			throw new ProjectDirectoryError(cwd);
 		}
 		return await this.transact((draft) => {
-			if ([...draft.values()].some((project) => project.cwd === cwd)) {
+			// 比的是「同一处」而不是同一个字符串：Windows 上大小写写法不同也是同一个目录
+			const key = projectPathKey(cwd);
+			if ([...draft.values()].some((project) => projectPathKey(project.cwd) === key)) {
 				throw new ProjectExistsError(cwd);
 			}
 			const project: StoredProject = {

@@ -26,6 +26,7 @@ import type { HubAgent } from "./session-hub.ts";
 import { SessionHub } from "./session-hub.ts";
 import { SessionsChannel } from "./sessions-channel.ts";
 import { SettingsStore } from "./settings-store.ts";
+import { testSocketPath } from "./socket.test-support.ts";
 
 const SESSION = makeChannel("session", "s1");
 const CHAT = makeChannel("chat", "s1");
@@ -375,7 +376,7 @@ describe("令牌与 unix socket", () => {
 
 	it("unix socket 上同样能连", async () => {
 		await endpoint.close();
-		const socketPath = join(dir, "host.sock");
+		const socketPath = testSocketPath(dir);
 		endpoint = await startTestEndpoint({ socketPath, token: "令牌" });
 		expect(endpoint.socketPath).toBe(socketPath);
 		const socket = connect({ path: socketPath });

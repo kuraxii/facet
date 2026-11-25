@@ -18,6 +18,7 @@ import { ProjectStore } from "../project-store.ts";
 import { SessionHub } from "../session-hub.ts";
 import { SessionsChannel } from "../sessions-channel.ts";
 import { SettingsStore } from "../settings-store.ts";
+import { testSocketPath } from "../socket.test-support.ts";
 import { serveWebRequest } from "./static.ts";
 
 let dir: string;
@@ -92,7 +93,7 @@ describe("WebSocket 接入", () => {
 		return {
 			host: "127.0.0.1",
 			port: 0,
-			socketPath: join(dataDir, "host.sock"),
+			socketPath: testSocketPath(dataDir),
 			token: "令牌",
 			agentDir: dataDir,
 			sessionDir: undefined,

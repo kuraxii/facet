@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { normalizeProjectPath } from "./projects.ts";
 import { PiAgentFactory, thinkingLevelForModel } from "./runtime.ts";
 
 let root: string;
@@ -151,7 +152,7 @@ describe("会话清单", () => {
 		const sessions = await scoped.listSessions();
 		expect(sessions.map((item) => item.id)).toEqual(["s1"]);
 		expect(sessions[0]?.firstMessage).toBe("第一句");
-		expect(sessions[0]?.cwd).toBe("/work/a");
+		expect(sessions[0]?.cwd).toBe(normalizeProjectPath("/work/a"));
 		scoped.dispose();
 	});
 

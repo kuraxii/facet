@@ -15,6 +15,7 @@ export {
 	listSessionFiles,
 	normalizeProjectPath,
 	projectIdOf,
+	projectPathKey,
 	scanSessionProjects,
 } from "./projects.ts";
 export type {

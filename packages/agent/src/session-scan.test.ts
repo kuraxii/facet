@@ -7,6 +7,7 @@ import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { normalizeProjectPath } from "./projects.ts";
 import {
 	readFirstUserMessage,
 	readSessionHeader,
@@ -176,7 +177,7 @@ describe("readSessionSummary", () => {
 		expect(summary?.name).toBe("会话名");
 		expect(summary?.firstMessage).toBe("");
 		expect(summary?.modified).toBe(1_700_000_000_000);
-		expect(summary?.cwd).toBe("/work/a");
+		expect(summary?.cwd).toBe(normalizeProjectPath("/work/a"));
 	});
 
 	it("没有名字时用首条消息", async () => {

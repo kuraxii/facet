@@ -219,6 +219,17 @@ export class ProjectWatch {
 			return;
 		}
 		if (kind === "tree") {
+			/*
+			 * 被忽略的目录名不算工作树改动。
+			 *
+			 * NTFS 上父目录会为子目录里的写入补一条「这个子目录变了」的事件：往 `.git` 里写
+			 * 索引、`git` 连写 `objects/` 时，项目根上的监听就会收到 `change .git`。这些内容
+			 * 各有自己的通道（版本库是下面那一支，依赖与产物根本不看），当成工作树改动会白跑
+			 * 一次状态刷新；Linux 上多数时候收不到这类事件，两边行为也应当一致。
+			 */
+			if (filename !== null && this.isIgnored(filename)) {
+				return;
+			}
 			this.pendingTree = true;
 			this.dirty.add(dir);
 			this.schedule();

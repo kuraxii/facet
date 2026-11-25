@@ -7,7 +7,7 @@
 import { createHash } from "node:crypto";
 import type { Dirent } from "node:fs";
 import { type FileHandle, open, readdir, stat } from "node:fs/promises";
-import { join, normalize } from "node:path";
+import { join, normalize, parse } from "node:path";
 import { mapLimit } from "./limit.ts";
 
 /** 会话头最大读取字节数，头部只有少量字段。 */
@@ -36,18 +36,40 @@ export interface ScanSessionProjectsOptions {
 	concurrency?: number;
 }
 
-/** 清理目录路径:收拢重复斜杠以及 `.`、`..`,去掉末尾斜杠。空串原样返回。 */
+/**
+ * 清理目录路径:收拢重复斜杠以及 `.`、`..`,去掉末尾分隔符。空串原样返回。
+ *
+ * 末尾分隔符两种写法都去:POSIX 的 `/` 与 Windows 的反斜杠。`normalize()` 在 Windows 上把
+ * 重复斜杠并成反斜杠、却保留末尾那一个,只判 `/` 的话 `C:/work/` 与 `C:/work` 会被算成两个
+ * 目录,同一份清单里就能出现两条。两者各自的根(`/`、`C:/`)不动。
+ */
 export function normalizeProjectPath(cwd: string): string {
 	if (cwd.length === 0) {
 		return "";
 	}
 	const normalized = normalize(cwd);
-	return normalized.length > 1 && normalized.endsWith("/") ? normalized.slice(0, -1) : normalized;
+	if (normalized.length <= parse(normalized).root.length) {
+		return normalized;
+	}
+	return TRAILING_SEPARATOR.test(normalized) ? normalized.slice(0, -1) : normalized;
 }
+
+/** 末尾分隔符:POSIX 的斜杠或 Windows 的反斜杠。 */
+const TRAILING_SEPARATOR = /[\\/]$/;
 
 /** 由 cwd 得到稳定标识,调用方传入已清理的路径。 */
 export function projectIdOf(cwd: string): string {
-	return createHash("sha1").update(cwd).digest("hex").slice(0, 16);
+	return createHash("sha1").update(projectPathKey(cwd)).digest("hex").slice(0, 16);
+}
+
+/**
+ * 判断两个目录是不是同一处时用的键。
+ *
+ * Windows 的路径大小写不敏感：`C:/Work` 与 `c:/work` 是同一个目录，只按字符串比会把它当成
+ * 两条项目、两个会话分组。POSIX 上大小写有意义，原样返回。
+ */
+export function projectPathKey(cwd: string): string {
+	return process.platform === "win32" ? cwd.toLowerCase() : cwd;
 }
 
 /** 读会话文件第一行里的 cwd，读不到或格式不符时返回空。 */
@@ -136,12 +158,12 @@ export async function scanSessionProjects(options: ScanSessionProjectsOptions): 
 		if (item === undefined) {
 			continue;
 		}
-		const known = projects.get(item.cwd);
+		const known = projects.get(projectPathKey(item.cwd));
 		if (known) {
 			known.sessionCount += 1;
 			known.lastUsed = Math.max(known.lastUsed, item.lastUsed);
 		} else {
-			projects.set(item.cwd, {
+			projects.set(projectPathKey(item.cwd), {
 				id: projectIdOf(item.cwd),
 				cwd: item.cwd,
 				sessionCount: 1,

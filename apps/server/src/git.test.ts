@@ -24,6 +24,16 @@ import {
 
 const roots: string[] = [];
 
+/** 这个名字在这个文件系统上建不建得出来：Win32 的保留字符（尖括号、竖线之类）建不出来。 */
+async function canCreateName(root: string, name: string): Promise<boolean> {
+	try {
+		await writeFile(join(root, name), "", "utf8");
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 /**
  * 在临时仓库里跑一条 git 命令。
  *
@@ -472,25 +482,22 @@ describe("gitCommit", () => {
 });
 
 describe("特殊路径与提交说明的解析", () => {
-	it("中文、空格、单引号、箭头与重命名的路径都按原样解析", async () => {
+	it("中文、空格、单引号与重命名的路径都按原样解析", async () => {
 		const root = await createRepo();
 		await writeFile(join(root, "中文 空格.txt"), "一\n", "utf8");
 		await writeFile(join(root, "it's.txt"), "二\n", "utf8");
-		await writeFile(join(root, "箭头 -> 文件.txt"), "三\n", "utf8");
 		await writeFile(join(root, "原名.txt"), "四\n", "utf8");
 		git(root, "add", ".");
 		git(root, "commit", "-m", "加上这些文件");
 
-		// 一个已跟踪的改动、一个带箭头的改动、一个重命名
+		// 一个已跟踪的改动、一个重命名
 		await writeFile(join(root, "中文 空格.txt"), "一\n改过\n", "utf8");
-		await writeFile(join(root, "箭头 -> 文件.txt"), "三\n改过\n", "utf8");
 		git(root, "mv", "--", "原名.txt", "改名 后.txt");
 
 		const status = await gitStatus(root);
 		expect(status.isRepo).toBe(true);
 		const paths = status.files.map((file) => file.path);
 		expect(paths).toContain("中文 空格.txt");
-		expect(paths).toContain("箭头 -> 文件.txt");
 		const renamed = status.files.find((file) => file.status === "renamed");
 		expect(renamed?.path).toBe("改名 后.txt");
 		expect(renamed?.oldPath).toBe("原名.txt");
@@ -504,6 +511,31 @@ describe("特殊路径与提交说明的解析", () => {
 		// 重命名之后取它相对 HEAD 的补丁：旧路径与新路径都能找到
 		const moved = await gitDiff(root, "改名 后.txt");
 		expect(moved.patch).toContain("改名 后.txt");
+	});
+
+	it("名字里带箭头的路径按原样解析，不当成重命名", async (ctx) => {
+		const root = await createRepo();
+		const arrow = "箭头 -> 文件.txt";
+		/*
+		 * 「>」是 Win32 文件名里的保留字符，Windows 上这个文件根本建不出来；这一条验的是
+		 * 「路径里出现箭头的写法时不能按重命名切开」，只能在肯建这种名字的文件系统上跑。
+		 * 先试建，建不出来才跳过——不是按平台写死。
+		 */
+		if (!(await canCreateName(root, arrow))) {
+			ctx.skip();
+			return;
+		}
+		await writeFile(join(root, arrow), "三\n", "utf8");
+		git(root, "add", ".");
+		git(root, "commit", "-m", "加上带箭头的文件");
+		await writeFile(join(root, arrow), "三\n改过\n", "utf8");
+
+		const status = await gitStatus(root);
+		expect(status.files.map((file) => file.path)).toContain(arrow);
+		expect(status.files.filter((file) => file.status === "renamed")).toEqual([]);
+
+		const patch = await gitDiff(root, arrow);
+		expect(patch.patch).toContain("+改过");
 	});
 
 	it("提交说明里的竖线与制表符不会让字段错位", async () => {

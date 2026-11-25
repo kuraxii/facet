@@ -27,14 +27,15 @@ describe("applyAgentDir", () => {
 	});
 
 	it("调用方给出的目录优先于缺省值", () => {
+		// 交给 pi 之前会先按本平台展开成绝对路径，期望那一侧也走 resolve
 		const target = applyAgentDir("/tmp/facet-test-agent");
-		expect(target).toBe("/tmp/facet-test-agent");
-		expect(process.env[ENV]).toBe("/tmp/facet-test-agent");
+		expect(target).toBe(resolve("/tmp/facet-test-agent"));
+		expect(process.env[ENV]).toBe(resolve("/tmp/facet-test-agent"));
 	});
 
 	it("已设置的环境变量优先于调用方给出的目录", () => {
 		process.env[ENV] = "/tmp/facet-env-agent";
-		expect(applyAgentDir("/tmp/facet-test-agent")).toBe("/tmp/facet-env-agent");
+		expect(applyAgentDir("/tmp/facet-test-agent")).toBe(resolve("/tmp/facet-env-agent"));
 	});
 
 	it("展开波浪号", () => {

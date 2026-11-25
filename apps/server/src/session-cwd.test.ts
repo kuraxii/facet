@@ -5,6 +5,7 @@
  * `C:\Program Files\facet` 在 Linux 上是相对路径，拼在数据目录下会凭空建出一个同名目录，
  * 那条路径还会被当成项目登记。主机这一侧必须在交给 pi 之前按自己的磁盘核一遍。
  */
+import { existsSync } from "node:fs";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -45,11 +46,23 @@ describe("createSession 的 cwd", () => {
 	it("另一台机器的路径被拒绝，也不会去建目录", async () => {
 		const received: Record<string, unknown>[] = [];
 		const context = makeContext(received);
-		const cwd = "C:\\Program Files\\facet";
-
-		await expect(sessionHandlers.createSession({ cwd }, context, connection)).rejects.toSatisfy(
-			(error: unknown) => codeOf(error) === "bad_params",
+		/*
+		 * 两台机器各写各的绝对路径：Windows 的盘符路径与 POSIX 的 `/home/...`。本机恰好真有这个
+		 * 目录时那一条就不算「另一台机器」的样本（装上 facet 的 Windows 上 `C:\Program Files\facet`
+		 * 是真实目录）先挑掉。
+		 *
+		 * 被拒的原因随平台不同：盘符路径在 Linux 上是相对路径（`bad_params`），`/home/...` 在
+		 * Windows 上是绝对路径但不存在（`rejected`）。用例只管「拒绝」与「什么都没动」。
+		 */
+		const foreign = ["C:\\Program Files\\facet\\workspace", "/home/facet/project"].filter(
+			(path) => !existsSync(path),
 		);
+		expect(foreign.length).toBeGreaterThan(0);
+		for (const cwd of foreign) {
+			await expect(sessionHandlers.createSession({ cwd }, context, connection)).rejects.toSatisfy(
+				(error: unknown) => codeOf(error) === "bad_params" || codeOf(error) === "rejected",
+			);
+		}
 		expect(received).toEqual([]);
 		expect(await readdir(root)).toEqual([]);
 	});

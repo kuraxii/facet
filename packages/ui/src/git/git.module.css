@@ -24,6 +24,17 @@
 
 /* ---------- 补丁正文 ---------- */
 
+/*
+ * 虚拟画布。
+ *
+ * 行是绝对定位的，高度由虚拟化器给（`style.height`），宽度由"最长行实测像素"给
+ * （`style.minWidth`）：行脱离文档流之后不再撑开父盒，横向滚动条就得靠画布自己的宽度。
+ */
+.diffCanvas {
+	position: relative;
+	width: 100%;
+}
+
 .diffBody {
 	font-family: var(--font-mono);
 	font-size: var(--text-xs);
@@ -32,10 +43,6 @@
 	/* 补丁是要被拷走的东西：全局在 body 上关了选择，这里放开（行号在下面单独关回去） */
 	user-select: text;
 	cursor: text;
-}
-
-.diffBody[data-wrap="true"] {
-	overflow-x: hidden;
 }
 
 /*
@@ -78,29 +85,6 @@
 .lineText {
 	padding-right: var(--space-5);
 	white-space: pre;
-}
-
-/*
- * 折行开关：正文换行、不再横向滚，行宽跟着内容列走。
- *
- * 整块写在这里而不是文件末尾：这几条的权重比下面那些按行状态写的规则低，排在它们后面
- * 会被判成"降序"，也让"谁能盖住谁"变得要往上翻。
- */
-.diffBody[data-wrap="true"] .diffLine {
-	width: auto;
-	min-width: 0;
-}
-
-.diffBody[data-wrap="true"] .lineText {
-	white-space: pre-wrap;
-	overflow-wrap: anywhere;
-	line-break: anywhere;
-}
-
-/* 折行时行号与记号不跟着涨高：它们各自钉在第一行，行号才不会被正文折行带歪 */
-.diffBody[data-wrap="true"] .lineNumber,
-.diffBody[data-wrap="true"] .lineSign {
-	line-height: var(--leading-code-block);
 }
 
 /*

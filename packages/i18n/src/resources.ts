@@ -58,7 +58,6 @@ export const en = {
 		openDiff: "Open diff",
 		binaryDiff: "Binary file; no patch to show.",
 		noDiff: "No changes to show.",
-		truncatedDiff: "The patch is too long; showing the first part.",
 		commits: "Commits",
 		gitGraph: "Git graph",
 		refreshCommits: "Refresh commits",
@@ -79,8 +78,6 @@ export const en = {
 		commitCopyHash: "Copy commit hash",
 		collapseAllFiles: "Collapse all files",
 		expandAllFiles: "Expand all files",
-		wrapLongLines: "Wrap long lines",
-		scrollLongLines: "Scroll long lines",
 		filesCount_one: "{{count}} file",
 		filesCount_other: "{{count}} files",
 		status: {
@@ -605,7 +602,6 @@ export const zhCN = {
 		openDiff: "打开补丁",
 		binaryDiff: "二进制文件，不展示补丁",
 		noDiff: "没有可展示的改动",
-		truncatedDiff: "补丁过长，只显示前半部分",
 		commits: "提交历史",
 		gitGraph: "提交图谱",
 		refreshCommits: "刷新提交",
@@ -623,8 +619,6 @@ export const zhCN = {
 		commitCopyHash: "复制提交哈希",
 		collapseAllFiles: "折叠全部文件",
 		expandAllFiles: "展开全部文件",
-		wrapLongLines: "自动折行",
-		scrollLongLines: "长行横向滚动",
 		filesCount_other: "{{count}} 个文件",
 		status: {
 			added: "新增",

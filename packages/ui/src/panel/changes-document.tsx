@@ -6,7 +6,7 @@
  */
 
 import type { GitDiff, GitFileChange, GitStatus } from "@facet/protocol";
-import { ChevronRight, ChevronsDownUp, ChevronsUpDown, TextWrap } from "lucide-react";
+import { ChevronRight, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GitPatch } from "../git/git-patch.tsx";
 import { ChangeMark, changeStatusLabelKey } from "../git/git-status-mark.tsx";
@@ -86,17 +86,21 @@ function ChangesFileSection({
 	isCollapsed,
 	isFocused,
 	focusRequestId,
-	wrapLines,
 	loadDiff,
 	onToggle,
+	scrollElement,
+	layoutVersion,
+	onLayoutChange,
 }: {
 	file: GitFileChange;
 	isCollapsed: boolean;
 	isFocused: boolean;
 	focusRequestId: number | undefined;
-	wrapLines: boolean;
 	loadDiff: (file: GitFileChange) => Promise<GitDiff>;
 	onToggle: (path: string) => void;
+	scrollElement: HTMLElement | null;
+	layoutVersion: number;
+	onLayoutChange: () => void;
 }): ReactNode {
 	const { t } = useI18n();
 	const sectionRef = useRef<HTMLElement | null>(null);
@@ -243,8 +247,16 @@ function ChangesFileSection({
 				</p>
 			);
 		}
-		// 补丁正文与提交详情、单文件补丁视图共用 `GitPatch`，行号与配色只有一份实现
-		return <GitPatch diff={state.diff} wrapLines={wrapLines} />;
+		// 补丁正文与提交详情、单文件补丁视图共用 `GitPatch`，行号与配色只有一份实现。
+		// 八个文件共用外层这一条滚动轴：补丁把顶部偏移报成 `scrollMargin`，只挂视口附近的行。
+		return (
+			<GitPatch
+				diff={state.diff}
+				scrollElement={scrollElement}
+				layoutVersion={layoutVersion}
+				onLayoutChange={onLayoutChange}
+			/>
+		);
 	}
 }
 
@@ -263,8 +275,17 @@ export function ChangesDocument({
 }: ChangesDocumentProps): ReactNode {
 	const { t } = useI18n();
 	const [collapsedPaths, setCollapsedPaths] = useState<ReadonlySet<string>>(new Set());
-	const [wrapLines, setWrapLines] = useState(false);
 	const [revision, setRevision] = useState(0);
+	/** 外层统一滚动容器：所有补丁的虚拟化都挂在它上面 */
+	const [scrollElement, setScrollElement] = useState<HTMLElement | null>(null);
+	/**
+	 * 布局修订号。
+	 *
+	 * 任何一个文件展开/折叠、补丁懒加载完成、切换折行之后，下面那些补丁的顶部偏移都变了，
+	 * 由这里递增一次让它们重量 `scrollMargin`。滚动期间不递增，量偏移不做在滚动路径上。
+	 */
+	const [layoutVersion, setLayoutVersion] = useState(0);
+	const bumpLayout = useCallback(() => setLayoutVersion((current) => current + 1), []);
 	const signature = useMemo(() => statusSignature(status), [status]);
 	const lastSignature = useRef(signature);
 	const files = status?.files ?? [];
@@ -301,21 +322,26 @@ export function ChangesDocument({
 		onRefresh();
 	}, [onRefresh]);
 
-	const toggleFile = useCallback((path: string) => {
-		setCollapsedPaths((current) => {
-			const next = new Set(current);
-			if (next.has(path)) {
-				next.delete(path);
-			} else {
-				next.add(path);
-			}
-			return next;
-		});
-	}, []);
+	const toggleFile = useCallback(
+		(path: string) => {
+			bumpLayout();
+			setCollapsedPaths((current) => {
+				const next = new Set(current);
+				if (next.has(path)) {
+					next.delete(path);
+				} else {
+					next.add(path);
+				}
+				return next;
+			});
+		},
+		[bumpLayout],
+	);
 
 	const toggleAll = useCallback(() => {
+		bumpLayout();
 		setCollapsedPaths(allCollapsed ? new Set() : new Set(files.map((file) => file.path)));
-	}, [allCollapsed, files]);
+	}, [allCollapsed, files, bumpLayout]);
 
 	/*
 	 * 工具栏左侧那行字：调用方给的标题、状态里的分支。两者都没有（比如提交详情的改动，那条
@@ -345,25 +371,14 @@ export function ChangesDocument({
 				</span>
 			)}
 			{files.length === 0 ? null : (
-				<>
-					<button
-						type="button"
-						className={styles.iconButton}
-						aria-label={allCollapsed ? t("panel.expandAllFiles") : t("panel.collapseAllFiles")}
-						onClick={toggleAll}
-					>
-						{allCollapsed ? <ChevronsUpDown size={ICON_SIZE.md} /> : <ChevronsDownUp size={ICON_SIZE.md} />}
-					</button>
-					<button
-						type="button"
-						className={styles.iconButton}
-						data-on={wrapLines}
-						aria-label={wrapLines ? t("panel.scrollLongLines") : t("panel.wrapLongLines")}
-						onClick={() => setWrapLines((current) => !current)}
-					>
-						<TextWrap size={ICON_SIZE.md} />
-					</button>
-				</>
+				<button
+					type="button"
+					className={styles.iconButton}
+					aria-label={allCollapsed ? t("panel.expandAllFiles") : t("panel.collapseAllFiles")}
+					onClick={toggleAll}
+				>
+					{allCollapsed ? <ChevronsUpDown size={ICON_SIZE.md} /> : <ChevronsDownUp size={ICON_SIZE.md} />}
+				</button>
 			)}
 			{toolbarTrailing}
 		</div>
@@ -410,7 +425,7 @@ export function ChangesDocument({
 	return (
 		<div className={styles.document}>
 			{header}
-			<div className={`scroll-y ${styles.docScroll}`}>
+			<div className={`scroll-y ${styles.docScroll}`} ref={setScrollElement}>
 				{files.map((file) => (
 					<ChangesFileSection
 						key={`${file.path}:${revision}`}
@@ -418,9 +433,11 @@ export function ChangesDocument({
 						isCollapsed={collapsedPaths.has(file.path)}
 						isFocused={focusPath === file.path}
 						focusRequestId={focusRequestId}
-						wrapLines={wrapLines}
 						loadDiff={loadDiff}
 						onToggle={toggleFile}
+						scrollElement={scrollElement}
+						layoutVersion={layoutVersion}
+						onLayoutChange={bumpLayout}
 					/>
 				))}
 			</div>

@@ -142,6 +142,8 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 		() => ({
 			loadSettings: () => client.getSettings(),
 			saveSettings: (next) => client.saveSettings(next),
+			// 终端清单是本机此刻的状态，不进设置，每次进设置页现取
+			loadTerminalProfiles: () => client.listTerminalProfiles(),
 			loadProviders: () => client.listProviders(),
 			loadModels: () => client.listModels(),
 			// 凭证与自定义提供方会改变可用模型，改完重取一次目录

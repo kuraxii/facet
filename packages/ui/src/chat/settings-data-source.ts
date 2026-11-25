@@ -12,6 +12,7 @@ import type {
 	ProviderInfo,
 	ProviderLoginState,
 	ProviderLoginType,
+	TerminalProfileInfo,
 	ThinkingLevel,
 	UpstreamModel,
 } from "@facet/protocol";
@@ -61,6 +62,8 @@ export interface SettingsDataSource {
 	removeCustomProvider: (providerId: string) => Promise<CustomProviderInfo[]>;
 	/** 用指定模型发一次最小请求 */
 	testModel: (model: ModelRef) => Promise<{ ok: boolean; latencyMs: number; message?: string }>;
+	/** 读主机上可用的终端，顺序即「更可能是用户想要的」 */
+	loadTerminalProfiles: () => Promise<TerminalProfileInfo[]>;
 	/** 生成诊断文本 */
 	diagnostics: () => Promise<string>;
 	/** 保存一段文本到用户选定的文件，取消时返回 false */

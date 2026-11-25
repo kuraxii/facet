@@ -402,6 +402,7 @@ export const en = {
 		models: "Models",
 		appearance: "Appearance",
 		input: "Input",
+		terminal: "Terminal",
 		about: "About",
 		local: "This device",
 		language: "Language",
@@ -450,6 +451,13 @@ export const en = {
 			expandSearch: "Open and focus sidebar search",
 			closeOverlays: "Close overlays, dialogs, and search",
 			submitDialog: "Submit dialog input",
+		},
+		terminalPage: {
+			title: "Terminal",
+			startup: "Startup",
+			defaultShell: "Default shell",
+			auto: "Automatic",
+			readFailed: "Could not list shells: {{error}}",
 		},
 		aboutPage: {
 			title: "About",
@@ -929,6 +937,7 @@ export const zhCN = {
 		models: "模型",
 		appearance: "外观",
 		input: "输入",
+		terminal: "终端",
 		about: "关于",
 		local: "本机",
 		language: "语言",
@@ -977,6 +986,13 @@ export const zhCN = {
 			expandSearch: "展开并聚焦侧栏搜索",
 			closeOverlays: "关闭浮层、对话框与搜索",
 			submitDialog: "提交对话框里的输入",
+		},
+		terminalPage: {
+			title: "终端",
+			startup: "启动",
+			defaultShell: "默认 shell",
+			auto: "自动",
+			readFailed: "读不到可用的 shell：{{error}}",
 		},
 		aboutPage: {
 			title: "关于",

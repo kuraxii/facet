@@ -76,6 +76,7 @@ function fakeData(overrides: Partial<SettingsDataSource> = {}): SettingsDataSour
 		saveCustomProvider: async () => [custom],
 		removeCustomProvider: async () => [],
 		testModel: async () => ({ ok: true, latencyMs: 0 }),
+		loadTerminalProfiles: async () => [],
 		diagnostics: async () => "",
 		saveText: async () => false,
 		...overrides,

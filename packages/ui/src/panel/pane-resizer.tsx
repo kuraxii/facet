@@ -19,6 +19,7 @@
  */
 import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
+import { PANEL_WIDTH_VAR, writePanelWidth } from "../layout/panel-width.ts";
 import { clampPaneWidth } from "./pane-width.ts";
 
 /** 拖动期间挂在根节点上的属性：`motion.css` 据此把四档过渡时长清零。 */
@@ -107,6 +108,26 @@ export function PaneResizer({
 	const finishRef = useRef({ onCollapse, onWidthChange });
 	finishRef.current = { onCollapse, onWidthChange };
 
+	/**
+	 * 写一列的宽度。
+	 *
+	 * 右栏宽度有两个落点（`.app` 的轨道 + 顶带中格的让位副本），统一走 `writePanelWidth`；
+	 * 左栏只有一个落点，直接写。
+	 */
+	const writeWidth = useCallback(
+		(target: HTMLElement | null, value: string): void => {
+			if (target === null) {
+				return;
+			}
+			if (cssVar === PANEL_WIDTH_VAR) {
+				writePanelWidth(target, value);
+				return;
+			}
+			target.style.setProperty(cssVar, value);
+		},
+		[cssVar],
+	);
+
 	// 拖动到一半被卸载时补发一次「结束」：否则外壳会一直以为还在拖，折叠永远锁着。
 	// 变量也还原成起点、预览属性一并摘掉，别把一个没提交的宽度或一列零宽留在界面上。
 	useEffect(() => {
@@ -118,12 +139,12 @@ export function PaneResizer({
 			dragging.current = undefined;
 			document.documentElement.removeAttribute(RESIZE_ATTR);
 			draggingListener.current?.(false);
-			start.target?.style.setProperty(cssVar, `${start.startWidth}px`);
+			writeWidth(start.target, `${start.startWidth}px`);
 			if (start.pending && collapsePreviewAttr !== undefined) {
 				start.target?.removeAttribute(collapsePreviewAttr);
 			}
 		};
-	}, [collapsePreviewAttr, cssVar]);
+	}, [collapsePreviewAttr, writeWidth]);
 
 	const handlePointerDown = useCallback(
 		(event: ReactPointerEvent<HTMLHRElement>) => {
@@ -157,7 +178,6 @@ export function PaneResizer({
 			// 算出来不是有限数时退回这次拖动的起点宽度，不要跳
 			const next = clampPaneWidth(raw, { min, max, defaultWidth: start.startWidth });
 			start.current = next;
-			start.target?.style.setProperty(cssVar, `${next}px`);
 
 			// 跨阈值才翻状态：拖动过程中不做无谓的重渲染
 			const pending = collapseThreshold !== undefined && Number.isFinite(raw) && raw <= collapseThreshold;
@@ -173,8 +193,10 @@ export function PaneResizer({
 					}
 				}
 			}
+			// 属性先落，宽度后写：顶带中格的副本按"这一列实际占多宽"算，收起预览里要跟着归零
+			writeWidth(start.target, `${next}px`);
 		},
-		[collapsePreviewAttr, collapseThreshold, cssVar, max, min, side],
+		[collapsePreviewAttr, collapseThreshold, writeWidth, max, min, side],
 	);
 
 	/**
@@ -203,7 +225,7 @@ export function PaneResizer({
 			}
 			draggingListener.current?.(false);
 			if (cancelled || start.pending) {
-				start.target?.style.setProperty(cssVar, `${start.startWidth}px`);
+				writeWidth(start.target, `${start.startWidth}px`);
 				const collapse = finishRef.current.onCollapse;
 				if (!cancelled && collapse !== undefined) {
 					flushSync(collapse);
@@ -218,7 +240,7 @@ export function PaneResizer({
 				finishRef.current.onWidthChange(start.current);
 			}
 		},
-		[collapsePreviewAttr, cssVar, width],
+		[collapsePreviewAttr, writeWidth, width],
 	);
 
 	return (

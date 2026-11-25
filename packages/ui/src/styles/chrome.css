@@ -5,19 +5,31 @@
 /*
  * 应用外壳：顶带与正文在同一张网格里，共享同一组列轨道。
  *
- * 三列宽度只由实占宽 `--col-*` 决定，`.app-chrome` 与 `.shell` 都用 `subgrid` 继承这组
- * 轨道，顶带里不再有自己的宽度计算，顶带与下面的列不可能错位（口径见 `docs/layout.md`）。
+ * 三列宽度只由列轨道决定，`.app-chrome` 与 `.shell` 都用 `subgrid` 继承这组轨道，顶带里
+ * 不再有自己的宽度计算，顶带与下面的列不可能错位（口径见 `docs/layout.md`）。
  */
+/*
+ * 右栏宽度。
+ *
+ * 注册成不继承：分隔条拖动时每帧写它，可继承的话整棵 `.app` 子树都要重算样式（展开大补丁
+ * 时一万多个节点，单帧十几毫秒）；不继承之后失效只停在 `.app` 一层，轨道由它直接派生。
+ * 顶带中格要读这个数算让位，拿的是写着同一份值的局部副本（见 `layout/panel-width.ts`）。
+ */
+@property --panel-width {
+	syntax: "<length>";
+	inherits: false;
+	initial-value: 0px;
+}
+
 .app {
 	position: relative;
 	display: grid;
-	grid-template-columns: var(--col-sidebar) minmax(0, 1fr) var(--col-panel);
+	grid-template-columns: var(--col-sidebar) minmax(0, 1fr) var(--panel-width);
 	grid-template-rows: var(--chrome-height) minmax(0, 1fr);
 	height: 100%;
 	overflow: hidden;
-	/* 实占宽由偏好宽派生：拖动只改偏好宽，这一层跟着算，不经过渲染 */
+	/* 左栏实占宽由偏好宽派生：拖动只改偏好宽，这一层跟着算，不经过渲染 */
 	--col-sidebar: var(--sidebar-width);
-	--col-panel: var(--panel-width);
 }
 
 /* 窄档：左栏进抽屉、实占宽归零；右栏没有抽屉，照旧占列 */
@@ -33,8 +45,9 @@
 	--col-sidebar: 0px;
 }
 
+/* 右栏列宽归零：直接改轨道。经中间变量转一道的话，那一层派生会把失效传进整棵子树 */
 .app.is-panel-hidden {
-	--col-panel: 0px;
+	grid-template-columns: var(--col-sidebar) minmax(0, 1fr) 0px;
 }
 
 /*
@@ -44,7 +57,7 @@
  * 左栏按它自己的意图摆（它不在被盖住的范围内），意图位与偏好宽都不动，退出展开时原样恢复。
  */
 .app.is-panel-expanded:not(.is-narrow) {
-	--col-panel: calc(100% - var(--col-sidebar));
+	grid-template-columns: var(--col-sidebar) minmax(0, 1fr) calc(100% - var(--col-sidebar));
 }
 
 /*
@@ -59,7 +72,7 @@
 }
 
 .app[data-panel-drag-collapsed="true"] {
-	--col-panel: 0px;
+	grid-template-columns: var(--col-sidebar) minmax(0, 1fr) 0px;
 }
 
 /* 拖动区盖住整条顶带，格子里的控件自己标 no-drag */
@@ -118,15 +131,19 @@
 	gap: var(--space-2);
 	padding-left: var(--sidebar-edge);
 	/*
-	 * 窗口按钮簇是右上角的固定簇：右栏收起（`--col-panel` 为 0）时它压在中间这一格上，
-	 * 这格得让出整簇的宽度；右栏展开且够宽时让 0，簇落在右栏那一格里。
+	 * 窗口按钮簇是右上角的固定簇：右栏收起时它压在中间这一格上，这格得让出整簇的宽度；
+	 * 右栏展开且够宽时让 0，簇落在右栏那一格里。
+	 *
+	 * 宽度读的是这一格自己的副本（`--panel-track`，由 `layout/panel-width.ts` 与 `.app` 同帧
+	 * 写入）：偏好宽是不继承的变量，传不到这里。副本缺省 0，与右栏收起时一致。
 	 */
-	padding-inline-end: max(0px, calc(var(--window-controls-width) - var(--col-panel)));
+	--panel-track: 0px;
+	padding-inline-end: max(0px, calc(var(--window-controls-width) - var(--panel-track)));
 }
 
 /*
  * 宽展开时中格是 `0` 宽、整格不渲染控件（见 `workbench.tsx`），这条让位也得清零：
- * 展开的 `--col-panel` 含百分比，百分比在 padding 里会按中格自己的（零）宽度解析，
+ * 展开的右栏宽是百分比，百分比在 padding 里会按中格自己的（零）宽度解析，
  * 算出来是个负数，内层内容会被推到格子外面去。窗口按钮簇此刻落在右栏那一格里。
  */
 .app.is-panel-expanded:not(.is-narrow) .chrome-slot.is-main {

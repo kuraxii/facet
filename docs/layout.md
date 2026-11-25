@@ -170,7 +170,7 @@
 
 **数值口径**：
 
-样式与脚本共用的那几个数只在 `packages/ui/src/layout/layout-contract.ts` 里写一次（`LAYOUT_PX` 与 `SHELL_DATA_ATTRS`）：左栏 / 右栏 / 文件树 / 索引栏的上下限与缺省、正文最小可用宽、两个档位断点、单栏两栏折点、顶栏标签的两个折点、窗口按钮簇，以及 `.app` 上的两个拖拽折叠属性名。各领域模块（`sidebar-state.ts`、`panel-state.ts`、`file-tree-state.ts`、`workspace-list-state.ts`、`workspace-split.tsx`、`resolve-layout.ts`）的导出常量都指向它，`index.ts` 一并转发 `LAYOUT_PX` / `SHELL_DATA_ATTRS`。容器查询与属性选择器里不能写变量，样式表那边仍是字面量，所以 `layout-contract.test.ts` 反过来读 `panel.css` / `base.css` / `chrome.css` 的源码逐条比对：三个容器折点、`--main-min`、文件树与索引栏那两组 `:root` 变量、窗口按钮簇的派生式、两个 `data-*-drag-collapsed` 选择器——任何一边单独改都会红。
+样式与脚本共用的那几个数只在 `packages/ui/src/layout/layout-contract.ts` 里写一次（`LAYOUT_PX` 与 `SHELL_DATA_ATTRS`）：左栏 / 右栏 / 文件树 / 索引栏的上下限与缺省、正文最小可用宽、两个档位断点、单栏两栏折点、顶栏标签的折点、窗口按钮簇，以及 `.app` 上的两个拖拽折叠属性名。各领域模块（`sidebar-state.ts`、`panel-state.ts`、`file-tree-state.ts`、`workspace-list-state.ts`、`workspace-split.tsx`、`resolve-layout.ts`）的导出常量都指向它，`index.ts` 一并转发 `LAYOUT_PX` / `SHELL_DATA_ATTRS`。容器查询与属性选择器里不能写变量，样式表那边仍是字面量，所以 `layout-contract.test.ts` 反过来读 `panel.css` / `base.css` / `chrome.css` 的源码逐条比对：三个容器折点、`--main-min`、文件树与索引栏那两组 `:root` 变量、窗口按钮簇的派生式、两个 `data-*-drag-collapsed` 选择器——任何一边单独改都会红。
 
 | 变量 | 值 | 含义 |
 | :--- | :--- | :--- |
@@ -179,8 +179,8 @@
 | `--sidebar-width` 范围 | `220–420px`（缺省 `272`） | 偏好宽，落盘 |
 | `--panel-width` 范围 | `≥ 300px`（缺省 `420`，**没有固定上限**） | 界面写下来的宽度：三档一体的实占宽，偏好宽与正文预算取小之后的值（见约束 2） |
 | `--workspace-list-width` | `200–480px`（缺省 `320`） | 两栏态里**索引栏**（右侧列表）的宽度，落盘 `facet.workspace.listWidth`；容器放不下时被 `clamp()` 与 `workspaceListMaxWidth()` 收住，左边永远留 `280px`（`WORKSPACE_DETAIL_KEEP_WIDTH`）给预览 |
-| 标签文字的折点 | `640px`（容器查询，`WORKSPACE_TAB_LABEL_BREAKPOINT_PX`） | 顶带右格的**整列宽**小于它时，标签只剩图标；640 是按「四个图文标签 + 两枚动作 + 132px 窗口按钮簇」实测的，英文标签一侧是 639 |
-| 极窄顶带 | `420px`（容器查询） | 再窄就藏掉每条标签的关闭按钮、收紧间距：300px 的右栏里只剩图标也放不下四个 `×` |
+| 极窄顶带 | `420px`（容器查询，`LAYOUT_PX.workspaceTabBar.tight`） | 窄于它只收紧标签间距与同排的 `+`、动作按钮间距 |
+| 标签栏溢出 | 横着滚（无可见滚动条） | 标签按内容占宽、文字永不折成图标；放不下就滚，鼠标竖向滚轮也接到 `scrollLeft` 上，当前项切过去时自动滚进可视范围 |
 | 提交历史分页 | `COMMIT_PAGE_SIZE = 50` | 图谱每页取多少条；`gitCommits` 带 `limit` / `skip`，返回体用 `hasMore` 说明后面还有没有 |
 | 提交图谱泳道 | `LANE_GAP = 12px`、`GRAPH_ROW_HEIGHT = 26px`、最多 16 列 | 纯函数 `layoutGitGraph()` 算列号与连线，SVG 按它画；16 列是「再宽也看不清」的上限 |
 | 单栏 / 两栏的折点 | `680px`（容器查询，`WORKSPACE_SPLIT_WIDE_WIDTH_PX`） | **变更视图**窄于它时单栏钻取，宽于等于它时解锁两栏 |
@@ -211,9 +211,9 @@
 
 中栏让出的宽度等于「窗口按钮簇宽度减去右栏实占宽」：右栏展开且够宽时让 `0`，右栏收起（`--col-panel: 0`）时让满 `132px`。右栏那一格再自己扣掉这段，两格的内容因此都不会钻到按钮底下。
 
-**为什么让位在内层**：右格（`.chrome-slot.is-panel`）是容器查询的容器——标签文字的折点按「整列宽 640px」判定。容器查询量的是查询容器的内容盒，所以这两处 MUST NOT 留横向内边距；否则查询到的宽度比列窄 132px，`420px` 的右栏会被当成 `288px` 而折起文字。让位因此写在内层那一行上：外层的宽度就是列宽，内层的内容仍然停在按钮左侧。宽展开时中格那条让位清零（见 §2「宽展开」），否则它里面的 `--col-panel` 是个百分比，会按中格自己的宽度解析。
+**为什么让位在内层**：右格（`.chrome-slot.is-panel`）是容器查询的容器，折点按整列宽判定。容器查询量的是查询容器的内容盒，所以这两处 MUST NOT 留横向内边距；否则查询到的宽度比列窄 132px，`420px` 的右栏会被当成 `288px`。让位因此写在内层那一行上：外层的宽度就是列宽，内层的内容仍然停在按钮左侧。宽展开时中格那条让位清零（见 §2「宽展开」），否则它里面的 `--col-panel` 是个百分比，会按中格自己的宽度解析。
 
-**标签文字的折点**：`@container (width < 640px)` 时只留图标、计数与关闭按钮，文案改由悬浮提示补上（`< 420px` 再藏掉关闭按钮，见 §2 的「极窄顶带」）。这个数字同时出现在 `panel.css`（真的藏文字）与 `workspace-tab-bar.tsx`（决定要不要挂提示）里——容器查询里不能写变量，改一处要改两处。标签多到放不下时先缩标签（`flex: 0 1 auto` + 省略号），右端的两枚动作不被挤出格子；四件工具全开时不再渲染 `+`（没有可打开的东西，留着只会占掉最紧的那几十像素）。
+**标签栏溢出**：标签一律按内容占宽（`flex: none`），文字永远在、不折成图标，也不向内省略——放不下时 `.workspace-tabs` 自己横着滚。滚动条不画（这一条只有 `--workspace-tab-height` 高），滚轮与触控板都由 `workspace-tab-bar.tsx` 的 `useWheelScroll` 接到 `scrollLeft` 上（鼠标只给 `deltaY`）；当前项切过去时那只 effect 把它滚回可视范围，只动标签栏自己的 `scrollLeft`，不调 `scrollIntoView`。右端的两枚动作与 `+` 不受影响：滚动的是标签那一条，不是整行。四件工具全开时不再渲染 `+`（没有可打开的东西，留着只会占掉最紧的那几十像素）。
 
 ### 约束 2：右栏实占宽与拖拽上限
 

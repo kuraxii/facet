@@ -5,9 +5,9 @@
  * 都由调用方给，组件不知道每一条对应哪个业务，也不在这里发请求；`+` 菜单是独立的一枚
  * 按钮（`WorkspaceTabMenu`），不混进标签栏的键盘序列。
  *
- * 同一个组件用在两处：展开态顶带右格与抽屉顶头，两处都是横向一条。宽度差别很大，所以文字
- * 标签由容器查询决定折不折：容器窄于 `WORKSPACE_TAB_LABEL_BREAKPOINT_PX` 时只剩图标，说明
- * 改由悬浮提示承担。
+ * 同一个组件用在两处：展开态顶带右格与抽屉顶头，两处都是横向一条，宽度差别很大。标签因此
+ * 不压缩：文字永远在，放不下就横着滚；鼠标只有竖向滚轮，所以滚轮也接到横向上，并且带一段
+ * 逐帧收窄的滑动（见 `useTabStripScroll`）。
  */
 
 import { X } from "lucide-react";
@@ -18,13 +18,10 @@ import {
 	useCallback,
 	useEffect,
 	useRef,
-	useState,
 } from "react";
 import { Badge } from "../common/Badge.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
-import { LAYOUT_PX } from "../layout/layout-contract.ts";
 import { ICON_SIZE } from "../styles/visual-contract.ts";
-import { useHoverTip } from "../tip.tsx";
 import type { RightPanelTab } from "./panel-state.ts";
 
 /**
@@ -38,7 +35,7 @@ export type WorkspaceTabId = RightPanelTab;
 export interface WorkspaceTabItem {
 	/** 标签标识 */
 	id: WorkspaceTabId;
-	/** 文字标签；容器窄时折起，由悬浮提示补上 */
+	/** 文字标签 */
 	label: string;
 	/** 图标，尺寸由调用方给；标签栏只管位置 */
 	icon: ReactNode;
@@ -69,57 +66,142 @@ export interface WorkspaceTabBarProps {
 }
 
 /**
- * 文字标签折起的容器宽度（CSS px）。
+ * 每一帧收掉剩余距离的比例。
  *
- * 与 `panel.css` 里 `@container (width < 660px)` 是同一个数：CSS 负责真的把文字藏起来，
- * 这里只用来决定要不要挂悬浮提示。两处改一处要改两处（容器查询里不能写变量）。
- *
- * 640 是按「四个图文标签 + `+` + 两枚动作 + 132px 窗口按钮簇」实测量出来的：四枚标签
- * 中文 343、英文 403，加上固定项后分别是 579 与 639 的容器宽；取英文那一侧再留一点余量，
- * 进撞车之前就已经退化成纯图标。缺省 420 的右栏因此只显示图标，`⤢` 展开之后才出文字。
+ * 0.28 时一格滚轮（约 100px）在 12 帧左右（≈200ms）走完，起手快、到尾巴自然慢下来，
+ * 与系统里那种"滑一下"的手感接近。一次给满（1）就是瞬移，给太小则显得拖沓。
  */
-export const WORKSPACE_TAB_LABEL_BREAKPOINT_PX = LAYOUT_PX.workspaceTabBar.labelBreakpoint;
+const TAB_SCROLL_EASING = 0.28;
 
 /**
- * 最近的查询容器。
+ * 要不要做这段滑动动画。
  *
- * 容器查询按最近的、`container-type` 不是 `normal` 的祖先解析，这里走同一条规则去找到
- * 它：顶带右格是容器，中间的 `.chrome-slot-row` 只是让位的一行，不算。找不到时退回
- * 父元素，够用。
+ * 与样式里的 `--dur-*` 数是同一套判断：系统偏好与设置项任一成立就减动效，此时直接落位。
  */
-function findQueryContainer(node: HTMLElement): HTMLElement | null {
-	let current = node.parentElement;
-	while (current !== null) {
-		if (getComputedStyle(current).containerType !== "normal") {
-			return current;
-		}
-		current = current.parentElement;
+function wantsSmoothScroll(): boolean {
+	if (typeof document === "undefined") {
+		return false;
 	}
-	return node.parentElement;
+	if (document.documentElement.dataset.motion === "reduced") {
+		return false;
+	}
+	return !(
+		typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+	);
 }
 
 /**
- * 容器够不够窄。
+ * 标签栏的横向滚动。
  *
- * 观察的是容器的宽度而不是标签栏自己：标签栏在容器里只占内容所需的宽度，折的却是容器的
- * 宽度。`clientWidth` 是容器的内容盒宽度，容器因此不能有横向内边距——让出窗口按钮簇的那
- * 段内边距放在容器里面的一行上（见 `panel.css`）。
+ * 两件事共用一份「目标位置」：滚轮/触控板横滚，以及当前项切过去时把它带回可视范围。
+ * 自己维护目标值而不直接读 `scrollLeft`——动画途中 `scrollLeft` 是中间位置，快速连滚时
+ * `scrollLeft += delta` 会把上一段动画吃掉，滚得越快反而越走不动。
+ *
+ * 滚轮部分：React 的 `onWheel` 挂在根节点上且是**被动**监听，里面 `preventDefault()` 不
+ * 生效，所以挂原生监听并标 `passive: false`。标签栏本身没有可滚的纵向内容，吃掉这个事件
+ * 不会影响别处；没溢出时直接放行，让外层照旧处理。触控板横向滑动给的是 `deltaX`，鼠标
+ * 竖滚给的是 `deltaY`：取绝对值大的那个方向，两种设备都能滚。
+ *
+ * 带回可视范围：新开的标签排在末尾、容器窄时它就在滚动区外面，键盘切到看不见的那一条也
+ * 一样。这里只改标签栏自己的 `scrollLeft`，不调 `scrollIntoView`——那会把外壳的横向滚动
+ * 一起带走。
  */
-function useNarrowContainer(ref: RefObject<HTMLDivElement | null>): boolean {
-	const [isNarrow, setIsNarrow] = useState(false);
+function useTabStripScroll(
+	barRef: RefObject<HTMLDivElement | null>,
+	buttonsRef: RefObject<Map<WorkspaceTabId, HTMLButtonElement>>,
+	activeId: WorkspaceTabId | null,
+): void {
+	/** 动画要走到哪儿；`null` 表示没有在走 */
+	const targetRef = useRef<number | null>(null);
+	/** 在跑的那一帧；0 表示没在跑 */
+	const frameRef = useRef(0);
+
+	/** 逐帧走向目标位置 */
+	const glide = useCallback(
+		function step(): void {
+			const bar = barRef.current;
+			const target = targetRef.current;
+			if (bar === null || target === null) {
+				frameRef.current = 0;
+				return;
+			}
+			const remaining = target - bar.scrollLeft;
+			if (Math.abs(remaining) < 1) {
+				bar.scrollLeft = target;
+				targetRef.current = null;
+				frameRef.current = 0;
+				return;
+			}
+			bar.scrollLeft += remaining * TAB_SCROLL_EASING;
+			frameRef.current = requestAnimationFrame(step);
+		},
+		[barRef],
+	);
+
+	/** 走向某个位置（已夹在可滚范围内）；减动效时直接落位 */
+	const scrollTo = useCallback(
+		(next: number): void => {
+			const bar = barRef.current;
+			if (bar === null) {
+				return;
+			}
+			const max = bar.scrollWidth - bar.clientWidth;
+			targetRef.current = Math.min(max, Math.max(0, next));
+			if (!wantsSmoothScroll()) {
+				bar.scrollLeft = targetRef.current;
+				targetRef.current = null;
+				return;
+			}
+			if (frameRef.current === 0) {
+				frameRef.current = requestAnimationFrame(glide);
+			}
+		},
+		[barRef, glide],
+	);
+
 	useEffect(() => {
-		const bar = ref.current;
-		const container = bar === null ? null : findQueryContainer(bar);
-		if (container === null) {
+		const bar = barRef.current;
+		if (bar === null) {
 			return;
 		}
-		const read = (): void => setIsNarrow(container.clientWidth < WORKSPACE_TAB_LABEL_BREAKPOINT_PX);
-		read();
-		const observer = new ResizeObserver(read);
-		observer.observe(container);
-		return () => observer.disconnect();
-	}, [ref]);
-	return isNarrow;
+		const onWheel = (event: WheelEvent): void => {
+			if (bar.scrollWidth <= bar.clientWidth) {
+				return;
+			}
+			const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+			if (delta === 0) {
+				return;
+			}
+			event.preventDefault();
+			scrollTo((targetRef.current ?? bar.scrollLeft) + delta);
+		};
+		bar.addEventListener("wheel", onWheel, { passive: false });
+		return () => {
+			bar.removeEventListener("wheel", onWheel);
+			if (frameRef.current !== 0) {
+				cancelAnimationFrame(frameRef.current);
+			}
+			frameRef.current = 0;
+			targetRef.current = null;
+		};
+	}, [barRef, scrollTo]);
+
+	// 依赖只有当前项：新开一条标签时它就是新那条，切换与追加都会走到这里
+	useEffect(() => {
+		const bar = barRef.current;
+		const button = activeId === null ? undefined : buttonsRef.current.get(activeId);
+		if (bar === null || button === undefined) {
+			return;
+		}
+		const barRect = bar.getBoundingClientRect();
+		const buttonRect = button.getBoundingClientRect();
+		const from = targetRef.current ?? bar.scrollLeft;
+		if (buttonRect.left < barRect.left) {
+			scrollTo(from - (barRect.left - buttonRect.left));
+		} else if (buttonRect.right > barRect.right) {
+			scrollTo(from + (buttonRect.right - barRect.right));
+		}
+	}, [activeId, barRef, buttonsRef, scrollTo]);
 }
 
 export function WorkspaceTabBar({
@@ -132,12 +214,10 @@ export function WorkspaceTabBar({
 	controlsId,
 }: WorkspaceTabBarProps): ReactNode {
 	const { t } = useI18n();
-	// 文字被折起来时，标签文案改由这份提示给出
-	const tip = useHoverTip();
 	const barRef = useRef<HTMLDivElement | null>(null);
 	const buttonRefs = useRef(new Map<WorkspaceTabId, HTMLButtonElement>());
-	const showsLabel = !useNarrowContainer(barRef);
-	const wantsTip = !showsLabel;
+
+	useTabStripScroll(barRef, buttonRefs, activeId);
 
 	const enabled = items.filter((item) => item.disabled !== true);
 	/** 焦点位：当前项可用就落在它身上，否则落在第一条可用项上 */
@@ -247,10 +327,8 @@ export function WorkspaceTabBar({
 							className="workspace-tab"
 							aria-selected={selected}
 							aria-controls={controlsId}
-							aria-label={showsLabel ? undefined : item.label}
 							disabled={item.disabled === true}
 							tabIndex={item.id === rovingId ? 0 : -1}
-							{...(wantsTip ? tip.handlers(item.label) : {})}
 							ref={(node) => {
 								if (node === null) {
 									buttonRefs.current.delete(item.id);
@@ -266,7 +344,7 @@ export function WorkspaceTabBar({
 							}}
 						>
 							<span className="workspace-tab-icon">{item.icon}</span>
-							<span className="workspace-tab-label">{item.label}</span>
+							{item.label}
 							{item.badge === undefined || item.badge === 0 || item.badge === "" ? null : (
 								<Badge>{item.badge}</Badge>
 							)}
@@ -285,7 +363,6 @@ export function WorkspaceTabBar({
 					</div>
 				);
 			})}
-			{tip.render()}
 		</div>
 	);
 }

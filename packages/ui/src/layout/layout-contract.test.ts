@@ -34,16 +34,13 @@ function rootPx(source: string, name: string): number | undefined {
 }
 
 describe("样式表与布局契约一致", () => {
-	it("右栏顶栏的两个容器折点", () => {
-		expect(panel).toContain(`@container (width < ${LAYOUT_PX.workspaceTabBar.labelBreakpoint}px)`);
+	it("右栏顶栏的容器折点", () => {
 		expect(panel).toContain(`@container (width < ${LAYOUT_PX.workspaceTabBar.tight}px)`);
 	});
 
 	it("样式表里没有契约之外的容器折点", () => {
 		// 新增一个折点必须先进契约再改样式，否则这里会红
-		expect(new Set(containerBreakpoints(panel))).toEqual(
-			new Set([LAYOUT_PX.workspaceTabBar.labelBreakpoint, LAYOUT_PX.workspaceTabBar.tight]),
-		);
+		expect(new Set(containerBreakpoints(panel))).toEqual(new Set([LAYOUT_PX.workspaceTabBar.tight]));
 	});
 
 	it("正文最小可用宽与 `--main-min` 是同一个数", () => {

@@ -79,6 +79,18 @@ export interface LayoutSettings {
 	sidebarWidth: number;
 }
 
+/** 终端设置。 */
+export interface TerminalSettings {
+	/**
+	 * 新建终端用哪种 shell。
+	 *
+	 * 空串表示「自动」：主机按探测顺序取第一个（Windows 上 pwsh 7 → Windows PowerShell →
+	 * Git Bash → WSL → cmd，POSIX 上是 `$SHELL`）。取值是主机上报的 profile 标识，主机那边
+	 * 认不出来时同样回落到「自动」。
+	 */
+	profile: string;
+}
+
 /** 一整份设置。 */
 export interface FacetSettings {
 	/** 文件格式版本 */
@@ -89,6 +101,8 @@ export interface FacetSettings {
 	input: InputSettings;
 	/** 界面布局 */
 	layout: LayoutSettings;
+	/** 终端 */
+	terminal: TerminalSettings;
 }
 
 /** 缺省设置。 */
@@ -108,4 +122,5 @@ export const DEFAULT_SETTINGS: FacetSettings = {
 	},
 	input: { sendKey: "enter" },
 	layout: { sidebarWidth: 272 },
+	terminal: { profile: "" },
 };

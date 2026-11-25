@@ -366,6 +366,7 @@ export const REQUEST_SCHEMAS = {
 		nonEmpty: ["providerId"],
 	},
 	listTerminals: { auth: "public", params: NoParams },
+	listTerminalProfiles: { auth: "public", params: NoParams },
 	createTerminal: {
 		auth: "write",
 		params: Type.Object({

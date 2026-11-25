@@ -847,6 +847,19 @@ function buildRequestListTerminals(): (value: unknown) => boolean {
 const checkRequestListTerminals = buildRequestListTerminals();
 
 /**
+ * listTerminalProfiles 的参数判断。
+ *
+ * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
+ */
+function buildRequestListTerminalProfiles(): (value: unknown) => boolean {
+	// @ts-ignore
+	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && true));
+	return check_0;
+}
+
+const checkRequestListTerminalProfiles = buildRequestListTerminalProfiles();
+
+/**
  * createTerminal 的参数判断。
  *
  * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
@@ -1111,6 +1124,7 @@ export const REQUEST_CONTRACTS: Readonly<Record<string, RequestContract | undefi
 	"saveCustomProvider": { auth: "admin", check: checkRequestSaveCustomProvider },
 	"removeCustomProvider": { auth: "admin", check: checkRequestRemoveCustomProvider },
 	"listTerminals": { auth: "public", check: checkRequestListTerminals },
+	"listTerminalProfiles": { auth: "public", check: checkRequestListTerminalProfiles },
 	"createTerminal": { auth: "write", check: checkRequestCreateTerminal },
 	"writeTerminal": { auth: "write", check: checkRequestWriteTerminal },
 	"resizeTerminal": { auth: "write", check: checkRequestResizeTerminal },

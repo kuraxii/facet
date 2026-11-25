@@ -14,6 +14,8 @@
  * 摆出来验。
  */
 
+import { existsSync } from "node:fs";
+
 /** 一个可用的终端。 */
 export interface TerminalProfile {
 	/** 稳定标识：界面记住选中项、协议里传它 */
@@ -174,6 +176,46 @@ export function defaultTerminalProfile(options: DetectTerminalProfilesOptions): 
 			path: options.platform === "win32" ? "cmd.exe" : "/bin/sh",
 			args: [],
 		}
+	);
+}
+
+/**
+ * 本机此刻可用的终端。
+ *
+ * 唯一一处不纯的地方：把 `process` 上的东西交给上面那些纯函数。主机侧的处理器与 pty 子进程
+ * 都走它，两边算出来的清单因此不会不一样。
+ */
+export function hostTerminalProfiles(): TerminalProfile[] {
+	return detectTerminalProfiles({ platform: process.platform, env: process.env, exists: existsSync });
+}
+
+/**
+ * 从一份清单里挑出标识对应的那一个。
+ *
+ * 空标识与认不出来的标识都给 `undefined`，由调用方决定回落成什么：设置里存的是别的机器上的
+ * shell（换主机、卸载了 Git Bash）属于常态，回落比拒绝执行更贴近用户意图。
+ */
+export function pickTerminalProfile(
+	profiles: readonly TerminalProfile[],
+	id: string | undefined,
+): TerminalProfile | undefined {
+	const wanted = id?.trim();
+	if (wanted === undefined || wanted.length === 0) {
+		return undefined;
+	}
+	return profiles.find((profile) => profile.id === wanted);
+}
+
+/** 按设置里存下来的标识解析本机的终端，认不出来时用探测顺序里的第一个。 */
+export function resolveHostTerminal(id: string | undefined): TerminalProfile {
+	const profiles = hostTerminalProfiles();
+	return (
+		pickTerminalProfile(profiles, id) ??
+		defaultTerminalProfile({
+			platform: process.platform,
+			env: process.env,
+			exists: existsSync,
+		})
 	);
 }
 

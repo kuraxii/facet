@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import {
 	defaultTerminalProfile,
 	detectTerminalProfiles,
+	pickTerminalProfile,
 	type TerminalProfile,
 	terminalProfileById,
 } from "./terminal-profiles.ts";
@@ -103,6 +104,24 @@ describe("Windows 上的终端探测", () => {
 		};
 		expect(terminalProfileById(options, "git-bash")?.path).toBe(GIT_BASH);
 		expect(terminalProfileById(options, "pwsh")).toBeUndefined();
+	});
+});
+
+describe("按设置里的标识挑终端", () => {
+	const profiles: TerminalProfile[] = [
+		{ id: "pwsh", label: "PowerShell 7", path: "C:pwsh.exe", args: ["-NoLogo"] },
+		{ id: "git-bash", label: "Git Bash", path: "C:\bash.exe", args: ["--login", "-i"] },
+	];
+
+	it("标识对得上就取那一条", () => {
+		expect(pickTerminalProfile(profiles, "git-bash")?.path).toBe("C:\bash.exe");
+	});
+
+	it("空标识、认不出来的标识都交给调用方回落", () => {
+		expect(pickTerminalProfile(profiles, "")).toBeUndefined();
+		expect(pickTerminalProfile(profiles, "   ")).toBeUndefined();
+		// 换主机之后设置里留着别的机器上的 shell 属于常态
+		expect(pickTerminalProfile(profiles, "wt")).toBeUndefined();
 	});
 });
 

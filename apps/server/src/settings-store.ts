@@ -74,6 +74,7 @@ export function parseSettings(value: unknown): FacetSettings {
 	const appearance = isRecord(value.appearance) ? value.appearance : {};
 	const input = isRecord(value.input) ? value.input : {};
 	const layout = isRecord(value.layout) ? value.layout : {};
+	const terminal = isRecord(value.terminal) ? value.terminal : {};
 	return {
 		version: FILE_VERSION,
 		appearance: {
@@ -130,6 +131,10 @@ export function parseSettings(value: unknown): FacetSettings {
 				MIN_SIDEBAR_WIDTH,
 				MAX_SIDEBAR_WIDTH,
 			),
+		},
+		terminal: {
+			// 认不出来的标识照原样留着：它可能属于另一台主机，换回去还能对上
+			profile: readString(terminal.profile, DEFAULT_SETTINGS.terminal.profile),
 		},
 	};
 }

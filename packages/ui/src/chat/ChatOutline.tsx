@@ -23,6 +23,7 @@ import {
 	useState,
 } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { VISUAL_SCALE } from "../styles/visual-contract.ts";
 import { measureStaleRows } from "../transcript/row-measure.ts";
 import { markScrollSettling, whenScrollSettles } from "../transcript/scroll-settle.ts";
 import {
@@ -35,11 +36,16 @@ import {
 	outlineTickMagnification,
 } from "./chat-outline.ts";
 
-/** 跳转后这条消息距视口上沿留多少像素，避免贴着顶部。 */
-const JUMP_OFFSET = 12;
+/**
+ * 跳转后这条消息距视口上沿留多少像素。
+ *
+ * 至少要盖过顶部那层渐隐（`--control-lg`）：落点压在渐隐底下的话，跳过去的第一行是蒙着的。
+ * 再多留一档空隙，落点不贴渐隐下缘。
+ */
+const JUMP_OFFSET = VISUAL_SCALE.control.lg + VISUAL_SCALE.space.s2;
 
 /** 判断当前轮次时，视口上沿再往下算多少像素。 */
-const ACTIVE_OFFSET = 32;
+const ACTIVE_OFFSET = JUMP_OFFSET;
 
 export interface ChatOutlineProps {
 	/** 渲染单元，只取其中的用户消息 */

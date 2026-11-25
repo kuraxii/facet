@@ -10,6 +10,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
 import { I18nProvider } from "../i18n/I18nProvider.tsx";
+import { VISUAL_SCALE } from "../styles/visual-contract.ts";
 import { ChatOutline } from "./ChatOutline.tsx";
 import { OUTLINE_MIN_ITEMS, outlineIsActive, outlinePrompts } from "./chat-outline.ts";
 
@@ -66,10 +67,15 @@ function fakeContainer(scrollTop: number): HTMLElement {
 	const element = document.createElement("div");
 	element.scrollTop = scrollTop;
 	element.setAttribute("data-scroll-to-count", "0");
-	element.scrollTo = (): void => {
+	// 两种重载都要能接：这里只关心 `{ top }` 那种，并把落点记下来给用例断言
+	element.scrollTo = ((options?: ScrollToOptions | number, y?: number): void => {
 		const count = Number(element.getAttribute("data-scroll-to-count") ?? "0") + 1;
 		element.setAttribute("data-scroll-to-count", String(count));
-	};
+		const top = typeof options === "number" ? y : options?.top;
+		if (typeof top === "number") {
+			element.setAttribute("data-scroll-to-top", String(top));
+		}
+	}) as typeof element.scrollTo;
 	return element;
 }
 
@@ -95,6 +101,23 @@ describe("导航竖轨的显示条件", () => {
 		expect(outlineIsActive(two)).toBe(true);
 		expect(outlineIsActive(one)).toBe(false);
 		expect(OUTLINE_MIN_ITEMS).toBe(2);
+	});
+});
+
+describe("跳转落点", () => {
+	it("落点要盖过顶部渐隐层", () => {
+		const container = fakeContainer(1000);
+		// 容器里挂两个锚点：jsdom 没有布局，锚点相对容器的偏移都是 0，落点就等于 scrollTop - 留白
+		for (const key of ["v:e1", "v:e2"]) {
+			const anchor = document.createElement("div");
+			anchor.setAttribute("data-outline-key", key);
+			container.append(anchor);
+		}
+		const { host } = mount([userMessage("e1", "第一问"), userMessage("e2", "第二问")], { container });
+		act(() => host.querySelectorAll<HTMLElement>(".outline-tick")[1]?.click());
+		const landed = Number(container.getAttribute("data-scroll-to-top"));
+		// 留白至少盖过渐隐层（`--control-lg`），否则跳过去第一行是蒙着的
+		expect(1000 - landed).toBeGreaterThanOrEqual(VISUAL_SCALE.control.lg);
 	});
 });
 

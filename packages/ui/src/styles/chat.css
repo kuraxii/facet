@@ -225,12 +225,14 @@
 	/* 交给原生惯性；吸底由脚本按 scrollTop 管，不让浏览器自己锚定 */
 	scroll-behavior: auto;
 	overflow-anchor: none;
-	padding: var(--space-12) 0 var(--space-6);
 	/*
-	 * 底部留白与渐隐层等高再多一档：滚到最后一条消息时，它与渐隐区之间留出呼吸区，
-	 * 回到底部（`scrollToBottom`）也不会把最后一行压在渐隐里。
+	 * 上下留白对称地让开那两层渐隐：顶部留给跳转落点，底部留给最后一轮的收尾行。
+	 *
+	 * 停在底部时，最后一条消息的复制/分叉行应当整个在底部渐隐带之上——渐隐是给"还有内容"
+	 * 的那一侧用的提示，不该把正文最后一行跟按钮一起蒙掉。
 	 */
-	scroll-padding-bottom: var(--control-lg);
+	padding: var(--space-12) 0 calc(var(--control-lg) + var(--space-2));
+	scroll-padding-bottom: calc(var(--control-lg) + var(--space-2));
 }
 
 /*

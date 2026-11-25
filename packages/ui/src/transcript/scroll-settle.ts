@@ -9,6 +9,28 @@
  */
 
 /**
+ * 正在做程序化滚动的容器与它的落定时刻，Unix 毫秒。
+ *
+ * 只在 WeakMap 里：容器被卸掉之后记录跟着消失，不需要手动回收。
+ */
+const settlingUntil = new WeakMap<HTMLElement, number>();
+
+/**
+ * 标一次程序化滚动：从现在起这段时间里认为视口还在飞。
+ *
+ * 静默回收靠它避开跳转途中：飞行中读到的最顶行下一刻就会变，裁下去锚点一定偏。
+ */
+export function markScrollSettling(element: HTMLElement, durationMs = 1200): void {
+	settlingUntil.set(element, performance.now() + durationMs);
+}
+
+/** 这个容器是不是还在程序化滚动的路上。 */
+export function isScrollSettling(element: HTMLElement): boolean {
+	const until = settlingUntil.get(element);
+	return until !== undefined && until > performance.now();
+}
+
+/**
  * 等 `element` 的平滑滚动落定，然后调用一次 `done`。
  *
  * @param element 滚动容器

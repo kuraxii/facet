@@ -37,6 +37,8 @@ export interface Transcript {
 	forgetScroll: (file: string) => void;
 	/** 还有没有更早的历史可补 */
 	hasMore: boolean;
+	/** 是否正在补更早的历史 */
+	isLoadingOlder: boolean;
 	/** 补一页更早的历史（只由竖轨顶端的「…」调用，滚动位置不触发） */
 	loadOlderNow: () => void;
 }
@@ -83,6 +85,8 @@ export function useTranscript(options: TranscriptOptions): Transcript {
 
 	// 补页只由竖轨顶端的「…」触发，滚动位置不参与：滚到顶部本身不加载任何东西
 	const loadingOlder = useRef(false);
+	/** 补页在途：静默回收要避开，不然裁完回来的那一页与游标对不上 */
+	const [isLoadingOlder, setIsLoadingOlder] = useState(false);
 	/** `client.hasMore` 是运行期游标上的取值，补完页不会引起投影变化，所以本地留一份用于重画 */
 	const [hasMore, setHasMore] = useState(() => client.hasMore);
 	/*
@@ -104,13 +108,16 @@ export function useTranscript(options: TranscriptOptions): Transcript {
 	const loadOlderNow = useCallback((): void => {
 		if (loadingOlder.current || !client.hasMore) return;
 		loadingOlder.current = true;
+		setIsLoadingOlder(true);
 		void client.loadOlder().then(
 			(result) => {
 				loadingOlder.current = false;
+				setIsLoadingOlder(false);
 				setHasMore(result.hasMore);
 			},
 			() => {
 				loadingOlder.current = false;
+				setIsLoadingOlder(false);
 			},
 		);
 	}, [client]);
@@ -128,6 +135,7 @@ export function useTranscript(options: TranscriptOptions): Transcript {
 		scrollToBottom,
 		forgetScroll,
 		hasMore,
+		isLoadingOlder,
 		loadOlderNow,
 	};
 }

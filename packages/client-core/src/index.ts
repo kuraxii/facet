@@ -12,6 +12,8 @@ export type {
 	SessionTransport,
 } from "./client.ts";
 export { SessionClient } from "./client.ts";
+export type { HistoryTrimCut } from "./history-trim.ts";
+export { applyHistoryTrim, planHistoryTrim, RETAIN_MAX_PAGES } from "./history-trim.ts";
 export type {
 	ConnectionLinkOptions,
 	LinkHooks,

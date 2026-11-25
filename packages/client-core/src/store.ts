@@ -16,6 +16,7 @@ import type {
 	SessionStatus,
 } from "@facet/protocol";
 import { makeChannel, parseChannel } from "@facet/protocol";
+import { applyHistoryTrim, type HistoryTrimCut, planHistoryTrim } from "./history-trim.ts";
 import { historyMessageId, isHistoryMessageId } from "./message-id.ts";
 import { reduceChat, reduceSession } from "./reduce.ts";
 import {
@@ -523,6 +524,28 @@ export class SessionStore {
 		}
 		slot.view = { ...slot.view, notices: appendNotice(slot.view.notices, notice) };
 		this.markChanged();
+	}
+
+	/**
+	 * 算出更早历史能裁到哪儿；不到保留水位或找不到轮的起点时为空。
+	 *
+	 * `maxEntries` 由调用方按客户端真实的页大小给出（`pageSize * 首屏页数`）。
+	 * 只读，不改视图：界面先拿裁剪点判断视口是否已经离开裁剪线，确认之后再真正裁。
+	 */
+	historyTrimCut(channel: Channel, maxEntries: number): HistoryTrimCut | undefined {
+		const slot = this.chats.get(channel);
+		return slot === undefined ? undefined : planHistoryTrim(slot.view.items, maxEntries);
+	}
+
+	/** 按裁剪点裁掉更早的历史，裁剪本身的规则见 `history-trim.ts`。 */
+	trimOlderHistory(channel: Channel, cut: HistoryTrimCut): ChatView | undefined {
+		const slot = this.chats.get(channel);
+		if (slot === undefined) {
+			return undefined;
+		}
+		slot.view = applyHistoryTrim(slot.view, cut);
+		this.markChanged();
+		return slot.view;
 	}
 
 	/** 往更早的方向补一页历史,已存在的标识跳过。 */

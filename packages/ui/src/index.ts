@@ -234,6 +234,6 @@ export { ToastHost } from "./toast-host.tsx";
 export type { DisplayRow, ForkPoint, RowKind } from "./transcript/group.ts";
 export { formatDuration, groupLabel, groupRows, turnDurationText } from "./transcript/group.ts";
 export { ArrowDownIcon } from "./transcript/icons.tsx";
-export type { ChatTranscriptProps } from "./transcript/rows.tsx";
+export type { ChatTranscriptProps, TranscriptReclaimOptions } from "./transcript/rows.tsx";
 export { ChatTranscript } from "./transcript/rows.tsx";
 export { foldOutput, toolStatusText, toolTarget } from "./transcript/tool-text.ts";

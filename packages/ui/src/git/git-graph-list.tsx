@@ -12,6 +12,7 @@
  * 就去要下一页，滚到底不会停在「要不要再点一下」上；正在取时底部给一条读取提示。
  */
 import type { GitCommit } from "@facet/protocol";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { RefreshCw } from "lucide-react";
 import { type ReactNode, type RefObject, useCallback, useEffect, useMemo, useRef } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
@@ -22,6 +23,17 @@ import styles from "./git.module.css";
 import { GitGraphLanes, GRAPH_ROW_HEIGHT } from "./git-graph-lanes.tsx";
 import { layoutGitGraph } from "./git-graph-layout.ts";
 import { GitRefs } from "./git-refs.tsx";
+
+/**
+ * 触底提前量，按行数算。
+ *
+ * 一页 200 条，剩下 50 条（约两屏）时就去取下一页：翻到最底之前那一页通常已经回来了，
+ * 中途看不到"正在加载"。
+ */
+const COMMIT_PREFETCH_ROWS = 50;
+
+/** 视口外预渲染行数：快速滚轮不至于先看到空白再来内容 */
+const COMMIT_OVERSCAN = 12;
 
 /** 图谱列表的参数。 */
 export interface GitGraphListProps {
@@ -120,18 +132,30 @@ export function GitGraphList({
 					loadMoreRef.current();
 				}
 			},
-			{ root, rootMargin: "240px 0px", threshold: 0 },
+			{ root, rootMargin: `0px 0px ${COMMIT_PREFETCH_ROWS * GRAPH_ROW_HEIGHT}px 0px`, threshold: 0 },
 		);
 		observer.observe(sentinel);
 		return () => observer.disconnect();
 	}, [hasMore, loadedCount]);
 
+	/**
+	 * 定高虚拟化：行高恒定（`GRAPH_ROW_HEIGHT`），纯算术定位，不绑 `measureElement`。
+	 *
+	 * 滚动容器就是这个列表自己，不需要 `scrollMargin`；整表高度仍是 `条数 × 行高`，退回列表
+	 * 时按 `scrollTop` 恢复位置的逻辑原样成立。
+	 */
+	const virtualizer = useVirtualizer<HTMLDivElement, HTMLLIElement>({
+		count: commits.length,
+		getScrollElement: () => scrollNode.current,
+		overscan: COMMIT_OVERSCAN,
+		estimateSize: () => GRAPH_ROW_HEIGHT,
+	});
+	const items = virtualizer.getVirtualItems();
+	const totalSize = commits.length * GRAPH_ROW_HEIGHT;
+
 	const bar = (
 		<div className={styles.graphBar}>
 			<span className={styles.graphBranch}>{branch ?? "…"}</span>
-			<span className={styles.graphCount}>
-				{commits.length === 0 ? null : t("panel.commitCount", { count: commits.length })}
-			</span>
 			<button
 				type="button"
 				className={styles.graphRefresh}
@@ -185,11 +209,30 @@ export function GitGraphList({
 		<div className={styles.graph}>
 			{bar}
 			<div className={`scroll-y ${styles.graphScroll}`} ref={attachScroll}>
-				<ol className={styles.graphList}>
-					{commits.map((commit, index) => {
-						const row = layout.rows[index];
+				{/*
+				 * 行高恒定（`GRAPH_ROW_HEIGHT`），所以是定高虚拟化：只挂视口附近的行，纯算术定位、
+				 * 不绑 `measureElement`。几千条的深历史也只挂几十个 `<li>`，泳道 svg 跟着少。
+				 * 整表高度仍是 `条数 × 行高`，触底哨兵与退回时的滚动位置都不受影响。
+				 */}
+				<ol className={styles.graphList} style={{ height: totalSize }}>
+					{items.map((item) => {
+						const commit = commits[item.index];
+						const row = layout.rows[item.index];
+						if (commit === undefined) {
+							return null;
+						}
 						return (
-							<li key={commit.sha} className={styles.graphItem}>
+							<li
+								key={commit.sha}
+								className={styles.graphItem}
+								style={{
+									position: "absolute",
+									top: 0,
+									left: 0,
+									width: "100%",
+									transform: `translateY(${item.start}px)`,
+								}}
+							>
 								<button
 									type="button"
 									className={styles.graphRow}

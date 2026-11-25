@@ -14,6 +14,21 @@ import { FilesPane } from "./files-pane.tsx";
 
 beforeAll(() => {
 	(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+	/*
+	 * jsdom 不做布局，而虚拟化器按滚动容器的 `clientHeight` 算可见窗口。这里给那棵树一个
+	 * 固定高度：行才会挂出来，用例才有东西可断言。
+	 */
+	for (const [name, size] of [
+		["clientHeight", 600],
+		["clientWidth", 300],
+	] as const) {
+		Object.defineProperty(HTMLElement.prototype, name, {
+			configurable: true,
+			get(this: HTMLElement): number {
+				return this.classList?.contains("tree") === true ? size : 0;
+			},
+		});
+	}
 });
 
 let unmount: (() => void) | undefined;

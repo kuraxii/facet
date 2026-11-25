@@ -592,6 +592,14 @@
 	padding-bottom: var(--space-4);
 }
 
+/*
+ * 文件树的虚拟画布：高度由虚拟化器给（`行数 × 行高`），行绝对定位落在自己的 offset 上。
+ * 相对定位是行的定位祖先，树自己的内边距只在下缘，不影响行坐标。
+ */
+.tree-canvas {
+	position: relative;
+}
+
 /* 文件树的行：几何来自 `common/ListRow.tsx` 的 `xs` 档，这里只补层级缩进与紧凑的字号 */
 .tree-row {
 	gap: var(--files-icon-gap);

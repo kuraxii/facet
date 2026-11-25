@@ -201,6 +201,9 @@
 	/* 侧栏两行会话行：纵向内边距、最小高度、标题与元信息间距、状态标记下移量 */
 	--sb-row-padding-y: 6px;
 	--sb-row-two-line-height: 44px;
+	/* 会话队列的组内间距与组尾间距：虚拟化之后由每一项的下内边距给（见 `sidebar.css`） */
+	--sb-group-gap: 2px;
+	--sb-group-gap-end: 6px;
 	--sb-row-meta-gap: 2px;
 	--sb-row-mark-offset: 3px;
 	/* 会话行内部横向内边距：行背景左右各留这么多，文字从留白之后开始 */

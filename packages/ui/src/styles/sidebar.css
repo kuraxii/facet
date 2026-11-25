@@ -363,12 +363,27 @@
 	mask-image: linear-gradient(to bottom, transparent 0, #000 6px, #000 100%);
 }
 
-.sb-group {
-	display: flex;
-	flex: none;
-	flex-direction: column;
-	gap: var(--space-1);
-	margin-bottom: 6px;
+/*
+ * 会话队列的虚拟画布。
+ *
+ * 队列是摊平的一项一行（组标题也是一项），行绝对定位落在自己的 offset 上；组间距折进每一项
+ * 的下内边距——组内 2px、组尾 6px，与改前「组内 gap + 组尾 margin」的位置一致。
+ */
+.sb-canvas {
+	position: relative;
+}
+
+.sb-item {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	padding-bottom: var(--sb-group-gap);
+}
+
+/* 组的最后一行：组与组之间比组内多留一点间距（改前是 `.sb-group` 的下外边距） */
+.sb-item.is-group-end {
+	padding-bottom: var(--sb-group-gap-end);
 }
 
 .sb-group-head {

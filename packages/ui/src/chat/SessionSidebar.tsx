@@ -6,9 +6,11 @@
  * `sidebar-model.ts`）。
  *
  * 这个文件只做状态编排与组装：纯推导在 `session-list-model.ts`，单行在 `SessionRow.tsx`，
- * 一组在 `SessionGroup.tsx`，过滤器在 `ProjectFilter.tsx`，两个右键菜单在 `SidebarMenus.tsx`。
+ * 过滤器在 `ProjectFilter.tsx`，两个右键菜单在 `SidebarMenus.tsx`。队列本身是摊平的一条
+ * 列表（组标题也是一项），按固定估值虚拟化——滚出去的组与行不必留在 DOM 里。
  */
 import type { ProjectInfo, SessionStatus, SessionSummary } from "@facet/protocol";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { Plus, Settings } from "lucide-react";
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../common/Button.tsx";
@@ -19,12 +21,26 @@ import { PaneResizer } from "../panel/pane-resizer.tsx";
 import { ICON_SIZE } from "../styles/visual-contract.ts";
 import { useHoverTip } from "../tip.tsx";
 import { ProjectFilter } from "./ProjectFilter.tsx";
-import { SessionGroup } from "./SessionGroup.tsx";
+import { SessionRow } from "./SessionRow.tsx";
 import { type MenuPosition, menuPositionOf, ProjectMenu, SessionMenu } from "./SidebarMenus.tsx";
 import { findSession, projectById, resolveScopeCwd, runningOrderOf } from "./session-list-model.ts";
 import { SidebarHeader } from "./sidebar-header.tsx";
 import { buildSidebar, type SidebarSession, samePath } from "./sidebar-model.ts";
 import { SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "./sidebar-state.ts";
+
+/** 视口外预渲染的队列项数 */
+const SIDEBAR_OVERSCAN = 12;
+
+/** 会话队列里的一项：组标题或一条会话。 */
+type QueueEntry =
+	| { readonly kind: "head"; readonly key: string; readonly label: string }
+	| {
+			readonly kind: "row";
+			readonly key: string;
+			readonly session: SidebarSession;
+			/** 这一组的最后一行：组尾比组内多留一点间距 */
+			readonly groupEnd: boolean;
+	  };
 
 /** 侧栏参数。 */
 export interface SessionSidebarProps {
@@ -149,6 +165,8 @@ export const SessionSidebar = memo(function SessionSidebar({
 		undefined,
 	);
 	const panelRef = useRef<HTMLDivElement>(null);
+	/** 会话队列的滚动容器：虚拟化看它算可见窗口 */
+	const queueRef = useRef<HTMLDivElement | null>(null);
 
 	// 行尾的相对时间按分钟变，自己走一个分钟时钟；流式期间不必跟着每一帧重算
 	const [now, setNow] = useState(() => Date.now());
@@ -178,6 +196,52 @@ export const SessionSidebar = memo(function SessionSidebar({
 		runningOrder.current = runningOrderOf(built.groups);
 		return built;
 	}, [sessions, storedProjects, statuses, scopeCwd, t, now, i18n.language]);
+
+	/** 组标题文案：进行中 / 今天 / 昨天 / 更早 */
+	const groupLabel = useCallback(
+		(key: string): string =>
+			key === "running"
+				? t("sidebar.group.running")
+				: key === "today"
+					? t("sidebar.group.today")
+					: key === "yesterday"
+						? t("sidebar.group.yesterday")
+						: t("sidebar.group.earlier"),
+		[t],
+	);
+
+	/*
+	 * 会话队列摊平成一条列表（组标题也算一项），再按固定估值虚拟化：队列会随会话数线性长
+	 * 下去，滚出去的组与行不必留在 DOM 里。组间距折进每一项的下内边距（组内 2px、组尾 6px），
+	 * `measureElement` 量到的就是含间距的那一段，位置与改前一致。
+	 */
+	const list = useMemo(() => {
+		const flat: QueueEntry[] = [];
+		for (const group of data.groups) {
+			flat.push({ kind: "head", key: `head:${group.key}`, label: groupLabel(group.key) });
+			group.sessions.forEach((session, index) => {
+				flat.push({
+					kind: "row",
+					key: session.path,
+					session,
+					groupEnd: index === group.sessions.length - 1,
+				});
+			});
+		}
+		return flat;
+	}, [data.groups, groupLabel]);
+
+	const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
+		count: list.length,
+		getScrollElement: () => queueRef.current,
+		overscan: SIDEBAR_OVERSCAN,
+		// 首帧还没量到容器高度时给一个够高的窗口，量到之后以实测为准
+		initialRect: { width: 0, height: 800 },
+		estimateSize: (index) => (list[index]?.kind === "head" ? 32 : 30),
+		measureElement: (element) => element.getBoundingClientRect().height,
+	});
+	const items = virtualizer.getVirtualItems();
+	const totalSize = virtualizer.getTotalSize();
 
 	const menuProject = projectById(data.projects, projectMenu?.projectId);
 	const menuSession = findSession(data.groups, sessionMenu?.path);
@@ -209,14 +273,6 @@ export const SessionSidebar = memo(function SessionSidebar({
 	};
 
 	const emptyHint = scopeCwd === undefined ? t("sidebar.emptyAll") : t("sidebar.emptyProject");
-	const groupLabel = (key: string): string =>
-		key === "running"
-			? t("sidebar.group.running")
-			: key === "today"
-				? t("sidebar.group.today")
-				: key === "yesterday"
-					? t("sidebar.group.yesterday")
-					: t("sidebar.group.earlier");
 
 	return (
 		<aside className={isOpen ? "sb is-open" : "sb"}>
@@ -290,20 +346,40 @@ export const SessionSidebar = memo(function SessionSidebar({
 				onClose={closeFilter}
 			/>
 
-			<ScrollArea className="sb-queue" inset="var(--sidebar-edge)">
+			<ScrollArea className="sb-queue" inset="var(--sidebar-edge)" ref={queueRef}>
 				{data.groups.length === 0 ? <p className="sb-empty">{emptyHint}</p> : null}
-				{data.groups.map((group) => (
-					<SessionGroup
-						key={group.key}
-						group={group}
-						activeFile={activeFile}
-						// 不过滤到单个项目时行上来两行：项目名与时间
-						twoLine={scopeCwd === undefined}
-						label={groupLabel(group.key)}
-						onOpen={openSession}
-						onContextMenu={openSessionMenu}
-					/>
-				))}
+				<div className="sb-canvas" style={{ height: totalSize }}>
+					{items.map((item) => {
+						const entry = list[item.index];
+						if (entry === undefined) {
+							return null;
+						}
+						return (
+							<div
+								key={entry.key}
+								className={entry.kind === "row" && entry.groupEnd ? "sb-item is-group-end" : "sb-item"}
+								data-index={item.index}
+								ref={virtualizer.measureElement}
+								style={{ transform: `translateY(${item.start}px)` }}
+							>
+								{entry.kind === "head" ? (
+									<h2 className="sb-group-head">
+										<span>{entry.label}</span>
+									</h2>
+								) : (
+									<SessionRow
+										session={entry.session}
+										isActive={entry.session.path === activeFile}
+										// 不过滤到单个项目时行上来两行：项目名与时间
+										twoLine={scopeCwd === undefined}
+										onOpen={openSession}
+										onContextMenu={openSessionMenu}
+									/>
+								)}
+							</div>
+						);
+					})}
+				</div>
 			</ScrollArea>
 
 			{menuProject === undefined ? null : (

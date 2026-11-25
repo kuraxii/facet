@@ -9,6 +9,7 @@
  */
 
 import type { FileEntry } from "@facet/protocol";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { File as FileGlyph, PanelRightClose, RefreshCw } from "lucide-react";
 import {
 	type CSSProperties,
@@ -23,7 +24,7 @@ import { FACET_FILE_DRAG_MIME } from "../common/file-drag.ts";
 import { IconButton } from "../common/IconButton.tsx";
 import { ListRow } from "../common/ListRow.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
-import { ICON_SIZE } from "../styles/visual-contract.ts";
+import { ICON_SIZE, VISUAL_SCALE } from "../styles/visual-contract.ts";
 import { useHoverTip } from "../tip.tsx";
 import { TreeChevron } from "../transcript/chevron.tsx";
 
@@ -48,6 +49,9 @@ interface DirectoryState {
 	error?: string;
 }
 
+/** 视口外预渲染行数：快速滚轮不至于先看到空白再来内容 */
+const TREE_OVERSCAN = 10;
+
 /** 目录树里的一行。 */
 interface Row {
 	entry: FileEntry;
@@ -65,6 +69,10 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath, onCollapse 
 	const [activePath, setActivePath] = useState<string | undefined>(undefined);
 	/** 行元素，键盘移动之后把焦点送过去 */
 	const rowRefs = useRef(new Map<string, HTMLButtonElement>());
+	/** 树的滚动容器：虚拟化看它算可见窗口 */
+	const treeRef = useRef<HTMLDivElement | null>(null);
+	/** 已经请求、但那一行还没挂载时的待办焦点 */
+	const pendingFocus = useRef<string | null>(null);
 
 	/** 取一层目录；已经取过或正在取就不再发。 */
 	const load = useCallback(
@@ -134,6 +142,61 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath, onCollapse 
 	};
 	walk("", 0);
 
+	/**
+	 * 定高虚拟化：行高恒定（`ListRow` 的 `xs` 档），纯算术定位、不绑 `measureElement`。
+	 *
+	 * 目录树本来就是摊平的行序列（缩进靠 `--files-depth`），所以整表高度就是
+	 * `行数 × 行高`；`initialRect` 给的是首帧还没量到容器高度时的可见窗口，量到之后以实测为准。
+	 */
+	const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
+		count: rows.length,
+		getScrollElement: () => treeRef.current,
+		overscan: TREE_OVERSCAN,
+		estimateSize: () => VISUAL_SCALE.control.xs,
+		initialRect: { width: 0, height: 600 },
+	});
+	const items = virtualizer.getVirtualItems();
+	const totalSize = rows.length * VISUAL_SCALE.control.xs;
+
+	// 焦点要用的两样都放 ref 里：`focusRow` 因此不必随着行数组重建
+	const rowsRef = useRef<readonly Row[]>(rows);
+	rowsRef.current = rows;
+	const virtualizerRef = useRef(virtualizer);
+	virtualizerRef.current = virtualizer;
+
+	/**
+	 * 把焦点送到某一行。
+	 *
+	 * 虚拟化之后目标行可能还没挂载：先让虚拟化器滚到它，再一帧帧等它挂上之后把焦点交过去
+	 * （一次请求最多试 30 帧）。
+	 */
+	const focusRow = useCallback((path: string): void => {
+		setActivePath(path);
+		const index = rowsRef.current.findIndex((row) => row.entry.path === path);
+		if (index >= 0) {
+			virtualizerRef.current.scrollToIndex(index, { align: "auto" });
+		}
+		pendingFocus.current = path;
+		let frames = 0;
+		const tick = (): void => {
+			const target = pendingFocus.current;
+			if (target === null) {
+				return;
+			}
+			const node = rowRefs.current.get(target);
+			if (node !== undefined) {
+				pendingFocus.current = null;
+				node.focus();
+				return;
+			}
+			frames += 1;
+			if (frames < 30) {
+				window.requestAnimationFrame(tick);
+			}
+		};
+		window.requestAnimationFrame(tick);
+	}, []);
+
 	const root = directories[""];
 
 	/*
@@ -201,12 +264,6 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath, onCollapse 
 		);
 	}
 
-	/** 把焦点送到某一行。 */
-	const focusRow = (path: string): void => {
-		setActivePath(path);
-		rowRefs.current.get(path)?.focus();
-	};
-
 	/** 键盘导航：上下移动、左右展开收起、回车打开。 */
 	const onRowKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, row: Row, index: number): void => {
 		const { entry } = row;
@@ -271,71 +328,89 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath, onCollapse 
 		<>
 			{header}
 			{/* `scroll-y` 是全仓滚动容器的那一套：细拇指、始终预留沟槽（见 `base.css`） */}
-			<div className="tree scroll-y" role="tree" aria-label={t("panel.projectFiles")}>
-				{rows.map((row, index): ReactNode => {
-					const { entry, depth } = row;
-					const isDirectory = entry.kind === "directory";
-					const isOpen = expanded.has(entry.path);
-					const state = directories[entry.path];
-					const isSelected = entry.path === selectedPath;
-					const isActive = entry.path === activePath;
-					return (
-						<div key={entry.path} className="tree-item">
-							<ListRow
-								as="button"
-								size="xs"
-								selected={isSelected}
-								ref={(node) => {
-									if (node === null) {
-										rowRefs.current.delete(entry.path);
-									} else {
-										rowRefs.current.set(entry.path, node);
-									}
-								}}
-								className="tree-row"
-								style={{ "--files-depth": depth } as CSSProperties}
-								{...tip.handlers(entry.path)}
-								role="treeitem"
-								aria-level={depth + 1}
-								aria-expanded={isDirectory ? isOpen : undefined}
-								aria-selected={isSelected}
-								// 文件行可以拖进输入区：拖的是它的相对路径，落地是一枚 `@文件` 胶囊
-								draggable={!isDirectory}
-								onDragStart={(event) => {
-									if (isDirectory) {
-										return;
-									}
-									event.dataTransfer.setData(FACET_FILE_DRAG_MIME, entry.path);
-									event.dataTransfer.effectAllowed = "copy";
-								}}
-								tabIndex={isActive || (activePath === undefined && index === 0) ? 0 : -1}
-								onFocus={() => setActivePath(entry.path)}
-								onKeyDown={(event) => onRowKeyDown(event, row, index)}
-								onClick={() => {
-									setActivePath(entry.path);
-									if (isDirectory) {
-										toggle(entry);
-									} else {
-										onOpenFile(entry.path);
-									}
+			<div className="tree scroll-y" role="tree" aria-label={t("panel.projectFiles")} ref={treeRef}>
+				{/* 虚拟画布：高度 = 行数 × 行高，行绝对定位落在自己的 offset 上 */}
+				<div className="tree-canvas" style={{ height: totalSize }}>
+					{items.map((item): ReactNode => {
+						const row = rows[item.index];
+						if (row === undefined) {
+							return null;
+						}
+						const index = item.index;
+						const { entry, depth } = row;
+						const isDirectory = entry.kind === "directory";
+						const isOpen = expanded.has(entry.path);
+						const state = directories[entry.path];
+						const isSelected = entry.path === selectedPath;
+						const isActive = entry.path === activePath;
+						return (
+							<div
+								key={entry.path}
+								className="tree-item"
+								style={{
+									position: "absolute",
+									top: 0,
+									left: 0,
+									width: "100%",
+									transform: `translateY(${item.start}px)`,
 								}}
 							>
-								{isDirectory ? (
-									<TreeChevron isOpen={isOpen} size={ICON_SIZE.md} />
-								) : (
-									<FileGlyph size={ICON_SIZE.md} className="tree-icon" />
-								)}
-								<span className="tree-name">{entry.name}</span>
-								{state?.isLoading === true ? <span className="tree-note">…</span> : null}
-								{state?.error === undefined ? null : (
-									<span className="tree-note is-error" {...tip.handlers(state.error)}>
-										{t("panel.readFailed")}
-									</span>
-								)}
-							</ListRow>
-						</div>
-					);
-				})}
+								<ListRow
+									as="button"
+									size="xs"
+									selected={isSelected}
+									ref={(node) => {
+										if (node === null) {
+											rowRefs.current.delete(entry.path);
+										} else {
+											rowRefs.current.set(entry.path, node);
+										}
+									}}
+									className="tree-row"
+									style={{ "--files-depth": depth } as CSSProperties}
+									{...tip.handlers(entry.path)}
+									role="treeitem"
+									aria-level={depth + 1}
+									aria-expanded={isDirectory ? isOpen : undefined}
+									aria-selected={isSelected}
+									// 文件行可以拖进输入区：拖的是它的相对路径，落地是一枚 `@文件` 胶囊
+									draggable={!isDirectory}
+									onDragStart={(event) => {
+										if (isDirectory) {
+											return;
+										}
+										event.dataTransfer.setData(FACET_FILE_DRAG_MIME, entry.path);
+										event.dataTransfer.effectAllowed = "copy";
+									}}
+									tabIndex={isActive || (activePath === undefined && index === 0) ? 0 : -1}
+									onFocus={() => setActivePath(entry.path)}
+									onKeyDown={(event) => onRowKeyDown(event, row, index)}
+									onClick={() => {
+										setActivePath(entry.path);
+										if (isDirectory) {
+											toggle(entry);
+										} else {
+											onOpenFile(entry.path);
+										}
+									}}
+								>
+									{isDirectory ? (
+										<TreeChevron isOpen={isOpen} size={ICON_SIZE.md} />
+									) : (
+										<FileGlyph size={ICON_SIZE.md} className="tree-icon" />
+									)}
+									<span className="tree-name">{entry.name}</span>
+									{state?.isLoading === true ? <span className="tree-note">…</span> : null}
+									{state?.error === undefined ? null : (
+										<span className="tree-note is-error" {...tip.handlers(state.error)}>
+											{t("panel.readFailed")}
+										</span>
+									)}
+								</ListRow>
+							</div>
+						);
+					})}
+				</div>
 			</div>
 			{tip.render()}
 		</>

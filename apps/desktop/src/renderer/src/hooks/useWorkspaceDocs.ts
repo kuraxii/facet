@@ -40,7 +40,7 @@ const SIGNAL_SETTLE_MS = 250;
 const WAKE_SETTLE_MS = 80;
 
 /** 提交图谱每页取多少条：一页够撑满一屏多一点，滚到底再要下一页。 */
-const COMMIT_PAGE_SIZE = 50;
+const COMMIT_PAGE_SIZE = 200;
 
 /** 窗口此刻在前台吗。失焦或隐藏时不该为主机拉一次 git 探测。 */
 function windowIsActive(): boolean {

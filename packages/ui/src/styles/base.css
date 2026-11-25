@@ -396,6 +396,10 @@
 	--outline-pill-active-scale: 1.618;
 	--outline-pill-grow-width: calc(12px * var(--outline-scale));
 	--outline-pill-grow-height: calc(2px * var(--outline-scale));
+	/* 竖轨顶部「补一页更早的历史」那块热区的高度，以及里面三个点的直径与间距 */
+	--outline-more-height: calc(14px * var(--outline-scale));
+	--outline-more-dot: calc(2.5px * var(--outline-scale));
+	--outline-more-dot-gap: calc(2px * var(--outline-scale));
 	/* 过程组的缩进：竖线到行内容的距离，以及竖线本身相对正文列的位置
 	   （后者来自展开箭头字形在图标盒子里的内缩，改箭头图标时跟着调） */
 	--indent-rail-offset: 16px;

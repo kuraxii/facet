@@ -180,6 +180,7 @@ export const en = {
 		nav: "Conversation outline",
 		item: "Message {{index}} of {{count}}: {{preview}}",
 		fallback: "Message {{index}}",
+		more: "Load one earlier message",
 	},
 	commands: {
 		builtin: "Built-in",
@@ -721,6 +722,7 @@ export const zhCN = {
 		nav: "对话导航",
 		item: "第 {{index}} 条，共 {{count}} 条：{{preview}}",
 		fallback: "第 {{index}} 条消息",
+		more: "加载更早的一条消息",
 	},
 	commands: {
 		builtin: "自带",

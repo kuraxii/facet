@@ -4,6 +4,9 @@
  * 贴在主区右缘，每条用户消息一根短条。当前轮次加长、颜色提亮；指针附近的几根按距离
  * 放大，悬浮时在左侧给出那一条的开头，点一下跳到那一条。
  *
+ * 竖轨顶端另有一个「…」：滚到最上面，落定后补一页更早的历史。短条只管跳转，**补历史只有这一个
+ * 入口**——滚到顶部本身不加载任何东西，所以跳转与滚动途中都不会冒出整页插入带来的长任务。
+ *
  * 只在"没有可跳的条目"时不画（见 `outlineIsActive`）：位置由三列网格的右轨
  * （`--outline-slot`）保证，与窗口宽度无关，窄屏也不隐藏、不与正文重叠。
  */
@@ -20,6 +23,8 @@ import {
 	useState,
 } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
+import { measureStaleRows } from "../transcript/row-measure.ts";
+import { whenScrollSettles } from "../transcript/scroll-settle.ts";
 import {
 	activeOutlineIndex,
 	createOutlineHoverIntent,
@@ -41,6 +46,10 @@ export interface ChatOutlineProps {
 	items: readonly TranscriptItem[];
 	/** 正文所在的滚动容器，用来定位与跳转 */
 	container: HTMLElement | null;
+	/** 还有没有更早的历史可补，决定顶端「…」是否可用 */
+	canLoadOlder: boolean;
+	/** 补一页更早的历史 */
+	onLoadOlder: () => void;
 }
 
 /** 量一个锚点相对滚动容器上沿的偏移。 */
@@ -125,7 +134,7 @@ const OutlineTick = memo(function OutlineTick({
 	);
 });
 
-export function ChatOutline({ items, container }: ChatOutlineProps) {
+export function ChatOutline({ items, container, canLoadOlder, onLoadOlder }: ChatOutlineProps) {
 	const { t } = useI18n();
 	const prompts = useMemo(
 		() => outlinePrompts(items, (index) => t("outline.fallback", { index })),
@@ -269,6 +278,11 @@ export function ChatOutline({ items, container }: ChatOutlineProps) {
 			if (anchor === null || scroll === null) {
 				return;
 			}
+			/*
+			 * 起跳前兜底量一次：宽度刚变过的话，之前写回的高度全是旧宽度的，落点会按错的文档高度
+			 * 算。宽度没变时这里一行都不脏，只花一次查询的钱。
+			 */
+			measureStaleRows(scroll);
 			scroll.scrollTo({
 				top: scroll.scrollTop + offsetInContainer(anchor, scroll) - JUMP_OFFSET,
 				behavior: "smooth",
@@ -276,6 +290,33 @@ export function ChatOutline({ items, container }: ChatOutlineProps) {
 		},
 		[anchorOf, container],
 	);
+
+	/** 等着补页的落定监听：再点一次或卸载时把上一次的撤掉，免得两次点击各补一页 */
+	const cancelSettle = useRef<(() => void) | null>(null);
+	useEffect(() => () => cancelSettle.current?.(), []);
+
+	/**
+	 * 到最顶部并补一页更早的历史。
+	 *
+	 * 先滚、落定后再插：插页是几十到两百毫秒的长任务，压在飞行轨迹上就是"跳着跳着卡一下"。
+	 * 已经在顶部（没有可滚的距离，也就没有 `scrollend`）时直接补。
+	 */
+	const jumpToEarliest = useCallback(() => {
+		const scroll = container;
+		if (scroll === null) {
+			return;
+		}
+		cancelSettle.current?.();
+		if (scroll.scrollTop <= 0) {
+			onLoadOlder();
+			return;
+		}
+		scroll.scrollTo({ top: 0, behavior: "smooth" });
+		cancelSettle.current = whenScrollSettles(scroll, () => {
+			cancelSettle.current = null;
+			onLoadOlder();
+		});
+	}, [container, onLoadOlder]);
 
 	/*
 	 * 交给每根短条的回调都固定身份：短条是 `memo` 的，换成内联箭头会让整排每次渲染都白比一遍。
@@ -300,6 +341,19 @@ export function ChatOutline({ items, container }: ChatOutlineProps) {
 
 	return (
 		<div className="outline">
+			<button
+				type="button"
+				className="outline-more"
+				aria-label={t("outline.more")}
+				disabled={!canLoadOlder}
+				onClick={jumpToEarliest}
+			>
+				<span className="outline-more-dots" aria-hidden="true">
+					<i />
+					<i />
+					<i />
+				</span>
+			</button>
 			<div
 				className="outline-rail"
 				role="tablist"

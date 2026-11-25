@@ -13,15 +13,60 @@
 	right: var(--outline-inset);
 	z-index: var(--z-content-local);
 	display: flex;
+	flex-direction: column;
 	width: var(--outline-rail-width);
+	align-items: center;
+	justify-content: center;
+}
+
+/*
+ * 竖轨顶部的「…」：滚到最上面，落定后再补一页更早的历史。
+ *
+ * 它是唯一会触发补页的控件：短条只负责跳转。这样跳转途中永远不会有整页插入，飞行轨迹上不会
+ * 出现几十到两百毫秒的长任务。没有更早的页时灰掉，但热区仍然占着，短条区的位置不跟着跳。
+ */
+.outline-more {
+	display: flex;
+	flex: none;
+	width: 100%;
+	height: var(--outline-more-height);
+	align-items: center;
+	/* 与短条共用同一条竖轴：右对齐到同一个内缩，点阵的右缘贴着短条的右缘 */
+	justify-content: flex-end;
+	padding: 0 var(--outline-rail-inset) 0 0;
+	border: 0;
+	background: transparent;
+}
+
+.outline-more-dots {
+	display: flex;
+	gap: var(--outline-more-dot-gap);
 	align-items: center;
 }
 
+.outline-more-dots > i {
+	width: var(--outline-more-dot);
+	height: var(--outline-more-dot);
+	border-radius: var(--radius-pill);
+	background: var(--border-default);
+	transition: background-color var(--dur-fast) var(--ease-standard);
+}
+
+.outline-more:is(:hover, :focus-visible) .outline-more-dots > i {
+	background: var(--fg-default);
+}
+
+.outline-more:disabled .outline-more-dots > i {
+	background: var(--border-subtle);
+}
+
+/* 短条区按内容高度排，「…」紧挨着第一根；短条多到放不下时整体收缩（槽位各自可缩） */
 .outline-rail {
 	display: flex;
+	flex: 0 1 auto;
 	flex-direction: column;
 	width: 100%;
-	height: 100%;
+	min-height: 0;
 	align-items: center;
 	justify-content: center;
 }
@@ -260,6 +305,14 @@
 .row[data-outline-key],
 .row.is-streaming,
 .row:nth-last-child(-n + 2) {
+	content-visibility: visible;
+}
+
+/*
+ * 增量测高期间临时打开（`transcript/row-measure.ts`）：只有被标记为脏的行参与，
+ * 量完真实高度会写回行内 `contain-intrinsic-block-size`，随即摘掉这个类。
+ */
+.row.is-measuring {
 	content-visibility: visible;
 }
 

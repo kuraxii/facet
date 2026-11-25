@@ -2,8 +2,8 @@
 /**
  * 工作区标签栏。
  *
- * 纯展示组件，交互全部落在按钮上，所以这里要真的挂一棵 DOM：点击切换、关闭、方向键切换与
- * 无障碍属性都按用户看得见的行为断言，而不是只看静态标记。
+ * 纯展示组件，交互全部落在按钮上，所以这里要真的挂一棵 DOM：点击切换、关闭、方向键切换、
+ * 滚轮横向滚动与无障碍属性都按用户看得见的行为断言，而不是只看静态标记。
  */
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -23,13 +23,7 @@ const ITEMS: readonly WorkspaceTabItem[] = [
 	{ id: "terminal", label: "终端", icon: <span data-icon="terminal" /> },
 ];
 
-// jsdom 没有 ResizeObserver：标签栏用它在容器变窄时切到只有图标
 beforeAll(() => {
-	globalThis.ResizeObserver = class {
-		observe(): void {}
-		unobserve(): void {}
-		disconnect(): void {}
-	};
 	(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 });
 
@@ -39,37 +33,50 @@ afterEach(() => {
 	act(() => unmount?.());
 	unmount = undefined;
 	document.body.innerHTML = "";
+	// 滑动动画的开关是根节点上的设置项，测完还原，别带到别的用例
+	delete document.documentElement.dataset.motion;
 });
 
-/**
- * 挂一棵标签栏。
- *
- * 容器宽度是假的：组件按祖先容器的 `clientWidth` 决定要不要折起文字，jsdom 里一律是 0，
- * 所以这里显式给一个宽度，两种口径都能测到。
- */
-function mount(
-	props: Partial<WorkspaceTabBarProps> = {},
-	{ width = 800 }: { width?: number } = {},
-): {
+/** 关掉滑动动画：位置断言就不用一帧帧等。 */
+function withoutMotion(): void {
+	document.documentElement.dataset.motion = "reduced";
+}
+
+/** 让出几帧，等滑动动画走完。 */
+async function frames(count: number): Promise<void> {
+	for (let index = 0; index < count; index += 1) {
+		await act(async () => {
+			await new Promise((resolve) => {
+				requestAnimationFrame(() => resolve(undefined));
+			});
+		});
+	}
+}
+
+/** 挂一棵标签栏。 */
+function mount(props: Partial<WorkspaceTabBarProps> = {}): {
 	container: HTMLDivElement;
 	onSelect: ReturnType<typeof vi.fn>;
 	onClose: ReturnType<typeof vi.fn>;
+	rerender: (next: Partial<WorkspaceTabBarProps>) => void;
 } {
 	const container = document.createElement("div");
-	Object.defineProperty(container, "clientWidth", { value: width, configurable: true });
 	document.body.append(container);
 	const onSelect = vi.fn();
 	const onClose = vi.fn();
 	const root = createRoot(container);
-	act(() => {
-		root.render(
-			<I18nProvider language="zh-CN">
-				<WorkspaceTabBar items={ITEMS} activeId="files" onSelect={onSelect} onClose={onClose} {...props} />
-			</I18nProvider>,
-		);
-	});
+	const show = (next: Partial<WorkspaceTabBarProps>): void => {
+		act(() => {
+			root.render(
+				<I18nProvider language="zh-CN">
+					<WorkspaceTabBar items={ITEMS} activeId="files" onSelect={onSelect} onClose={onClose} {...next} />
+				</I18nProvider>,
+			);
+		});
+	};
+	show(props);
 	unmount = () => root.unmount();
-	return { container, onSelect, onClose };
+	return { container, onSelect, onClose, rerender: show };
 }
 
 /** 取所有标签按钮。 */
@@ -84,6 +91,15 @@ function tab(container: HTMLElement, label: string): HTMLButtonElement {
 		throw new Error(`找不到标签 ${label}`);
 	}
 	return found;
+}
+
+/** 取标签栏本身。 */
+function barOf(container: HTMLElement): HTMLDivElement {
+	const bar = container.querySelector<HTMLDivElement>('[role="tablist"]');
+	if (bar === null) {
+		throw new Error("找不到标签栏");
+	}
+	return bar;
 }
 
 /** 敲一下按键。 */
@@ -185,14 +201,94 @@ describe("工作区标签栏", () => {
 		press(tab(container, "文件"), "Delete");
 	});
 
-	it("容器够宽时给文字、不加无障碍名称，避免与可见文字重复", () => {
-		const { container } = mount({}, { width: 800 });
+	it("标签文字一直在，窄成什么样都不折成图标", () => {
+		const { container } = mount();
+		expect(tabs(container).map((node) => node.textContent)).toEqual(["文件", "变更3", "终端"]);
+		// 文字就是无障碍名称，不再另挂一份 aria-label 重复一遍
 		expect(tab(container, "文件").getAttribute("aria-label")).toBeNull();
 	});
 
-	it("容器窄时折起文字，用无障碍名称补上文案", () => {
-		const { container } = mount({}, { width: 300 });
-		expect(tab(container, "文件").getAttribute("aria-label")).toBe("文件");
+	it("放不下时滚轮竖着滚也横向滚标签", () => {
+		withoutMotion();
+		const { container } = mount();
+		const bar = barOf(container);
+		let left = 0;
+		Object.defineProperty(bar, "scrollWidth", { value: 400, configurable: true });
+		Object.defineProperty(bar, "clientWidth", { value: 100, configurable: true });
+		Object.defineProperty(bar, "scrollLeft", {
+			get: () => left,
+			set: (next: number) => {
+				left = next;
+			},
+			configurable: true,
+		});
+		const event = new WheelEvent("wheel", { deltaY: 60, bubbles: true, cancelable: true });
+		act(() => {
+			bar.dispatchEvent(event);
+		});
+		expect(left).toBe(60);
+		// 吃掉事件，页面与外壳都不跟着滚
+		expect(event.defaultPrevented).toBe(true);
+	});
+
+	it("没溢出时滚轮照常放行", () => {
+		const { container } = mount();
+		const bar = barOf(container);
+		Object.defineProperty(bar, "scrollWidth", { value: 100, configurable: true });
+		Object.defineProperty(bar, "clientWidth", { value: 100, configurable: true });
+		const event = new WheelEvent("wheel", { deltaY: 60, bubbles: true, cancelable: true });
+		act(() => {
+			bar.dispatchEvent(event);
+		});
+		expect(event.defaultPrevented).toBe(false);
+	});
+
+	it("当前项滚回可视范围里，只动标签栏自己的 scrollLeft", () => {
+		withoutMotion();
+		const { container, rerender } = mount({ activeId: "files" });
+		const bar = barOf(container);
+		let left = 0;
+		Object.defineProperty(bar, "scrollLeft", {
+			get: () => left,
+			set: (next: number) => {
+				left = next;
+			},
+			configurable: true,
+		});
+		// jsdom 没有布局：可滚范围与左右边界都自己给，目标整条落在右边框外面
+		Object.defineProperty(bar, "scrollWidth", { value: 400, configurable: true });
+		Object.defineProperty(bar, "clientWidth", { value: 100, configurable: true });
+		bar.getBoundingClientRect = () => ({ left: 0, right: 100, top: 0, bottom: 26 }) as DOMRect;
+		tab(container, "变更").getBoundingClientRect = () =>
+			({ left: 160, right: 240, top: 0, bottom: 26 }) as DOMRect;
+		rerender({ activeId: "changes" });
+		expect(left).toBe(140);
+	});
+
+	it("滚轮滚到目标位置是逐帧走过去的，一次到位就不叫动画了", async () => {
+		const { container } = mount();
+		const bar = barOf(container);
+		let left = 0;
+		Object.defineProperty(bar, "scrollWidth", { value: 400, configurable: true });
+		Object.defineProperty(bar, "clientWidth", { value: 100, configurable: true });
+		Object.defineProperty(bar, "scrollLeft", {
+			get: () => left,
+			set: (next: number) => {
+				left = next;
+			},
+			configurable: true,
+		});
+		act(() => {
+			bar.dispatchEvent(new WheelEvent("wheel", { deltaY: 60, bubbles: true, cancelable: true }));
+		});
+		// 第一帧之前还是原位置
+		expect(left).toBe(0);
+		await frames(1);
+		const midway = left;
+		expect(midway).toBeGreaterThan(0);
+		expect(midway).toBeLessThan(60);
+		await frames(30);
+		expect(left).toBe(60);
 	});
 
 	it("读屏名称与方向键顺序跟着条目走，不认硬编码的业务", () => {

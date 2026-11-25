@@ -3,8 +3,9 @@
  *
  * 顶带那一行与下面的正文行在同一个 CSS Grid 里，共享同一组列轨道（详见 `docs/layout.md`）：
  * `.app` 决定三列的实占宽，`.app-chrome` 与 `.shell` 用 `subgrid` 继承同一组轨道，顶带里
- * 不再有第二份宽度计算。实占宽 `--col-sidebar` / `--col-panel` 由偏好宽
- * `--sidebar-width` / `--panel-width` 在样式表里派生，这里只写偏好宽。
+ * 不再有第二份宽度计算。左栏的实占宽 `--col-sidebar` 由偏好宽 `--sidebar-width` 在样式表
+ * 里派生；右栏的偏好宽 `--panel-width` 不继承（拖动每帧改它，不能标脏整棵树），轨道直接由
+ * 它派生，顶带中格另拿一份局部副本算让位（见 `layout/panel-width.ts`）。
  *
  * 窗口按钮是右上角的固定簇，不占轨道：右栏收起或进抽屉时它都留在原地，顶带中格靠
  * `padding-inline-end` 给它让位（见 `chrome.css`）。它是 `.app` 的直接子元素，不放进
@@ -13,6 +14,7 @@
  * 连接中与连不上的界面只有窗口按钮，否则无边框窗口没有关闭入口。浏览器里没有窗口动作，
  * 拖动区与按钮都不渲染。
  */
+import { writePanelWidth } from "@facet/ui";
 import { type ReactNode, useLayoutEffect, useRef, useSyncExternalStore } from "react";
 import { bridge } from "./bridge.ts";
 import { layoutClassName, readLayoutIsNarrow, subscribeLayout } from "./layout-mode.ts";
@@ -74,14 +76,17 @@ export function AppFrame({
 
 	// 宽度只用两个变量表达，写在根节点上；拖动分隔条时由右栏直接改这两个变量，不经过渲染。
 	// 用 layout effect 而不是 effect：首帧就要按存盘的宽度排版，否则会先按缺省宽度闪一下
+	// biome-ignore lint/correctness/useExhaustiveDependencies: `panelVisible` 决定顶带副本取零还是取宽，类名落版后要重写一次
 	useLayoutEffect(() => {
 		const element = appRef.current;
 		if (element === null) {
 			return;
 		}
 		element.style.setProperty("--sidebar-width", sidebarWidth);
-		element.style.setProperty("--panel-width", panelWidth);
-	}, [sidebarWidth, panelWidth]);
+		// 右栏宽度有两个落点（`.app` 的轨道 + 顶带中格的让位副本），统一走 ui 那边的写入口。
+		// 收起与否也决定副本的值，所以显隐一起进依赖——类名先落到 DOM，这里再按新状态写。
+		writePanelWidth(element, panelWidth);
+	}, [sidebarWidth, panelWidth, panelVisible]);
 
 	return (
 		<div className={appClassName(isNarrow, sidebarVisible, panelVisible, panelExpanded)} ref={appRef}>

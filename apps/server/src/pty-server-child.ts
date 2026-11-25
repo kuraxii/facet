@@ -14,6 +14,9 @@
  * 本文件不依赖 Electron，也不读主机数据目录：它是纯执行端，参数全部来自父进程。
  */
 
+import { existsSync } from "node:fs";
+import { defaultTerminalProfile } from "./terminal-profiles.ts";
+
 /** 开一个终端时父进程给的参数。 */
 export interface PtySpawnOptions {
 	/** 启动目录，父进程已校验过 */
@@ -22,8 +25,10 @@ export interface PtySpawnOptions {
 	cols: number;
 	/** 行数 */
 	rows: number;
-	/** shell 路径，缺省取环境变量 SHELL */
+	/** shell 路径，缺省按平台探测（见 `terminal-profiles.ts`） */
 	shell?: string;
+	/** shell 的启动参数，缺省按探到的那个 shell 给 */
+	args?: readonly string[];
 }
 
 /** 父进程发来的消息。 */
@@ -71,9 +76,19 @@ function post(message: PtyChildMessage): void {
 	process.send?.(message);
 }
 
-/** 缺省 shell：尊重用户的 SHELL，没有就退到 sh。 */
-function defaultShell(): string {
-	return process.env.SHELL?.trim() || "/bin/sh";
+/**
+ * 缺省的 shell 与它的启动参数。
+ *
+ * 各平台的写法不同：Windows 上要按位置探一遍（PowerShell、Git Bash、WSL、cmd 的启动参数
+ * 也各不相同），POSIX 上仍是 `$SHELL`。探测本身是纯函数，这里只把「这个路径在不在」传进去。
+ */
+function defaultShell(): { shell: string; args: readonly string[] } {
+	const profile = defaultTerminalProfile({
+		platform: process.platform,
+		env: process.env,
+		exists: existsSync,
+	});
+	return { shell: profile.path, args: profile.args };
 }
 
 /**
@@ -91,9 +106,12 @@ function spawnTerminal(
 	module: PtyModule,
 	message: { requestId: number; id: string; options: PtySpawnOptions },
 ): void {
-	const shell = message.options.shell?.trim() || defaultShell();
+	const fallback = defaultShell();
+	const shell = message.options.shell?.trim() || fallback.shell;
+	// 显式给了 shell 却没给参数时按探到的那个 shell 补上，只有路径对不上才留空
+	const args = [...(message.options.args ?? (shell === fallback.shell ? fallback.args : []))];
 	try {
-		const pty = module.spawn(shell, [], {
+		const pty = module.spawn(shell, args, {
 			name: "xterm-256color",
 			cols: Math.max(2, message.options.cols),
 			rows: Math.max(2, message.options.rows),

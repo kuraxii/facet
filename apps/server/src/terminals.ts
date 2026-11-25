@@ -10,6 +10,7 @@
  * 登记同时写进数据目录的 `terminals.json`，主机重启后据此把以前开过的终端列成已结束。
  */
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { writeFileAtomic } from "@facet/agent";
 import type {
@@ -23,6 +24,7 @@ import type {
 import { terminalChannelFor } from "@facet/protocol";
 import { EventLog, replayAndSubscribe } from "./event-log.ts";
 import type { PtyBackend, PtyHandle, PtySpawnOptions } from "./pty-server.ts";
+import { defaultTerminalProfile } from "./terminal-profiles.ts";
 
 /** 单帧最大字符数，超出就切开，避免一帧撑爆对端的解析缓冲。 */
 const MAX_FRAME_CHARS = 64 * 1024;
@@ -104,8 +106,10 @@ export interface CreateTerminalOptions {
 	cols: number;
 	/** 行数 */
 	rows: number;
-	/** shell 路径，缺省用 pty 子进程的环境变量 SHELL */
+	/** shell 路径，缺省按平台探测（见 `terminal-profiles.ts`） */
 	shell?: string;
+	/** shell 的启动参数，缺省按那个 shell 给 */
+	args?: readonly string[];
 }
 
 /** 终端的当前状态与回滚内容，端挂载或重连时先取这一份。 */
@@ -242,6 +246,7 @@ export class TerminalService {
 			cols: row.info.cols,
 			rows: row.info.rows,
 			shell: options.shell,
+			args: options.args,
 		};
 		try {
 			row.handle = await this.backend.spawn(spawnOptions, {
@@ -522,8 +527,18 @@ function shellTitle(shell: string): string {
 }
 
 /** 后端没给 shell 时先按环境变量猜一个，spawn 之后以回执为准。 */
+/**
+ * 缺省的 shell 路径。
+ *
+ * 只是登记行上的初值：真跑起来之后由 pty 子进程回报实际启动的 shell。各平台的探测见
+ * `terminal-profiles.ts`。
+ */
 function defaultShell(): string {
-	return process.env.SHELL?.trim() || "/bin/sh";
+	return defaultTerminalProfile({
+		platform: process.platform,
+		env: process.env,
+		exists: existsSync,
+	}).path;
 }
 
 /** 读登记文件，格式不对时当作空。 */

@@ -83,6 +83,11 @@ flowchart BT
 - **生命周期分开**：主机级单例通道（`sessions-channel`、`models-channel`）在端点断开时只清订阅者、
   保留 `lastSeq`；会话通道（`session-hub`）按引用计数（`holders`）空闲回收；终端通道（`terminals`）
   独立维护水印背压（`ack`），并在 PTY 销毁时释放。它们不合并成带钩子的通用容器。
+- **终端按平台探测 shell**：Windows 上没有 `SHELL`，也不是「有 bash 就行」——pwsh、Windows
+  PowerShell、Git Bash、WSL、`cmd.exe` 的路径与启动参数各不相同。`terminal-profiles.ts` 是
+  纯函数（平台、环境变量、`exists` 都由调用方给），按 VS Code 的顺序探测：pwsh → Windows
+  PowerShell → Git Bash → WSL → `cmd.exe`，缺省取第一个；POSIX 上仍是 `$SHELL`（没有则
+  `/bin/sh`）。探测结果也是「有哪些终端」的来源，界面据此让用户挑。
 - **按目录盯工作树**：`workspace:/<cwd>` 一个项目目录一条，订阅即由 `workspaces` 建一份
   `ProjectWatch`（逐目录 `fs.watch`，跳过被忽略的目录，500ms 合并），最后一个订阅者走了就停；
   动作只有 `workspace/changed`，`history` 标出 HEAD 或引用是否动过，状态仍由端按需来取。

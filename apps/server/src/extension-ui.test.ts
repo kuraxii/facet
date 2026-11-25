@@ -15,6 +15,7 @@ import { ProjectStore } from "./project-store.ts";
 import { SessionHub } from "./session-hub.ts";
 import { SessionsChannel } from "./sessions-channel.ts";
 import { SettingsStore } from "./settings-store.ts";
+import { testSocketPath } from "./socket.test-support.ts";
 
 let dir: string;
 let factory: PiAgentFactory | undefined;
@@ -37,7 +38,7 @@ async function start(source: string): Promise<void> {
 	const config: ServerConfig = {
 		host: "127.0.0.1",
 		port: 0,
-		socketPath: join(dir, "server.sock"),
+		socketPath: testSocketPath(dir, "server"),
 		token: undefined,
 		remotePermission: "operate",
 		webPort: undefined,
@@ -66,7 +67,7 @@ async function openPeer(role?: "operator" | "viewer") {
 	const transport = new StreamTransport({
 		...(role === undefined ? {} : { role }),
 		createStream: async (): Promise<StreamLike> => {
-			const socket = connect({ path: join(dir, "server.sock") });
+			const socket = connect({ path: testSocketPath(dir, "server") });
 			socket.setEncoding("utf8");
 			await new Promise<void>((resolve, reject) => {
 				socket.once("connect", resolve);

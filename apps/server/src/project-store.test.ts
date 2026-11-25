@@ -51,6 +51,14 @@ describe("项目清单", () => {
 		await expect(store.add({ cwd: `${dir("a")}/` })).rejects.toBeInstanceOf(ProjectExistsError);
 	});
 
+	it.runIf(process.platform === "win32")("大小写写法不同也是同一个目录", async () => {
+		const store = await ProjectStore.open({ file });
+		const added = await store.add({ cwd: dir("a") });
+		// Windows 的路径大小写不敏感：同一处换个大小写不该再收一条
+		await expect(store.add({ cwd: dir("a").toUpperCase() })).rejects.toBeInstanceOf(ProjectExistsError);
+		expect(store.list()).toEqual([added]);
+	});
+
 	it("存进去的目录是清理过的", async () => {
 		const store = await ProjectStore.open({ file });
 		const project = await store.add({ cwd: `${root}//a/./` });

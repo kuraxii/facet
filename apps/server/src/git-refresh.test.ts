@@ -5,13 +5,8 @@
  * 探针换成计数用的假实现，所以断言的是「拉起了几次探测」「那一批有没有被真的收掉」，与
  * 真实 git 无关；`resolveKey` 也换成恒等函数，省掉每条用例去 spawn 一次 rev-parse。
  */
-import { execFileSync } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import type { GitCommitDetail, GitCommits, GitDiff, GitStatus } from "@facet/protocol";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { gitStatus } from "./git.ts";
+import { describe, expect, it, vi } from "vitest";
 import { GitAbortedError } from "./git-exec.ts";
 import { GitRefreshService } from "./git-refresh.ts";
 
@@ -100,34 +95,6 @@ function commitsStub() {
 			return calls;
 		},
 	};
-}
-
-const roots: string[] = [];
-
-afterEach(async () => {
-	for (const root of roots.splice(0)) {
-		await rm(root, { recursive: true, force: true });
-	}
-});
-
-/** 建一个临时仓库并提交一次。 */
-async function createRepo(): Promise<string> {
-	const root = await mkdtemp(join(tmpdir(), "facet-refresh-"));
-	roots.push(root);
-	const env = {
-		...process.env,
-		GIT_AUTHOR_NAME: "facet",
-		GIT_AUTHOR_EMAIL: "facet@example.com",
-		GIT_COMMITTER_NAME: "facet",
-		GIT_COMMITTER_EMAIL: "facet@example.com",
-		GIT_CONFIG_GLOBAL: "/dev/null",
-		GIT_CONFIG_SYSTEM: "/dev/null",
-	};
-	execFileSync("git", ["-C", root, "init", "-b", "main"], { env });
-	await writeFile(join(root, "a.txt"), "一行\n", "utf8");
-	execFileSync("git", ["-C", root, "add", "."], { env });
-	execFileSync("git", ["-C", root, "commit", "-m", "初始提交"], { env });
-	return root;
 }
 
 describe("GitRefreshService", () => {
@@ -300,27 +267,30 @@ describe("GitRefreshService", () => {
 		expect(stub.calls).toBe(2);
 	});
 
-	it("200ms 里连着来 10 次请求，真仓库上最多跑两轮探测", async () => {
-		const root = await createRepo();
-		let rounds = 0;
-		const service = new GitRefreshService({
-			probeStatus: async (repoRoot: string, signal: AbortSignal) => {
-				rounds += 1;
-				return await gitStatus(repoRoot, { signal });
-			},
-		});
+	it("连着的 10 次请求只跑一两轮探测", async () => {
+		const stub = probeStub();
+		const service = new GitRefreshService({ resolveKey: sameKey, probeStatus: stub.probe });
 
-		await writeFile(join(root, "a.txt"), "改过\n", "utf8");
+		/*
+		 * 间隔 15ms、总共 150ms，落在 1500ms 的冷却窗口里，探测本身又是同步返回的：
+		 * 这串请求该被并成一批，冷却到点只再多跑一轮。
+		 *
+		 * 不拿真仓库来定这个间隔：工作区车道走 latest-wins，请求打得比一轮探测还密就会
+		 * 一直「新一代顶掉在途」（那是车道的既定行为），而 `git status` 在不同机器上差一个
+		 * 量级——本机 Windows 二百多毫秒、Linux 几十毫秒——真仓库上「最多两轮」只在快的
+		 * 那边成立。这里要验的是调度，探测本身另有用例覆盖。
+		 */
 		const waits: Promise<GitStatus>[] = [];
 		for (let index = 0; index < 10; index += 1) {
-			waits.push(service.status(root));
-			await new Promise((resolve) => setTimeout(resolve, 20));
+			waits.push(service.status("/repo"));
+			await new Promise((resolve) => setTimeout(resolve, 15));
 		}
 		const results = await Promise.all(waits);
 
-		expect(rounds).toBeLessThanOrEqual(2);
-		// 所有等待者拿到的都是同一份最新结果
-		expect(results.every((status) => status.files.length === 1)).toBe(true);
+		// 十次请求只跑了两轮：第一轮服务第一个请求，其余九个在冷却窗口里并成一批，等第二轮
+		expect(stub.calls).toBe(2);
+		expect(results[0]?.branch).toBe("run-1");
+		expect(results.slice(1).every((status) => status.branch === "run-2")).toBe(true);
 	});
 
 	it("不同仓库各排各的，不会被对方的冷却挡住", async () => {

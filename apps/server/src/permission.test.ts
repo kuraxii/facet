@@ -18,6 +18,7 @@ import { ProjectStore } from "./project-store.ts";
 import { SessionHub } from "./session-hub.ts";
 import { SessionsChannel } from "./sessions-channel.ts";
 import { SettingsStore } from "./settings-store.ts";
+import { testSocketPath } from "./socket.test-support.ts";
 
 const SESSION = makeChannel("session", "s1") as Channel;
 
@@ -191,9 +192,9 @@ afterEach(async () => {
 
 describe("权限档", () => {
 	it("本机连接是管理档，只读档拿不到管理操作", async () => {
-		await start({ socketPath: join(dir, "local.sock") });
-		const local = await Peer.connect(join(dir, "local.sock"), "令牌");
-		const readOnly = await Peer.connect(join(dir, "local.sock"), "令牌", "viewer");
+		await start({ socketPath: testSocketPath(dir, "local") });
+		const local = await Peer.connect(testSocketPath(dir, "local"), "令牌");
+		const readOnly = await Peer.connect(testSocketPath(dir, "local"), "令牌", "viewer");
 		peerList.push(local, readOnly);
 		const localHello = await local.hello();
 		expect(localHello.role).toBe("admin");
@@ -209,8 +210,8 @@ describe("权限档", () => {
 	});
 
 	it("只读档不能建会话、写文件，也不能派发动作", async () => {
-		await start({ socketPath: join(dir, "local.sock") });
-		const remote = await Peer.connect(join(dir, "local.sock"), "令牌", "viewer");
+		await start({ socketPath: testSocketPath(dir, "local") });
+		const remote = await Peer.connect(testSocketPath(dir, "local"), "令牌", "viewer");
 		peerList.push(remote);
 		expect((await remote.request("createSession", { cwd: dir })).message).toBe(
 			"This connection is read-only",
@@ -224,10 +225,10 @@ describe("权限档", () => {
 	});
 
 	it("桌面入口的操作档能改设置，浏览器入口同一档位被拒", async () => {
-		await start({ socketPath: join(dir, "local.sock"), remotePermission: "operate" });
+		await start({ socketPath: testSocketPath(dir, "local"), remotePermission: "operate" });
 		// 声明操作档，主机的配置是 operate，所以给操作档；入口决定能不能碰主机配置
-		const ssh = await Peer.connect(join(dir, "local.sock"), "令牌", "operator", "desktop");
-		const browser = await Peer.connect(join(dir, "local.sock"), "令牌", "operator", "web");
+		const ssh = await Peer.connect(testSocketPath(dir, "local"), "令牌", "operator", "desktop");
+		const browser = await Peer.connect(testSocketPath(dir, "local"), "令牌", "operator", "web");
 		peerList.push(ssh, browser);
 		const sshHello = await ssh.hello();
 		expect(sshHello.role).toBe("operator");
@@ -243,8 +244,8 @@ describe("权限档", () => {
 	});
 
 	it("浏览器入口的只读档改不了会话，桌面入口的操作档可以", async () => {
-		await start({ socketPath: join(dir, "local.sock"), remotePermission: "operate" });
-		const browser = await Peer.connect(join(dir, "local.sock"), "令牌", "viewer", "web");
+		await start({ socketPath: testSocketPath(dir, "local"), remotePermission: "operate" });
+		const browser = await Peer.connect(testSocketPath(dir, "local"), "令牌", "viewer", "web");
 		peerList.push(browser);
 		expect((await browser.request("createSession", { cwd: dir })).message).toBe(
 			"This connection is read-only",
@@ -254,8 +255,8 @@ describe("权限档", () => {
 
 describe("终端的权限", () => {
 	it("只读档能列终端，开终端与打字都拒绝", async () => {
-		await start({ socketPath: join(dir, "local.sock") });
-		const remote = await Peer.connect(join(dir, "local.sock"), "令牌", "viewer");
+		await start({ socketPath: testSocketPath(dir, "local") });
+		const remote = await Peer.connect(testSocketPath(dir, "local"), "令牌", "viewer");
 		peerList.push(remote);
 		expect((await remote.hello()).role).toBe("viewer");
 		expect((await remote.request("listTerminals")).ok).toBe(true);
@@ -272,8 +273,8 @@ describe("终端的权限", () => {
 	});
 
 	it("没有 pty 后端的主机在握手里不报终端能力，开终端时说明原因", async () => {
-		await start({ socketPath: join(dir, "local.sock") });
-		const local = await Peer.connect(join(dir, "local.sock"), "令牌");
+		await start({ socketPath: testSocketPath(dir, "local") });
+		const local = await Peer.connect(testSocketPath(dir, "local"), "令牌");
 		peerList.push(local);
 		const hello = await local.hello();
 		expect(hello.capabilities).toContain("dispatch");
@@ -286,9 +287,9 @@ describe("终端的权限", () => {
 
 describe("远程操作审计", () => {
 	it("远程的写操作进审计文件，本机的不记", async () => {
-		await start({ socketPath: join(dir, "local.sock") });
-		const local = await Peer.connect(join(dir, "local.sock"), "令牌");
-		const remote = await Peer.connect(join(dir, "local.sock"), "令牌", "viewer");
+		await start({ socketPath: testSocketPath(dir, "local") });
+		const local = await Peer.connect(testSocketPath(dir, "local"), "令牌");
+		const remote = await Peer.connect(testSocketPath(dir, "local"), "令牌", "viewer");
 		peerList.push(local, remote);
 		await local.request("getSettings");
 		await remote.request("createSession", { cwd: dir });

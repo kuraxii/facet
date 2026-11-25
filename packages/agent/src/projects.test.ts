@@ -1,8 +1,18 @@
 import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, parse, sep } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { normalizeProjectPath, projectIdOf, scanSessionProjects } from "./projects.ts";
+
+/**
+ * 样本路径在主机上的写法。
+ *
+ * 会话头里的 cwd 由主机清理成本平台的写法，用例里统一用 POSIX 写法的样本，期望那一侧走
+ * 同一个函数：Linux 上还是 `/work/a`，Windows 上是 `\work\a`。
+ */
+function at(path: string): string {
+	return normalizeProjectPath(path);
+}
 
 let root: string;
 let sessionsDir: string;
@@ -37,16 +47,16 @@ describe("扫描会话目录", () => {
 		await writeSession("--b--", "s3.jsonl", "/work/b", new Date("2026-01-15T00:00:00Z"));
 
 		const projects = await scanSessionProjects({ sessionsDir });
-		expect(projects.map((project) => project.cwd)).toEqual(["/work/a", "/work/b"]);
+		expect(projects.map((project) => project.cwd)).toEqual([at("/work/a"), at("/work/b")]);
 		expect(projects[0]?.sessionCount).toBe(2);
 		expect(projects[0]?.lastUsed).toBe(new Date("2026-02-01T00:00:00Z").getTime());
-		expect(projects[0]?.id).toBe(projectIdOf("/work/a"));
+		expect(projects[0]?.id).toBe(projectIdOf(at("/work/a")));
 	});
 
 	it("目录不存在也照样提取", async () => {
 		await writeSession("--gone--", "s1.jsonl", "/work/已经删掉的目录");
 		const projects = await scanSessionProjects({ sessionsDir });
-		expect(projects.map((project) => project.cwd)).toEqual(["/work/已经删掉的目录"]);
+		expect(projects.map((project) => project.cwd)).toEqual([at("/work/已经删掉的目录")]);
 	});
 
 	it("坏文件与不是会话头的文件跳过", async () => {
@@ -78,14 +88,17 @@ describe("扫描会话目录", () => {
 		await writeSession("--b--", "s2.jsonl", "/work/./a");
 		const projects = await scanSessionProjects({ sessionsDir });
 		expect(projects).toHaveLength(1);
-		expect(projects[0]?.cwd).toBe("/work/a");
+		expect(projects[0]?.cwd).toBe(at("/work/a"));
 		expect(projects[0]?.sessionCount).toBe(2);
 	});
 
-	it("路径清理收拢重复斜杠与点段", () => {
-		expect(normalizeProjectPath("/work//a/./")).toBe("/work/a");
-		expect(normalizeProjectPath("/work/a/../b")).toBe("/work/b");
-		expect(normalizeProjectPath("/")).toBe("/");
+	it("路径清理收拢重复斜杠与点段，末尾分隔符一并收掉", () => {
+		expect(normalizeProjectPath("/work//a/./")).toBe(at("/work/a"));
+		expect(normalizeProjectPath("/work/a/../b")).toBe(at("/work/b"));
+		// 末尾分隔符本平台怎么写都收掉，根本身不动
+		expect(normalizeProjectPath(`/work/a${sep}`)).toBe(at("/work/a"));
+		const root = parse(process.cwd()).root;
+		expect(normalizeProjectPath(root)).toBe(root);
 		expect(normalizeProjectPath("")).toBe("");
 	});
 

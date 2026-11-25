@@ -64,13 +64,25 @@ describe("listDirectory", () => {
 		await expectCode(listDirectory(root, "/etc"), "outside_project");
 	});
 
-	it("指向项目外的符号链接不进列表，指进来的可以", async () => {
+	it("指向项目外的符号链接不进列表，指进来的可以", async (ctx) => {
 		const root = await createProject();
 		const outside = await createProject();
 		await writeFile(join(outside, "secret.txt"), "秘密\n", "utf8");
 		await writeFile(join(root, "inside.txt"), "内部\n", "utf8");
-		await symlink(join(outside, "secret.txt"), join(root, "escape.txt"));
-		await symlink(join(root, "inside.txt"), join(root, "alias.txt"));
+		/*
+		 * 普通用户在 Windows 上建不了符号链接（要开发者模式或管理员），这里先试一下：建不出来
+		 * 才跳过，建得出来就照常验——不是按平台写死。
+		 */
+		try {
+			await symlink(join(outside, "secret.txt"), join(root, "escape.txt"));
+			await symlink(join(root, "inside.txt"), join(root, "alias.txt"));
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code === "EPERM") {
+				ctx.skip();
+				return;
+			}
+			throw error;
+		}
 
 		const entries = await listDirectory(root, "");
 		expect(entries.map((entry) => entry.name)).toEqual(["alias.txt", "inside.txt"]);

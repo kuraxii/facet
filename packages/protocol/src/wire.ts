@@ -17,7 +17,7 @@ import type { ProjectInfo } from "./project.ts";
 import type { REQUEST_SCHEMAS } from "./schema/contracts.ts";
 import type { Entry, SessionListItem, SessionSnapshot } from "./session.ts";
 import type { FacetSettings } from "./settings.ts";
-import type { TerminalInfo } from "./terminal.ts";
+import type { TerminalInfo, TerminalProfileInfo } from "./terminal.ts";
 
 /** 线格式版本。不兼容的改动递增此值,端点据此拒绝握手。 */
 export const PROTOCOL_VERSION = 3;
@@ -277,6 +277,8 @@ export interface RequestResults {
 	saveCustomProvider: { providers: CustomProviderInfo[] };
 	removeCustomProvider: { providers: CustomProviderInfo[] };
 	listTerminals: { terminals: TerminalInfo[] };
+	/** 主机上可用的终端，顺序即「更可能是用户想要的」顺序 */
+	listTerminalProfiles: { profiles: TerminalProfileInfo[] };
 	createTerminal: { terminal: TerminalInfo };
 	writeTerminal: Record<string, never>;
 	resizeTerminal: Record<string, never>;

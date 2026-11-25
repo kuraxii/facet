@@ -43,6 +43,21 @@ export interface TerminalInfo {
 	restored: boolean;
 }
 
+/**
+ * 主机上可用的一种终端。
+ *
+ * 由主机探测出来（Windows 上是 PowerShell、Git Bash、WSL、cmd 这些，POSIX 上是 `$SHELL`），
+ * 界面据此让用户挑缺省的那一个；真正的路径与启动参数只有主机知道，端只传 `id`。
+ */
+export interface TerminalProfileInfo {
+	/** 稳定标识，例如 `pwsh`、`powershell`、`git-bash` */
+	id: string;
+	/** 显示名，例如 `Windows PowerShell` */
+	label: string;
+	/** 可执行文件路径，界面上作为次要说明 */
+	path: string;
+}
+
 /** 终端动作。 */
 export type TerminalAction =
 	/** 主机侧：一段输出。通道序号在帧上，端据此发现缺口。 */

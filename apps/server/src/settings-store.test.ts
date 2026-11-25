@@ -74,6 +74,19 @@ describe("设置读取", () => {
 		expect(settings.appearance.outlineScale).toBe(200);
 	});
 
+	it("终端 shell 的标识原样留着，没有时是自动", async () => {
+		await writeFile(file, JSON.stringify({ version: 1, terminal: { profile: "git-bash" } }), "utf8");
+		expect((await SettingsStore.open({ file })).get().terminal.profile).toBe("git-bash");
+
+		// 缺这一项、或者写了个别的类型，都按「自动」处理
+		await writeFile(file, JSON.stringify({ version: 1 }), "utf8");
+		expect((await SettingsStore.open({ file })).get().terminal.profile).toBe(
+			DEFAULT_SETTINGS.terminal.profile,
+		);
+		await writeFile(file, JSON.stringify({ version: 1, terminal: { profile: 7 } }), "utf8");
+		expect((await SettingsStore.open({ file })).get().terminal.profile).toBe("");
+	});
+
 	it("编辑器与终端字号保留 0.5 步长", async () => {
 		await writeFile(
 			file,

@@ -114,6 +114,8 @@ class Peer {
 }
 
 let dir: string;
+/** 审计写入是排队的，读文件前要 flush */
+let audit: AuditLog;
 let peerList: Peer[] = [];
 let endpoint: Awaited<ReturnType<typeof startEndpoint>>;
 
@@ -158,6 +160,7 @@ async function start(overrides: Partial<ServerConfig> = {}): Promise<void> {
 		replayLimit: 32,
 	});
 	const settingsStore = await SettingsStore.open({ file: join(dir, "settings.json") });
+	audit = new AuditLog(join(dir, "audit.log"));
 	endpoint = await startEndpoint({
 		config: config(dir, overrides),
 		factory: {
@@ -171,7 +174,7 @@ async function start(overrides: Partial<ServerConfig> = {}): Promise<void> {
 		hostId: "h",
 		sessions: new SessionsChannel(32),
 		modelLog: new ModelsChannel(32),
-		audit: new AuditLog(join(dir, "audit.log")),
+		audit,
 	});
 }
 
@@ -294,7 +297,7 @@ describe("远程操作审计", () => {
 		await local.request("getSettings");
 		await remote.request("createSession", { cwd: dir });
 		await remote.request("getSettings");
-		await new Promise((resolve) => setTimeout(resolve, 100));
+		await audit.flush();
 		const lines = (await readFile(join(dir, "audit.log"), "utf8"))
 			.split("\n")
 			.filter((line) => line.length > 0)

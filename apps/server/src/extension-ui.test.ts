@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SessionClient } from "../../../packages/client-core/src/client.ts";
 import { StreamTransport } from "../../../packages/transport/src/stream.ts";
 import type { StreamLike } from "../../../packages/transport/src/types.ts";
+import { AuditLog } from "./audit.ts";
 import type { ServerConfig } from "./config.ts";
 import { startEndpoint } from "./endpoint.ts";
 import { ModelsChannel } from "./models-channel.ts";
@@ -20,6 +21,8 @@ import { testSocketPath } from "./socket.test-support.ts";
 let dir: string;
 let factory: PiAgentFactory | undefined;
 let hub: SessionHub;
+/** 审计写入是排队的，读文件前必须 flush，否则可能读到还没落盘的那几行 */
+let audit: AuditLog;
 let endpoint: Awaited<ReturnType<typeof startEndpoint>> | undefined;
 const peers: { client: SessionClient; transport: StreamTransport }[] = [];
 
@@ -51,8 +54,10 @@ async function start(source: string): Promise<void> {
 		hostName: "交互测试",
 		debug: false,
 	};
+	audit = new AuditLog(join(dir, "audit.log"));
 	endpoint = await startEndpoint({
 		config,
+		audit,
 		factory,
 		hub,
 		hostId: "ui-host",
@@ -248,9 +253,10 @@ describe("pi 扩展交互完整链路", () => {
 		expect(results.sort()).toEqual([false, true]);
 		await vi.waitFor(() => expect(viewer.client.sessionView()?.state.extensionUi.prompts).toEqual([]));
 		await expect(first.client.respondUi(pending.requestId, { kind: "cancel" })).resolves.toBe(false);
-		const audit = await readFile(join(dir, "audit.log"), "utf8");
-		expect(audit).toContain("respondUi");
-		expect(audit).not.toMatch(/viewer-private|admin-private|operator-private/);
+		await audit.flush();
+		const audited = await readFile(join(dir, "audit.log"), "utf8");
+		expect(audited).toContain("respondUi");
+		expect(audited).not.toMatch(/viewer-private|admin-private|operator-private/);
 	});
 
 	it("断线保留请求，重连快照恢复并关闭其他端的弹窗", async () => {

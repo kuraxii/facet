@@ -7,11 +7,11 @@ import type {
 	RequestMethod,
 	RequestParams,
 	RequestResults,
-	SessionSnapshot,
 } from "@facet/protocol";
 import { workspaceChannelFor } from "@facet/protocol";
 import { describe, expect, it, vi } from "vitest";
 import { formatCommitLog, type HostHandshake, SessionClient, type SessionTransport } from "./client.ts";
+import { sessionSnapshot } from "./session-fixture.test-support.ts";
 import type { EntryView } from "./state.ts";
 import { toTranscript } from "./transcript.ts";
 
@@ -47,36 +47,6 @@ function user(text: string): Message {
 function assistantCalling(block: Extract<Message, { role: "assistant" }>["content"][number]): Message {
 	const base = assistant("") as Extract<Message, { role: "assistant" }>;
 	return { ...base, content: [block] };
-}
-
-function snapshot(): SessionSnapshot {
-	return {
-		id: "s1",
-		file: "/tmp/s1.jsonl",
-		cwd: "/tmp",
-		name: "既有会话",
-		phase: "idle",
-		maintenance: undefined,
-		model: undefined,
-		thinkingLevel: "medium",
-		availableThinkingLevels: ["medium"],
-		activeToolNames: [],
-		queued: { steering: [], followUp: [] },
-		contextUsage: undefined,
-		stats: {
-			sessionId: "s1",
-			sessionFile: "/tmp/s1.jsonl",
-			userMessages: 0,
-			assistantMessages: 0,
-			toolCalls: 0,
-			toolResults: 0,
-			totalMessages: 0,
-			tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-			cost: 0,
-			contextUsage: undefined,
-		},
-		modelFallbackMessage: undefined,
-	};
 }
 
 class FakeTransport implements SessionTransport {
@@ -118,14 +88,14 @@ class FakeTransport implements SessionTransport {
 				case "openSession": {
 					const file = (params as { sessionFile: string }).sessionFile;
 					const id = file.split("/").pop()?.replace(".jsonl", "") ?? "s1";
-					return { ...snapshot(), id, file };
+					return { ...sessionSnapshot(), id, file };
 				}
 				case "forkSession":
-					return { ...snapshot(), id: "s2", file: "/tmp/s2.jsonl" };
+					return { ...sessionSnapshot(), id: "s2", file: "/tmp/s2.jsonl" };
 				case "respondUi":
 					return { accepted: this.uiAccepted };
 				case "snapshot":
-					return snapshot();
+					return sessionSnapshot();
 				case "availableModels":
 					return {
 						models: [
@@ -173,7 +143,11 @@ class FakeTransport implements SessionTransport {
 						this.unknownSession = false;
 						throw Object.assign(new Error("会话不存在:s1"), { code: "unknown_session" });
 					}
-					return { seq: 0, resync: false, session: channel.startsWith("session:") ? snapshot() : undefined };
+					return {
+						seq: 0,
+						resync: false,
+						session: channel.startsWith("session:") ? sessionSnapshot() : undefined,
+					};
 				}
 				case "unsubscribe":
 					return {};

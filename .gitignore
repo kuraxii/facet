@@ -24,3 +24,8 @@ Thumbs.db
 *.swo
 *~
 .harness/
+
+# 真机压测脚本的产物：跑一次就在仓库根目录落一份，别提交
+measure-result*.json
+reclaim-result.json
+perf-*.json

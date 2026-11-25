@@ -16,6 +16,7 @@ import { imagesOf } from "./message-images.tsx";
 import { forgetRowMeasure, measureStaleRows, ROW_MEASURE_SETTLE_MS } from "./row-measure.ts";
 import { isCollapsedByDefault, retryDelayText, Shell, textOf, useNow } from "./row-shell.tsx";
 import { RowView } from "./row-view.tsx";
+import { type HistoryReclaimOptions, useHistoryReclaim } from "./use-history-reclaim.ts";
 
 /** 没有附带图片时共用这一份空数组，行复用时不必每帧新建。 */
 const NO_IMAGES: readonly MessageImage[] = [];
@@ -47,7 +48,16 @@ export interface ChatTranscriptProps {
 	isRunning?: boolean;
 	/** 正文的滚动容器：增量测高与翻页锚定都在它上面做 */
 	scrollElement?: HTMLElement | null;
+	/** 静默回收更早历史的接线；不给就不回收（测试与嵌入式用法） */
+	reclaim?: TranscriptReclaimOptions | undefined;
 }
+
+/**
+ * 静默回收的接线：除了正文自己提供的容器与行模型，其余由外壳决定。
+ *
+ * 不给就不回收（测试与嵌入式用法），定时器不开。
+ */
+export type TranscriptReclaimOptions = Omit<HistoryReclaimOptions, "scrollElement" | "rows">;
 
 /**
  * 对话面板。把渲染单元聚合成分行,并维护每行的收起状态。
@@ -66,6 +76,7 @@ export function ChatTranscript({
 	renames,
 	isRunning = false,
 	scrollElement = null,
+	reclaim,
 }: ChatTranscriptProps) {
 	const { t } = useI18n();
 	// 分组每帧都会重算，内容没变的行沿用上一帧的对象，行组件据此跳过重渲染
@@ -260,6 +271,24 @@ export function ChatTranscript({
 			retryImages: lastUser === undefined ? NO_IMAGES : imagesOf(lastUser.items),
 		};
 	}, [rows, textFor]);
+
+	/*
+	 * 静默回收更早的历史：判据与锚点补偿都在 `use-history-reclaim.ts`，这里只把行模型与
+	 * 裁剪点递进去。没接回收线时传空容器，定时器不开。
+	 */
+	useHistoryReclaim({
+		...(reclaim ?? {
+			retainMaxEntries: Number.POSITIVE_INFINITY,
+			entryCount: 0,
+			cutViewId: undefined,
+			isStreaming: true,
+			isLoadingOlder: true,
+			sessionKey: undefined,
+			onReclaim: () => undefined,
+		}),
+		scrollElement: reclaim === undefined ? null : scrollElement,
+		rows,
+	});
 
 	if (rows.length === 0 && maintenance === undefined) {
 		return <div className="empty">{emptyHint ?? t("transcript.empty")}</div>;

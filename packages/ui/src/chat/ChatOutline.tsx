@@ -24,7 +24,7 @@ import {
 } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { measureStaleRows } from "../transcript/row-measure.ts";
-import { whenScrollSettles } from "../transcript/scroll-settle.ts";
+import { markScrollSettling, whenScrollSettles } from "../transcript/scroll-settle.ts";
 import {
 	activeOutlineIndex,
 	createOutlineHoverIntent,
@@ -283,6 +283,8 @@ export function ChatOutline({ items, container, canLoadOlder, onLoadOlder }: Cha
 			 * 算。宽度没变时这里一行都不脏，只花一次查询的钱。
 			 */
 			measureStaleRows(scroll);
+			// 平滑跳转要飞一段：这段时间里静默回收不该动手量视口
+			markScrollSettling(scroll);
 			scroll.scrollTo({
 				top: scroll.scrollTop + offsetInContainer(anchor, scroll) - JUMP_OFFSET,
 				behavior: "smooth",
@@ -311,6 +313,8 @@ export function ChatOutline({ items, container, canLoadOlder, onLoadOlder }: Cha
 			onLoadOlder();
 			return;
 		}
+		// 平滑跳到顶部要飞一段：这段时间里静默回收不该动手量视口
+		markScrollSettling(scroll);
 		scroll.scrollTo({ top: 0, behavior: "smooth" });
 		cancelSettle.current = whenScrollSettles(scroll, () => {
 			cancelSettle.current = null;

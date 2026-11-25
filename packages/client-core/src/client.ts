@@ -49,6 +49,7 @@ import {
 	sessionsChannelFor,
 	workspaceChannelFor,
 } from "@facet/protocol";
+import { type HistoryTrimCut, RETAIN_MAX_PAGES } from "./history-trim.ts";
 import { debugLog, errorLog } from "./log.ts";
 import { isHistoryMessageId } from "./message-id.ts";
 import type { ChatView, SessionView } from "./state.ts";
@@ -147,7 +148,7 @@ export interface OpenedSession {
 }
 
 const DEFAULT_PAGE_SIZE = 50;
-const DEFAULT_INITIAL_PAGES = 2;
+const DEFAULT_INITIAL_PAGES = RETAIN_MAX_PAGES;
 const DEFAULT_SESSION_RETENTION_MS = 3 * 60 * 1000;
 
 /** 一条等待主机确认的发送。 */
@@ -310,6 +311,48 @@ export class SessionClient {
 
 	private get olderCursor(): string | undefined {
 		return this.active?.olderCursor;
+	}
+
+	/**
+	 * 首屏装载的条目数，也就是静默回收的保留水位。
+	 *
+	 * 由客户端自己的 `pageSize * initialPages` 算：页大小是构造参数，写死就会与实际装载量脱开
+	 * （应用用 200 条一页，写 50 就只有四分之一）。
+	 */
+	get historyWatermark(): number {
+		return this.pageSize * this.initialPages;
+	}
+
+	/**
+	 * 静默回收的裁剪点：够两页水位时给出保留区首条，否则为空。
+	 *
+	 * 界面用它先看视口是否已经离开裁剪线，确认之后才调 `trimOlderHistory`。
+	 */
+	historyTrimCut(): HistoryTrimCut | undefined {
+		const runtime = this.active;
+		return runtime === undefined
+			? undefined
+			: this.state.historyTrimCut(runtime.opened.chatChannel, this.historyWatermark);
+	}
+
+	/**
+	 * 把两页水位之前的条目裁掉，游标回退到保留区首条。
+	 *
+	 * 裁掉的那段重新走 `loadOlder()` 能原样取回：`olderCursor` 就是保留区首条的条目 id，
+	 * 主机按它取「更早的一页」，衔接处既不重复也不缺条。
+	 */
+	trimOlderHistory(): { trimmed: number } {
+		const runtime = this.active;
+		if (runtime === undefined) {
+			return { trimmed: 0 };
+		}
+		const cut = this.state.historyTrimCut(runtime.opened.chatChannel, this.historyWatermark);
+		if (cut === undefined) {
+			return { trimmed: 0 };
+		}
+		this.state.trimOlderHistory(runtime.opened.chatChannel, cut);
+		runtime.olderCursor = cut.olderCursor;
+		return { trimmed: cut.cutIndex };
 	}
 
 	/** 状态持有者,界面从这里读视图并订阅变化。 */

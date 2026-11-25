@@ -116,6 +116,27 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 		[transcript.items],
 	);
 	const outlineAttr = outlineActive ? "true" : "false";
+	/*
+	 * 静默回收的接线：裁剪点由客户端算（刚好在满两页水位时给出保留区首条），执行裁剪也回客户端。
+	 * 什么时候真正动手由正文里的定时器按判据决定，这里只把当前的量递给它。
+	 */
+	// biome-ignore lint/correctness/useExhaustiveDependencies: `chat` 只作重算信号；裁剪点靠视图变化才可能变
+	const reclaimCut = useMemo(() => client.historyTrimCut(), [client, chat]);
+	const reclaim = useMemo(
+		() => ({
+			entryCount: chat?.items.length ?? 0,
+			// 保留水位跟客户端自己的页大小走，写死数字会与实际装载量脱开
+			retainMaxEntries: client.historyWatermark,
+			cutViewId: reclaimCut?.cutViewId,
+			isStreaming: activity !== "idle",
+			isLoadingOlder: transcript.isLoadingOlder,
+			sessionKey: sessionView.channel,
+			onReclaim: () => {
+				client.trimOlderHistory();
+			},
+		}),
+		[chat, reclaimCut, activity, transcript.isLoadingOlder, sessionView.channel, client],
+	);
 	return (
 		<>
 			<ChatOutline
@@ -149,6 +170,7 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 							onCopyDetails={copyText}
 							onCopyText={copyText}
 							scrollElement={transcript.scrollElement}
+							reclaim={reclaim}
 							renames={chat?.renames}
 							emptyHint={t("app.emptyHint")}
 						/>

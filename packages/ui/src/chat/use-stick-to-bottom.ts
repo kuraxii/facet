@@ -4,6 +4,7 @@
  * 贴底时内容变化自动跟到底部；用户向上滚动后脱离跟随，由界面给出回底入口。
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { markScrollSettling } from "../transcript/scroll-settle.ts";
 
 /** 距底部多少像素以内仍算贴底。 */
 const PIN_THRESHOLD = 24;
@@ -103,6 +104,8 @@ export function useStickToBottom(
 			applyPinned(true);
 			if (behavior === "smooth") {
 				animatingRef.current = true;
+				// 平滑回底也是飞行：静默回收靠这个标记避开途中量视口
+				markScrollSettling(element, SMOOTH_MS);
 				window.setTimeout(() => {
 					animatingRef.current = false;
 				}, SMOOTH_MS);

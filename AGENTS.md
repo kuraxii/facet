@@ -11,6 +11,7 @@
 | `docs/visual-system.md` | 视觉刻度（字号、行高、间距、控件高度、圆角、图标、动效）的真值、控件原语、滚动条与零债门禁 |
 | `docs/layout.md` | 外壳档位、列宽的真值来源、浮层与层级约定 |
 | `docs/testing.md` | 五条自检命令各查什么、改到什么跑哪几条、流水线怎么跑、常见的坑 |
+| `docs/performance.md` | 帧预算的两种测量口径、当前基线（每帧 ms 与各刷新率换算）、测量脚本用法 |
 | `docs/protocol-rpc.md` | 线格式、帧类型、RPC 方法与单测口径 |
 | `docs/ui_design_specification.md` | 界面设计、配色与尺寸规范 |
 | `docs/i18n.md` | 界面语言与文案规则 |

@@ -6,6 +6,7 @@
 import type { Part, ToolCallPart, ToolImage } from "@facet/client-core";
 import { Brain, Edit3, FileText, Search, Terminal, Wrench } from "lucide-react";
 import {
+	memo,
 	type MouseEvent as ReactMouseEvent,
 	type ReactNode,
 	useEffect,
@@ -96,7 +97,14 @@ function ToolImageThumb({
 	);
 }
 
-function ToolRow({ part }: { part: ToolCallPart }) {
+/**
+ * 一条工具调用。
+ *
+ * `memo` 是流式期间的关键：正在写的那条消息每帧都会重投影一次，而它已经结束的工具调用会沿用
+ * 上一次的段对象（见 `toTranscript` 的 `parts` 缓存），这里据此直接跳过——不然一轮里几十个
+ * 工具行会跟着每一帧重算 `toolTarget`/`foldOutput`、重建图标、重写 DOM。
+ */
+const ToolRow = memo(function ToolRow({ part }: { part: ToolCallPart }) {
 	const { t } = useI18n();
 	const [isOpen, setOpen] = useState(false);
 	const [isExpanded, setExpanded] = useState(false);
@@ -172,7 +180,7 @@ function ToolRow({ part }: { part: ToolCallPart }) {
 			{tip.render()}
 		</div>
 	);
-}
+});
 
 /** 一段思考。收起时只有一行，点开是正文。 */
 function ThinkingRow({ text }: { text: string }) {
@@ -193,8 +201,13 @@ function ThinkingRow({ text }: { text: string }) {
 	);
 }
 
-/** 一段内容。正文走 Markdown,思考与工具各自成块。 */
-export function PartView({ part, isStreaming }: { part: Part; isStreaming: boolean }) {
+/**
+ * 一段内容。正文走 Markdown,思考与工具各自成块。
+ *
+ * 同样 `memo`：段对象没变就不重渲染。正文段的字符串没变时 `Markdown` 自己也会跳过解析，
+ * 这里先跳一层能省下每次投影重建几十个元素的钱。
+ */
+export const PartView = memo(function PartView({ part, isStreaming }: { part: Part; isStreaming: boolean }) {
 	if (part.kind === "text") {
 		return <Markdown text={part.text} isStreaming={isStreaming} />;
 	}
@@ -206,7 +219,7 @@ export function PartView({ part, isStreaming }: { part: Part; isStreaming: boole
 		return null;
 	}
 	return <ToolRow part={part} />;
-}
+});
 
 /** 这一行是否被用户中止。 */
 export function isAborted(row: DisplayRow): boolean {

@@ -22,6 +22,8 @@ const MAX = 420;
 const THRESHOLD = MIN / 2;
 /** 折叠预览属性：与 `SessionSidebar` 传给分隔条的是同一个名字。 */
 const PREVIEW_ATTR = SHELL_DATA_ATTRS.sidebarDragCollapsed;
+/** 「被压住」属性：用来替掉样式里挂在 `.app` 上的 `:has()`。 */
+const ACTIVE_ATTR = SHELL_DATA_ATTRS.sidebarResizerActive;
 
 beforeAll(() => {
 	for (const name of ["setPointerCapture", "releasePointerCapture"]) {
@@ -76,6 +78,7 @@ function mount(patch: Partial<PaneResizerProps> = {}): {
 					collapseThreshold={THRESHOLD}
 					onCollapse={onCollapse}
 					collapsePreviewAttr={PREVIEW_ATTR}
+					activeAttr={ACTIVE_ATTR}
 					{...patch}
 				/>
 			</I18nProvider>,
@@ -235,5 +238,26 @@ describe("分隔条的拖收关闭", () => {
 
 		dragTo(handle, THRESHOLD + 1);
 		expect(app.hasAttribute(PREVIEW_ATTR)).toBe(false);
+	});
+});
+
+describe("接缝高亮的属性", () => {
+	it("指针进出各写一次，落在 `.app` 上而不是元素自己身上", () => {
+		const { app, handle } = mount();
+		// React 的 onPointerEnter / onPointerLeave 由 pointerover / pointerout 合成
+		pointer(handle, "pointerover", 400);
+		expect(app.getAttribute(ACTIVE_ATTR)).toBe("true");
+		pointer(handle, "pointerout", 400);
+		expect(app.hasAttribute(ACTIVE_ATTR)).toBe(false);
+		// 元素自己不留状态：样式只认 `.app[data-…]`
+		expect(handle.hasAttribute(ACTIVE_ATTR)).toBe(false);
+	});
+
+	it("按下时也保证挂上（触摸没有 hover），松手摘掉", () => {
+		const { app, handle } = mount();
+		pointer(handle, "pointerdown", 400);
+		expect(app.getAttribute(ACTIVE_ATTR)).toBe("true");
+		pointer(handle, "pointerup", 400);
+		expect(app.hasAttribute(ACTIVE_ATTR)).toBe(false);
 	});
 });

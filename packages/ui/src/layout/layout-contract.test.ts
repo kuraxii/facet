@@ -21,6 +21,9 @@ function css(name: string): string {
 const panel = css("panel.css");
 const base = css("base.css");
 const chrome = css("chrome.css");
+const sidebar = css("sidebar.css");
+/** 外壳三份样式表合起来：属性名散落在各自那一栏的样式里 */
+const shell = `${panel}${sidebar}${chrome}`;
 
 /** 取出文件里所有 `@container (width < Npx)` 的折点。 */
 function containerBreakpoints(source: string): number[] {
@@ -70,14 +73,24 @@ describe("样式表与布局契约一致", () => {
 		expect(panel).toContain("var(--file-tree-min)");
 	});
 
-	it("拖拽折叠的属性名在样式里只出现契约里的这两个", () => {
+	it("外壳属性名在样式里只出现契约里的这几个", () => {
 		const declared = Object.values(SHELL_DATA_ATTRS);
 		for (const name of declared) {
-			expect(panel).toContain(`.app[${name}="true"]`);
+			expect(shell).toContain(`.app[${name}="true"]`);
 		}
 		// 样式里出现的 `data-*-drag-collapsed` 不能有契约之外的第三个
-		const used = new Set([...`${panel}${chrome}`.matchAll(/data-[\w-]*drag-collapsed/g)].map((m) => m[0]));
-		expect(used).toEqual(new Set(declared));
+		const collapsed = [SHELL_DATA_ATTRS.sidebarDragCollapsed, SHELL_DATA_ATTRS.panelDragCollapsed];
+		const used = new Set([...shell.matchAll(/data-[\w-]*drag-collapsed/g)].map((m) => m[0]));
+		expect(used).toEqual(new Set(collapsed));
+	});
+
+	it("外壳样式不把 `:has()` 挂在 `.app` 上", () => {
+		/*
+		 * `.app` 包着整棵文档：`:has()` 的失效集合会让每一次样式重算都按整棵树重验一遍。实测
+		 * 文档 6.97 万元素时每帧多花 8.9ms，图表面板滚一下就从 100fps 掉到 50fps。悬停/拖动这类
+		 * 状态改用 `.app` 上的属性，代价与文档大小无关。
+		 */
+		expect(shell).not.toContain(".app:has(");
 	});
 
 	it("左右栏的折叠预览属性各用一条,不串", () => {

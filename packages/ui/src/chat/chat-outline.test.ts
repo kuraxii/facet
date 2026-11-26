@@ -208,3 +208,34 @@ describe("createOutlineHoverIntent", () => {
 		expect(activated).toEqual([1, null]);
 	});
 });
+
+describe("给出上一帧结果时的探查次数", () => {
+	/** 造一个"第 i 条顶边 = i * 100"的正文，并记录被问了几次 */
+	function ladder(count: number) {
+		const asked: number[] = [];
+		const topOf = (index: number): number => {
+			asked.push(index);
+			return index * 100;
+		};
+		return { count, topOf, asked };
+	}
+
+	it("连续滚动时只问两条就够", () => {
+		const { count, topOf, asked } = ladder(105);
+		// 视口上沿在 4200：第 42 条已越过、第 43 条还没
+		expect(activeOutlineIndex(count, topOf, 4200, 42)).toBe(42);
+		expect(asked.length).toBeLessThanOrEqual(2);
+	});
+
+	it("上一帧结果不对时落回二分，结果仍然正确", () => {
+		const { count, topOf } = ladder(105);
+		expect(activeOutlineIndex(count, topOf, 4200, 3)).toBe(42);
+		expect(activeOutlineIndex(count, topOf, 4200, 100)).toBe(42);
+	});
+
+	it("没有上一帧结果时还是老行为", () => {
+		const { count, topOf, asked } = ladder(105);
+		expect(activeOutlineIndex(count, topOf, 4200, null)).toBe(42);
+		expect(asked.length).toBeGreaterThan(2);
+	});
+});

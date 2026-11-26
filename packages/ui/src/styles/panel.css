@@ -41,10 +41,14 @@
  * 悬停与拖动时把面板自己那条边染成强调色。
  *
  * 高亮就是分界线本身，不额外叠线：命中区始终透明，边框宽度也不变，内容不会跳。
+ *
+ * 状态是 `.app` 上的属性，由分隔条直接写，不用 `:has()`：`.app` 包着整棵文档，`:has()` 的
+ * 失效集合会让每一次样式重算都按整棵树重验一遍——实测文档 6.97 万元素时每帧多花 8.9ms，
+ * 图表面板滚一下就从 100fps 掉到 50fps。属性选择器只按属性桶匹配，代价与文档大小无关。
+ *
  * 目标用 `:where()` 包起来：这条规则只负责颜色，不应比档位规则权重更高。
  */
-.app:has(.panel-resizer:hover) :where(.panel, .chrome-slot.is-panel),
-.app:has(.panel-resizer:active) :where(.panel, .chrome-slot.is-panel) {
+.app[data-panel-resizer-active="true"] :where(.panel, .chrome-slot.is-panel) {
 	border-left-color: var(--divider-highlight);
 }
 

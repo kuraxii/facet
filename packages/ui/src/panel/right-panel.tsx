@@ -64,6 +64,7 @@ export function RightPanel({
 					collapseThreshold={PANEL_MIN_WIDTH / 2}
 					{...(onDragCollapse === undefined ? {} : { onCollapse: onDragCollapse })}
 					collapsePreviewAttr={SHELL_DATA_ATTRS.panelDragCollapsed}
+					activeAttr={SHELL_DATA_ATTRS.panelResizerActive}
 				/>
 			)}
 			<div className={bodyClasses} id="workspace-panel" role="tabpanel">

@@ -1,6 +1,7 @@
 import type { AssistantMessage, Entry, ToolResultMessage } from "@facet/protocol";
 import { describe, expect, it } from "vitest";
 import { historyMessageId } from "./message-id.ts";
+import type { ToolCallView } from "./state.ts";
 import { type ChatView, createChatView, type EntryView } from "./state.ts";
 import { createTranscriptCache, toTranscript } from "./transcript.ts";
 
@@ -551,6 +552,36 @@ describe("投影缓存", () => {
 		const after = toTranscript(viewWith(second), cache);
 		expect(after[0]).toBe(before[0]);
 		expect(after[1]).not.toBe(before[1]);
+	});
+
+	it("流式重投影时，已结束的工具段沿用同一个对象", () => {
+		/*
+		 * 流式期间每帧都会重建正在写的那条单元。它里面已经跑完的工具调用如果没有沿用旧对象，
+		 * 界面那边 `memo` 就全部失效，一轮几十个工具行跟着每帧重算、重写 DOM（实测占主线程四成）。
+		 */
+		const call = (callId: string, isRunning: boolean): ToolCallView => ({
+			callId,
+			toolName: "bash",
+			input: { command: "ls" },
+			isRunning,
+			isError: false,
+			durationMs: undefined,
+			output: isRunning ? undefined : { content: [{ type: "text", text: "ok" }] },
+		});
+		const done = call("c1", false);
+		const toolBlock = { type: "toolCall" as const, id: "c1", name: "bash", arguments: { command: "ls" } };
+		const blocks = [toolBlock, { type: "text" as const, text: "先看一眼" }];
+		const first = [historyItem("e1", assistant(blocks))];
+		const cache = createTranscriptCache();
+		const before = toTranscript(viewWith(first, { c1: done }), cache);
+		// 正文接着写：内容块只换了文本那一个，工具调用块与工具视图都是原对象
+		const grown = [toolBlock, { type: "text" as const, text: "先看一眼，然后继续" }];
+		const second = [{ ...(first[0] as EntryView), message: assistant(grown) }];
+		const after = toTranscript(viewWith(second, { c1: done }), cache);
+		const toolOf = (item: { parts: readonly { kind: string }[] }) =>
+			item.parts.find((p) => p.kind === "toolCall");
+		expect(after[0]).not.toBe(before[0]);
+		expect(toolOf(after[0] as never)).toBe(toolOf(before[0] as never));
 	});
 
 	it("工具输出变化时重建引用它的单元", () => {

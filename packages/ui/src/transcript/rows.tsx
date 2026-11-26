@@ -139,20 +139,39 @@ export function ChatTranscript({
 		}
 		const element = scrollElement;
 		/*
-		 * 滚动与测量之后各记一次锚点。只在滚动时读一次布局，滚动路径上本来就要读，不额外花钱；
-		 * 拖宽/改窗口那两个动作不会触发滚动，所以这里记下的就是"变宽之前的顶边"。
+		 * 滚动与测量之后各记一次锚点。拖宽/改窗口那两个动作不会触发滚动，所以这里记下的就是
+		 * "变宽之前的顶边"。
+		 *
+		 * 取行用命中测试而不是扫全表：扫一遍 `.row` 再逐行量矩形是每帧 O(行数)，405 行时单次
+		 * 1.7ms、一次滚动就是几百毫秒。`elementsFromPoint` 是 O(1)，取视口顶部往下一点的那个点，
+		 * 沿栈找第一个落在行里的元素——顶部渐隐层盖在正文上，所以要看整条命中栈。
 		 */
 		const remember = (): void => {
-			const containerTop = element.getBoundingClientRect().top;
-			const row = Array.from(element.querySelectorAll<HTMLElement>(".row")).find(
-				(candidate) => candidate.getBoundingClientRect().bottom > containerTop + 8,
-			);
-			anchor.current = { element: row ?? null, top: row === undefined ? 0 : row.getBoundingClientRect().top };
+			const rect = element.getBoundingClientRect();
+			let row: HTMLElement | null = null;
+			for (const hit of document.elementsFromPoint(rect.left + rect.width / 2, rect.top + 12)) {
+				const found = hit.closest<HTMLElement>(".row");
+				if (found !== null) {
+					row = found;
+					break;
+				}
+			}
+			anchor.current = { element: row, top: row === null ? 0 : row.getBoundingClientRect().top };
 		};
 		remember();
 		element.addEventListener("scroll", remember, { passive: true });
 		let timer = 0;
 		const settle = (): void => {
+			/*
+			 * 流式期间不做全量重测：行还在长，量出来的高度马上又作废；而一次全量在 405 行上要
+			 * 340ms（实测就是流式时那几个长任务的来源）。改成等流完再补，最多晚几帧，不影响落点：
+			 * 正在写的那一行本来就不参与写回（`.is-streaming` 豁免兜底高度）。
+			 */
+			if (element.querySelector(".row.is-streaming") !== null) {
+				window.clearTimeout(timer);
+				timer = window.setTimeout(settle, ROW_MEASURE_SETTLE_MS * 3);
+				return;
+			}
 			const result = measureStaleRows(element);
 			const pinned = anchor.current;
 			if (result.dirty > 0 && pinned.element !== null && pinned.element.isConnected) {

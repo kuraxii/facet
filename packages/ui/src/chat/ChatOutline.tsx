@@ -30,7 +30,6 @@ import {
 	activeOutlineIndex,
 	createOutlineHoverIntent,
 	OUTLINE_MAGNIFY_RADIUS,
-	type OutlinePrompt,
 	outlineIsActive,
 	outlinePrompts,
 	outlineTickMagnification,
@@ -150,17 +149,26 @@ export function ChatOutline({ items, container, canLoadOlder, onLoadOlder }: Cha
 	const [attentionIndex, setAttentionIndex] = useState<number | null>(null);
 
 	/**
+	 * 导航键的指纹。
+	 *
+	 * 缓存能不能用只取决于"可跳的条目换了没有"，而流式期间 `items` 每帧都是新数组：拿数组身份
+	 * 当钥匙的话，正在写消息的那几秒里每一帧都会重建一次缓存——一次 `querySelectorAll` 在
+	 * 6.7 万元素上要 0.2–1.3ms，实测这一段占到流式主线程的一成多。
+	 */
+	const keySignature = useMemo(() => prompts.map((prompt) => prompt.key).join("\u0000"), [prompts]);
+
+	/**
 	 * 行元素缓存：导航键 → 正文行。
 	 *
 	 * 滚动里每帧都要按行量位置，逐帧 `querySelectorAll` 等于每帧把整棵正文树匹配一遍；条目只在
-	 * 内容变了以后才会换，缓存住之后每帧只剩 O(1) 的查表。
+	 * 真的多了一条用户消息之后才换，缓存住之后每帧只剩 O(1) 的查表。
 	 */
-	const anchorCache = useRef<{ prompts: readonly OutlinePrompt[]; byKey: Map<string, Element> }>({
-		prompts: [],
+	const anchorCache = useRef<{ signature: string; byKey: Map<string, Element> }>({
+		signature: "",
 		byKey: new Map(),
 	});
 
-	/** 重建缓存：一次 DOM 遍历，只在内容变了或查不到行时发生 */
+	/** 重建缓存：一次 DOM 遍历，只在可跳条目变了或查不到行时发生 */
 	const rebuildAnchors = useCallback((): Map<string, Element> => {
 		const byKey = new Map<string, Element>();
 		if (container !== null) {
@@ -171,26 +179,30 @@ export function ChatOutline({ items, container, canLoadOlder, onLoadOlder }: Cha
 				}
 			}
 		}
-		anchorCache.current = { prompts, byKey };
+		anchorCache.current = { signature: keySignature, byKey };
 		return byKey;
-	}, [container, prompts]);
+	}, [container, keySignature]);
 
 	/**
 	 * 取一条消息对应的正文行。
 	 *
-	 * 缓存没命中（行刚挂上、或换了一份内容）就重建一次再取；行已经脱离文档同样是失效的。
+	 * 缓存没命中（可跳条目变了、行刚挂上、或换了一份内容）就重建一次再取；行已经脱离文档
+	 * 同样是失效的。
 	 */
 	const anchorOf = useCallback(
 		(key: string): Element | null => {
 			const cache = anchorCache.current;
-			const hit = cache.prompts === prompts ? cache.byKey.get(key) : undefined;
+			const hit = cache.signature === keySignature ? cache.byKey.get(key) : undefined;
 			if (hit?.isConnected === true) {
 				return hit;
 			}
 			return rebuildAnchors().get(key) ?? null;
 		},
-		[prompts, rebuildAnchors],
+		[keySignature, rebuildAnchors],
 	);
+
+	/** 上一帧算出的轮次：连续滚动时当前轮次几乎不动，用它把每帧的布局读从 7 次压到 2 次 */
+	const lastActive = useRef<number | null>(null);
 
 	/** 按滚动位置算出当前读到的轮次。 */
 	const measure = useCallback(() => {
@@ -203,20 +215,21 @@ export function ChatOutline({ items, container, canLoadOlder, onLoadOlder }: Cha
 		 * 原来是每条消息各做一次查询加两次矩形，20 条就是 20 次查询、40 次布局读，随会话长度线性增长。
 		 */
 		const containerTop = container.getBoundingClientRect().top;
-		setActiveIndex(
-			activeOutlineIndex(
-				prompts.length,
-				(index) => {
-					const prompt = prompts[index];
-					if (prompt === undefined) {
-						return undefined;
-					}
-					const anchor = anchorOf(prompt.key);
-					return anchor === null ? undefined : anchor.getBoundingClientRect().top - containerTop;
-				},
-				ACTIVE_OFFSET,
-			),
+		const next = activeOutlineIndex(
+			prompts.length,
+			(index) => {
+				const prompt = prompts[index];
+				if (prompt === undefined) {
+					return undefined;
+				}
+				const anchor = anchorOf(prompt.key);
+				return anchor === null ? undefined : anchor.getBoundingClientRect().top - containerTop;
+			},
+			ACTIVE_OFFSET,
+			lastActive.current,
 		);
+		lastActive.current = next;
+		setActiveIndex(next);
 	}, [anchorOf, container, prompts]);
 
 	// 滚动与尺寸变化时重算当前轮次。逐帧测量比按滚动事件直接算重一点，用 rAF 收一收。

@@ -291,6 +291,7 @@ export const SessionSidebar = memo(function SessionSidebar({
 					collapseThreshold={SIDEBAR_MIN_WIDTH / 2}
 					{...(onDragCollapse === undefined ? {} : { onCollapse: onDragCollapse })}
 					collapsePreviewAttr={SHELL_DATA_ATTRS.sidebarDragCollapsed}
+					activeAttr={SHELL_DATA_ATTRS.sidebarResizerActive}
 				/>
 			)}
 			{showHeader ? (

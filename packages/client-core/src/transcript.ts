@@ -197,8 +197,35 @@ function bareToolPart(
 	};
 }
 
+/**
+ * 取一份可以复用的段。
+ *
+ * 同一个来源对象标签出的段在一次会话里只变一次：来源换了对象（工具输出推进、正文追加）才重建，
+ * 否则整棵子树都能靠 `memo` 跳过。缓存挂在投影缓存上，跟着它一起被丢弃。
+ */
+function reusedPart(
+	cache: TranscriptCache | undefined,
+	source: object,
+	build: () => Part | undefined,
+): Part | undefined {
+	if (cache === undefined) {
+		return build();
+	}
+	const hit = cache.parts.get(source);
+	if (hit !== undefined) {
+		return hit.part;
+	}
+	const part = build();
+	cache.parts.set(source, { part });
+	return part;
+}
+
 /** 正文与工具调用的排布:内容块按原顺序展开,工具调用位置即它在消息里的位置。 */
-function assistantParts(entryView: EntryView, calls: Readonly<Record<string, ToolCallView>>): Part[] {
+function assistantParts(
+	entryView: EntryView,
+	calls: Readonly<Record<string, ToolCallView>>,
+	cache: TranscriptCache | undefined,
+): Part[] {
 	const message = entryView.message;
 	if (message === undefined || message.role !== "assistant") {
 		return [];
@@ -209,7 +236,10 @@ function assistantParts(entryView: EntryView, calls: Readonly<Record<string, Too
 		if (block.type === "toolCall") {
 			const call = calls[block.id];
 			if (call) {
-				parts.push(toolPart(call));
+				const part = reusedPart(cache, call, () => toolPart(call));
+				if (part !== undefined) {
+					parts.push(part);
+				}
 			} else if (message.stopReason === "aborted") {
 				// 这一轮被中止:内容里的调用一条都没执行过,主机不会为它们发事件
 				parts.push(bareToolPart(block, "skipped"));
@@ -219,8 +249,9 @@ function assistantParts(entryView: EntryView, calls: Readonly<Record<string, Too
 			}
 			continue;
 		}
-		const part = blockPart(block, parts.length);
-		if (part) {
+		const index = parts.length;
+		const part = reusedPart(cache, block, () => blockPart(block, index));
+		if (part !== undefined) {
 			parts.push(part);
 		}
 	}
@@ -268,6 +299,14 @@ function mergeToolResult(item: TranscriptItem, message: Message): TranscriptItem
 export interface TranscriptCache {
 	/** 条目视图 → 渲染单元（工具结果尚未合并） */
 	readonly entries: WeakMap<EntryView, CachedItem>;
+	/**
+	 * 来源对象 → 已构建的渲染段。
+	 *
+	 * 流式期间只有最后一条消息在变，而它的工具调用大半早就结束了；每帧给这些没变的调用重建段对象，
+	 * 行组件就一个个都得重渲染（实测流式时工具行占掉主线程的四成）。按来源对象（`ToolCallView`、
+	 * 内容块）缓存之后，没变的段是同一个对象，`memo` 就跳过了。
+	 */
+	readonly parts: WeakMap<object, { readonly part: Part | undefined }>;
 	/** 工具结果条目 → 并入目标与合并后的单元，目标没变就复用 */
 	readonly merges: WeakMap<EntryView, { readonly target: TranscriptItem; readonly item: TranscriptItem }>;
 }
@@ -282,7 +321,7 @@ interface CachedItem {
 
 /** 建一份投影缓存。 */
 export function createTranscriptCache(): TranscriptCache {
-	return { entries: new WeakMap(), merges: new WeakMap() };
+	return { entries: new WeakMap(), merges: new WeakMap(), parts: new WeakMap() };
 }
 
 /**
@@ -419,13 +458,17 @@ function entryItem(entryView: EntryView, view: ChatView, cache: TranscriptCache)
 	if (cached !== undefined && sameSources(cached.sources, sources)) {
 		return cached.item;
 	}
-	const item = buildEntryItem(entryView, view);
+	const item = buildEntryItem(entryView, view, cache);
 	cache.entries.set(entryView, { item, sources });
 	return item;
 }
 
 /** 按条目类型造出渲染单元。不占行的条目返回 undefined。 */
-function buildEntryItem(entryView: EntryView, view: ChatView): TranscriptItem | undefined {
+function buildEntryItem(
+	entryView: EntryView,
+	view: ChatView,
+	cache: TranscriptCache,
+): TranscriptItem | undefined {
 	const entry = entryView.entry;
 	if (entry?.kind === "compaction" || entry?.kind === "branch_summary") {
 		const timestamp = Date.parse(entry.timestamp);
@@ -496,7 +539,7 @@ function buildEntryItem(entryView: EntryView, view: ChatView): TranscriptItem | 
 		};
 	}
 	const parts =
-		message.role === "assistant" ? assistantParts(entryView, view.toolCalls) : userParts(entryView);
+		message.role === "assistant" ? assistantParts(entryView, view.toolCalls, cache) : userParts(entryView);
 	// 流刚开始就被打断的中止消息没有内容,不占一行
 	if (message.role === "assistant" && parts.length === 0) {
 		return undefined;

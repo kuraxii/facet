@@ -105,4 +105,14 @@ export const SHELL_DATA_ATTRS = {
 	sidebarDragCollapsed: "data-sidebar-drag-collapsed",
 	/** 右栏拖到一半、准备关闭 */
 	panelDragCollapsed: "data-panel-drag-collapsed",
+	/**
+	 * 左栏分隔条被指针压住或正在拖。
+	 *
+	 * 只为一件事服务：把那一栏接缝染成强调色。状态必须落在 `.app` 上的属性里，不能用
+	 * `.app:has(...)`——`.app` 包着整棵文档，`:has()` 的失效集合会让每次样式重算都按整棵树重验
+	 * 一遍（实测 6.97 万元素时每帧多花 8.9ms，图表面板滚一下就掉一半帧）。
+	 */
+	sidebarResizerActive: "data-sidebar-resizer-active",
+	/** 右栏分隔条被指针压住或正在拖，理由同上 */
+	panelResizerActive: "data-panel-resizer-active",
 } as const;

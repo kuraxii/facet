@@ -8,7 +8,7 @@
 import type { TranscriptItem } from "@facet/client-core";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../i18n/I18nProvider.tsx";
 import { VISUAL_SCALE } from "../styles/visual-contract.ts";
 import { ChatOutline } from "./ChatOutline.tsx";
@@ -149,5 +149,63 @@ describe("竖轨顶端的「…」", () => {
 		expect(more?.disabled).toBe(true);
 		act(() => more?.click());
 		expect(calls.load).toBe(0);
+	});
+});
+
+describe("竖轨锚点缓存的失效条件", () => {
+	/** 造一个带锚点行的正文容器：每根短条对应一行 */
+	function containerWithRows(count: number): HTMLElement {
+		const scroll = document.createElement("div");
+		// 挂在文档里：缓存只认 `isConnected` 的行，脱离文档的行每次都算失效
+		document.body.append(scroll);
+		for (let index = 0; index < count; index += 1) {
+			const row = document.createElement("div");
+			row.className = "row";
+			// 键取 `entryId`（见 `outlinePrompts`），不是单元 id
+			row.setAttribute("data-outline-key", `e${index}`);
+			scroll.append(row);
+		}
+		return scroll;
+	}
+
+	it("流式追加正文（可跳条目没变）不会重建缓存", () => {
+		vi.useFakeTimers();
+		const container = containerWithRows(3);
+		const items = [userMessage("e0", "一"), userMessage("e1", "二"), userMessage("e2", "三")];
+		const host = document.createElement("div");
+		document.body.append(host);
+		root = createRoot(host);
+		const render = (next: TranscriptItem[]): void => {
+			act(() => {
+				root?.render(
+					<I18nProvider language="zh-CN">
+						<ChatOutline
+							items={next}
+							container={container}
+							canLoadOlder={false}
+							onLoadOlder={() => undefined}
+						/>
+					</I18nProvider>,
+				);
+			});
+		};
+		const spy = vi.spyOn(Element.prototype, "querySelectorAll");
+		render(items);
+		// 滚一下让 measure 走完一次完整路径
+		act(() => {
+			container.dispatchEvent(new Event("scroll"));
+			vi.advanceTimersByTime(50);
+		});
+		const afterFirst = spy.mock.calls.filter((call) => String(call[0]).includes("data-outline-key")).length;
+		// 正文追加一条助手消息：投影换了新数组，可跳条目还是那三个
+		render([...items, userMessage("e3", "四")].slice(0, 3).concat([]));
+		act(() => {
+			container.dispatchEvent(new Event("scroll"));
+			vi.advanceTimersByTime(50);
+		});
+		const afterSecond = spy.mock.calls.filter((call) => String(call[0]).includes("data-outline-key")).length;
+		spy.mockRestore();
+		expect(afterFirst).toBeLessThanOrEqual(1);
+		expect(afterSecond).toBe(afterFirst);
 	});
 });

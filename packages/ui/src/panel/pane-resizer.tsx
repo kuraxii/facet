@@ -80,6 +80,14 @@ export interface PaneResizerProps {
 	 * 元素上、不经过 React 状态，拖动期间因此一次渲染都不发生。
 	 */
 	collapsePreviewAttr?: string | undefined;
+	/**
+	 * 「分隔条被压住或正在拖」的属性名（挂在 `.app` 上，如 `"data-panel-resizer-active"`）。
+	 *
+	 * 样式据此把那一栏的接缝染成强调色。给属性而不是让样式写 `.app:has(.resizer:hover)`：
+	 * `.app` 包着整棵文档，`:has()` 会让每次样式重算都按整棵树重验一遍，滚动时每帧多花几毫秒。
+	 * 与折叠预览一样直接写在元素上，不经过 React 状态。
+	 */
+	activeAttr?: string | undefined;
 }
 
 export function PaneResizer({
@@ -95,6 +103,7 @@ export function PaneResizer({
 	collapseThreshold,
 	onCollapse,
 	collapsePreviewAttr,
+	activeAttr,
 }: PaneResizerProps) {
 	const dragging = useRef<DragState | undefined>(undefined);
 	/** 拖动中才挂遮罩；组件中途被卸掉时遮罩跟着它一起走 */
@@ -146,9 +155,29 @@ export function PaneResizer({
 		};
 	}, [collapsePreviewAttr, writeWidth]);
 
+	/** 把「被压住」的状态写到 `.app` 上；`on` 为假时摘掉 */
+	const markActive = useCallback(
+		(node: Element, on: boolean): void => {
+			if (activeAttr === undefined) {
+				return;
+			}
+			const root = node.closest(".app");
+			if (root === null) {
+				return;
+			}
+			if (on) {
+				root.setAttribute(activeAttr, "true");
+				return;
+			}
+			root.removeAttribute(activeAttr);
+		},
+		[activeAttr],
+	);
+
 	const handlePointerDown = useCallback(
 		(event: ReactPointerEvent<HTMLHRElement>) => {
 			event.preventDefault();
+			markActive(event.currentTarget, true);
 			const target = event.currentTarget.closest(".app");
 			dragging.current = {
 				startX: event.clientX,
@@ -163,7 +192,7 @@ export function PaneResizer({
 			document.documentElement.setAttribute(RESIZE_ATTR, "");
 			draggingListener.current?.(true);
 		},
-		[width],
+		[markActive, width],
 	);
 
 	const handlePointerMove = useCallback(
@@ -217,6 +246,7 @@ export function PaneResizer({
 			setIsDragging(false);
 			setIsCollapsePending(false);
 			document.documentElement.removeAttribute(RESIZE_ATTR);
+			markActive(event.currentTarget, false);
 			if (event.currentTarget.hasPointerCapture?.(event.pointerId) === true) {
 				event.currentTarget.releasePointerCapture(event.pointerId);
 			}
@@ -240,7 +270,7 @@ export function PaneResizer({
 				finishRef.current.onWidthChange(start.current);
 			}
 		},
-		[collapsePreviewAttr, writeWidth, width],
+		[collapsePreviewAttr, markActive, writeWidth, width],
 	);
 
 	return (
@@ -253,6 +283,8 @@ export function PaneResizer({
 				aria-valuemin={min}
 				aria-valuemax={max}
 				data-collapse-pending={isCollapsePending ? "true" : undefined}
+				onPointerEnter={(event) => markActive(event.currentTarget, true)}
+				onPointerLeave={(event) => markActive(event.currentTarget, false)}
 				onPointerDown={handlePointerDown}
 				onPointerMove={handlePointerMove}
 				onPointerUp={(event) => finishDrag(event, false)}

@@ -15,6 +15,15 @@ import { MarkdownImagesProvider } from "./markdown-image.tsx";
 import { markdownImages } from "./markdown-images.ts";
 import { MARKDOWN_SCOPE } from "./registry.ts";
 
+/**
+ * 解析选项：让解析器在"只追加"的流式解析之间复用稳定的顶层块。
+ *
+ * 不开这个的话，每次提交 markstream 都会给所有顶层块造一批新节点，渲染器按节点身份做的记忆
+ * 全部失效——一条长回答在流式期间等于整条重渲。开了之后没变的块连节点对象一起沿用，
+ * 渲染面只剩正在长的那一块。（库只对非 final 的解析生效，正好是流式。）
+ */
+const PARSE_OPTIONS = { reuseStableTopLevelNodes: true } as const;
+
 /** 平滑输出的基速,其余节奏用库默认值。 */
 const SMOOTH_OPTIONS: SmoothMarkdownStreamOptions = {
 	minCharsPerSecond: 80,
@@ -111,6 +120,7 @@ export const Markdown = memo(function Markdown({ text, isStreaming, indexKey }: 
 					customId={MARKDOWN_SCOPE}
 					content={text}
 					final={!isStreaming}
+					parseOptions={PARSE_OPTIONS}
 					fade={false}
 					smoothStreaming={smoothRef.current}
 					smoothStreamingOptions={SMOOTH_OPTIONS}

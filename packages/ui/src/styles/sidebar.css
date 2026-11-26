@@ -55,9 +55,13 @@
 	background: transparent;
 }
 
-/* 悬停或拖动时只染颜色，目标包在 `:where()` 里：不与档位规则比权重 */
-.app:has(.sb-resizer:hover) :where(.sb, .chrome-slot.is-sidebar),
-.app:has(.sb-resizer:active) :where(.sb, .chrome-slot.is-sidebar) {
+/*
+ * 悬停或拖动时只染颜色，目标包在 `:where()` 里：不与档位规则比权重。
+ *
+ * 状态走 `.app` 上的属性而不是 `:has()`，理由见 `panel.css` 同名那条规则：`:has()` 挂在
+ * 整棵文档的根上，每次样式重算都要按整棵树重验一遍。
+ */
+.app[data-sidebar-resizer-active="true"] :where(.sb, .chrome-slot.is-sidebar) {
 	border-right-color: var(--divider-highlight);
 }
 

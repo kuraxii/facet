@@ -13,7 +13,7 @@
  * 压不过它，所以弹层内部要用提示时，得把浮层挂进弹层自己的子树。
  */
 
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { VISUAL_PX } from "./styles/visual-contract.ts";
 
@@ -72,6 +72,8 @@ export interface HoverTipOptions {
 
 /** 浮层的落点与两个指针事件。 */
 interface TipBoxProps {
+	/** 浮层本体，用来判断滚动是不是发生在浮层内部 */
+	boxRef: RefObject<HTMLDivElement | null>;
 	anchor: TipAnchor;
 	onEnter: () => void;
 	onLeave: () => void;
@@ -86,8 +88,8 @@ interface TipBoxProps {
  * 先按触发元素的落点摆好，挂载之后量一次自己的尺寸：超出视口右缘就往左收，下方放不下
  * 就翻到触发元素上方。量尺寸要等它进了 DOM，因此只在位置变化时再校正一次。
  */
-function TipBox({ anchor, onEnter, onLeave, flush, children }: TipBoxProps): ReactNode {
-	const ref = useRef<HTMLDivElement>(null);
+function TipBox({ boxRef, anchor, onEnter, onLeave, flush, children }: TipBoxProps): ReactNode {
+	const ref = useRef<HTMLDivElement | null>(null);
 	const [place, setPlace] = useState({ left: anchor.left, top: anchor.bottom + TIP_GAP });
 
 	useEffect(() => {
@@ -106,7 +108,10 @@ function TipBox({ anchor, onEnter, onLeave, flush, children }: TipBoxProps): Rea
 
 	return createPortal(
 		<div
-			ref={ref}
+			ref={(node) => {
+				ref.current = node;
+				boxRef.current = node;
+			}}
 			className={flush ? "pop-tip is-flush" : "pop-tip"}
 			style={{ left: place.left, top: place.top }}
 			onPointerEnter={onEnter}
@@ -122,6 +127,8 @@ function TipBox({ anchor, onEnter, onLeave, flush, children }: TipBoxProps): Rea
 export function useHoverTip({ holdOnLeave = false, flush = false }: HoverTipOptions = {}): HoverTip {
 	const [shown, setShown] = useState<{ anchor: TipAnchor; label: ReactNode } | undefined>(undefined);
 	const timer = useRef<number | undefined>(undefined);
+	/** 浮层本体，用来把"浮层自己内部的滚动"排除在外 */
+	const box = useRef<HTMLDivElement | null>(null);
 
 	const clear = useCallback(() => window.clearTimeout(timer.current), []);
 
@@ -145,6 +152,32 @@ export function useHoverTip({ holdOnLeave = false, flush = false }: HoverTipOpti
 	// 组件卸载时未到点的定时器不能再弹
 	useEffect(() => clear, [clear]);
 
+	/**
+	 * 一滚就收。
+	 *
+	 * 浮层钉的是触发元素在视口里的矩形（`position: fixed`），滚动之后那个矩形已经不准了，
+	 * 再留着就是一张悬在半空、和谁都不挨着的卡片。滚轮、键盘、拖滚动条都会产生 `scroll`，
+	 * 因此统一在手势这一层收掉，不逐个滚动容器去挂。
+	 *
+	 * 只在浮层真的显示着时挂监听（同一时刻最多一份），不给长列表里每个触发元素都摊一条。
+	 * 浮层内部的滚动不算：`holdOnLeave` 的那类卡片里本来就要能滚（提交概览、工具参数全文）。
+	 */
+	useEffect(() => {
+		if (shown === undefined) {
+			return;
+		}
+		const onScroll = (event: Event): void => {
+			const inner = box.current;
+			if (inner !== null && event.target instanceof Node && inner.contains(event.target)) {
+				return;
+			}
+			window.clearTimeout(timer.current);
+			setShown(undefined);
+		};
+		window.addEventListener("scroll", onScroll, { capture: true, passive: true });
+		return () => window.removeEventListener("scroll", onScroll, { capture: true });
+	}, [shown]);
+
 	const handlers = useCallback(
 		(label: ReactNode): TipHandlers => {
 			// 空文案等于没有提示：挂上空监听只会让元素多两条无用的回调
@@ -164,7 +197,7 @@ export function useHoverTip({ holdOnLeave = false, flush = false }: HoverTipOpti
 			return null;
 		}
 		return (
-			<TipBox anchor={shown.anchor} onEnter={clear} onLeave={hide} flush={flush}>
+			<TipBox boxRef={box} anchor={shown.anchor} onEnter={clear} onLeave={hide} flush={flush}>
 				{shown.label}
 			</TipBox>
 		);

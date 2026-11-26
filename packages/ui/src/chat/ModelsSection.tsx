@@ -212,14 +212,6 @@ export function ModelsSection({
 
 	return (
 		<div className="set-models">
-			<header className="set-models-head">
-				<h2 className="set-section-title">{t("settings.models")}</h2>
-				<Button variant="primary" size="md" onClick={() => setIsPickerOpen(true)}>
-					<Plus size={ICON_SIZE.md} aria-hidden="true" />
-					{t("providers.addProvider")}
-				</Button>
-			</header>
-
 			<SettingsGroup>
 				<SettingsRow title={t("settings.modelsPage.defaultModel")}>
 					<Select
@@ -256,10 +248,16 @@ export function ModelsSection({
 			</SettingsGroup>
 
 			<section className="set-models-group">
-				<h3 className="set-models-group-title">
-					{t("providers.configured")}
-					{rows === undefined ? null : ` · ${rows.length}`}
-				</h3>
+				<div className="set-models-group-head">
+					<h3 className="set-models-group-title">
+						{t("providers.configured")}
+						{rows === undefined ? null : ` · ${rows.length}`}
+					</h3>
+					<Button variant="primary" size="sm" onClick={() => setIsPickerOpen(true)}>
+						<Plus size={ICON_SIZE.md} aria-hidden="true" />
+						{t("providers.addProvider")}
+					</Button>
+				</div>
 				{providersError === undefined ? null : (
 					<StatusNote
 						message={t("providers.readFailed", { error: providersError })}

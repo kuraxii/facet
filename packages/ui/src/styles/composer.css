@@ -50,15 +50,19 @@
 	width: 32px;
 	height: 32px;
 	transform: translateX(-50%);
-	border: 1px solid var(--border-default);
+	/* 外缘由 `--shadow-popover` 自带的 1px 环勾出，不再叠 `border` 造成 2px 双重粗边 */
+	border: 0;
 	border-radius: var(--radius-pill);
-	background: var(--bg-elevated);
+	background: var(--bg-surface);
 	color: var(--fg-muted);
 	box-shadow: var(--shadow-popover);
+	transition:
+		background-color var(--dur-fast) var(--ease-standard),
+		color var(--dur-fast) var(--ease-standard);
 }
 
 .to-bottom:hover {
-	background: var(--border-default);
+	background: var(--bg-elevated);
 	color: var(--fg-default);
 }
 
@@ -77,6 +81,8 @@
 	border: 1px solid var(--border-default);
 	border-radius: var(--radius-xl);
 	background: var(--bg-surface);
+	box-shadow: var(--shadow-control);
+	transition: border-color var(--dur-fast) var(--ease-standard);
 }
 
 /*
@@ -372,6 +378,13 @@
 	font-size: var(--text-xs);
 }
 
+.cmd-file-icon {
+	flex: none;
+	align-self: center;
+	width: var(--files-icon-size);
+	height: var(--files-icon-size);
+}
+
 .cmd-hint {
 	flex: none;
 	color: var(--fg-subtle);
@@ -440,7 +453,7 @@
 	border: 0;
 	border-radius: var(--radius-pill);
 	background: transparent;
-	color: var(--fg-subtle);
+	color: var(--fg-muted);
 	transition:
 		background-color var(--dur-fast) var(--ease-standard),
 		color var(--dur-fast) var(--ease-standard);
@@ -457,6 +470,13 @@
 	align-items: center;
 	gap: var(--space-4);
 	margin-left: auto;
+}
+
+/* 发送按钮无内容可发时收成扁平的浅底圆钮，不加描边或边缘高光 */
+.composer-send .ui-icon-btn:disabled {
+	border-color: transparent;
+	background: var(--bg-elevated);
+	color: var(--fg-subtle);
 }
 
 /* 上下文用量环：无边框无底色，只有一圈进度与悬浮提示 */
@@ -538,21 +558,22 @@
 	background: transparent;
 }
 
-/* 停止态与发送态共用一个方框：几何来自 `common/IconButton.tsx`，这里只换配色 */
+/* 停止态与发送态共用同一枚圆形按钮：扁平填色，不加描边与边缘高亮 */
 .is-stop {
-	border-color: color-mix(in srgb, var(--fg-subtle) 62%, transparent);
-	background: transparent;
+	border-color: transparent;
+	background: var(--status-err-bg);
 	color: var(--status-err-fg);
 }
 
 .is-stop:hover:not(:disabled) {
-	border-color: var(--fg-subtle);
-	background: var(--bg-hover);
+	border-color: transparent;
+	background: color-mix(in srgb, var(--status-err-fg) 18%, transparent);
 	color: var(--status-err-fg);
 }
 
 .is-stop:active:not(:disabled) {
-	background: var(--bg-active);
+	border-color: transparent;
+	background: color-mix(in srgb, var(--status-err-fg) 26%, transparent);
 	color: var(--status-err-fg);
 }
 .chip-wrap {

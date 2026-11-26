@@ -16,6 +16,9 @@ export const PANEL_WIDTH_VAR = "--panel-width";
 /** 顶带中格上的局部副本，只给它算让位用 */
 export const PANEL_TRACK_VAR = "--panel-track";
 
+/** 右栏顶格与本体上的不继承副本，供跨列右贴齐排版与平滑收起滑移读取 */
+export const PANEL_BOX_WIDTH_VAR = "--panel-box-width";
+
 /**
  * 写一次右栏宽度。
  *
@@ -24,6 +27,9 @@ export const PANEL_TRACK_VAR = "--panel-track";
  *
  * 副本写的是"这一列此刻实际占多宽"，不是偏好宽：右栏收起与拖动收起的预览里列轨道是 `0`，
  * 副本也必须归零，否则顶带中格会以为右栏还占着位置、不给窗口按钮簇让位。
+ *
+ * 相比之下，`.chrome-slot.is-panel` 与 `.panel` 拿到的 `--panel-box-width` 始终写开放态的目标宽
+ * （不随收起归零），这样开关右栏时只需原地平移而不重排内部内容，展开/还原时从右往左覆盖主栏。
  */
 export function writePanelWidth(app: HTMLElement, width: string): void {
 	app.style.setProperty(PANEL_WIDTH_VAR, width);
@@ -34,4 +40,6 @@ export function writePanelWidth(app: HTMLElement, width: string): void {
 	app
 		.querySelector<HTMLElement>(".chrome-slot.is-main")
 		?.style.setProperty(PANEL_TRACK_VAR, collapsed ? "0px" : width);
+	app.querySelector<HTMLElement>(".chrome-slot.is-panel")?.style.setProperty(PANEL_BOX_WIDTH_VAR, width);
+	app.querySelector<HTMLElement>(".panel")?.style.setProperty(PANEL_BOX_WIDTH_VAR, width);
 }

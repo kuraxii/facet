@@ -11,7 +11,7 @@ import { Input } from "../common/Input.tsx";
 import { ListRow } from "../common/ListRow.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { isComposingKey } from "../keys.ts";
-import { Modal } from "../modal.tsx";
+import { Modal, useModalPresence } from "../modal.tsx";
 import { ICON_SIZE } from "../styles/visual-contract.ts";
 import { SessionStatusMark } from "./session-status-mark.tsx";
 import { type SidebarSession, searchSessions } from "./sidebar-model.ts";
@@ -86,12 +86,14 @@ export function SessionSearch({
 		[onSelect, onClose],
 	);
 
-	if (!isOpen) {
+	const mounted = useModalPresence(isOpen);
+
+	if (!mounted) {
 		return null;
 	}
 
 	return (
-		<Modal open onClose={onClose} label={t("search.title")} className="search-panel">
+		<Modal open={isOpen} onClose={onClose} label={t("search.title")} className="search-panel">
 			<label className="search-field">
 				<Search size={ICON_SIZE.lg} />
 				<Input

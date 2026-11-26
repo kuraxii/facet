@@ -10,7 +10,7 @@ import { Button } from "../common/Button.tsx";
 import { IconButton } from "../common/IconButton.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { isComposingKey } from "../keys.ts";
-import { Modal } from "../modal.tsx";
+import { Modal, useModalPresence } from "../modal.tsx";
 import { ICON_SIZE } from "../styles/visual-contract.ts";
 import { ChevronIcon } from "../transcript/chevron.tsx";
 import { FolderIcon } from "../transcript/icons.tsx";
@@ -60,7 +60,9 @@ export function CreateProjectDialog({ isOpen, onPickFolder, onCreate, onClose }:
 		onClose();
 	}, [onClose]);
 
-	if (!isOpen) {
+	const mounted = useModalPresence(isOpen);
+
+	if (!mounted) {
 		return null;
 	}
 
@@ -115,7 +117,7 @@ export function CreateProjectDialog({ isOpen, onPickFolder, onCreate, onClose }:
 	};
 
 	return (
-		<Modal open onClose={close} label={t("projectDialog.title")}>
+		<Modal open={isOpen} onClose={close} label={t("projectDialog.title")}>
 			<div className="dialog-head">
 				<h2 className="dialog-title">{t("projectDialog.title")}</h2>
 				<IconButton

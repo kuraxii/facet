@@ -4,16 +4,16 @@
  * 只有正文与左缘那条可以拖动的分隔条，宽度拖一次记一次。它永远是外壳网格的第 3 列：
  * 标签与动作在窗口顶部那条带里，由外壳排布；窗口窄下去时这一列自己收窄，不退成浮层。
  */
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { SHELL_DATA_ATTRS } from "../layout/layout-contract.ts";
 import { PaneResizer } from "./pane-resizer.tsx";
 import { PANEL_MIN_WIDTH } from "./panel-state.ts";
 
 export interface RightPanelProps {
-	/** 宽度，单位 px；宽展开期间不给（那一列由样式按视口现算），此时不渲染分隔条 */
+	/** 实占宽度，单位 px；用作 `--panel-box-width` 初值与分隔条拖拽起点 */
 	width?: number | undefined;
-	/** 拖动分隔条时给出新宽度 */
+	/** 拖动分隔条时给出新宽度；`⤢` 宽展开期间不传以隐藏分隔条 */
 	onWidthChange?: ((width: number) => void) | undefined;
 	/**
 	 * 分隔条此刻能拖到的最大宽度。
@@ -47,8 +47,10 @@ export function RightPanel({
 }: RightPanelProps) {
 	const { t } = useI18n();
 	const bodyClasses = bodyClassName === undefined ? "panel-body" : `panel-body ${bodyClassName}`;
+	const panelStyle =
+		width === undefined ? undefined : ({ "--panel-box-width": `${width}px` } as CSSProperties);
 	return (
-		<aside className="panel">
+		<aside className="panel" style={panelStyle}>
 			{width === undefined || onWidthChange === undefined ? null : (
 				<PaneResizer
 					className="panel-resizer"

@@ -86,11 +86,10 @@
 	 */
 	--text-size: var(--text-body);
 	/*
-	 * 用户消息气泡的四周留白：纵向取半档，加上行高 24px 带来的半个行距（5px）后视觉留白约
-	 * 15px，与横向的 14px 基本齐平；横向用精确刻度里没有的 14px，单独给一个名字。
-	 * 不复用 `--space-8`——那个刻度同时是代码块与 Markdown 段落的留白。
+	 * 用户消息气泡的四周留白：纵向收紧到 `--space-3`（6px）以减小垂直占位，横向保留 14px，
+	 * 不复用正文与代码块的 `--space-8`。
 	 */
-	--bubble-padding-y: var(--space-5);
+	--bubble-padding-y: var(--space-3);
 	--bubble-padding-x: 14px;
 	/* 交互动效：极快反馈 120ms，展开折叠 180ms；`data-motion="reduced"` 把两者清零 */
 	--ease-standard: cubic-bezier(0.2, 0.6, 0.3, 1);
@@ -219,6 +218,15 @@
 	/* 环的半径：外缘落在环的尺寸上，描边以这条半径居中画 */
 	--status-ring-radius: calc(var(--status-ring-size) / 2 - var(--status-ring-stroke) / 2);
 	--sidebar-edge: 10px;
+	/* 顶带左上角常驻品牌槽宽（Facet 字样）与左栏开关右侧让位宽 */
+	--chrome-brand-width: 40px;
+	--chrome-sidebar-toggle-clearance: calc(
+		var(--sidebar-edge) +
+		var(--chrome-brand-width) +
+		var(--space-2) +
+		var(--control-sm) +
+		var(--space-3)
+	);
 	/* 聊天正文与输入区共用的内容列宽；输入框和过程组胶囊用同一个边界 */
 	--chat-column-max: 840px;
 	/*
@@ -257,9 +265,11 @@
 	 */
 	--workspace-tab-height: 26px;
 	--workspace-tab-gap: 2px;
-	--workspace-tab-padding-x: 8px;
+	--workspace-tab-padding-x: 10px;
 	--workspace-tab-icon-gap: 6px;
 	--workspace-tab-close-size: 16px;
+	/* 标签栏横向溢出时的边缘渐隐宽度 */
+	--workspace-tabs-fade: var(--space-12);
 	/* 工作区顶栏里图标与文字之间的间距 */
 	--workspace-head-gap: 4px;
 	/*
@@ -294,7 +304,7 @@
 	--files-row-padding-x: 8px;
 	--files-tree-indent: 12px;
 	--files-trailing: 8px;
-	--files-icon-size: 14px;
+	--files-icon-size: var(--icon-lg);
 	--files-icon-gap: 6px;
 	/* 变更树与变更文档：行高、缩进、右侧留白、图标与统计间距 */
 	--changes-row-padding-x: 12px;
@@ -341,6 +351,13 @@
 	--panel-width: 0px;
 	/* 窗口按钮簇的总宽：三个按钮排成一组，固定贴在窗口右上角 */
 	--window-controls-width: calc(var(--window-button-width) * 3);
+	/* 顶带右上角常驻右栏开关距右缘位置与左侧内容让位宽（含 28px 按钮与 4px 间距） */
+	--chrome-panel-toggle-right: calc(var(--window-controls-width) + var(--space-3));
+	--chrome-panel-toggle-clearance: calc(
+		var(--chrome-panel-toggle-right) +
+		var(--control-sm) +
+		var(--space-2)
+	);
 	/*
 	 * 层级刻度：全仓只认这九个名字，样式里不再写裸数字（顺序与叠放关系见 `docs/layout.md` §4）。
 	 *
@@ -370,11 +387,11 @@
 	--scrollbar-thumb-color: color-mix(in srgb, var(--fg-subtle) 40%, transparent);
 	--scrollbar-thumb-color-hover: var(--fg-muted);
 	--scrollbar-track-color: transparent;
-	/* 分隔条的鼠标命中区总宽度，左右两条共用；悬停时那条高亮线的颜色取下一项 */
+	/* 分隔条的鼠标命中区总宽度，左右两条共用；悬停时那条高亮线的颜色取不抢眼的中性边框色 */
 	--divider-hit-width: 6px;
 	/* 左栏分隔条压进列表内容的宽度：只压 1px，其余命中区落在接缝外侧，贴右缘的滚动条照旧可点 */
 	--sidebar-hit-inset: 1px;
-	--divider-highlight: color-mix(in srgb, var(--accent-fg) 55%, transparent);
+	--divider-highlight: color-mix(in srgb, var(--fg-muted) 28%, var(--border-default));
 	/* 对话导航的缩放倍数，由设置里的百分比写入；下面每个尺寸都是它的倍数 */
 	--outline-scale: 1;
 	/* 对话导航竖轨：离主区左缘的间距、轨宽、轨内边距、短条静止尺寸、当前轮次的加宽倍数
@@ -410,6 +427,13 @@
 	--set-select-icon: 14px;
 	--set-select-icon-inset: 9px;
 	--set-select-max-width: 220px;
+	/* 设置页左栏导航宽度 */
+	--set-sidebar-width: 212px;
+	/* 设置页开关：轨道宽高、滑块直径与内缩间距 */
+	--set-switch-width: 34px;
+	--set-switch-height: 20px;
+	--set-switch-thumb: 14px;
+	--set-switch-inset: 2px;
 	/* 设置页模型一栏：标题行、默认设置卡片与两个分组之间的距离 */
 	--set-models-gap: 16px;
 	--set-models-group-gap: 8px;
@@ -737,14 +761,13 @@ textarea:focus-visible {
 }
 
 /*
- * 图形缺省：不填充、跟着文字色描边、圆头圆角。
+ * 自绘线框图标（`transcript/icons.tsx` 的 `.ui-icon`）：不填充、跟着文字色描边、圆头圆角。
  *
- * **描边宽度不在这里给**：这一条以前写死 1.8，优先级压过了 lucide 组件上七十多处
- * `strokeWidth` 属性——那些属性一个都没生效，改一个也不见变化。现在宽度只在
- * `.lucide` 与界面自绘的 `.ui-icon` 上按 `--icon-stroke-width` 落地，Mermaid、Git 泳道、
- * 状态环这些自带描边的图形各管各的。
+ * 描边样式只落在具体类（`.ui-icon`、`.lucide`、`chrome.css` 的 `.window-btn-icon`）上，
+ * 不写全局 `svg { stroke: ... }`，以免污染 `@react-symbols/icons`、Mermaid、Git 泳道等
+ * 自带配色与填充结构的第三方或数据驱动 SVG。
  */
-svg {
+.ui-icon {
 	fill: none;
 	stroke: currentColor;
 	stroke-linecap: round;

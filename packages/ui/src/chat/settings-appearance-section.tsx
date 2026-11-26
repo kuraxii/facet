@@ -47,14 +47,8 @@ export function AppearanceSection({
 				return t("theme.light");
 			case "dark":
 				return t("theme.dark");
-			case "midnight":
-				return t("theme.midnight");
 			case "claude":
 				return t("theme.claude");
-			case "ghostty":
-				return t("theme.ghostty");
-			case "pureBlack":
-				return t("theme.pureBlack");
 			case "system":
 				return t("theme.system");
 		}
@@ -86,7 +80,6 @@ export function AppearanceSection({
 
 	return (
 		<>
-			<h2 className="set-section-title">{t("settings.appearancePage.title")}</h2>
 			<SettingsGroup label={t("settings.appearancePage.general")}>
 				<SettingsRow title={t("settings.appearancePage.theme")} isStacked>
 					<div className="set-swatches">
@@ -127,6 +120,9 @@ export function AppearanceSection({
 				<SettingsRow title={t("settings.appearancePage.reducedMotion")}>
 					<input
 						type="checkbox"
+						role="switch"
+						aria-checked={appearance.reducedMotion}
+						className="set-switch"
 						checked={appearance.reducedMotion}
 						onChange={(event) => patchAppearance({ reducedMotion: event.target.checked })}
 						aria-label={t("settings.appearancePage.reducedMotion")}

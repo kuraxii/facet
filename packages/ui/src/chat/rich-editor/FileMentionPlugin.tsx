@@ -25,6 +25,7 @@ import {
 } from "lexical";
 import { type ReactNode, type RefObject, useCallback, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { FileSymbolIcon } from "../../common/FileSymbolIcon.tsx";
 import { useI18n } from "../../i18n/I18nProvider.tsx";
 import { OptionList } from "../OptionList.tsx";
 import { $createFileMentionNode, fileBasename, fileDirname } from "./file-mention-node.ts";
@@ -150,6 +151,7 @@ function MentionMenu({
 			})}
 			renderRow={(option) => (
 				<>
+					<FileSymbolIcon name={option.path} className="cmd-file-icon" />
 					<span className="cmd-name">{fileBasename(option.path)}</span>
 					<span className="cmd-desc">{fileDirname(option.path)}</span>
 				</>

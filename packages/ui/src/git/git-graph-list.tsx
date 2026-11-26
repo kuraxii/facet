@@ -23,6 +23,7 @@ import styles from "./git.module.css";
 import { GitGraphLanes, GRAPH_ROW_HEIGHT } from "./git-graph-lanes.tsx";
 import { layoutGitGraph } from "./git-graph-layout.ts";
 import { GitRefs } from "./git-refs.tsx";
+import { splitCommitSubject } from "./git-subject.ts";
 
 /**
  * 触底提前量，按行数算。
@@ -221,6 +222,7 @@ export function GitGraphList({
 						if (commit === undefined) {
 							return null;
 						}
+						const subject = splitCommitSubject(commit.subject);
 						return (
 							<li
 								key={commit.sha}
@@ -243,7 +245,12 @@ export function GitGraphList({
 									onClick={() => onSelect(commit)}
 								>
 									{row === undefined ? null : <GitGraphLanes row={row} maxLanes={layout.maxLanes} />}
-									<span className={styles.graphSubject}>{commit.subject}</span>
+									<span className={styles.graphSubject}>
+										{subject.prefix === undefined ? null : (
+											<span className={styles.graphSubjectPrefix}>{subject.prefix}</span>
+										)}
+										{subject.body}
+									</span>
 									{/* 引用贴右端：泳道与说明在左，分支与 Tag 在右，扫视时各看一边 */}
 									<GitRefs refs={commit.refs ?? []} />
 								</button>

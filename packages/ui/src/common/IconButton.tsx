@@ -33,8 +33,8 @@ export type IconButtonProps = Omit<
 		variant?: IconButtonVariant;
 		/** 尺寸档位，缺省 `sm`（28 × 28） */
 		size?: IconButtonSize;
-		/** 圆角单独放宽一档：输入区那种要跟外框圆角对齐的主图标按钮写 `lg` */
-		radius?: "lg";
+		/** 圆角档位：`lg` 放到 `--radius-xl`，`pill` 收到正圆 `--radius-pill`（输入区发送 / 停止按钮） */
+		radius?: "lg" | "pill";
 		/** 选中 / 激活态：底色取 `--bg-active`，替代过去零散的 `is-on` */
 		active?: boolean;
 		/** 额外的业务类名 */

@@ -11,7 +11,7 @@
 | :--- | :--- | :--- |
 | `VISUAL_SCALE` | `packages/ui/src/styles/visual-contract.ts` | 刻度：字号、行高、间距、控件高度、圆角、图标、动效 |
 | `VISUAL_PX` | 同上 | 具名长度：正文列宽、对话导航竖轨、浮层落点、编辑器标题行间距 |
-| `theme.css` | `packages/ui/src/styles/theme.css` | 颜色：六套配色的同一组语义键，外加阴影、遮罩与选区 |
+| `theme.css` | `packages/ui/src/styles/theme.css` | 颜色：三套配色（`light` / `dark` / `claude`）的同一组语义键，外加阴影、遮罩与选区 |
 
 样式表那头的对应物是 `packages/ui/src/styles/base.css` 的 `:root`（`--text-*` /
 `--leading-*` / `--space-*` / `--control-*` / `--radius-*` / `--icon-*` / `--dur-*` /
@@ -119,8 +119,7 @@
 
 ## 2. 颜色与主题
 
-颜色只有一份真值：`theme.css` 里六套配色（`light` / `dark` / `midnight` / `claude` / `ghostty` /
-`pureBlack`）填满**同一组语义键**。组件读名字，不读具体色值；换主题只换取值。
+颜色只有一份真值：`theme.css` 里三套配色（GitHub Copilot 默认浅色 `light`、GitHub Copilot 默认深色 `dark`，以及暖棕深色 `claude`）填满**同一组语义键**。组件读名字，不读具体色值；换主题只换取值。
 
 变量按角色分组，不按颜色分组——这就是"语义化主题层"的全部意思：
 
@@ -148,7 +147,7 @@
 - **焦点环画在盒子内侧**：`outline: 2px solid var(--border-focus)` 配 `outline-offset: -2px`
   （输入类控件 `-1px`）。向外扩会挤动相邻元素、贴边时溢出容器。
 
-- 六套配色的键集完全一致（`theme.test.ts`）。
+- 三套配色的键集完全一致（`theme.test.ts`）。
 - `theme.css` 里每个变量在全仓至少有一处引用，没人读的色彩变量等于一份要一直维护的死配置（`theme.test.ts`）。
 - `theme.css` 与泳道色（`git-graph.css`）之外不许出现裸颜色字面量：`#hex` / `rgb()` / `hsl()`
   （`visual-contract.test.ts`）。豁免逐条写在测试里——遮罩只取 alpha、"跟随系统"色片要两种底色
@@ -167,7 +166,7 @@
 | `Button` | `variant` | `primary`（`--accent-fill` 三态 + `--accent-on-fill`）、`secondary`（描边 + `--bg-hover`）、`ghost`（无边框，`--fg-muted`）、`danger`（`--status-err-fg`）；`armed` 表示两步确认的第一步 |
 | | `size` | `sm` 28 / `md` 32 / `lg` 40（`--control-*`） |
 | `IconButton` | `variant` | `ghost` / `outline` / `primary`；`active` 走 `--bg-active` |
-| | `size` | `xs` 24 / `sm` 28 / `md` 32；`radius="lg"` 单独放宽圆角（输入区的发送按钮） |
+| | `size` | `xs` 24 / `sm` 28 / `md` 32；`radius="lg"` 放宽圆角，`radius="pill"` 为正圆（输入区的发送 / 停止按钮） |
 | `Input` | `variant` | `default`（`--bg-elevated` + `--border-default`）/ `ghost`（无边框，嵌在带框容器里） |
 | | `size` | `sm` 28 / `md` 32 / `lg` 40；`invalid` 转错误色并带 `aria-invalid` |
 | `ListRow` | `as` | `div`（展示）/ `button`（可点，自动 `type="button"`）/ `li` |
@@ -193,7 +192,7 @@
 
 ## 4. 配套基准
 
-- **零字距微调**：层级靠字号与字重（`400 / 500 / 600`）拉开，不写 `letter-spacing`。
+- **克制字距微调**：常规文本与正文不写 `letter-spacing`，层级主要靠字号与字重（`400 / 500 / 600`）拉开；仅侧栏应用标题与日期分组小标题等少数外壳锚点做微幅字距调整。
 - **单向下边距**：正文与 Markdown 区块只用 `margin-bottom`，首尾由
   `> :first-child { margin-top: 0 }` 与 `> :last-child { margin-bottom: 0 }` 归零。
 - **一个数一处定义**：脚本要读的长度进 `VISUAL_PX`，样式要用的进 `:root`，两边同名同值；

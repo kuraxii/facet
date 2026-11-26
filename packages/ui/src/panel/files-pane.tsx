@@ -10,7 +10,7 @@
 
 import type { FileEntry } from "@facet/protocol";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { File as FileGlyph, PanelRightClose, RefreshCw } from "lucide-react";
+import { PanelRightClose, RefreshCw } from "lucide-react";
 import {
 	type CSSProperties,
 	type KeyboardEvent as ReactKeyboardEvent,
@@ -20,6 +20,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { FileSymbolIcon, FolderSymbolIcon } from "../common/FileSymbolIcon.tsx";
 import { FACET_FILE_DRAG_MIME } from "../common/file-drag.ts";
 import { IconButton } from "../common/IconButton.tsx";
 import { ListRow } from "../common/ListRow.tsx";
@@ -395,9 +396,12 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath, onCollapse 
 									}}
 								>
 									{isDirectory ? (
-										<TreeChevron isOpen={isOpen} size={ICON_SIZE.md} />
+										<>
+											<TreeChevron isOpen={isOpen} size={ICON_SIZE.md} />
+											<FolderSymbolIcon name={entry.name} isOpen={isOpen} className="tree-icon" />
+										</>
 									) : (
-										<FileGlyph size={ICON_SIZE.md} className="tree-icon" />
+										<FileSymbolIcon name={entry.name} className="tree-icon" />
 									)}
 									<span className="tree-name">{entry.name}</span>
 									{state?.isLoading === true ? <span className="tree-note">…</span> : null}

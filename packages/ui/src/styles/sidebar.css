@@ -5,37 +5,49 @@
 .sb {
 	position: relative;
 	display: flex;
-	/* 占外壳网格的左列；列轨道由实占宽 `--col-sidebar` 给 */
+	/* 占外壳网格的左列首行；列轨道由实占宽 `--col-sidebar` 给 */
+	grid-row: 1;
 	grid-column: 1;
 	flex-direction: column;
 	height: 100%;
 	/* 横向内边距交给每一行（`.scroll-row`），滚动条才能贴着右缘；
 	   顶带里那行头部自己带 4px 下边距，这里再留 4px，头部控件到新建按钮正好 8px */
 	padding: var(--space-2) 0 var(--space-4);
-	border-right: 1px solid var(--border-subtle);
 	background: var(--bg-subtle);
 	overflow: hidden;
 	transition: background-color var(--dur-fast) var(--ease-standard);
 }
 
 /*
- * 宽档与中档：把剪辑区放宽到分隔条命中区的宽度。
+ * 宽档与中档：把剪辑区放宽到分隔条命中区的宽度，同时在非拖收态保持自身宽为 `--sidebar-width`
+ * 并右对齐到列接缝；列轨道从偏好宽过渡到 `0` 时整块向左滑出 `.shell` 裁剪区，不挤压内部文案。
  *
  * 分隔条的热区有一大半落在接缝外侧的主区上，而 `.sb` 的 `overflow: hidden` 会把伸出去的那半
  * 裁掉、连点击一起裁掉。窄档不这样做：那里 `.sb` 是贴左缘的抽屉，放宽剪辑会从屏幕左缘漏出
  * 一条内容。
  */
-.app:not(.is-narrow) .sb {
+.app:where(:not(.is-narrow)) .sb {
 	overflow: clip;
 	overflow-clip-margin: var(--divider-hit-width);
+	transition:
+		visibility var(--dur-structural) allow-discrete,
+		background-color var(--dur-fast) var(--ease-standard);
+}
+
+.app:where(:not(.is-narrow):not([data-sidebar-drag-collapsed="true"])) .sb {
+	justify-self: end;
+	width: var(--sidebar-width);
 }
 
 /*
- * 宽档与中档收起左栏；窄档的抽屉另有显示规则，不能在这里 display: none。
- * 档位判断放在 `:where()` 里，这条规则只负责显隐，不与档位规则比权重。
+ * 宽档与中档收起左栏：保留在布局里随列轨道实底滑出，`allow-discrete` 等过渡结束再切到
+ * `visibility: hidden` 移出焦点与辅助树；窄档抽屉另有 `transform` 规则。
  */
-.app.is-sidebar-hidden:where(:not(.is-narrow)) .sb {
-	display: none;
+.app:where(.is-sidebar-hidden:not(.is-narrow)) .sb {
+	overflow: hidden;
+	overflow-clip-margin: 0px;
+	visibility: hidden;
+	pointer-events: none;
 }
 
 /* 拖宽用的命中区，和右栏那条对称 */
@@ -55,16 +67,6 @@
 	background: transparent;
 }
 
-/*
- * 悬停或拖动时只染颜色，目标包在 `:where()` 里：不与档位规则比权重。
- *
- * 状态走 `.app` 上的属性而不是 `:has()`，理由见 `panel.css` 同名那条规则：`:has()` 挂在
- * 整棵文档的根上，每次样式重算都要按整棵树重验一遍。
- */
-.app[data-sidebar-resizer-active="true"] :where(.sb, .chrome-slot.is-sidebar) {
-	border-right-color: var(--divider-highlight);
-}
-
 .sb-head {
 	position: relative;
 	z-index: var(--z-content-local);
@@ -72,19 +74,29 @@
 	align-items: center;
 	justify-content: space-between;
 	width: 100%;
-	/* 上下各留 4px，28px 的图标按钮正好在 36px 的顶带里居中 */
+	/* 上下各留 4px，28px 的图标按钮正好在 36px 的顶带里居中；空白拖窗交给底层 `.app-drag` */
 	padding: var(--space-2) 0;
-	-webkit-app-region: drag;
 }
 
-/* 顶带里的那份头部要自己补左内边距，标题才能与下面的新建按钮、会话行对齐 */
+/* 顶带里的侧栏头部让出左上角常驻的「Facet + 左栏开关」组合，搜索与添加项目贴齐右缘 */
 .chrome-slot.is-sidebar .sb-head {
-	padding-left: var(--sidebar-edge);
+	justify-content: flex-end;
+	padding-left: var(--chrome-sidebar-toggle-clearance);
+}
+
+.sb-head-lead {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	min-width: 0;
 }
 
 .sb-title {
+	flex: none;
+	width: var(--chrome-brand-width);
 	font-size: var(--text-body);
 	font-weight: 600;
+	letter-spacing: -0.01em;
 }
 
 .sb-tools {
@@ -93,10 +105,21 @@
 	gap: var(--space-1);
 }
 
-/* 新建会话：几何来自 `common/Button.tsx`，这里只管它在侧栏里的外边距 */
+/* 新建会话：几何来自 `common/Button.tsx`，采用沉稳卡片按钮以免大块强调色抢夺焦点 */
 .sb-new {
+	justify-content: flex-start;
 	width: auto;
-	margin: 0 var(--sidebar-edge) var(--space-4);
+	margin: var(--space-4) var(--sidebar-edge) var(--space-3);
+	padding-inline: var(--space-4);
+	border-color: var(--border-default);
+	background: var(--bg-surface);
+	box-shadow: var(--shadow-control);
+	color: var(--fg-default);
+	font-weight: 500;
+}
+
+.sb-new:hover:not(:disabled) {
+	background: var(--bg-elevated);
 }
 
 .sb-filter {
@@ -401,7 +424,8 @@
 	color: var(--fg-subtle);
 	font-size: var(--text-xs);
 	font-variant-numeric: tabular-nums;
-	font-weight: 500;
+	font-weight: 600;
+	letter-spacing: 0.02em;
 }
 
 /* 会话行：几何来自 `common/ListRow.tsx` 的 `sm` 档，这里只留侧栏自己的内缩与两行布局 */
@@ -445,15 +469,22 @@
 	flex: none;
 }
 
+.sb-row[data-selected="true"],
+.sb-row.is-active {
+	box-shadow: inset 0 0 0 1px var(--border-subtle);
+}
+
+.sb-row[data-selected="true"] .sb-row-title,
 .sb-row.is-active .sb-row-title {
 	font-weight: 500;
 }
 
+.sb-row[data-selected="true"] .sb-row-meta,
 .sb-row.is-active .sb-row-meta {
 	color: var(--fg-muted);
 }
 
-.sb-row:hover:not(.is-active) .sb-row-meta {
+.sb-row:hover:not([data-selected="true"]):not(.is-active) .sb-row-meta {
 	color: var(--fg-muted);
 }
 
@@ -506,7 +537,6 @@
 	gap: var(--space-3);
 	margin-top: 6px;
 	padding: 8px var(--sidebar-edge) 0;
-	border-top: 1px solid var(--border-subtle);
 	color: var(--fg-subtle);
 	font-size: var(--text-xs);
 }
@@ -698,7 +728,9 @@
 	/* 顶部 36px 是抽屉自己的顶头（头部就在里面），所以基类那 4px 上内边距让给顶头 */
 	padding-top: 0;
 	transform: translateX(-100%);
-	transition: transform var(--dur-fast) var(--ease-standard);
+	transition:
+		transform var(--dur-structural) var(--ease-panel),
+		box-shadow var(--dur-structural) var(--ease-panel);
 }
 
 /*

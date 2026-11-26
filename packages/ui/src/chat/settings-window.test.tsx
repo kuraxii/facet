@@ -57,8 +57,9 @@ describe("设置窗", () => {
 		expect(markup).not.toContain("aria-modal");
 	});
 
-	it("标题栏带关闭按钮", () => {
+	it("标题栏带关闭按钮，两段式布局在右侧头部展示当前分类标题", () => {
 		expect(markup).toContain('aria-label="关闭设置"');
+		expect(markup).toContain('<h2 class="set-main-title">外观</h2>');
 	});
 
 	it("外观页提供语言选择", () => {

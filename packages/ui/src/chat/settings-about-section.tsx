@@ -44,7 +44,6 @@ export function AboutSection({
 
 	return (
 		<section className="set-section">
-			<h2 className="set-section-title">{t("settings.aboutPage.title")}</h2>
 			<ul className="set-list">
 				<li className="set-row">
 					<span className="set-row-name">{t("settings.aboutPage.appVersion")}</span>

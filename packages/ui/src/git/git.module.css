@@ -197,18 +197,20 @@
 	max-width: 120px;
 	overflow: hidden;
 	padding: 0 var(--space-2);
+	border: 1px solid var(--border-subtle);
 	border-radius: var(--radius-sm);
 	background: var(--bg-elevated);
 	color: var(--fg-muted);
 	font-family: var(--font-mono);
 	font-size: var(--text-xs);
-	line-height: 15px;
+	line-height: var(--leading-tight);
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
 .ref[data-kind="head"] {
-	background: color-mix(in srgb, var(--accent-fg) 22%, transparent);
+	border-color: color-mix(in srgb, var(--accent-fg) 35%, transparent);
+	background: color-mix(in srgb, var(--accent-fg) 18%, transparent);
 	color: var(--accent-fg);
 }
 
@@ -237,7 +239,7 @@
 	flex: none;
 	gap: var(--changes-icon-gap);
 	align-items: center;
-	height: var(--control-lg);
+	height: var(--control-md);
 	padding: 0 var(--changes-trailing) 0 var(--changes-row-padding-x);
 	border-bottom: 1px solid var(--border-subtle);
 }
@@ -308,7 +310,7 @@
 	gap: var(--space-4);
 	align-items: center;
 	width: 100%;
-	padding: 0 var(--changes-trailing) 0 0;
+	padding: 0 var(--changes-trailing) 0 var(--space-5);
 	border: 0;
 	background: transparent;
 	color: var(--fg-default);
@@ -334,6 +336,10 @@
 	font-size: var(--text-ui);
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+.graphSubjectPrefix {
+	color: var(--fg-subtle);
 }
 
 /* 触底自动加载的哨兵：零高度，只为让观察者有个落点 */

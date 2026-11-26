@@ -1,8 +1,9 @@
 /*
  * 界面配色。
  *
- * 同一套语义色板的六种取值：一套浅色加五套深色。所有主题用同一组变量名，组件只读变量，
- * 不关心当前是哪一套。缺省是深色的 dark，`:root` 与它一致，脚本跑起来之前也不会闪。
+ * 同一套语义色板的三种取值：GitHub Copilot 默认浅色（light）、GitHub Copilot 默认深色
+ * （dark），以及暖棕深色变体（claude）。所有主题用同一组变量名，组件只读变量，不关心当前
+ * 是哪一套。缺省是深色的 dark，`:root` 与它一致，脚本跑起来之前也不会闪。
  *
  * 变量按**角色**分五组，不按颜色分：
  *
@@ -12,7 +13,7 @@
  *    跟着色相走。全仓只有这两个交互底色，别处不再各调一档。
  * 3. 前景 `--fg-*`：三档文字。
  * 4. 边框 `--border-*`：结构线、控件边框、焦点。
- * 5. 语义 `--accent-*` / `--status-*` / `--dot-*` / `--diff-*` / `--code-block-*`。
+ * 5. 语义 `--accent-*` `--status-*` `--dot-*` `--diff-*` `--code-block-*`。
  *
  * 阴影与选区也在这里：明暗两套的观感差得远，交给主题选，别在组件里各写一份 alpha。
  */
@@ -20,153 +21,110 @@
 :root[data-theme="light"] {
 	color-scheme: light;
 	--bg-canvas: #ffffff;
-	--bg-subtle: #f4f4f5;
-	--bg-surface: #fafafa;
-	--bg-elevated: #f4f4f5;
-	/* 悬停与选中：白底上往深里混，7% 刚好看出层次、不脏 */
-	--bg-hover: color-mix(in srgb, var(--fg-default) 7%, transparent);
-	--bg-active: color-mix(in srgb, var(--fg-default) 14%, transparent);
-	--fg-default: #1a1a1e;
-	--fg-muted: #71717a;
-	--fg-subtle: #a1a1aa;
-	/* 浅色里越深越重：分割线比控件边框淡一档，与深色主题的强弱关系一致 */
-	--border-subtle: #ececf1;
-	--border-default: #e4e4e7;
+	--bg-subtle: #f6f8fa;
+	--bg-surface: #ffffff;
+	--bg-elevated: #f6f8fa;
+	/* 悬停与选中：白底上往深里混，6% 刚好看出层次、不脏 */
+	--bg-hover: color-mix(in srgb, var(--fg-default) 6%, transparent);
+	--bg-active: color-mix(in srgb, var(--fg-default) 12%, transparent);
+	--fg-default: #1f2328;
+	--fg-muted: #59636e;
+	--fg-subtle: #6e7781;
+	--border-subtle: #e0e6eb;
+	--border-default: #d1d9e0;
 	/* 焦点环与主强调同色；分开命名是为了将来能单独调 */
 	--border-focus: var(--accent-fg);
-	/* 钴蓝：文字版压在白底上 5.2:1，填充版深一档，白字压上去 6.6:1 */
-	--accent-fg: #2563eb;
-	--accent-fill: #1d4ed8;
+	/* Primer 浅色强调蓝 */
+	--accent-fg: #0969da;
+	--accent-fill: #0969da;
 	/* 悬停与按下朝前景方向混：浅色主题里越点越深 */
 	--accent-fill-hover: color-mix(in srgb, var(--accent-fill) 88%, var(--fg-default));
 	--accent-fill-active: color-mix(in srgb, var(--accent-fill) 76%, var(--fg-default));
 	--accent-on-fill: #ffffff;
-	--status-ok-fg: #3e704a;
-	--status-warn-fg: #7b5d39;
-	--status-err-fg: #9d433b;
-	--status-warn-bg: #7b5d391f;
-	--status-err-bg: #9d433b1f;
-	--status-warn-border: #eed9b4;
-	--dot-ok: #299f51;
-	--dot-warn: #b37824;
-	--dot-err: #f12e2f;
-	--dot-run: #268ae0;
-	--diff-add-fg: #15803d;
-	--diff-del-fg: #b91c1c;
-	--diff-add-bg: #15803d1f;
-	--diff-del-bg: #b91c1c1f;
+	--status-ok-fg: #1a7f37;
+	--status-warn-fg: #9a6700;
+	--status-err-fg: #d1242f;
+	--status-warn-bg: #fff8c5;
+	--status-err-bg: #ffebe9;
+	--status-warn-border: #d4a72c66;
+	--dot-ok: #1f883d;
+	--dot-warn: #bf8700;
+	--dot-err: #cf222e;
+	--dot-run: #0969da;
+	--diff-add-fg: #1a7f37;
+	--diff-del-fg: #cf222e;
+	--diff-add-bg: #dafbe1;
+	--diff-del-bg: #ffebe9;
 	/* 增删行的 3px 左缘条：不透明实色，深色主题更亮、浅色主题不掺灰 */
 	--diff-add-bar: var(--diff-add-fg);
 	--diff-del-bar: var(--diff-del-fg);
-	--code-block-bg: #f6f6f6;
-	--code-block-fg: #3f3f46;
+	--code-block-bg: #f6f8fa;
+	--code-block-fg: #1f2328;
 	/* 浅底靠一条压边撑起层次，不用大 alpha 的投影 */
-	--shadow-control: 0 1px 0 0 rgb(31 35 40 / 4%);
-	--shadow-popover: 0 8px 24px rgb(31 35 40 / 12%), 0 0 0 1px var(--border-subtle);
-	--shadow-modal: 0 24px 64px rgb(31 35 40 / 18%);
-	--selection-bg: color-mix(in srgb, var(--accent-fg) 22%, transparent);
-	/* 模态遮罩：叠在正文上的那一层黑，深浅各按底色给透明度 */
-	--scrim-bg: rgb(0 0 0 / 32%);
+	--shadow-control: 0 1px 2px 0 rgb(31 35 40 / 5%), inset 0 1px 0 0 rgb(255 255 255 / 60%);
+	--bubble-rim: linear-gradient(to bottom, #e5eaef, #d5dde5);
+	--shadow-bubble: 0 2px 6px -1px rgb(10 10 12 / 5%), 0 1px 2px 0 rgb(10 10 12 / 4%);
+	--shadow-popover: 0 6px 18px 0 rgb(37 41 46 / 12%), 0 0 0 1px var(--border-default);
+	--shadow-modal: 0 24px 64px 0 rgb(37 41 46 / 20%), 0 0 0 1px var(--border-subtle);
+	--selection-bg: color-mix(in srgb, var(--accent-fill) 22%, transparent);
+	/* 模态遮罩：叠在正文上的那一层暗幕，深浅各按底色给透明度 */
+	--scrim-bg: rgb(31 35 40 / 28%);
 }
 
 :root,
 :root[data-theme="dark"] {
 	color-scheme: dark;
-	--bg-canvas: #18181b;
-	--bg-subtle: #131316;
-	--bg-surface: #1f1f22;
-	--bg-elevated: #27272a;
-	/* 深底上往白里混：7% 与 old surface2 / 14% 与 old surface3 观感相当 */
+	--bg-canvas: #0d1117;
+	--bg-subtle: #151b23;
+	--bg-surface: #151b23;
+	--bg-elevated: #212830;
+	/* 深底上往白里混：7% 与 14% 刚好撑开悬停与选中层次 */
 	--bg-hover: color-mix(in srgb, var(--fg-default) 7%, transparent);
 	--bg-active: color-mix(in srgb, var(--fg-default) 14%, transparent);
-	--fg-default: #fafafa;
-	--fg-muted: #a1a1aa;
-	--fg-subtle: #71717a;
-	--border-subtle: #27272a;
-	--border-default: #303036;
+	--fg-default: #f0f6fc;
+	--fg-muted: #9198a1;
+	--fg-subtle: #767e88;
+	--border-subtle: #2a313c;
+	--border-default: #3d444d;
 	--border-focus: var(--accent-fg);
-	/* 钴蓝的亮版：压深底 7.5:1 当文字色，填充用它本身、配深色文字 7.5:1 */
-	--accent-fg: #60a5fa;
-	--accent-fill: #60a5fa;
+	/* Primer 深色强调蓝：文字取亮蓝、填充取深一档的实体蓝配白字 */
+	--accent-fg: #4493f8;
+	--accent-fill: #1f6feb;
 	/* 深色主题里悬停更亮、按下更暗，方向与浅色相反 */
 	--accent-fill-hover: color-mix(in srgb, var(--accent-fill) 88%, var(--fg-default));
 	--accent-fill-active: color-mix(in srgb, var(--accent-fill) 76%, var(--fg-default));
-	--accent-on-fill: #18181b;
-	--status-ok-fg: #6cb17b;
-	--status-warn-fg: #c09664;
-	--status-err-fg: #d8847b;
-	--status-warn-bg: #c0966429;
-	--status-err-bg: #d8847b29;
-	--status-warn-border: #4a4436;
-	--dot-ok: #35c264;
-	--dot-warn: #db932e;
-	--dot-err: #f7796d;
-	--dot-run: #5caaf6;
-	--diff-add-fg: #4ade80;
-	--diff-del-fg: #ef4444;
-	--diff-add-bg: #4ade8029;
-	--diff-del-bg: #ef444429;
-	/* 增删行的 3px 左缘条：不透明实色，深色主题更亮、浅色主题不掺灰 */
-	--diff-add-bar: var(--diff-add-fg);
-	--diff-del-bar: var(--diff-del-fg);
-	--code-block-bg: #242427;
-	--code-block-fg: #d4d4d8;
-	/*
-	 * 深色不用压边阴影，浮层靠自己那条 1px 环与底色拉开：环色取 `--border-default`——
-	 * `--border-subtle` 在这里与浮层底色同值，勾不住边。
-	 */
-	--shadow-control: none;
-	--shadow-popover: 0 12px 32px rgb(0 0 0 / 40%), 0 0 0 1px var(--border-default);
-	--shadow-modal: 0 24px 64px rgb(0 0 0 / 45%), 0 0 0 1px var(--border-subtle);
-	--selection-bg: color-mix(in srgb, var(--accent-fg) 22%, transparent);
-	/* 模态遮罩：叠在正文上的那一层黑，深浅各按底色给透明度 */
-	--scrim-bg: rgb(0 0 0 / 45%);
-}
-
-:root[data-theme="midnight"] {
-	color-scheme: dark;
-	--bg-canvas: #161820;
-	--bg-subtle: #121420;
-	--bg-surface: #1c1e27;
-	--bg-elevated: #252731;
-	--bg-hover: color-mix(in srgb, var(--fg-default) 7%, transparent);
-	--bg-active: color-mix(in srgb, var(--fg-default) 14%, transparent);
-	--fg-default: #fafafa;
-	--fg-muted: #9a9db0;
-	--fg-subtle: #6b6e82;
-	--border-subtle: #242636;
-	--border-default: #2e3040;
-	--border-focus: var(--accent-fg);
-	--accent-fg: #7eaaeb;
-	--accent-fill: #3b6fcf;
-	--accent-fill-hover: color-mix(in srgb, var(--accent-fill) 88%, var(--fg-default));
-	--accent-fill-active: color-mix(in srgb, var(--accent-fill) 76%, var(--fg-default));
 	--accent-on-fill: #ffffff;
-	--status-ok-fg: #6cb17b;
-	--status-warn-fg: #c09664;
-	--status-err-fg: #d8847b;
-	--status-warn-bg: #c0966429;
-	--status-err-bg: #d8847b29;
-	--status-warn-border: #443d28;
-	--dot-ok: #35c26e;
-	--dot-warn: #d9a04a;
-	--dot-err: #f2767f;
-	--dot-run: #5a9bf6;
-	--diff-add-fg: #4ade80;
-	--diff-del-fg: #ef4444;
-	--diff-add-bg: #4ade8029;
-	--diff-del-bg: #ef444429;
+	--status-ok-fg: #3fb950;
+	--status-warn-fg: #d29922;
+	--status-err-fg: #f85149;
+	--status-warn-bg: #bb800926;
+	--status-err-bg: #f851491a;
+	--status-warn-border: #bb800966;
+	--dot-ok: #3fb950;
+	--dot-warn: #d29922;
+	--dot-err: #f85149;
+	--dot-run: #4493f8;
+	--diff-add-fg: #3fb950;
+	--diff-del-fg: #f85149;
+	--diff-add-bg: #2ea04326;
+	--diff-del-bg: #f851491a;
 	/* 增删行的 3px 左缘条：不透明实色，深色主题更亮、浅色主题不掺灰 */
 	--diff-add-bar: var(--diff-add-fg);
 	--diff-del-bar: var(--diff-del-fg);
-	--code-block-bg: #222430;
-	--code-block-fg: #d4d4d8;
-	--shadow-control: none;
-	--shadow-popover: 0 12px 32px rgb(0 0 0 / 40%), 0 0 0 1px var(--border-default);
-	--shadow-modal: 0 24px 64px rgb(0 0 0 / 45%), 0 0 0 1px var(--border-subtle);
-	--selection-bg: color-mix(in srgb, var(--accent-fg) 22%, transparent);
+	--code-block-bg: #151b23;
+	--code-block-fg: #f0f6fc;
+	/*
+	 * 深色表面给一条极克制的顶部受光内高光与微弱落影，让卡片、输入区与气泡从画布底上
+	 * 浮起来一点，不显得平板。
+	 */
+	--shadow-control: inset 0 1px 0 0 rgb(255 255 255 / 4%), 0 1px 2px 0 rgb(1 4 9 / 40%);
+	--bubble-rim: linear-gradient(to bottom, rgb(240 246 252 / 14%), rgb(240 246 252 / 5%));
+	--shadow-bubble: 0 2px 6px -1px rgb(1 4 9 / 32%), 0 1px 2px 0 rgb(1 4 9 / 20%);
+	--shadow-popover: 0 6px 18px 0 rgb(1 4 9 / 45%), 0 0 0 1px var(--border-default);
+	--shadow-modal: 0 24px 48px 0 rgb(1 4 9 / 75%), 0 0 0 1px var(--border-default);
+	--selection-bg: color-mix(in srgb, var(--accent-fill) 30%, transparent);
 	/* 模态遮罩：叠在正文上的那一层黑，深浅各按底色给透明度 */
-	--scrim-bg: rgb(0 0 0 / 45%);
+	--scrim-bg: rgb(1 4 9 / 56%);
 }
 
 :root[data-theme="claude"] {
@@ -207,102 +165,12 @@
 	--diff-del-bar: var(--diff-del-fg);
 	--code-block-bg: #2a2826;
 	--code-block-fg: #d4d4d8;
-	--shadow-control: none;
+	--shadow-control: inset 0 1px 0 0 rgb(255 255 255 / 5%), 0 1px 2px 0 rgb(0 0 0 / 24%);
+	--bubble-rim: linear-gradient(to bottom, rgb(250 250 250 / 13%), rgb(250 250 250 / 5%));
+	--shadow-bubble: 0 2px 6px -1px rgb(0 0 0 / 28%), 0 1px 2px 0 rgb(0 0 0 / 18%);
 	--shadow-popover: 0 12px 32px rgb(0 0 0 / 40%), 0 0 0 1px var(--border-default);
 	--shadow-modal: 0 24px 64px rgb(0 0 0 / 45%), 0 0 0 1px var(--border-subtle);
 	--selection-bg: color-mix(in srgb, var(--accent-fg) 22%, transparent);
 	/* 模态遮罩：叠在正文上的那一层黑，深浅各按底色给透明度 */
 	--scrim-bg: rgb(0 0 0 / 45%);
-}
-
-:root[data-theme="ghostty"] {
-	color-scheme: dark;
-	--bg-canvas: #282c34;
-	--bg-subtle: #21252d;
-	--bg-surface: #2f333d;
-	--bg-elevated: #383c48;
-	--bg-hover: color-mix(in srgb, var(--fg-default) 7%, transparent);
-	--bg-active: color-mix(in srgb, var(--fg-default) 14%, transparent);
-	--fg-default: #fafafa;
-	--fg-muted: #c8ccd8;
-	--fg-subtle: #a0a4b2;
-	--border-subtle: #353a47;
-	--border-default: #3f4454;
-	--border-focus: var(--accent-fg);
-	--accent-fg: #b4d0fc;
-	--accent-fill: #3570e0;
-	--accent-fill-hover: color-mix(in srgb, var(--accent-fill) 88%, var(--fg-default));
-	--accent-fill-active: color-mix(in srgb, var(--accent-fill) 76%, var(--fg-default));
-	--accent-on-fill: #ffffff;
-	--status-ok-fg: #6cb17b;
-	--status-warn-fg: #c09664;
-	--status-err-fg: #d8847b;
-	--status-warn-bg: #c0966429;
-	--status-err-bg: #d8847b29;
-	--status-warn-border: #4a4436;
-	--dot-ok: #3ec97a;
-	--dot-warn: #e0a544;
-	--dot-err: #f2887f;
-	--dot-run: #6aa9f2;
-	--diff-add-fg: #4ade80;
-	--diff-del-fg: #ef4444;
-	--diff-add-bg: #4ade8029;
-	--diff-del-bg: #ef444429;
-	/* 增删行的 3px 左缘条：不透明实色，深色主题更亮、浅色主题不掺灰 */
-	--diff-add-bar: var(--diff-add-fg);
-	--diff-del-bar: var(--diff-del-fg);
-	--code-block-bg: #323643;
-	--code-block-fg: #d4d4d8;
-	--shadow-control: none;
-	--shadow-popover: 0 12px 32px rgb(0 0 0 / 40%), 0 0 0 1px var(--border-default);
-	--shadow-modal: 0 24px 64px rgb(0 0 0 / 45%), 0 0 0 1px var(--border-subtle);
-	--selection-bg: color-mix(in srgb, var(--accent-fg) 22%, transparent);
-	/* 模态遮罩：叠在正文上的那一层黑，深浅各按底色给透明度 */
-	--scrim-bg: rgb(0 0 0 / 45%);
-}
-
-:root[data-theme="pureBlack"] {
-	color-scheme: dark;
-	--bg-canvas: #000000;
-	--bg-subtle: #000000;
-	--bg-surface: #0a0a0a;
-	--bg-elevated: #111111;
-	--bg-hover: color-mix(in srgb, var(--fg-default) 9%, transparent);
-	--bg-active: color-mix(in srgb, var(--fg-default) 16%, transparent);
-	--fg-default: #fafafa;
-	--fg-muted: #a1a1aa;
-	--fg-subtle: #71717a;
-	--border-subtle: #1c1c1c;
-	--border-default: #242424;
-	--border-focus: var(--accent-fg);
-	--accent-fg: #7ccba0;
-	--accent-fill: #20744a;
-	--accent-fill-hover: color-mix(in srgb, var(--accent-fill) 88%, var(--fg-default));
-	--accent-fill-active: color-mix(in srgb, var(--accent-fill) 76%, var(--fg-default));
-	--accent-on-fill: #ffffff;
-	--status-ok-fg: #6cb17b;
-	--status-warn-fg: #c09664;
-	--status-err-fg: #d8847b;
-	--status-warn-bg: #c0966429;
-	--status-err-bg: #d8847b29;
-	--status-warn-border: #4a4436;
-	--dot-ok: #4ade80;
-	--dot-warn: #e6b450;
-	--dot-err: #ff6b6b;
-	--dot-run: #5caaf6;
-	--diff-add-fg: #4ade80;
-	--diff-del-fg: #ef4444;
-	--diff-add-bg: #4ade8029;
-	--diff-del-bg: #ef444429;
-	/* 增删行的 3px 左缘条：不透明实色，深色主题更亮、浅色主题不掺灰 */
-	--diff-add-bar: var(--diff-add-fg);
-	--diff-del-bar: var(--diff-del-fg);
-	--code-block-bg: #0c0c0c;
-	--code-block-fg: #d4d4d8;
-	--shadow-control: none;
-	--shadow-popover: 0 12px 32px rgb(0 0 0 / 55%), 0 0 0 1px var(--border-subtle);
-	--shadow-modal: 0 24px 64px rgb(0 0 0 / 60%), 0 0 0 1px var(--border-subtle);
-	--selection-bg: color-mix(in srgb, var(--accent-fg) 22%, transparent);
-	/* 模态遮罩：叠在正文上的那一层黑，深浅各按底色给透明度 */
-	--scrim-bg: rgb(0 0 0 / 55%);
 }

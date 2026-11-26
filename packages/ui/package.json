@@ -30,6 +30,7 @@
 		"@lexical/react": "^0.53.0",
 		"@lexical/rich-text": "^0.53.0",
 		"@lexical/utils": "^0.53.0",
+		"@react-symbols/icons": "^1.4.1",
 		"@tanstack/react-virtual": "^3.14.28",
 		"katex": "^0.19.1",
 		"lexical": "^0.53.0",

@@ -45,10 +45,11 @@
 	line-height: var(--leading-prose);
 }
 
-/* 代码块:无边框悬浮卡,标题栏常态隐身,悬浮或聚焦时出现复制按钮 */
+/* 代码块:细描边悬浮卡,标题栏常态隐身,悬浮或聚焦时出现复制按钮 */
 .code-card {
 	position: relative;
-	margin: 0 0 10px;
+	margin: 0 0 var(--space-6);
+	border: 1px solid var(--border-subtle);
 	border-radius: var(--radius-md);
 	background: var(--code-block-bg);
 	box-shadow: var(--shadow-control);
@@ -217,16 +218,27 @@
 	margin: 0 0 var(--space-6);
 }
 
+.md li p {
+	margin: 0;
+}
+
 /*
  * 竖向节奏只走下边距：每一块自带的下边距就是它与下一块的距离，相邻两块不再上下相加。
  * 首尾两块贴住容器边缘，正文进入消息与收尾时都不会多出半格空白。
+ *
+ * 注意 markstream 会把每个顶层块包在 `.node-slot > .node-content` 里，块元素本身永远
+ * 是 `.node-content` 唯一的 `:last-child`；不能写 `.md p:last-child`（否则所有段落
+ * 的下边距都会被清零），必须沿着最后一条 `.node-slot` 或直接子元素收口。
  */
-.md > :first-child {
+.md > :first-child,
+.md > .markstream-react > .node-slot:first-child > .node-content > :first-child {
 	margin-top: 0;
 }
 
 .md > :last-child,
-.md p:last-child {
+.md > .markstream-react > :last-child,
+.md > .markstream-react > .node-slot:last-child > .node-content > :last-child,
+.md blockquote > .markstream-react > .node-slot:last-child > .node-content > :last-child {
 	margin-bottom: 0;
 }
 
@@ -245,22 +257,42 @@
 	color: var(--accent-fg);
 }
 
-.md table {
+/* 表格卡片化：外框圆角与水平行分隔，去掉四周全网格的 HTML 默认感；压过 markstream `.my-8` 的上下留白 */
+.md .table-node-wrapper {
+	margin: 0 0 var(--space-6);
+	border: 1px solid var(--border-subtle);
+	border-radius: var(--radius-lg);
+	background: var(--bg-surface);
+	box-shadow: var(--shadow-control);
+	overflow-x: auto;
+	overflow-y: hidden;
+	scrollbar-gutter: auto;
+}
+
+.md :is(.markstream-react .table-node, table) {
 	width: 100%;
+	margin: 0;
 	border-collapse: collapse;
 	font-size: var(--text-ui);
 }
 
-.md th,
-.md td {
-	padding: var(--space-3) var(--space-5);
-	border: 1px solid var(--border-subtle);
+.md :is(.markstream-react th, .markstream-react td, th, td) {
+	padding: var(--space-4) var(--space-6);
+	border: 0;
+	border-bottom: 1px solid var(--border-subtle);
 	text-align: left;
+	vertical-align: top;
 }
 
-.md th {
-	background: var(--bg-elevated);
-	font-weight: 500;
+.md :is(.markstream-react th, th) {
+	background: color-mix(in srgb, var(--bg-elevated) 55%, var(--bg-surface));
+	color: var(--fg-muted);
+	font-size: var(--text-xs);
+	font-weight: 600;
+}
+
+.md :is(.markstream-react tr:last-child td, tr:last-child td) {
+	border-bottom: 0;
 }
 
 .md blockquote {
@@ -271,9 +303,15 @@
 }
 
 .md ul,
-.md ol {
+.md ol,
+.md .markstream-react .list-node {
 	margin: 0 0 var(--space-6);
 	padding-left: var(--space-10);
+}
+
+.md li ul,
+.md li ol {
+	margin: var(--space-2) 0 0;
 }
 
 .md h1,

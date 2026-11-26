@@ -5,25 +5,105 @@
 .main {
 	position: relative;
 	display: flex;
-	/* 占外壳网格的中列：宽度由列轨道给，列轨道又只由实占宽给 */
+	/* 占外壳网格的中列首行：与跨 2/4 列的右栏共行叠加，右栏展开时只覆盖而不挤压此列 */
+	grid-row: 1;
 	grid-column: 2;
 	flex-direction: column;
 	min-width: 0;
 	min-height: 0;
+	margin: 0 0 var(--space-4) 0;
+	border: 1px solid var(--border-subtle);
+	border-right-color: transparent;
+	border-radius: var(--radius-xl) 0 0 var(--radius-xl);
+	background: var(--bg-canvas);
+	overflow: hidden;
+	transition:
+		margin-left var(--dur-structural) var(--ease-panel),
+		margin-right var(--dur-structural) var(--ease-panel),
+		border-right-color var(--dur-fast) var(--ease-standard),
+		border-radius var(--dur-structural) var(--ease-panel),
+		visibility var(--dur-structural) allow-discrete;
 }
 
-/* 右栏：文件与变更。占右列，左缘一条分隔条拖动改偏好宽 */
+/* 左栏收起、窄档或拖收预览时，主区左缘留出外壳底色空隙以保留圆角分隔 */
+.app:is(.is-sidebar-hidden, .is-narrow, [data-sidebar-drag-collapsed="true"]) .main {
+	margin-left: var(--space-4);
+}
+
+/* 右栏收起或拖收预览时，主区与右栏分离成各自圆角卡片，右边距平滑扩宽到窗口外框宽度（--space-4） */
+.app:is(.is-panel-hidden, [data-panel-drag-collapsed="true"]) .main {
+	margin-right: var(--space-4);
+	border-right-color: var(--border-subtle);
+	border-radius: var(--radius-xl);
+}
+
+/* 右栏宽展开时仅延迟屏蔽主区焦点与指针，保持原尺寸不动让右栏从右往左覆盖 */
+.app.is-panel-expanded:not(.is-narrow) .main {
+	visibility: hidden;
+	pointer-events: none;
+}
+
+/*
+ * 右栏：并排展开时紧贴主区共用一道 1px 竖线，收起过程中才各自长出内侧圆角并同帧分离，
+ * 走 layout `margin-right` 过渡与列轨道完全同步，间距平滑扩到窗口外框宽度为止。
+ */
 .panel {
 	position: relative;
+	z-index: var(--z-content-local);
 	display: flex;
-	grid-column: 3;
+	grid-row: 1;
+	grid-column: 2 / 4;
 	flex-direction: column;
+	justify-self: end;
+	width: calc(var(--panel-box-width) - var(--space-4));
 	min-width: 0;
-	border-left: 1px solid var(--border-subtle);
+	margin: 0 var(--space-4) var(--space-4) 0;
+	border: 1px solid var(--border-subtle);
+	border-radius: 0 var(--radius-xl) var(--radius-xl) 0;
 	background: var(--bg-canvas);
+	overflow: clip;
+	overflow-clip-margin: var(--divider-hit-width);
+	transition:
+		width var(--dur-structural) var(--ease-panel),
+		margin-left var(--dur-structural) var(--ease-panel),
+		margin-right var(--dur-structural) var(--ease-panel),
+		border-radius var(--dur-structural) var(--ease-panel),
+		visibility var(--dur-structural) allow-discrete;
 }
 
-/* 拖宽用的命中区，画面上什么都不显示；hr 自带边框要先清掉，否则那条线会留在分界上 */
+@starting-style {
+	.panel {
+		margin-right: calc(var(--space-4) - var(--panel-box-width));
+		border-radius: var(--radius-xl);
+	}
+}
+
+.app:where(.is-panel-hidden) .panel {
+	overflow: hidden;
+	overflow-clip-margin: 0px;
+	margin-right: calc(var(--space-4) - var(--panel-box-width));
+	border-radius: var(--radius-xl);
+	visibility: hidden;
+	pointer-events: none;
+}
+
+.app:where(.is-panel-expanded.is-panel-hidden:not(.is-narrow)) .panel {
+	margin-right: calc(var(--space-4) - 100%);
+}
+
+.app:where(.is-panel-expanded:not(.is-narrow)) .panel {
+	width: calc(100% - var(--space-4));
+	margin-left: 0;
+	border-radius: var(--radius-xl);
+}
+
+.app:where(.is-panel-expanded.is-sidebar-hidden:not(.is-narrow)) .panel,
+.app:where(.is-panel-expanded[data-sidebar-drag-collapsed="true"]:not(.is-narrow)) .panel {
+	width: calc(100% - var(--space-4) * 2);
+	margin-left: var(--space-4);
+}
+
+/* 拖宽用的命中区，紧贴 1px 分界细线两侧 */
 .panel-resizer {
 	position: absolute;
 	top: 0;
@@ -38,18 +118,47 @@
 }
 
 /*
- * 悬停与拖动时把面板自己那条边染成强调色。
+ * 悬停与拖动分隔条时贴紧对应卡片左缘亮起 1px 中性描边：
+ * - 左侧分界线（`.main::after` 与宽展开时的 `.panel::after`）沿左侧直边到左圆角末端的
+ *   `--radius-xl` 渐隐收尾，不延伸到顶底平直边框上。
+ * - 右侧分界线（并排时的 `.panel::after`）左缘为直角，只画左边框一条直线，同样不延到顶底。
  *
- * 高亮就是分界线本身，不额外叠线：命中区始终透明，边框宽度也不变，内容不会跳。
- *
- * 状态是 `.app` 上的属性，由分隔条直接写，不用 `:has()`：`.app` 包着整棵文档，`:has()` 的
- * 失效集合会让每一次样式重算都按整棵树重验一遍——实测文档 6.97 万元素时每帧多花 8.9ms，
- * 图表面板滚一下就从 100fps 掉到 50fps。属性选择器只按属性桶匹配，代价与文档大小无关。
- *
- * 目标用 `:where()` 包起来：这条规则只负责颜色，不应比档位规则权重更高。
+ * 状态是 `.app` 上的属性，由分隔条直接写，不用 `:has()`（避免每帧全树重算样式）。
  */
-.app[data-panel-resizer-active="true"] :where(.panel, .chrome-slot.is-panel) {
-	border-left-color: var(--divider-highlight);
+.main::after,
+.panel::after {
+	position: absolute;
+	inset: 0;
+	z-index: var(--z-content-local);
+	border: 1px solid transparent;
+	border-radius: inherit;
+	mask-image: linear-gradient(
+		to right,
+		var(--bg-canvas) 0,
+		var(--bg-canvas) var(--space-1),
+		transparent var(--radius-xl)
+	);
+	content: "";
+	pointer-events: none;
+	transition: border-color var(--dur-fast) var(--ease-standard);
+}
+
+.app:where(:not(.is-panel-expanded)) .panel::after {
+	border-top-width: 0;
+	border-right-width: 0;
+	border-bottom-width: 0;
+	mask-image: none;
+}
+
+.app[data-sidebar-resizer-active="true"] .main::after,
+.app:where(.is-panel-expanded:not(.is-narrow))[data-sidebar-resizer-active="true"] .panel::after,
+.app[data-panel-resizer-active="true"]:where(:not(.is-panel-expanded)) .panel::after {
+	border-color: var(--divider-highlight);
+}
+
+.app[data-sidebar-drag-collapsed="true"] .main::after,
+.app[data-panel-drag-collapsed="true"] .panel::after {
+	border-color: transparent;
 }
 
 /*
@@ -81,19 +190,51 @@
 	display: none;
 }
 
+/* 只有当标签被左右缘遮挡时，才在被遮住的一侧叠一层透明渐隐，避免硬裁文字 */
+.workspace-tabs[data-fade-right="true"] {
+	mask-image: linear-gradient(
+		to right,
+		var(--fg-default) 0,
+		var(--fg-default) calc(100% - var(--workspace-tabs-fade)),
+		transparent 100%
+	);
+}
+
+.workspace-tabs[data-fade-left="true"] {
+	mask-image: linear-gradient(
+		to right,
+		transparent 0,
+		var(--fg-default) var(--workspace-tabs-fade),
+		var(--fg-default) 100%
+	);
+}
+
+.workspace-tabs[data-fade-left="true"][data-fade-right="true"] {
+	mask-image: linear-gradient(
+		to right,
+		transparent 0,
+		var(--fg-default) var(--workspace-tabs-fade),
+		var(--fg-default) calc(100% - var(--workspace-tabs-fade)),
+		transparent 100%
+	);
+}
+
 .workspace-tab-shell {
+	position: relative;
 	display: inline-flex;
 	flex: none;
 	align-items: center;
 	height: var(--workspace-tab-height);
-	border-radius: var(--radius-md);
+	border-radius: var(--radius-pill);
 	background: transparent;
+	transition: background-color var(--dur-fast) var(--ease-standard);
 }
 
 .workspace-tab-shell:hover {
 	background: var(--bg-hover);
 }
 
+/* 选中项用扁平浅灰胶囊与前景色区分，不加描边或阴影，贴合顶带轻量感 */
 .workspace-tab-shell[data-selected="true"] {
 	background: var(--bg-active);
 }
@@ -104,19 +245,33 @@
 	gap: var(--workspace-tab-icon-gap);
 	align-items: center;
 	height: 100%;
-	padding: 0 2px 0 var(--workspace-tab-padding-x);
+	padding: 0 var(--workspace-tab-padding-x);
 	border: 0;
-	border-radius: var(--radius-md) 0 0 var(--radius-md);
+	border-radius: var(--radius-pill);
 	background: transparent;
-	color: var(--fg-subtle);
+	color: var(--fg-muted);
 	font-size: var(--text-ui);
 	white-space: nowrap;
 	-webkit-app-region: no-drag;
 }
 
+/* 可关闭标签悬停或聚焦时把右侧文字/徽标渐隐让位给覆盖的 `×`，保持胶囊本身定宽不挤压邻项 */
+.workspace-tab-shell.is-closable:where(:hover, :focus-within) .workspace-tab {
+	mask-image: linear-gradient(
+		to right,
+		var(--fg-default) 0,
+		var(--fg-default) calc(100% - var(--workspace-tab-close-size) - var(--space-8)),
+		transparent calc(100% - var(--workspace-tab-close-size) - var(--space-2))
+	);
+}
+
 .workspace-tab-shell:hover .workspace-tab,
 .workspace-tab-shell[data-selected="true"] .workspace-tab {
 	color: var(--fg-default);
+}
+
+.workspace-tab-shell[data-selected="true"] .workspace-tab {
+	font-weight: 500;
 }
 
 .workspace-tab:disabled {
@@ -125,31 +280,40 @@
 	opacity: 0.45;
 }
 
-/* 关闭按钮：常态压暗，指针进到这一条标签上才提亮，免得一排叉比名字还抢眼 */
+/* 关闭按钮：绝对定位覆盖在胶囊右端，悬停或聚焦时显形而不向右撑开标签 */
 .workspace-tab-close {
+	position: absolute;
+	top: 50%;
+	right: var(--space-3);
 	display: grid;
 	flex: none;
 	place-items: center;
 	width: var(--workspace-tab-close-size);
 	height: var(--workspace-tab-close-size);
-	margin-inline-end: 3px;
 	padding: 0;
 	border: 0;
-	border-radius: var(--radius-sm);
+	border-radius: var(--radius-pill);
+	transform: translateY(-50%);
 	background: transparent;
-	color: var(--fg-subtle);
-	opacity: 0.5;
+	color: var(--fg-muted);
+	opacity: 0;
+	pointer-events: none;
 	-webkit-app-region: no-drag;
+	transition:
+		opacity var(--dur-fast) var(--ease-standard),
+		background-color var(--dur-fast) var(--ease-standard),
+		color var(--dur-fast) var(--ease-standard);
 }
 
-.workspace-tab-shell:hover .workspace-tab-close,
-.workspace-tab-shell[data-selected="true"] .workspace-tab-close {
-	opacity: 1;
+.workspace-tab-shell:where(:hover, :focus-within) .workspace-tab-close {
+	opacity: 0.8;
+	pointer-events: auto;
 }
 
 .workspace-tab-close:hover {
 	background: var(--bg-active);
 	color: var(--fg-default);
+	opacity: 1;
 }
 
 .workspace-tab-icon {
@@ -311,6 +475,7 @@
 .panel-body {
 	flex: 1;
 	min-height: 0;
+	border-radius: inherit;
 	overflow-y: auto;
 	/* 滚动条出现时不挤占内容：始终留出与滚动条等宽的沟槽，右侧内边距让出这部分 */
 	scrollbar-gutter: stable;
@@ -476,10 +641,16 @@
 .app[data-sidebar-drag-collapsed="true"] .sb,
 .app[data-panel-drag-collapsed="true"] .panel {
 	min-width: 0;
+	margin: 0;
 	padding: 0;
 	border-width: 0;
 	overflow: visible;
 	background: transparent;
+}
+
+.app[data-panel-drag-collapsed="true"] .panel {
+	width: 0px;
+	margin-right: 0;
 }
 
 .app[data-sidebar-drag-collapsed="true"] .sb > :not(.sb-resizer),
@@ -498,6 +669,16 @@
 	border-width: 0;
 	overflow: hidden;
 	background: transparent;
+}
+
+.app[data-panel-drag-collapsed="true"] .chrome-slot.is-panel {
+	width: 0px;
+	margin-right: 0;
+}
+
+.app[data-sidebar-drag-collapsed="true"] .chrome-slot.is-sidebar > * {
+	visibility: hidden;
+	pointer-events: none;
 }
 
 /* 待关闭的提示就是这一条线：整条命中区染强调色，与悬停、拖动时的分界线同一个色号 */

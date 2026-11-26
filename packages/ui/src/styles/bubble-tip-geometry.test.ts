@@ -35,8 +35,8 @@ function token(name: string): string | undefined {
 }
 
 describe("用户消息气泡的内边距", () => {
-	it("横向与纵向各有一个名字，纵向走半档刻度", () => {
-		expect(token("--bubble-padding-y")).toBe("var(--space-5)");
+	it("横向与纵向各有一个名字，纵向走紧凑刻度", () => {
+		expect(token("--bubble-padding-y")).toBe("var(--space-3)");
 		expect(token("--bubble-padding-x")).toBe("14px");
 	});
 
@@ -51,12 +51,12 @@ describe("用户消息气泡的内边距", () => {
 		expect(bubble).not.toContain("var(--space-8)");
 	});
 
-	it("字号、行高、圆角与宽度不受影响", () => {
+	it("字号、行高、对称圆角与单层渐变边框立体影保持一致", () => {
 		const bubble = block(chat, ".bub");
 		expect(bubble).toContain("max-width: 80%");
-		expect(bubble).toContain(
-			"border-radius: var(--radius-xl) var(--radius-sm) var(--radius-xl) var(--radius-xl)",
-		);
+		expect(bubble).toContain("border-radius: var(--radius-xl);");
+		expect(bubble).toContain("var(--bubble-rim)");
+		expect(bubble).toContain("box-shadow: var(--shadow-bubble);");
 		expect(bubble).toContain("font-size: var(--text-size)");
 		expect(bubble).toContain("line-height: var(--leading-prose)");
 	});

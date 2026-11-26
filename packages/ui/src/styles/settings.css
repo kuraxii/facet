@@ -1,9 +1,9 @@
 /* 设置窗口、设置分组、模型页与提供方编辑弹窗。 */
 
-/* 设置是浮在应用上的一层窗：遮罩沿用对话框的 `::backdrop`，窗口自己定尺寸 */
+/* 设置是浮在应用上的一层窗：左右两段式分栏，左栏导航、右栏标题与滚动内容同底拼齐 */
 dialog.set-page[open] {
 	display: flex;
-	flex-direction: column;
+	flex-direction: row;
 	width: min(920px, calc(100vw - 48px));
 	height: min(660px, calc(100vh - 48px));
 	margin: auto;
@@ -12,7 +12,7 @@ dialog.set-page[open] {
 	min-height: 0;
 	overflow: hidden;
 	border-radius: var(--radius-xl);
-	background: var(--bg-surface);
+	background: var(--bg-canvas);
 	box-shadow: var(--shadow-modal);
 	outline: none;
 	overscroll-behavior: contain;
@@ -24,37 +24,70 @@ dialog.set-page::backdrop {
 	overscroll-behavior: contain;
 }
 
-.set-head {
+.set-sidebar {
 	display: flex;
 	flex: none;
-	align-items: center;
-	justify-content: space-between;
-	padding: var(--space-8) var(--space-10) var(--space-6);
-	border-bottom: 1px solid var(--border-subtle);
+	flex-direction: column;
+	width: var(--set-sidebar-width);
+	min-height: 0;
+	border-right: 1px solid var(--border-subtle);
+	background: var(--bg-canvas);
+}
+
+.set-sidebar-head {
+	flex: none;
+	padding: var(--space-10) var(--space-10) var(--space-4);
 }
 
 .set-title {
 	margin: 0;
 	color: var(--fg-default);
-	font-size: var(--text-title-md);
+	font-size: var(--text-title-sm);
 	font-weight: 600;
-}
-
-.set-body {
-	display: flex;
-	flex: 1;
-	min-height: 0;
+	line-height: var(--leading-ui);
 }
 
 .set-nav {
 	display: flex;
-	flex: none;
+	flex: 1;
 	flex-direction: column;
 	gap: var(--space-1);
-	width: 148px;
-	padding: var(--space-6) var(--space-5);
-	border-right: 1px solid var(--border-subtle);
+	min-height: 0;
+	overflow-y: auto;
+	padding: var(--space-2) var(--space-5) var(--space-8);
+}
+
+.set-nav-divider {
+	flex: none;
+	height: 1px;
+	margin: var(--space-3) var(--space-3);
+	background: var(--border-subtle);
+}
+
+.set-main {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
 	background: var(--bg-canvas);
+}
+
+.set-main-head {
+	display: flex;
+	flex: none;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-6);
+	padding: var(--space-10) var(--space-12) var(--space-6);
+}
+
+.set-main-title {
+	margin: 0;
+	color: var(--fg-default);
+	font-size: var(--text-title-md);
+	font-weight: 600;
+	line-height: var(--leading-ui);
 }
 
 .set-lock {
@@ -72,7 +105,7 @@ dialog.set-page::backdrop {
 	display: flex;
 	flex-direction: column;
 	gap: var(--space-4);
-	margin: 0 0 22px;
+	margin: 0;
 }
 
 .set-group-title {
@@ -90,7 +123,7 @@ dialog.set-page::backdrop {
 	padding: var(--space-6);
 	border: 1px solid var(--border-default);
 	border-radius: var(--radius-lg);
-	background: var(--bg-surface);
+	background: var(--bg-canvas);
 }
 
 /*
@@ -142,32 +175,90 @@ dialog.set-page::backdrop {
 	white-space: nowrap;
 }
 
-/* 分类导航：几何来自 `common/ListRow.tsx` 的 `sm` 档 */
+/* 分类导航：几何来自 `common/ListRow.tsx` 的 `md` 档，图标左缘与侧栏标题同线 */
 .set-nav-item {
 	padding-inline: var(--space-5);
 }
 
-.set-content {
+.set-nav-item[data-selected="true"] {
+	font-weight: 500;
+}
+
+.set-nav-icon {
+	flex: none;
+	color: var(--fg-subtle);
+}
+
+.set-nav-item:hover .set-nav-icon,
+.set-nav-item[data-selected="true"] .set-nav-icon {
+	color: var(--fg-default);
+}
+
+.set-nav-label {
 	flex: 1;
 	min-width: 0;
+}
+
+.set-content {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: var(--space-8);
+	min-width: 0;
+	min-height: 0;
 	overflow-y: auto;
 	/* 滚动条在卡片内缘，始终留出沟槽，切分区时不左右跳动；右侧再扣掉沟槽宽度 */
 	scrollbar-gutter: stable;
-	padding: 18px calc(24px - var(--scrollbar-width)) 28px 24px;
+	padding: var(--space-4) calc(var(--space-12) - var(--scrollbar-width)) var(--space-12) var(--space-12);
 }
 
 .set-section {
 	display: flex;
 	flex-direction: column;
-	gap: var(--space-5);
-	max-width: 620px;
+	gap: var(--space-8);
+	width: 100%;
 }
 
-.set-section-title {
+.set-switch {
+	appearance: none;
+	position: relative;
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	width: var(--set-switch-width);
+	height: var(--set-switch-height);
 	margin: 0;
-	color: var(--fg-default);
-	font-size: var(--text-title-sm);
-	font-weight: 600;
+	padding: 0 var(--set-switch-inset);
+	border: 1px solid var(--border-default);
+	border-radius: var(--radius-pill);
+	background: var(--bg-elevated);
+	cursor: pointer;
+	transition:
+		background-color var(--dur-fast) var(--ease-standard),
+		border-color var(--dur-fast) var(--ease-standard);
+}
+
+.set-switch::before {
+	content: "";
+	width: var(--set-switch-thumb);
+	height: var(--set-switch-thumb);
+	border-radius: var(--radius-pill);
+	background: var(--fg-subtle);
+	transition:
+		transform var(--dur-fast) var(--ease-standard),
+		background-color var(--dur-fast) var(--ease-standard);
+}
+
+.set-switch:checked {
+	border-color: var(--accent-fill);
+	background: var(--accent-fill);
+}
+
+.set-switch:checked::before {
+	transform: translateX(
+		calc(var(--set-switch-width) - var(--set-switch-thumb) - var(--set-switch-inset) * 2 - 2px)
+	);
+	background: var(--accent-on-fill);
 }
 
 .set-hint {
@@ -386,7 +477,7 @@ select.ui-input option::checkmark {
 
 /* 跟随系统没有单一颜色，用深浅各一半表示 */
 .set-swatch-chip.is-system {
-	background: linear-gradient(135deg, #f4f4f5 0 50%, #272a29 50% 100%);
+	background: linear-gradient(135deg, #f6f8fa 0 50%, #0d1117 50% 100%);
 }
 
 .set-swatch-name {
@@ -467,21 +558,14 @@ select.ui-input option::checkmark {
 }
 
 /*
- * 模型页：标题行右侧是「添加提供商」，下面依次是默认设置卡片、已配置的提供方与可用模型。
+ * 模型页：默认设置卡片下面依次是已配置的提供方与可用模型，提供方分组右侧挂「添加提供商」。
  * 提供方与模型都以卡片列表出现，整组只有一个外框，行与行之间是一条发丝线。
  */
 .set-models {
 	display: flex;
 	flex-direction: column;
 	gap: var(--set-models-gap);
-	max-width: 620px;
-}
-
-.set-models-head {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: var(--space-6);
+	width: 100%;
 }
 
 /* 「添加提供商」是这一页唯一的主动作，用强调色填充 */
@@ -489,6 +573,13 @@ select.ui-input option::checkmark {
 	display: flex;
 	flex-direction: column;
 	gap: var(--set-models-group-gap);
+}
+
+.set-models-group-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-6);
 }
 
 .set-models-group-title {
@@ -518,7 +609,7 @@ select.ui-input option::checkmark {
 	gap: var(--set-models-mark-gap);
 	min-width: 0;
 	padding: var(--set-models-row-padding-y) var(--set-models-row-padding-x);
-	background: var(--bg-surface);
+	background: var(--bg-canvas);
 }
 
 /* 行首字母牌：提供方名字的第一个字母，只做视觉区分 */

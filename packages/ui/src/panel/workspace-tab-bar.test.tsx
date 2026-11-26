@@ -197,6 +197,7 @@ describe("工作区标签栏", () => {
 	it("不给关闭回调时不渲染关闭按钮", () => {
 		const { container } = mount({ onClose: undefined });
 		expect(container.querySelectorAll(".workspace-tab-close")).toHaveLength(0);
+		expect(container.querySelectorAll(".workspace-tab-shell.is-closable")).toHaveLength(0);
 		// 没有关闭按钮时 Delete 也不该关任何东西
 		press(tab(container, "文件"), "Delete");
 	});
@@ -299,5 +300,39 @@ describe("工作区标签栏", () => {
 		const { container, onSelect } = mount({ items: custom, activeId: "terminal" });
 		press(tab(container, "终端"), "ArrowRight");
 		expect(onSelect).toHaveBeenLastCalledWith("files" satisfies WorkspaceTabId);
+	});
+
+	it("只有溢出遮挡那一侧亮起渐隐标记", () => {
+		const { container } = mount();
+		const bar = barOf(container);
+		let left = 0;
+		Object.defineProperty(bar, "scrollWidth", { value: 300, configurable: true });
+		Object.defineProperty(bar, "clientWidth", { value: 120, configurable: true });
+		Object.defineProperty(bar, "scrollLeft", {
+			get: () => left,
+			set: (next: number) => {
+				left = next;
+			},
+			configurable: true,
+		});
+		act(() => {
+			bar.dispatchEvent(new Event("scroll"));
+		});
+		expect(bar.dataset.fadeLeft).toBeUndefined();
+		expect(bar.dataset.fadeRight).toBe("true");
+
+		left = 80;
+		act(() => {
+			bar.dispatchEvent(new Event("scroll"));
+		});
+		expect(bar.dataset.fadeLeft).toBe("true");
+		expect(bar.dataset.fadeRight).toBe("true");
+
+		left = 180;
+		act(() => {
+			bar.dispatchEvent(new Event("scroll"));
+		});
+		expect(bar.dataset.fadeLeft).toBe("true");
+		expect(bar.dataset.fadeRight).toBeUndefined();
 	});
 });

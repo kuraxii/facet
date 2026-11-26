@@ -542,7 +542,7 @@ export function Composer({
 						<IconButton
 							variant="primary"
 							size="md"
-							radius="lg"
+							radius="pill"
 							className="is-stop"
 							onClick={onStop}
 							disabled={!canStop || activity === "stopping"}
@@ -555,7 +555,7 @@ export function Composer({
 						<IconButton
 							variant="primary"
 							size="md"
-							radius="lg"
+							radius="pill"
 							aria-label={isQueuing ? t("composer.queue") : t("composer.send")}
 							{...tip.handlers(isQueuing ? t("composer.insertTurn") : undefined)}
 							onClick={onSend}

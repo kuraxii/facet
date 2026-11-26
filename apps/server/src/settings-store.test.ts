@@ -110,7 +110,7 @@ describe("设置读取", () => {
 	});
 
 	it("清单外的主题取值回落到缺省配色", async () => {
-		await writeFile(file, JSON.stringify({ version: 1, appearance: { theme: "dark" } }), "utf8");
+		await writeFile(file, JSON.stringify({ version: 1, appearance: { theme: "midnight" } }), "utf8");
 		expect((await SettingsStore.open({ file })).get().appearance.theme).toBe(
 			DEFAULT_SETTINGS.appearance.theme,
 		);
@@ -119,11 +119,11 @@ describe("设置读取", () => {
 	it("主题与代码配色都只接受清单里的取值", async () => {
 		await writeFile(
 			file,
-			JSON.stringify({ version: 1, appearance: { theme: "midnight", codeTheme: "nord" } }),
+			JSON.stringify({ version: 1, appearance: { theme: "claude", codeTheme: "nord" } }),
 			"utf8",
 		);
 		const settings = (await SettingsStore.open({ file })).get();
-		expect(settings.appearance.theme).toBe("midnight");
+		expect(settings.appearance.theme).toBe("claude");
 		expect(settings.appearance.codeTheme).toBe("nord");
 	});
 

@@ -307,6 +307,8 @@ const RUNTIME_SET_VARS: readonly string[] = [
 	// 滚动容器：`ScrollArea` 关掉沟槽时写 `auto`，行自己给横向留白（`scroll-area.tsx`）
 	"--scroll-gutter",
 	"--scroll-inset",
+	// 右栏顶格与本体自身的实占宽副本（`layout/panel-width.ts` `writePanelWidth` 写入）
+	"--panel-box-width",
 ];
 
 describe("变量都有定义", () => {
@@ -425,7 +427,7 @@ const COLOR_LITERAL_ALLOWLIST: readonly string[] = [
 	"mask-image: linear-gradient(to bottom, transparent 0, #000 6px, #000 100%);",
 	"mask-image: linear-gradient(to right, #000 0, #000 calc(100% - var(--sb-title-fade)), transparent 100%);",
 	// 「跟随系统」色片：深浅两半同时出现，天然是两个字面色
-	"background: linear-gradient(135deg, #f4f4f5 0 50%, #272a29 50% 100%);",
+	"background: linear-gradient(135deg, #f6f8fa 0 50%, #0d1117 50% 100%);",
 ];
 
 describe("颜色只从主题来", () => {

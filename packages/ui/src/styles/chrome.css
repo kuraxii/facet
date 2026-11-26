@@ -21,6 +21,13 @@
 	initial-value: 0px;
 }
 
+/* 右栏顶格与本体自身的实占宽副本，同样不继承，支撑跨列右贴齐的展开覆盖与平滑滑移 */
+@property --panel-box-width {
+	syntax: "<length>";
+	inherits: false;
+	initial-value: 0px;
+}
+
 .app {
 	position: relative;
 	display: grid;
@@ -28,8 +35,21 @@
 	grid-template-rows: var(--chrome-height) minmax(0, 1fr);
 	height: 100%;
 	overflow: hidden;
+	background: var(--bg-subtle);
 	/* 左栏实占宽由偏好宽派生：拖动只改偏好宽，这一层跟着算，不经过渲染 */
 	--col-sidebar: var(--sidebar-width);
+	/* 左右栏开合、宽展开时的列轨道过渡；拖拽与缩放期间由 `motion.css` 清零 */
+	transition: grid-template-columns var(--dur-structural) var(--ease-panel);
+}
+
+/* 无边框窗体的极细外框轮廓，避免深色窗口贴在深色壁纸上时边缘发虚 */
+.app::after {
+	position: fixed;
+	inset: 0;
+	z-index: var(--z-window-controls);
+	box-shadow: inset 0 0 0 1px var(--border-subtle);
+	content: "";
+	pointer-events: none;
 }
 
 /* 窄档：左栏进抽屉、实占宽归零；右栏没有抽屉，照旧占列 */
@@ -51,14 +71,9 @@
 }
 
 /*
- * 宽展开：右栏最大化——吃掉正文那一列，盖住主栏。
- *
- * 判据只有一条：`100%`（`.app` 的宽）扣掉左栏之后剩下的都归右栏，正文那一列因此是 `0`。
- * 左栏按它自己的意图摆（它不在被盖住的范围内），意图位与偏好宽都不动，退出展开时原样恢复。
+ * 宽展开由 `.panel` 与 `.chrome-slot.is-panel` 在列轨道 2 / 4 之间从右往左扩宽覆盖实现，
+ * 这里不再压窄第 2 列，主区对话保持原有宽度，不会在展开/还原途中反复折行挤压。
  */
-.app.is-panel-expanded:not(.is-narrow) {
-	grid-template-columns: var(--col-sidebar) minmax(0, 1fr) calc(100% - var(--col-sidebar));
-}
 
 /*
  * 拖收关闭的实时预览：分隔条越过「最小宽一半」那一刻由脚本挂上属性，这一列的实占宽当场
@@ -107,26 +122,33 @@
 	min-width: 0;
 }
 
-/* 侧栏那一格：占左列，右边留出与侧栏一致的内边距 */
+/* 侧栏那一格：占左列，右边留出与侧栏一致的内边距；收起时固定头部宽度并向右贴齐，随列宽实底滑出左缘 */
 .chrome-slot.is-sidebar {
+	grid-row: 1;
 	grid-column: 1;
+	justify-content: flex-end;
 	padding-right: var(--sidebar-edge);
 	overflow: hidden;
+	transition:
+		visibility var(--dur-structural) allow-discrete,
+		padding-right var(--dur-structural) var(--ease-panel);
 }
 
-/* 收起时不占位，也不留那段内边距，主区开关才能贴到统一的位置 */
+.chrome-slot.is-sidebar > .sb-head {
+	flex: none;
+	width: calc(var(--sidebar-width) - var(--sidebar-edge));
+}
+
+/* 收起时不占位、不留内边距，也不再接收焦点与点击 */
 .chrome-slot.is-sidebar:not(.is-open) {
 	padding-right: 0;
+	visibility: hidden;
+	pointer-events: none;
 }
 
-/* 展开时把正文那条分界线与底色续到顶带里，两边在同一个 x 上 */
-.chrome-slot.is-sidebar.is-open {
-	border-right: 1px solid var(--border-subtle);
-	background: var(--bg-subtle);
-}
-
-/* 主区那一格：占中列，左栏开关贴在它的左边；右栏收起时开关与分页也落在它的右端 */
+/* 主区那一格：占中列；左栏隐藏或退进抽屉时在左端给常驻左栏开关让位，右端按右栏宽度让出右栏开关与窗口按钮 */
 .chrome-slot.is-main {
+	grid-row: 1;
 	grid-column: 2;
 	gap: var(--space-2);
 	padding-left: var(--sidebar-edge);
@@ -138,33 +160,82 @@
 	 * 写入）：偏好宽是不继承的变量，传不到这里。副本缺省 0，与右栏收起时一致。
 	 */
 	--panel-track: 0px;
-	padding-inline-end: max(0px, calc(var(--window-controls-width) - var(--panel-track)));
+	padding-inline-end: max(0px, calc(var(--chrome-panel-toggle-clearance) - var(--panel-track)));
+	transition:
+		padding-left var(--dur-structural) var(--ease-panel),
+		padding-inline-end var(--dur-structural) var(--ease-panel),
+		visibility var(--dur-structural) allow-discrete;
+}
+
+.app:where(.is-sidebar-hidden, .is-narrow, [data-sidebar-drag-collapsed="true"]) .chrome-slot.is-main {
+	padding-left: var(--chrome-sidebar-toggle-clearance);
+}
+
+/* 宽展开时这一格被右侧栏在顶带盖住；等右格滑到位后再切到 hidden，避免底下的按钮被 Tab 到 */
+.app:where(.is-panel-expanded:not(.is-narrow)) .chrome-slot.is-main {
+	visibility: hidden;
+	pointer-events: none;
 }
 
 /*
- * 宽展开时中格是 `0` 宽、整格不渲染控件（见 `workbench.tsx`），这条让位也得清零：
- * 展开的右栏宽是百分比，百分比在 padding 里会按中格自己的（零）宽度解析，
- * 算出来是个负数，内层内容会被推到格子外面去。窗口按钮簇此刻落在右栏那一格里。
- */
-.app.is-panel-expanded:not(.is-narrow) .chrome-slot.is-main {
-	padding-inline-end: 0px;
-}
-
-/*
- * 右栏那一格：占右列，内容行自己让出窗口按钮簇的那一段。
+ * 右栏那一格：与主区共行并跨第 2 / 3 列右贴齐；常态与开关期间取 `--panel-box-width`，
+ * 宽展开时扩到 `100%` 从右往左盖住中格，内层行自己让出窗口按钮簇。
  *
- * 它自己是容器查询的容器，量到的宽度就是右栏整列宽（`panel.css` 里的 440px 断点用它），
- * 所以这里 MUST NOT 留横向内边距：让出大小是 `--window-controls-width`，落在
- * `.chrome-slot-row` 上。给这一格加内边距，查询量到的就会比列窄一整簇。
+ * 它自己是容器查询的容器，所以这里 MUST NOT 留横向内边距：让出大小落在 `.chrome-slot-row` 上。
  */
 .chrome-slot.is-panel {
-	grid-column: 3;
+	position: relative;
+	z-index: var(--z-content-local);
+	grid-row: 1;
+	grid-column: 2 / 4;
+	justify-self: end;
+	width: var(--panel-box-width);
+	margin-right: 0;
 	container-type: inline-size;
 	overflow: hidden;
+	background: var(--bg-subtle);
 	-webkit-app-region: no-drag;
+	transition:
+		width var(--dur-structural) var(--ease-panel),
+		margin-right var(--dur-structural) var(--ease-panel),
+		visibility var(--dur-structural) allow-discrete;
 }
 
-/* 右格里的内容行：分页、图钉与关闭按钮排在一条线上，右端留出窗口按钮簇 */
+@starting-style {
+	.chrome-slot.is-panel {
+		margin-right: calc(-1 * var(--panel-box-width));
+	}
+}
+
+.app:where(.is-panel-expanded:not(.is-narrow)) .chrome-slot.is-panel {
+	width: 100%;
+}
+
+/* 收起时走同帧 layout margin-right 滑出右缘，与列轨道及卡片同步推进 */
+.app:where(.is-panel-hidden) .chrome-slot.is-panel {
+	margin-right: calc(-1 * var(--panel-box-width));
+	visibility: hidden;
+	pointer-events: none;
+}
+
+.app:where(.is-panel-expanded.is-panel-hidden:not(.is-narrow)) .chrome-slot.is-panel {
+	margin-right: -100%;
+}
+
+/* 顶栏主区与右栏之间的短竖线隔离：居中于 36px 顶带，不贴上下边，保留通透呼吸感 */
+.app:not(.is-panel-expanded) .chrome-slot.is-panel.is-open::before {
+	position: absolute;
+	top: 50%;
+	left: 0;
+	width: 1px;
+	height: var(--icon-md);
+	transform: translateY(-50%);
+	background: var(--border-subtle);
+	content: "";
+	pointer-events: none;
+}
+
+/* 右格里的内容行：分页与动作按钮排在一条线上，左侧给短隔线留白，右端让出常驻右栏开关与窗口按钮簇 */
 .chrome-slot-row {
 	display: flex;
 	flex: 1;
@@ -172,12 +243,16 @@
 	align-items: center;
 	min-width: 0;
 	height: 100%;
-	padding-left: var(--space-2);
-	padding-inline-end: var(--window-controls-width);
+	padding-left: var(--space-4);
+	padding-inline-end: var(--chrome-panel-toggle-clearance);
+	transition: padding-left var(--dur-structural) var(--ease-panel);
 }
 
-.chrome-slot.is-panel.is-open {
-	border-left: 1px solid var(--border-subtle);
+/* 左栏不在列上且右栏宽展开占满整行顶带时，右栏顶栏左端同步让出左上角常驻左栏开关 */
+.app.is-panel-expanded:where(.is-sidebar-hidden, [data-sidebar-drag-collapsed="true"]):not(.is-narrow)
+	.chrome-slot.is-panel
+	.chrome-slot-row {
+	padding-left: var(--chrome-sidebar-toggle-clearance);
 }
 
 .chrome-spacer {
@@ -189,8 +264,9 @@
 	flex: 0 1 auto;
 	min-width: 0;
 	overflow: hidden;
-	color: var(--fg-muted);
+	color: var(--fg-default);
 	font-size: var(--text-ui);
+	font-weight: 500;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
@@ -206,9 +282,64 @@
 	color: var(--accent-fg);
 }
 
-/* 右栏开关上的计数：收起时提示还有多少改动没看，展开之后由标签上的计数接手 */
-.chrome-toggle.is-panel {
-	position: relative;
+/* 左上角常驻「Facet + 左栏开关」组合：字样本身透传指针给 `.app-drag` 拖窗，开关自己拦截点击 */
+.app-chrome > .chrome-brand {
+	position: absolute;
+	top: 50%;
+	left: var(--sidebar-edge);
+	z-index: var(--z-chrome);
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	transform: translateY(-50%);
+	pointer-events: none;
+}
+
+.app-chrome > .chrome-brand > .chrome-toggle.is-sidebar {
+	pointer-events: auto;
+}
+
+/* 右栏开关固定锚在窗口按钮簇左侧：收起、展开、宽展开与拖拽态都不位移，只平滑形变内部竖线；角标绝对定位以它为参照 */
+.app-chrome > .chrome-toggle.is-panel {
+	position: absolute;
+	top: 50%;
+	right: var(--chrome-panel-toggle-right);
+	z-index: var(--z-chrome);
+	transform: translateY(-50%);
+}
+
+/* 静态下铺同色底遮住侧栏滑出经过时的文字，0 权重不压过 .ui-icon-btn 的悬停底色 */
+:where(.app-chrome > .chrome-brand),
+:where(.app-chrome > .chrome-brand > .chrome-toggle.is-sidebar),
+:where(.app-chrome > .chrome-toggle.is-panel) {
+	background: var(--bg-subtle);
+}
+
+/*
+ * 左右侧栏开关内部竖线：共用同一圆角外框，`data-open` 变化时按方向平滑平移并收短：
+ * - `left`：`panel-left`（x=9 贯通 y=3..21）↔ `square-padding-left`（左移至 x=7、y=8..16）
+ * - `right`：`panel-right`（x=15 贯通 y=3..21）↔ `square-padding-right`（右移至 x=17、y=8..16）
+ */
+.panel-toggle-bar {
+	transform: translateX(0);
+	stroke-dasharray: 18 18;
+	stroke-dashoffset: 0;
+	transition:
+		transform var(--dur-structural) var(--ease-panel),
+		stroke-dasharray var(--dur-structural) var(--ease-panel),
+		stroke-dashoffset var(--dur-structural) var(--ease-panel);
+}
+
+.panel-toggle-icon[data-open="false"][data-side="left"] .panel-toggle-bar {
+	transform: translateX(-2px);
+	stroke-dasharray: 8 18;
+	stroke-dashoffset: -5;
+}
+
+.panel-toggle-icon[data-open="false"][data-side="right"] .panel-toggle-bar {
+	transform: translateX(2px);
+	stroke-dasharray: 8 18;
+	stroke-dashoffset: -5;
 }
 
 /*
@@ -238,7 +369,21 @@
 	display: flex;
 	min-width: var(--window-controls-width);
 	height: var(--chrome-height);
+	background: var(--bg-subtle);
 	-webkit-app-region: no-drag;
+}
+
+/* 面板工具按钮与系统窗口按钮之间的极细纵线分隔 */
+.window-controls::before {
+	position: absolute;
+	top: 50%;
+	left: 0;
+	width: 1px;
+	height: var(--icon-md);
+	transform: translateY(-50%);
+	background: var(--border-subtle);
+	content: "";
+	pointer-events: none;
 }
 
 .window-controls-group {
@@ -252,7 +397,20 @@
 	height: var(--chrome-height);
 	border: 0;
 	background: transparent;
-	color: var(--fg-subtle);
+	color: var(--fg-muted);
+	transition:
+		background-color var(--dur-fast) var(--ease-standard),
+		color var(--dur-fast) var(--ease-standard);
+}
+
+.window-btn-icon {
+	width: 10px;
+	height: 10px;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.1;
+	stroke-linecap: square;
+	stroke-linejoin: miter;
 }
 
 .window-btn:hover {
@@ -261,8 +419,8 @@
 }
 
 .window-btn.is-close:hover {
-	background: var(--status-err-bg);
-	color: var(--status-err-fg);
+	background: color-mix(in srgb, var(--dot-err) 24%, transparent);
+	color: var(--dot-err);
 }
 
 /*
@@ -278,6 +436,13 @@
 	border: 0;
 	background: var(--scrim-bg);
 	cursor: pointer;
+	transition: opacity var(--dur-structural) var(--ease-panel);
+}
+
+@starting-style {
+	.drawer-scrim {
+		opacity: 0;
+	}
 }
 
 /*

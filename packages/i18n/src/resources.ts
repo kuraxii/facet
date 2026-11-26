@@ -183,10 +183,7 @@ export const en = {
 	theme: {
 		light: "Light",
 		dark: "Dark",
-		midnight: "Midnight",
 		claude: "Claude",
-		ghostty: "Ghostty",
-		pureBlack: "Pure black",
 		system: "Follow system",
 	},
 	editor: {
@@ -423,7 +420,6 @@ export const en = {
 			noModels: "No models available",
 		},
 		appearancePage: {
-			title: "Appearance",
 			general: "General",
 			theme: "Theme",
 			followSystem: "Follow system",
@@ -441,7 +437,6 @@ export const en = {
 			codeTheme: "Code theme",
 		},
 		inputPage: {
-			title: "Input",
 			sending: "Sending",
 			sendKey: "Send key",
 			enter: "Enter to send",
@@ -453,14 +448,12 @@ export const en = {
 			submitDialog: "Submit dialog input",
 		},
 		terminalPage: {
-			title: "Terminal",
 			startup: "Startup",
 			defaultShell: "Default shell",
 			auto: "Automatic",
 			readFailed: "Could not list shells: {{error}}",
 		},
 		aboutPage: {
-			title: "About",
 			appVersion: "App version",
 			runtime: "Runtime",
 			endpoint: "Host endpoint",
@@ -725,10 +718,7 @@ export const zhCN = {
 	theme: {
 		light: "浅色",
 		dark: "暗色",
-		midnight: "Midnight",
 		claude: "Claude",
-		ghostty: "Ghostty",
-		pureBlack: "Pure black",
 		system: "跟随系统",
 	},
 	editor: {
@@ -958,7 +948,6 @@ export const zhCN = {
 			noModels: "还没有可用的模型",
 		},
 		appearancePage: {
-			title: "外观",
 			general: "通用",
 			theme: "主题",
 			followSystem: "跟随系统",
@@ -976,7 +965,6 @@ export const zhCN = {
 			codeTheme: "代码配色",
 		},
 		inputPage: {
-			title: "输入",
 			sending: "发送",
 			sendKey: "发送键位",
 			enter: "回车发送",
@@ -988,14 +976,12 @@ export const zhCN = {
 			submitDialog: "提交对话框里的输入",
 		},
 		terminalPage: {
-			title: "终端",
 			startup: "启动",
 			defaultShell: "默认 shell",
 			auto: "自动",
 			readFailed: "读不到可用的 shell：{{error}}",
 		},
 		aboutPage: {
-			title: "关于",
 			appVersion: "应用版本",
 			runtime: "运行时",
 			endpoint: "主机端点",

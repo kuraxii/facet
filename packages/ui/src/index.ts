@@ -141,6 +141,7 @@ export { CodeThemeProvider, useCodeTheme } from "./markdown/code-theme.tsx";
 export type { MarkdownProps } from "./markdown/Markdown.tsx";
 export { Markdown } from "./markdown/Markdown.tsx";
 export { markdownImages } from "./markdown/markdown-images.ts";
+export { useModalPresence } from "./modal.tsx";
 export type { ChangesDocumentProps } from "./panel/changes-document.tsx";
 export { ChangesDocument } from "./panel/changes-document.tsx";
 export type { FileTreeStorage } from "./panel/file-tree-state.ts";

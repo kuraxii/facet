@@ -8,6 +8,7 @@
 import type { GitDiff, GitFileChange, GitStatus } from "@facet/protocol";
 import { ChevronRight, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FileSymbolIcon } from "../common/FileSymbolIcon.tsx";
 import { GitPatch } from "../git/git-patch.tsx";
 import { ChangeMark, changeStatusLabelKey } from "../git/git-status-mark.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
@@ -211,6 +212,7 @@ function ChangesFileSection({
 					onClick={toggle}
 				>
 					<ChevronRight className={styles.chevron} size={ICON_SIZE.md} data-open={!isCollapsed} />
+					<FileSymbolIcon name={file.path} className={styles.fileIcon} />
 					<span className={styles.fileName}>{fileName(file.path)}</span>
 					<span className={styles.fileDir}>{directoryName(file.path)}</span>
 					{file.binary ? (

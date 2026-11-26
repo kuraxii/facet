@@ -56,9 +56,16 @@ export function morphImage(
 	let target: HTMLElement | null = null;
 	try {
 		const transition = document.startViewTransition(() => {
+			// 旧快照在回调前已经拍完；打开预览时 `from`（缩略图按钮）仍在 DOM 里，必须先摘掉它的
+			// `viewTransitionName`，否则新快照阶段会有两个元素同名，Chromium 会直接跳过整段过渡。
+			from.style.viewTransitionName = "";
 			apply();
 			target = nameTarget();
 			name(target, MORPH_NAME);
+			if (target instanceof HTMLImageElement && !target.complete && typeof target.decode === "function") {
+				return target.decode().catch(() => {});
+			}
+			return undefined;
 		});
 		void transition.finished.finally(() => {
 			from.style.viewTransitionName = "";

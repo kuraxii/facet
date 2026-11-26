@@ -9,11 +9,11 @@ import styles from "./git.module.css";
 import type { GitGraphRow } from "./git-graph-layout.ts";
 
 /** 一条泳道的横向间距（CSS px）。 */
-export const LANE_GAP = 12;
+export const LANE_GAP = 14;
 /** 行高（CSS px）：与列表行高一致，SVG 才能与文字对得上。 */
-export const GRAPH_ROW_HEIGHT = 26;
+export const GRAPH_ROW_HEIGHT = 28;
 /** 节点半径。 */
-const NODE_RADIUS = 3.2;
+const NODE_RADIUS = 3;
 
 /** 泳道配色：按颜色索引取一个变量，循环使用。 */
 const LANE_COLORS = [

@@ -1,8 +1,9 @@
 /**
  * 配色方案的选择与解析。
  *
- * 配色是同一套语义色板的六种取值：一套浅色加五套深色。这里给出每套的显示名与色板，
- * 并负责把设置里的取值解析成实际生效的那套（system 按系统的深浅取向挑一边）。
+ * 配色是同一套语义色板的三种取值：GitHub Copilot 浅色与深色两套默认主题，外加 Claude
+ * 暖棕深色变体。这里给出每套的显示名与色板，并负责把设置里的取值解析成实际生效的那套
+ * （system 按系统的深浅取向挑一边）。
  */
 import { type CodeTheme, type ThemeMode, UI_THEMES, type UiTheme } from "@facet/protocol";
 
@@ -21,11 +22,8 @@ export interface UiThemeOption {
 /** 设置页上的配色清单，浅色在前，其余按深浅排列。 */
 export const UI_THEME_OPTIONS: readonly UiThemeOption[] = [
 	{ id: "light", label: "Light", swatch: "#ffffff", dark: false },
-	{ id: "dark", label: "Dark", swatch: "#60a5fa", dark: true },
-	{ id: "midnight", label: "Midnight", swatch: "#4a6ba8", dark: true },
+	{ id: "dark", label: "Dark", swatch: "#1f6feb", dark: true },
 	{ id: "claude", label: "Claude", swatch: "#d97757", dark: true },
-	{ id: "ghostty", label: "Ghostty", swatch: "#8caaee", dark: true },
-	{ id: "pureBlack", label: "Pure black", swatch: "#000000", dark: true },
 ];
 
 /** 设置里允许的取值，含跟随系统。 */

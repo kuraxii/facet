@@ -18,6 +18,7 @@ import {
 	useCallback,
 	useEffect,
 	useRef,
+	useState,
 } from "react";
 import { Badge } from "../common/Badge.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
@@ -204,6 +205,55 @@ function useTabStripScroll(
 	}, [activeId, barRef, buttonsRef, scrollTo]);
 }
 
+/** 标签溢出状态：只有真的被左右边界裁住时才亮起对应一侧的渐隐遮罩。 */
+interface TabStripFade {
+	left: boolean;
+	right: boolean;
+}
+
+/** 跟踪横向标签栏两端是否存在溢出裁切，避免在全部放得下时误加边缘渐隐。 */
+function useTabStripFade(
+	barRef: RefObject<HTMLDivElement | null>,
+	itemCount: number,
+	activeId: WorkspaceTabId | null,
+): TabStripFade {
+	const [fade, setFade] = useState<TabStripFade>({ left: false, right: false });
+
+	const sync = useCallback((): void => {
+		const bar = barRef.current;
+		if (bar === null) {
+			return;
+		}
+		// 留 1px 容差吸收亚像素滚动取整误差
+		const left = bar.scrollLeft > 1;
+		const right = bar.scrollLeft + bar.clientWidth < bar.scrollWidth - 1;
+		setFade((current) => (current.left === left && current.right === right ? current : { left, right }));
+	}, [barRef]);
+
+	useEffect(() => {
+		// itemCount / activeId 变更后重算一次渐隐状态（依赖显式参与判定而非多余分支）
+		void itemCount;
+		void activeId;
+		sync();
+	}, [activeId, itemCount, sync]);
+
+	useEffect(() => {
+		const bar = barRef.current;
+		if (bar === null) {
+			return;
+		}
+		bar.addEventListener("scroll", sync, { passive: true });
+		const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(sync);
+		observer?.observe(bar);
+		return () => {
+			bar.removeEventListener("scroll", sync);
+			observer?.disconnect();
+		};
+	}, [barRef, sync]);
+
+	return fade;
+}
+
 export function WorkspaceTabBar({
 	items,
 	activeId,
@@ -218,6 +268,7 @@ export function WorkspaceTabBar({
 	const buttonRefs = useRef(new Map<WorkspaceTabId, HTMLButtonElement>());
 
 	useTabStripScroll(barRef, buttonRefs, activeId);
+	const fade = useTabStripFade(barRef, items.length, activeId);
 
 	const enabled = items.filter((item) => item.disabled !== true);
 	/** 焦点位：当前项可用就落在它身上，否则落在第一条可用项上 */
@@ -299,6 +350,8 @@ export function WorkspaceTabBar({
 			role="tablist"
 			aria-orientation="horizontal"
 			aria-label={ariaLabel ?? t("panel.tabs")}
+			data-fade-left={fade.left ? "true" : undefined}
+			data-fade-right={fade.right ? "true" : undefined}
 		>
 			{items.map((item) => {
 				const selected = activeId === item.id;
@@ -310,7 +363,7 @@ export function WorkspaceTabBar({
 					 */
 					<div
 						key={item.id}
-						className="workspace-tab-shell"
+						className={onClose === undefined ? "workspace-tab-shell" : "workspace-tab-shell is-closable"}
 						role="presentation"
 						data-selected={selected ? "true" : undefined}
 						onAuxClick={(event) => {

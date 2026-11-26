@@ -83,6 +83,16 @@ describe("IconButton", () => {
 		expect(html).toContain('data-size="md"');
 		expect(html).toContain('data-radius="lg"');
 		expect(html).toContain('data-active="true"');
+
+		const pillHtml = renderToStaticMarkup(
+			createElement(IconButton, {
+				"aria-label": "发送",
+				variant: "primary",
+				size: "md",
+				radius: "pill",
+			}),
+		);
+		expect(pillHtml).toContain('data-radius="pill"');
 	});
 });
 

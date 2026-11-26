@@ -6,7 +6,48 @@
  * 不写 `role="dialog"`、`aria-modal`、焦点陷阱，也不在关闭时手工还焦点。
  */
 
-import { type ReactNode, useEffect, useRef } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { MODAL_EXIT_SLACK_MS, modalExitDelayMs } from "./modal-presence.ts";
+
+/** 在浏览器/jsdom 中同步执行以配合 View Transitions 与首帧测距，Node 服务端渲染回退到 `useEffect`。 */
+const useIsomorphicLayoutEffect = typeof document !== "undefined" ? useLayoutEffect : useEffect;
+
+/** 读取文档根样式上的模态退场时长（`--dur-slow`）。 */
+function readModalExitDelayMs(): number {
+	if (typeof document === "undefined" || typeof getComputedStyle !== "function") {
+		return 0;
+	}
+	return modalExitDelayMs({
+		rawDuration: getComputedStyle(document.documentElement).getPropertyValue("--dur-slow"),
+		isWindowResizing: document.documentElement.hasAttribute("data-window-resizing"),
+	});
+}
+
+/**
+ * 模态弹层的挂载生命周期：打开时立即挂载，关闭时保留挂载直到 CSS 退场动画与遮罩
+ * 淡出播完再卸载；减弱动效或无样式环境下立即卸载。
+ */
+export function useModalPresence(open: boolean): boolean {
+	const [mounted, setMounted] = useState(open);
+
+	useEffect(() => {
+		if (open) {
+			setMounted(true);
+			return;
+		}
+		const delay = readModalExitDelayMs();
+		if (delay <= 0) {
+			setMounted(false);
+			return;
+		}
+		const timer = window.setTimeout(() => {
+			setMounted(false);
+		}, delay + MODAL_EXIT_SLACK_MS);
+		return () => window.clearTimeout(timer);
+	}, [open]);
+
+	return open || mounted;
+}
 
 /** 弹层的参数。 */
 export interface ModalProps {
@@ -47,28 +88,63 @@ export function Modal({ open, onClose, label, className, children }: ModalProps)
 	/** 关闭请求只处理一次：`cancel` 与 `close` 会连着来 */
 	const closing = useRef(false);
 
-	useEffect(() => {
+	// 用 layout effect 让 `showModal()` 在 `flushSync` 内同步生效，保证 `startViewTransition`
+	// 拍新快照前 `<dialog>` 已经处于 `[open]` 可见态，缩略图飞入浮层的开场形变才能命中目标图
+	useIsomorphicLayoutEffect(() => {
 		const dialog = ref.current;
-		if (!open || dialog === null) {
+		if (dialog === null) {
 			return;
 		}
-		closing.current = false;
-		// 认 `closedby` 的浏览器按属性走；不认的时候 Esc 照旧能用，只是少了点遮罩关闭
-		dialog.showModal();
-		// 标了 `data-autofocus` 的主控件拿初始焦点；没有就交给浏览器挑第一个可聚焦元素
-		const primary = dialog.querySelector<HTMLElement>("[data-autofocus]");
-		primary?.focus();
-		return () => {
-			// 卸载前先收起来：直接移除打开的 dialog 会让焦点停在 body 上
+		if (open) {
+			closing.current = false;
+			if (!dialog.open) {
+				dialog.showModal();
+				// 标了 `data-autofocus` 的主控件拿初始焦点；没有就交给浏览器挑第一个可聚焦元素
+				const primary = dialog.querySelector<HTMLElement>("[data-autofocus]");
+				primary?.focus();
+			}
+			return;
+		}
+		if (!dialog.open) {
+			return;
+		}
+		const delay = readModalExitDelayMs();
+		if (delay <= 0) {
+			dialog.close();
+			return;
+		}
+		// 等待 `dialog-out` 退场动画播完再关闭原生顶层，避免遮罩当帧闪失
+		const finish = (): void => {
 			if (dialog.open) {
 				dialog.close();
 			}
 		};
+		const onAnimationEnd = (event: AnimationEvent): void => {
+			if (event.target === dialog && event.animationName === "dialog-out") {
+				finish();
+			}
+		};
+		dialog.addEventListener("animationend", onAnimationEnd);
+		const timer = window.setTimeout(finish, delay + MODAL_EXIT_SLACK_MS);
+		return () => {
+			dialog.removeEventListener("animationend", onAnimationEnd);
+			window.clearTimeout(timer);
+		};
 	}, [open]);
+
+	// 组件最终卸载时兜底关掉仍开着的顶层 dialog，确保焦点不会遗落在 body 上
+	useEffect(() => {
+		return () => {
+			const dialog = ref.current;
+			if (dialog?.open === true) {
+				dialog.close();
+			}
+		};
+	}, []);
 
 	useEffect(() => {
 		const dialog = ref.current;
-		if (!open || dialog === null || supportsClosedBy()) {
+		if (!open || dialog === null) {
 			return;
 		}
 
@@ -78,7 +154,8 @@ export function Modal({ open, onClose, label, className, children }: ModalProps)
 			pressedOutside = isOutside(dialog, event);
 		};
 		const onPointerUp = (event: PointerEvent): void => {
-			if (pressedOutside && isOutside(dialog, event)) {
+			if (pressedOutside && isOutside(dialog, event) && !closing.current) {
+				closing.current = true;
 				onClose();
 			}
 			pressedOutside = false;
@@ -96,20 +173,21 @@ export function Modal({ open, onClose, label, className, children }: ModalProps)
 			ref={ref}
 			className={className === undefined ? "dialog" : `dialog ${className}`}
 			aria-label={label}
-			// 认这个属性的浏览器自己处理点遮罩关闭，Esc 始终有效
-			closedby="any"
+			data-closing={open ? undefined : "true"}
+			// 只让浏览器接管 Esc 关窗请求，点击遮罩由外缘指针逻辑延迟放行以播放退场动画
+			closedby={supportsClosedBy() ? "closerequest" : undefined}
 			onCancel={(event) => {
 				// Esc：交给上层决定关不关，浏览器因此不会再自己关一次
 				event.preventDefault();
-				if (closing.current) {
+				if (!open || closing.current) {
 					return;
 				}
 				closing.current = true;
 				onClose();
 			}}
 			onClose={() => {
-				// `close()` 之外还有「点遮罩」这条路径会直接关闭，同样要通知上层
-				if (closing.current) {
+				// 兜底：若原生层面直接关闭，同样只通知上层一次
+				if (!open || closing.current) {
 					return;
 				}
 				closing.current = true;

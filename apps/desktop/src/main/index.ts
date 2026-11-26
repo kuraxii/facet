@@ -192,7 +192,7 @@ function createWindow(): BrowserWindow {
 		minHeight: 480,
 		show: false,
 		autoHideMenuBar: true,
-		backgroundColor: "#0c0c0d",
+		backgroundColor: "#0d1117",
 		title: "facet",
 		// 标题栏由界面自己画：最小化、最大化、关闭三个按钮走 IPC，拖动区由 CSS 指定
 		frame: false,

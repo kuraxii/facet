@@ -55,7 +55,6 @@ export function TerminalSection({
 
 	return (
 		<>
-			<h2 className="set-section-title">{t("settings.terminalPage.title")}</h2>
 			<SettingsGroup label={t("settings.terminalPage.startup")}>
 				<SettingsRow title={t("settings.terminalPage.defaultShell")}>
 					{profiles === undefined ? (

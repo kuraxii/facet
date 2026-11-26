@@ -102,6 +102,26 @@ dialog.set-page[open] {
 	animation: dialog-in var(--dur-enter) var(--ease-enter);
 }
 
+dialog.dialog[open]::backdrop,
+dialog.search-panel[open]::backdrop,
+dialog.set-page[open]::backdrop {
+	animation: backdrop-in var(--dur-enter) var(--ease-out);
+}
+
+/* 退场时主体与遮罩一并淡出，避免直接卸载让整块背景瞬间亮回原色 */
+dialog.dialog[data-closing="true"],
+dialog.search-panel[data-closing="true"],
+dialog.set-page[data-closing="true"] {
+	animation: dialog-out var(--dur-slow) var(--ease-in) forwards;
+	pointer-events: none;
+}
+
+dialog.dialog[data-closing="true"]::backdrop,
+dialog.search-panel[data-closing="true"]::backdrop,
+dialog.set-page[data-closing="true"]::backdrop {
+	animation: backdrop-out var(--dur-slow) var(--ease-in) forwards;
+}
+
 @keyframes dialog-in {
 	from {
 		transform: translateY(6px) scale(0.97);
@@ -109,6 +129,38 @@ dialog.set-page[open] {
 
 	to {
 		transform: none;
+	}
+}
+
+@keyframes dialog-out {
+	from {
+		opacity: 1;
+		transform: none;
+	}
+
+	to {
+		opacity: 0;
+		transform: translateY(6px) scale(0.97);
+	}
+}
+
+@keyframes backdrop-in {
+	from {
+		opacity: 0;
+	}
+
+	to {
+		opacity: 1;
+	}
+}
+
+@keyframes backdrop-out {
+	from {
+		opacity: 1;
+	}
+
+	to {
+		opacity: 0;
 	}
 }
 

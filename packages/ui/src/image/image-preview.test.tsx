@@ -235,10 +235,29 @@ describe("View Transitions", () => {
 		return counter;
 	}
 
-	it("浏览器支持时用 View Transitions 打开", () => {
-		const counter = stubTransition();
+	it("浏览器支持时用 View Transitions 打开，且回调返回前 dialog 已经打开、仅目标节点带过渡名", () => {
+		let openDuringSnapshot = false;
+		let sourceNameDuringSnapshot: string | undefined;
+		let targetNameDuringSnapshot: string | undefined;
+		const opener = document.querySelector<HTMLElement>(".opener");
+		Object.defineProperty(document, "startViewTransition", {
+			configurable: true,
+			value: (update: () => void) => {
+				update();
+				openDuringSnapshot = dialog()?.open === true;
+				sourceNameDuringSnapshot = opener?.style.viewTransitionName;
+				targetNameDuringSnapshot = shownImage()?.style.viewTransitionName;
+				return {
+					finished: Promise.resolve(),
+					ready: Promise.resolve(),
+					updateCallbackDone: Promise.resolve(),
+				};
+			},
+		});
 		clickOpener();
-		expect(counter.calls).toBe(1);
+		expect(openDuringSnapshot).toBe(true);
+		expect(sourceNameDuringSnapshot).toBe("");
+		expect(targetNameDuringSnapshot).toBe("image-preview");
 		expect(dialog()).not.toBeNull();
 	});
 

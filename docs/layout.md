@@ -40,7 +40,7 @@
    .app.is-panel-hidden { --col-panel: 0px; }
    ```
 
-   拖动仍然只写偏好宽，实占宽由 CSS 跟着算，**拖动期间不经过 React 渲染**（`PaneResizer` 的既有前提）。
+   拖动仍然只写偏好宽，实占宽由 CSS 跟着算，**拖动期间不经过 React 渲染**（`PaneResizer` 的既有前提）。非拖拽状态下的显隐切换（左右栏开合、宽展开、`narrow` 抽屉）走 `--dur-structural`（`320ms`）配 `--ease-panel`：左侧栏与顶带头部通过贴齐右缘的固定宽在外层裁剪中滑出并用 `allow-discrete` 延迟 `visibility: hidden`；右栏顶格与本体跨列 2/4 右贴齐并持有不继承的 `--panel-box-width`，开关时沿右缘平移滑入/滑出（`usePanelPresence()` 等关闭过渡结束再卸载），`⤢` 宽展开时第 2 列保持原宽不被挤压，右栏直接从右往左扩宽覆盖主区并在结束后以 `allow-discrete` 隐藏主区，拖拽与窗口缩放期间由 `data-window-resizing` 将四档时长清零冻结。
 
 3. **档位与折叠单处判定**：两个纯模块，都不读窗口：
    - `apps/desktop/src/renderer/src/resolve-layout.ts`：阈值常量（`LAYOUT_BREAKPOINT_PX = 880`、`LAYOUT_WIDE_BREAKPOINT_PX = 1216`、`MAIN_MIN_WIDTH = 520`）、`resolveLayout()`、`paneMaxWidth()` 与 `clampDragMax()`，全程纯函数，单测在 `resolve-layout.test.ts`。
@@ -97,7 +97,7 @@
   - 单栏态：一次只显示一层（`data-view="list" | "detail"`），满宽。点文件 / 改动 / 提交进预览，预览二级顶栏**左上角**那枚 `←` 退回列表（面包屑就是「箭头 + 路径」，路径由预览视图自己给）。
   - 「收起索引」只在两栏态有：收起之后预览占满、左缘不动，展开入口在预览顶栏最右端（`PanelRightOpen`）；单栏态两个按钮都由样式藏起来——那里没有「收起」这回事，`←` 才是退路。
   - 哪一层显示只由 `data-view` 表达，组件不做宽度判断；`WORKSPACE_SPLIT_WIDE_WIDTH_PX` 与 `panel.css` 里那条 `@container` 是同一个数。
-- 顶带右格用的是一组控件（`WorkspacePanelControls`）：动态标签 + `+` 菜单 + 右端的 `⤢` 宽展开与 `◫` 收起；窄档不给 `⤢`（正文那一列已经让到接近极限，展开没有意义）。
+- 顶带右格用的是一组控件（`WorkspacePanelControls`）：动态标签 + `+` 菜单 + 右端的 `⤢` 宽展开（窄档不给 `⤢`：正文那一列已经让到接近极限，展开没有意义）；右栏开合按钮（`PanelToggle`）常驻在 `.app-chrome` 右端、窗口按钮簇左侧，任何开合与宽展开状态都不位移，只原地切换图标。
 
 ## 2. 三档语义
 
@@ -146,21 +146,22 @@
 
 **宽展开（`⤢`，右栏最大化）**：
 
-- 含义只有一条：**右栏盖住正文那一列**。展开后右栏占「视口宽 − 左栏」，正文那一列的轨道宽度是 `0`；左栏按它自己的意图照旧摆（它不在被盖住的范围内），不给正文留 `--main-min`——最大化就是不留。
+- 含义只有一条：**右栏从右往左盖住正文那一列**。展开时第 2 列轨道（主区）保持原宽不动、不被压缩挤压；`.chrome-slot.is-panel` 与 `.panel` 跨第 2 / 3 列右贴齐，从 `var(--panel-box-width)` 平滑扩宽到 `100%`（即 `视口宽 − 左栏`）覆盖在主栏之上，左栏照旧按意图摆，不给正文留 `--main-min`——最大化就是覆盖。
 - 临时视图状态（`isPanelExpanded`），**不落盘**：刷新、切进窄档、或右栏自己也收起时自动归 `false`。
-- 只在非窄档且右栏想开时生效（`resolveLayout()` 里它排在窄档判定之后、宽档之前），并且**跳过预算折叠**：中档放不下也照样展开。两侧的意图位与偏好宽一个字都不改——退出展开时按原样恢复。
+- 只在非窄档且右栏想开时生效（`resolveLayout()` 里它排在窄档判定之后、宽档之前），并且**跳过预算折叠**：中档放不下也照样展开。两侧的意图位与偏好宽一个字都不改——退出展开时从左往右缩回，原样露出静止在底下的主区。
 - 宽度由样式现算，不在 JS 里：
 
   ```css
-  .app.is-panel-expanded:not(.is-narrow) {
-    --col-panel: calc(100% - var(--col-sidebar));
+  .app:where(.is-panel-expanded:not(.is-narrow)) .chrome-slot.is-panel {
+    width: 100%;
   }
-  /* 中格此时是 0 宽、也不渲染控件；这条让位必须清零（百分比在 padding 里按 0 宽解析） */
-  .app.is-panel-expanded:not(.is-narrow) .chrome-slot.is-main { padding-inline-end: 0px; }
+  .app:where(.is-panel-expanded:not(.is-narrow)) .panel {
+    width: calc(100% - var(--space-4));
+  }
   ```
 
-- 展开期间**不渲染 `.panel-resizer`**：拖动改的是偏好宽，会覆盖用户原本那一份，而展开已经是「能给多宽就给多宽」。
-- 顶带中格的控件在展开期间整格不渲染（那一列被盖住）：留着的按钮看不见却还能 Tab 到，还会溢出到右栏那一格。
+- 展开期间**不渲染 `.panel-resizer`**（通过不传 `onWidthChange` 控制）：拖动改的是偏好宽，会覆盖用户原本那一份，而展开已经是「能给多宽就给多宽」。
+- 顶带中格与 `.main` 在展开期间留在原位不动、不提前卸载，样式用 `visibility: hidden` + `allow-discrete` 等覆盖动画走完后再屏蔽焦点与指针；退出展开时立即恢复可见并随右格/右栏缩回而露出。
 - 点 `⤡`、收起右栏，任一动作都退出展开。
 
 **入口与收起**：
@@ -182,7 +183,7 @@
 | 极窄顶带 | `420px`（容器查询，`LAYOUT_PX.workspaceTabBar.tight`） | 窄于它只收紧标签间距与同排的 `+`、动作按钮间距 |
 | 标签栏溢出 | 横着滚（无可见滚动条） | 标签按内容占宽、文字永不折成图标；放不下就滚，鼠标竖向滚轮也接到 `scrollLeft` 上，当前项切过去时自动滚进可视范围 |
 | 提交历史分页 | `COMMIT_PAGE_SIZE = 50` | 图谱每页取多少条；`gitCommits` 带 `limit` / `skip`，返回体用 `hasMore` 说明后面还有没有 |
-| 提交图谱泳道 | `LANE_GAP = 12px`、`GRAPH_ROW_HEIGHT = 26px`、最多 16 列 | 纯函数 `layoutGitGraph()` 算列号与连线，SVG 按它画；16 列是「再宽也看不清」的上限 |
+| 提交图谱泳道 | `LANE_GAP = 14px`、`GRAPH_ROW_HEIGHT = 28px`、最多 16 列 | 纯函数 `layoutGitGraph()` 算列号与连线，SVG 按它画；16 列是「再宽也看不清」的上限 |
 | 单栏 / 两栏的折点 | `680px`（容器查询，`WORKSPACE_SPLIT_WIDE_WIDTH_PX`） | **变更视图**窄于它时单栏钻取，宽于等于它时解锁两栏 |
 | `--file-tree-width` | `180–420px`（缺省 `240`） | 文件树的宽度，落盘；容器放不下时被 `clamp()` 与 `fileTreeMaxWidth()` 收住，右侧永远留 `120px`（`EDITOR_KEEP_WIDTH`）给编辑器 |
 | 宽展开的宽度 | `calc(100% − var(--col-sidebar))` | 右栏最大化：盖住正文那一列，见 §2「宽展开」 |

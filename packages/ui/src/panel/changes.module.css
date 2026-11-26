@@ -250,6 +250,12 @@
 }
 
 /* 文件名是这一行的主语：正常前景、中等字重 */
+.fileIcon {
+	flex: none;
+	width: var(--files-icon-size);
+	height: var(--files-icon-size);
+}
+
 .fileName {
 	flex: 0 1 auto;
 	min-width: 0;

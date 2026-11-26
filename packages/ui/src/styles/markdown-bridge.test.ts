@@ -58,4 +58,11 @@ describe("markstream 变量桥", () => {
 	it("色板不占用渲染器自己的 `--code-*` 变量名", () => {
 		expect(theme).not.toMatch(/--code-(?:bg|fg):/);
 	});
+
+	it("不用 `.md p:last-child` 误伤 markstream 每个 node-slot 里的段落，按末尾槽位收口下边距", () => {
+		expect(markdown).not.toContain(".md p:last-child");
+		expect(markdown).toContain(
+			".md > .markstream-react > .node-slot:last-child > .node-content > :last-child",
+		);
+	});
 });

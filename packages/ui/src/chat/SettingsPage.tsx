@@ -6,8 +6,8 @@
  */
 import type { LanguageSetting } from "@facet/i18n";
 import type { FacetSettings, ProviderInfo } from "@facet/protocol";
-import { X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Cpu, Info, Keyboard, Palette, Terminal, X } from "lucide-react";
+import { type ComponentType, Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { IconButton } from "../common/IconButton.tsx";
 import { ListRow } from "../common/ListRow.tsx";
 import { Select } from "../common/select.tsx";
@@ -29,7 +29,10 @@ export type SettingsSection = "models" | "appearance" | "input" | "terminal" | "
 /** 自动保存的延迟：改动停下后等这么久再提交，连续调整只保存最后一次。 */
 const AUTO_SAVE_DELAY_MS = 1000;
 
-/** 分类顺序与标题文案键。 */
+/** 分类图标属性：只接收统一规格的尺寸与无障碍隐藏标记。 */
+type SectionIcon = ComponentType<{ size?: number; className?: string; "aria-hidden"?: boolean }>;
+
+/** 分类顺序、图标与标题文案键。 */
 const SECTIONS: ReadonlyArray<{
 	key: SettingsSection;
 	labelKey:
@@ -38,12 +41,15 @@ const SECTIONS: ReadonlyArray<{
 		| "settings.input"
 		| "settings.terminal"
 		| "settings.about";
+	icon: SectionIcon;
+	/** 这一项前是否插一条导航分隔线，把信息类入口与设置分组拉开 */
+	dividerBefore?: boolean;
 }> = [
-	{ key: "models", labelKey: "settings.models" },
-	{ key: "appearance", labelKey: "settings.appearance" },
-	{ key: "input", labelKey: "settings.input" },
-	{ key: "terminal", labelKey: "settings.terminal" },
-	{ key: "about", labelKey: "settings.about" },
+	{ key: "models", labelKey: "settings.models", icon: Cpu },
+	{ key: "appearance", labelKey: "settings.appearance", icon: Palette },
+	{ key: "input", labelKey: "settings.input", icon: Keyboard },
+	{ key: "terminal", labelKey: "settings.terminal", icon: Terminal },
+	{ key: "about", labelKey: "settings.about", icon: Info, dividerBefore: true },
 ];
 
 /** 设置的读取与保存入口，由宿主接到主机上。 */
@@ -51,6 +57,8 @@ export type { SettingsDataSource } from "./settings-data-source.ts";
 
 /** 设置页参数。 */
 export interface SettingsPageProps {
+	/** 是否处于打开态；退场动画期间可传 false 保持挂载以平滑关闭 */
+	open?: boolean | undefined;
 	/** 当前分类 */
 	section: SettingsSection;
 	/** 切换分类 */
@@ -83,6 +91,7 @@ export interface SettingsPageProps {
 }
 
 export function SettingsPage({
+	open = true,
 	section,
 	onSectionChange,
 	onClose,
@@ -196,46 +205,64 @@ export function SettingsPage({
 	// 关闭设置时还在等定时器的改动立刻提交，不让最后一秒的编辑丢掉
 	const pendingRef = useRef<FacetSettings | undefined>(undefined);
 	pendingRef.current = isDirty ? draft : undefined;
-	useEffect(
-		() => () => {
-			const pending = pendingRef.current;
-			if (pending !== undefined) {
-				void saveRef.current(pending).catch(() => undefined);
-			}
-		},
-		[],
-	);
+	const flushPending = useCallback(() => {
+		const pending = pendingRef.current;
+		if (pending !== undefined) {
+			pendingRef.current = undefined;
+			void saveRef.current(pending).catch(() => undefined);
+		}
+	}, []);
+	useEffect(() => {
+		if (!open) {
+			flushPending();
+		}
+	}, [open, flushPending]);
+	useEffect(() => flushPending, [flushPending]);
+
+	const activeLabelKey = SECTIONS.find((item) => item.key === section)?.labelKey ?? "settings.models";
 
 	return (
-		<Modal open onClose={onClose} label={t("settings.title")} className="set-page">
-			<header className="set-head">
-				<h1 className="set-title">{t("settings.title")}</h1>
-				<IconButton
-					variant="ghost"
-					size="sm"
-					className="set-close"
-					aria-label={t("settings.close")}
-					onClick={onClose}
-				>
-					<X size={ICON_SIZE.lg} />
-				</IconButton>
-			</header>
-
-			<div className="set-body">
+		<Modal open={open} onClose={onClose} label={t("settings.title")} className="set-page">
+			<aside className="set-sidebar">
+				<div className="set-sidebar-head">
+					<h1 className="set-title">{t("settings.title")}</h1>
+				</div>
 				<nav className="set-nav" aria-label={t("settings.categories")}>
-					{SECTIONS.map((item) => (
-						<ListRow
-							as="button"
-							key={item.key}
-							selected={item.key === section}
-							className="set-nav-item"
-							aria-current={item.key === section}
-							onClick={() => onSectionChange(item.key)}
-						>
-							{t(item.labelKey)}
-						</ListRow>
-					))}
+					{SECTIONS.map((item) => {
+						const Icon = item.icon;
+						return (
+							<Fragment key={item.key}>
+								{item.dividerBefore ? <div className="set-nav-divider" aria-hidden="true" /> : null}
+								<ListRow
+									as="button"
+									size="md"
+									selected={item.key === section}
+									className="set-nav-item"
+									aria-current={item.key === section}
+									onClick={() => onSectionChange(item.key)}
+								>
+									<Icon size={ICON_SIZE.lg} className="set-nav-icon" aria-hidden />
+									<span className="set-nav-label ell">{t(item.labelKey)}</span>
+								</ListRow>
+							</Fragment>
+						);
+					})}
 				</nav>
+			</aside>
+
+			<div className="set-main">
+				<header className="set-main-head">
+					<h2 className="set-main-title">{t(activeLabelKey)}</h2>
+					<IconButton
+						variant="ghost"
+						size="sm"
+						className="set-close"
+						aria-label={t("settings.close")}
+						onClick={onClose}
+					>
+						<X size={ICON_SIZE.lg} />
+					</IconButton>
+				</header>
 
 				<div className="set-content">
 					{section === "appearance" &&

@@ -9,9 +9,9 @@
 /**
  * 具体的界面配色方案。
  *
- * light 为唯一浅色，dark 为缺省的深色，其余是同一套语义色板的深色变体。
+ * light 为 GitHub Copilot 浅色，dark 为缺省的 GitHub Copilot 深色，claude 为暖棕深色变体。
  */
-export const UI_THEMES = ["light", "dark", "midnight", "claude", "ghostty", "pureBlack"] as const;
+export const UI_THEMES = ["light", "dark", "claude"] as const;
 
 /** 一个配色方案。 */
 export type UiTheme = (typeof UI_THEMES)[number];

@@ -303,7 +303,7 @@ export const SessionSidebar = memo(function SessionSidebar({
 				/>
 			) : null}
 			<Button
-				variant="primary"
+				variant="secondary"
 				size="md"
 				className="sb-new"
 				onClick={() => {

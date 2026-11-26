@@ -186,9 +186,13 @@
 	border-radius: var(--radius-md);
 }
 
-/* 圆角可以单独放宽一档：输入区那种 32px 的主图标按钮要跟外框的圆角对得上 */
+/* 圆角覆盖：`lg` 对齐容器大圆角，`pill` 做成正圆（输入区发送 / 停止按钮） */
 .ui-icon-btn:where([data-radius="lg"]) {
 	border-radius: var(--radius-xl);
+}
+
+.ui-icon-btn:where([data-radius="pill"]) {
+	border-radius: var(--radius-pill);
 }
 
 .ui-icon-btn:where([data-variant="outline"]) {

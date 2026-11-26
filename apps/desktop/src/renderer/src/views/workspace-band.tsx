@@ -11,7 +11,7 @@
 
 import type { WorkspaceTabId, WorkspaceTabItem } from "@facet/ui";
 import { ICON_SIZE, IconButton, useI18n, WorkspaceTabBar, WorkspaceTabMenu } from "@facet/ui";
-import { Maximize2, Minimize2, PanelRightClose } from "lucide-react";
+import { Maximize2, Minimize2 } from "lucide-react";
 import type { ReactNode } from "react";
 import type { WorkspaceShell } from "../hooks/useWorkspaceShell.ts";
 
@@ -31,7 +31,7 @@ export interface WorkspacePanelControlsProps {
 	showExpand: boolean;
 }
 
-/** 动态标签 + `+` 菜单 + 宽展开 / 收起：顶带右格与抽屉顶头共用。 */
+/** 动态标签 + `+` 菜单 + 宽展开：顶带右格控件行，右栏开合按钮常驻在 `.app-chrome` 右端。 */
 export function WorkspacePanelControls({
 	shell,
 	items,
@@ -74,6 +74,7 @@ export function WorkspacePanelControls({
 				<IconButton
 					variant="ghost"
 					size="sm"
+					radius="pill"
 					className="chrome-toggle"
 					aria-label={shell.isPanelExpanded ? t("panel.restoreWide") : t("panel.expandWide")}
 					aria-pressed={shell.isPanelExpanded}
@@ -82,15 +83,6 @@ export function WorkspacePanelControls({
 					<ExpandIcon size={ICON_SIZE.md} />
 				</IconButton>
 			) : null}
-			<IconButton
-				variant="ghost"
-				size="sm"
-				className="chrome-toggle"
-				aria-label={t("panel.collapsePanel")}
-				onClick={shell.togglePanel}
-			>
-				<PanelRightClose size={ICON_SIZE.md} />
-			</IconButton>
 		</>
 	);
 }

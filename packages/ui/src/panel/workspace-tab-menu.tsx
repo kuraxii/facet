@@ -177,7 +177,8 @@ export function WorkspaceTabMenu({
 			<IconButton
 				ref={anchorRef}
 				variant="ghost"
-				size="sm"
+				size="xs"
+				radius="pill"
 				className={classes}
 				aria-haspopup="menu"
 				aria-expanded={isOpen}
@@ -191,7 +192,7 @@ export function WorkspaceTabMenu({
 					setIsOpen(true);
 				}}
 			>
-				<Plus size={ICON_SIZE.lg} />
+				<Plus size={ICON_SIZE.md} />
 			</IconButton>
 			{!isOpen
 				? null

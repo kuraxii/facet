@@ -33,10 +33,11 @@ import {
 	sessionTitle,
 	TrustDialog,
 	useI18n,
+	useModalPresence,
 	type WorkspaceTabId,
 } from "@facet/ui";
 import { X } from "lucide-react";
-import { type ReactNode, type RefObject, useCallback, useMemo } from "react";
+import { type CSSProperties, type ReactNode, type RefObject, useCallback, useMemo, useRef } from "react";
 import { AppFrame } from "../app-frame.tsx";
 import { bridge } from "../bridge.ts";
 import type { Composer } from "../hooks/useComposer.ts";
@@ -47,6 +48,7 @@ import type { Transcript } from "../hooks/useTranscript.ts";
 import type { WorkspaceDocs } from "../hooks/useWorkspaceDocs.ts";
 import type { WorkspaceShell } from "../hooks/useWorkspaceShell.ts";
 import { applyAppearance } from "../hooks/useWorkspaceShell.ts";
+import { usePanelPresence } from "../hooks/workspace-shell/usePanelPresence.ts";
 import { LOCAL_TARGET } from "../host-connection.ts";
 import { useHostClient } from "../host-context.tsx";
 import { workspaceTabItems } from "../workspace-tabs.ts";
@@ -314,6 +316,14 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 
 	/* 右栏占着列时，它的控件在顶带右格里；否则顶带中格右端只留一个入口 */
 	const hasPanelColumn = shell.panelVisible;
+	const settingsOpen = shell.view === "settings";
+	const settingsMounted = useModalPresence(settingsOpen);
+	const shellRef = useRef<HTMLDivElement | null>(null);
+	const panelPresence = usePanelPresence(hasPanelColumn, shellRef);
+	const panelChromeClass = ["chrome-slot", "is-panel", hasPanelColumn ? "is-open" : undefined]
+		.filter((item) => item !== undefined)
+		.join(" ");
+	const panelChromeStyle = { "--panel-box-width": `${shell.panelEffectiveWidth}px` } as CSSProperties;
 
 	return (
 		<CodeThemeProvider value={shell.codeTheme}>
@@ -333,45 +343,20 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 									: "chrome-slot is-sidebar is-open"
 							}
 						>
-							{shell.isNarrow || !shell.isSidebarOpen ? null : (
+							{shell.isNarrow ? null : (
 								<SidebarHeader
 									isSearchOpen={shell.isSearchOpen}
 									onToggleSearch={() => shell.setSearchOpen(!shell.isSearchOpen)}
 									onAddProject={session.openProjectDialog}
-									onCollapse={shell.toggleSidebar}
 								/>
 							)}
 						</div>
 						<div className="chrome-slot is-main">
-							{/*
-							 * 宽展开时这一列被右栏整个盖住（轨道宽度是 0），整格不渲染控件：
-							 * 留着的按钮看不见却还能 Tab 到，还会溢出到右栏那一格上。
-							 */}
-							{shell.isPanelExpanded ? null : (
-								<>
-									{/*
-									 * 侧栏展开时开关在它自己的头部里，收起之后才回到主区左上角。
-									 * 窄档抽屉开着时这个开关留在原地（被抽屉与遮罩盖住）：抽屉关掉之后
-									 * 焦点要还给它，元素不能在打开期间就被卸载掉。
-									 */}
-									{shell.isNarrow || !shell.isSidebarOpen ? (
-										<SidebarToggle isOpen={false} onToggle={shell.toggleSidebar} />
-									) : null}
-									{chromeTitle === undefined ? null : <span className="chrome-title">{chromeTitle}</span>}
-									<span className="chrome-spacer" />
-									{/* 右栏占列时它的入口在右格；收起（或进抽屉）时回到主区右端 */}
-									{hasPanelColumn ? null : (
-										<PanelToggle
-											isOpen={shell.isPanelOpen}
-											onToggle={shell.togglePanel}
-											badge={tabItems.find((item) => item.id === "changes")?.badge}
-										/>
-									)}
-								</>
-							)}
+							{chromeTitle === undefined ? null : <span className="chrome-title">{chromeTitle}</span>}
+							<span className="chrome-spacer" />
 						</div>
-						{hasPanelColumn ? (
-							<div className="chrome-slot is-panel is-open">
+						{panelPresence.mounted ? (
+							<div className={panelChromeClass} style={panelChromeStyle}>
 								<div className="chrome-slot-row">
 									<WorkspacePanelControls
 										shell={shell}
@@ -384,10 +369,23 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 								</div>
 							</div>
 						) : null}
+						{/* 左右栏开关各自固定在顶带两端（置于 slot 之后以防兄弟拖窗层截获命中），仅形变内部竖线 */}
+						<div className="chrome-brand">
+							<span className="sb-title">Facet</span>
+							<SidebarToggle
+								isOpen={shell.isNarrow ? shell.isDrawerOpen : shell.sidebarVisible}
+								onToggle={shell.toggleSidebar}
+							/>
+						</div>
+						<PanelToggle
+							isOpen={shell.panelVisible}
+							onToggle={shell.togglePanel}
+							badge={tabItems.find((item) => item.id === "changes")?.badge}
+						/>
 					</>
 				}
 			>
-				<div className={shell.className}>
+				<div className={shell.className} ref={shellRef}>
 					{shell.isDrawerOpen ? (
 						<button
 							type="button"
@@ -456,13 +454,13 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 					{/* 主区只有对话：消息流与输入区直接撑满这一列，不再有标签栏 */}
 					<main className="main">{mainContent}</main>
 
-					{hasPanelColumn ? (
+					{panelPresence.mounted ? (
 						<RightPanel
 							/*
-							 * 宽展开期间不给宽度：那一列的宽度由样式按视口现算，拖动会把它改回
-							 * 偏好宽。展开态本来也不需要拖动——它已经是「能给多宽就给多宽」。
+							 * 始终把实占宽传给右栏作为 `--panel-box-width`，只通过 `onWidthChange` 开关分隔条；
+							 * 展开/还原过渡时右侧栏据此在固定位置与整行宽之间平滑伸缩覆盖主栏。
 							 */
-							width={shell.isPanelExpanded ? undefined : shell.panelEffectiveWidth}
+							width={shell.panelEffectiveWidth}
 							onWidthChange={shell.isPanelExpanded ? undefined : (width) => shell.updatePanel({ width })}
 							maxWidth={shell.panelMaxWidth}
 							onDraggingChange={shell.setPaneResizing}
@@ -492,8 +490,9 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 						onSelect={session.selectSession}
 					/>
 
-					{shell.view === "settings" ? (
+					{settingsMounted ? (
 						<SettingsPage
+							open={settingsOpen}
 							section={shell.settingsSection}
 							onSectionChange={shell.setSettingsSection}
 							onClose={shell.closeSettings}

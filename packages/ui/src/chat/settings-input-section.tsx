@@ -19,7 +19,6 @@ export function InputSection({
 	const { t } = useI18n();
 	return (
 		<>
-			<h2 className="set-section-title">{t("settings.inputPage.title")}</h2>
 			<SettingsGroup label={t("settings.inputPage.sending")}>
 				<SettingsRow title={t("settings.inputPage.sendKey")}>
 					<Select

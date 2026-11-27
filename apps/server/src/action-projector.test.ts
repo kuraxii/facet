@@ -74,6 +74,48 @@ describe("ActionProjector", () => {
 		const ended = projector.project({ type: "message_end", message: message as never });
 		expect(ended[0]?.action).toMatchObject({ type: "chat/messageUpdated", messageId: "m1" });
 		expect(projector.currentMessageId).toBeUndefined();
+
+		const committed = projector.project({
+			type: "entry_committed",
+			messageSeq: 1,
+			entry: {
+				id: "e1",
+				parentId: null,
+				kind: "message",
+				timestamp: "2026-11-27T00:00:00Z",
+				message: message as never,
+			},
+		});
+		expect(committed).toEqual([
+			{
+				channel: "chat:/s1",
+				action: {
+					type: "chat/entryCommitted",
+					messageId: "m1",
+					entry: {
+						id: "e1",
+						parentId: null,
+						kind: "message",
+						timestamp: "2026-11-27T00:00:00Z",
+						message: message as never,
+					},
+				},
+			},
+		]);
+	});
+
+	it("非流式持久化条目直接投影为不带 messageId 的 chat/entryCommitted", () => {
+		const projector = new ActionProjector("s1");
+		const entry = {
+			id: "e2",
+			parentId: "e1",
+			kind: "compaction" as const,
+			timestamp: "2026-11-27T00:00:01Z",
+			summary: "摘要",
+		};
+		expect(projector.project({ type: "entry_committed", entry })).toEqual([
+			{ channel: "chat:/s1", action: { type: "chat/entryCommitted", entry } },
+		]);
 	});
 
 	it("不产生动作的事件返回空数组", () => {

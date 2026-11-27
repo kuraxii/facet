@@ -86,6 +86,16 @@ export class ActionProjector {
 				this.pendingMessageId = undefined;
 				return [chat({ type: "chat/messageUpdated", messageId, message: event.message })];
 			}
+			case "entry_committed": {
+				const messageId = event.messageSeq === undefined ? undefined : `m${event.messageSeq}`;
+				return [
+					chat({
+						type: "chat/entryCommitted",
+						...(messageId === undefined ? {} : { messageId }),
+						entry: event.entry,
+					}),
+				];
+			}
 			case "tool_start":
 				return [
 					chat({

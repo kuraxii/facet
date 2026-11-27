@@ -525,24 +525,26 @@ export class SessionClient {
 		return await this.transport.request("listBackends", {});
 	}
 
-	/** 保存或更新一条外部 ACP 后端配置。 */
-	async saveAcpBackend(
-		profile: AcpBackendProfile,
-	): Promise<{ backends: BackendAvailability[]; profiles: AcpBackendProfile[] }> {
-		return await this.transport.request("saveAcpBackend", { profile });
-	}
-
-	/** 删除一条自定义 ACP 后端配置。 */
-	async removeAcpBackend(
-		backendId: string,
-	): Promise<{ backends: BackendAvailability[]; profiles: AcpBackendProfile[] }> {
-		return await this.transport.request("removeAcpBackend", { backendId });
-	}
-
 	/** 对指定代理后端执行可用性与握手探测。 */
 	async probeBackend(backendId: string): Promise<BackendAvailability> {
 		const result = await this.transport.request("probeBackend", { backendId });
 		return result.backend;
+	}
+
+	/** 启动指定 ACP 后端的交互式登录流程。 */
+	async acpLoginStart(backendId: string): Promise<{ loginId: string; authUrl?: string }> {
+		return await this.transport.request("acpLoginStart", { backendId });
+	}
+
+	/** 提交授权码完成 ACP 登录并返回最新后端状态。 */
+	async acpLoginSubmit(loginId: string, code: string): Promise<BackendAvailability> {
+		const result = await this.transport.request("acpLoginSubmit", { loginId, code });
+		return result.backend;
+	}
+
+	/** 取消正在进行的 ACP 登录流程。 */
+	async acpLoginCancel(loginId: string): Promise<void> {
+		await this.transport.request("acpLoginCancel", { loginId });
 	}
 
 	/** 列出用户添加的项目。 */

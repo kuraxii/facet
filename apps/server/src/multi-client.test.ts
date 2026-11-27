@@ -9,6 +9,7 @@ import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
+	ContextBreakdown,
 	ContextUsage,
 	Entry,
 	SessionEvent,
@@ -109,6 +110,22 @@ class FakeAgent implements HubAgent {
 
 	contextUsage(): ContextUsage | undefined {
 		return undefined;
+	}
+
+	contextBreakdown(): ContextBreakdown {
+		return {
+			contextWindow: 0,
+			reportedTokens: null,
+			reportedPercent: null,
+			estimatedTokens: 0,
+			categories: [],
+			hiddenTools: [],
+			compactions: 0,
+		};
+	}
+
+	stats() {
+		return this.snapshot().stats;
 	}
 
 	commands(): SlashCommand[] {

@@ -24,6 +24,7 @@ type SessionMethod =
 	| "openSession"
 	| "forkSession"
 	| "snapshot"
+	| "contextDetails"
 	| "entries"
 	| "entriesAfter"
 	| "subscribe"
@@ -87,6 +88,9 @@ export const sessionHandlers: Pick<RequestHandlerMap, SessionMethod> = {
 
 	snapshot: async (params, context: RpcContext): Promise<RequestResults["snapshot"]> =>
 		await context.hub.snapshot(params.sessionId),
+
+	contextDetails: async (params, context: RpcContext): Promise<RequestResults["contextDetails"]> =>
+		await context.hub.contextDetails(params.sessionId),
 
 	entries: async (params, context: RpcContext): Promise<RequestResults["entries"]> =>
 		await context.hub.entries(params.sessionId, params.cursor, params.limit),

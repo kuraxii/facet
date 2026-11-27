@@ -22,6 +22,7 @@ import type {
 	Action,
 	ActionFrame,
 	Channel,
+	ContextBreakdown,
 	SessionActivity,
 	SessionSettle,
 	SessionSnapshot,
@@ -52,6 +53,8 @@ export type HubAgent = Pick<
 	| "setName"
 	| "compact"
 	| "contextUsage"
+	| "contextBreakdown"
+	| "stats"
 	| "commands"
 	| "revertTo"
 	| "leafEntryId"
@@ -525,6 +528,16 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		const row = await this.requireReady(sessionId);
 		this.touch(row);
 		return this.snapshotRow(row);
+	}
+
+	/** 当前活动分支的上下文窗口分项拆解，按需查询。 */
+	async contextDetails(sessionId: string): Promise<ContextBreakdown> {
+		const row = await this.requireReady(sessionId);
+		if (row.agent === undefined) {
+			throw new SessionNotFoundError(sessionId);
+		}
+		this.touch(row);
+		return row.agent.contextBreakdown();
 	}
 
 	/**
@@ -1038,11 +1051,12 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		};
 	}
 
-	/** 推一份当前的上下文用量。用量可能为空（刚压缩完要等下一次响应才有），空也照实推。 */
+	/** 推一份当前的上下文用量与全会话统计。用量可能为空（刚压缩完要等下一次响应才有），空也照实推。 */
 	private publishUsage(row: SessionState<A>): void {
 		this.publish(row, row.projector.sessionChannelFor(), {
 			type: "session/usageChanged",
 			usage: row.agent?.contextUsage(),
+			stats: row.agent?.stats(),
 		});
 	}
 

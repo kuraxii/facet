@@ -7,12 +7,14 @@
  */
 import { join } from "node:path";
 import { registerBunOAuthFlows } from "@earendil-works/pi-ai/bun-oauth";
+import { getCurrentSystemPrompt } from "@earendil-works/pi-ai/utils/transcript";
 import {
 	createAgentSession,
 	createCodemodeExtension,
 	createMcpExtension,
 	createToolSearchExtension,
 	DefaultResourceLoader,
+	type ExtensionAPI,
 	type ExtensionUIContext,
 	hasTrustRequiringProjectResources,
 	type InlineExtension,
@@ -33,6 +35,7 @@ import type {
 	SessionSummary,
 	ThinkingLevel,
 } from "@facet/protocol";
+import type { ContextObserverState } from "./context-breakdown/index.ts";
 import { toModelInfo } from "./convert.ts";
 import { FileCredentialStore } from "./credential-store.ts";
 import { ExtensionUi } from "./extension-ui.ts";
@@ -177,6 +180,41 @@ function prioritizeBuiltinExtensions(result: LoadExtensionsResult): LoadExtensio
 			...result.extensions.filter((extension) => !PRIORITY_BUILTIN_PATHS.has(extension.path)),
 		],
 		errors: result.errors.filter((issue) => !isExpectedConflict(issue)),
+	};
+}
+
+/** 为单个会话建立只读上下文观察器，记录 hiddenTools 与本轮 forcedPrompt。 */
+function createContextObserver(): { state: ContextObserverState; extension: InlineExtension } {
+	const state: ContextObserverState = { hiddenTools: [], forcedPrompt: undefined };
+	return {
+		state,
+		extension: {
+			name: "context-observer",
+			builtin: true,
+			replaceable: false,
+			factory(pi: ExtensionAPI) {
+				pi.on("before_agent_start", (event) => {
+					state.hiddenTools = [...(event.systemPromptOptions.hiddenTools ?? [])];
+				});
+				pi.on("context_with_system", (event, ctx) => {
+					const effective = ctx.getSystemPrompt();
+					const replayed = getCurrentSystemPrompt(
+						event.messages as Parameters<typeof getCurrentSystemPrompt>[0],
+					);
+					state.forcedPrompt =
+						event.messages.some((message) => message.role === "system") && effective !== replayed
+							? effective
+							: undefined;
+				});
+				pi.on("agent_settled", () => {
+					state.forcedPrompt = undefined;
+				});
+				pi.on("session_shutdown", () => {
+					state.hiddenTools = [];
+					state.forcedPrompt = undefined;
+				});
+			},
+		},
 	};
 }
 
@@ -715,10 +753,15 @@ export class PiAgentFactory {
 		},
 	): Promise<PiAgent> {
 		const cwd = sessionManager.getCwd();
+		const contextObserver = createContextObserver();
 		const resourceLoader = new DefaultResourceLoader({
 			cwd,
 			agentDir: this.agentDir,
-			extensionFactories: [...BUILTIN_EXTENSIONS, ...(options.extensionFactories ?? [])],
+			extensionFactories: [
+				...BUILTIN_EXTENSIONS,
+				contextObserver.extension,
+				...(options.extensionFactories ?? []),
+			],
 			extensionsOverride: prioritizeBuiltinExtensions,
 			noExtensions: options.noExtensions,
 		});
@@ -752,6 +795,7 @@ export class PiAgentFactory {
 			],
 			onError,
 			ui,
+			contextObserver: contextObserver.state,
 			initialize: () =>
 				session.bindExtensions({
 					uiContext: ui?.context ?? options.uiContext,

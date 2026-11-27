@@ -5,6 +5,7 @@ import type {
 	SessionEntry,
 } from "@earendil-works/pi-coding-agent";
 import type {
+	ContextBreakdown,
 	ContextUsage,
 	Entry,
 	EntryKind,
@@ -27,6 +28,7 @@ import type {
 	TurnPhase,
 	UiResponse,
 } from "@facet/protocol";
+import { buildContextBreakdown, type ContextObserverState } from "./context-breakdown/index.ts";
 import { toMessage, toMessages, toModelInfo } from "./convert.ts";
 import {
 	reduceTurnState,
@@ -59,6 +61,8 @@ export interface PiAgentContext {
 	ui?: ExtensionUi;
 	/** 扩展初始化入口，登记之后才启动。 */
 	initialize?: () => Promise<void>;
+	/** 运行期上下文观察态，用于补充 hiddenTools 与 forcedPrompt 信息。 */
+	contextObserver?: Readonly<ContextObserverState>;
 }
 
 /** 把持久化条目转成对外条目，只保留界面需要的字段。 */
@@ -140,6 +144,7 @@ export class PiAgent {
 	private initialization: SessionInitialization;
 	private initializationPromise: Promise<void> | undefined;
 	private readonly stopUi: (() => void) | undefined;
+	private readonly contextObserver: Readonly<ContextObserverState> | undefined;
 	/** 活动分支快照，叶子变化时重建 */
 	private branch: BranchSnapshot | undefined;
 
@@ -151,6 +156,7 @@ export class PiAgent {
 		this.extensionIssues = context.extensionIssues ?? [];
 		this.onError = context.onError;
 		this.ui = context.ui;
+		this.contextObserver = context.contextObserver;
 		this.initializeExtensions = context.initialize;
 		this.initialization = context.initialize === undefined ? { kind: "ready" } : { kind: "starting" };
 		this.stopUi = this.ui?.subscribe((ui) => this.emit({ type: "ui", ui }));
@@ -517,6 +523,11 @@ export class PiAgent {
 
 	contextUsage(): ContextUsage | undefined {
 		return this.session.getContextUsage();
+	}
+
+	/** 当前活动分支的上下文窗口明细，按系统提示词、指令文件、Skills、工具与消息分类统计。 */
+	contextBreakdown(): ContextBreakdown {
+		return buildContextBreakdown(this.session, this.contextObserver);
 	}
 
 	/**

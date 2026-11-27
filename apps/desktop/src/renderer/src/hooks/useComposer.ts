@@ -135,6 +135,12 @@ export interface Composer {
 	send: () => void;
 	/** 收回排队内容，把文字拼回输入框 */
 	takeBackQueue: () => void;
+	/** 将指定索引的后续消息转为插话立即发送 */
+	promoteFollowUp: (index: number) => void;
+	/** 将指定索引的后续消息放回输入框编辑 */
+	editFollowUp: (index: number) => void;
+	/** 删除指定索引的后续消息 */
+	removeFollowUp: (index: number) => void;
 	/** 把一批文件加入待发图片 */
 	addImages: (files: readonly File[]) => void;
 	/** 打开系统选图窗口 */
@@ -472,9 +478,9 @@ export function useComposer(options: ComposerOptions): Composer {
 				const images = await Promise.all(pendingImages.map((item) => encodeImage(item)));
 				sentImagesKey.current = imagesKey;
 				if (activity === "running") {
-					// 排队那条路只有文本，带图片时改走插入当前回合
+					// 运行中默认进入后续消息队列，支持在卡片中按条转为插话、编辑或删除
 					client.send(text, {
-						streamingBehavior: "steer",
+						streamingBehavior: "followUp",
 						...(images.length === 0 ? {} : { images }),
 					});
 					return;
@@ -503,6 +509,35 @@ export function useComposer(options: ComposerOptions): Composer {
 			return current.trim().length === 0 ? restored : `${restored}\n\n${current}`;
 		});
 	}, [client, queued, updateDraft]);
+
+	/** 将指定索引的后续消息转为插话立即发送。 */
+	const promoteFollowUp = useCallback(
+		(index: number) => {
+			client.promoteFollowUp(index);
+		},
+		[client],
+	);
+
+	/** 将指定索引的后续消息放回输入框编辑。 */
+	const editFollowUp = useCallback(
+		(index: number) => {
+			const text = queued.followUp[index];
+			client.removeFollowUp(index);
+			if (text === undefined || text.length === 0) {
+				return;
+			}
+			updateDraft((current) => (current.trim().length === 0 ? text : `${text}\n\n${current}`));
+		},
+		[client, queued.followUp, updateDraft],
+	);
+
+	/** 删除指定索引的后续消息。 */
+	const removeFollowUp = useCallback(
+		(index: number) => {
+			client.removeFollowUp(index);
+		},
+		[client],
+	);
 
 	useEffect(() => {
 		return client.onSent((text) => {
@@ -599,6 +634,9 @@ export function useComposer(options: ComposerOptions): Composer {
 		updateDraft,
 		send,
 		takeBackQueue,
+		promoteFollowUp,
+		editFollowUp,
+		removeFollowUp,
 		addImages,
 		pickImages,
 		removeImage,

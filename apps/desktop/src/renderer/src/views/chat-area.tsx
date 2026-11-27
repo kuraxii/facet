@@ -214,7 +214,13 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 					{sessionView.state.initialization.kind === "failed" ? (
 						<p className="dialog-error">{sessionView.state.initialization.message}</p>
 					) : null}
-					<QueueStrip queued={queued} onClear={composer.takeBackQueue} />
+					<QueueStrip
+						queued={queued}
+						onClear={composer.takeBackQueue}
+						onPromoteFollowUp={composer.promoteFollowUp}
+						onEditFollowUp={composer.editFollowUp}
+						onRemoveFollowUp={composer.removeFollowUp}
+					/>
 					{sessionView.state.extensionUi.prompts[0] === undefined ? null : (
 						<ExtensionPromptCard
 							key={`${host.host?.hostId}:${sessionView.channel}:${sessionView.state.extensionUi.prompts[0].requestId}`}

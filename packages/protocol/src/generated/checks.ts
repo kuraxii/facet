@@ -1079,6 +1079,19 @@ function buildDispatchSessionFollowUpRemoved(): (value: unknown) => boolean {
 const checkDispatchSessionFollowUpRemoved = buildDispatchSessionFollowUpRemoved();
 
 /**
+ * session/steeringDemoted 的动作判断。
+ *
+ * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
+ */
+function buildDispatchSessionSteeringDemoted(): (value: unknown) => boolean {
+	// @ts-ignore
+	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && ("type" in value && (typeof value.type === "string" && value.type === "session/steeringDemoted"))));
+	return check_0;
+}
+
+const checkDispatchSessionSteeringDemoted = buildDispatchSessionSteeringDemoted();
+
+/**
  * session/compact 的动作判断。
  *
  * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
@@ -1194,6 +1207,7 @@ export const DISPATCH_CONTRACTS: Readonly<Record<string, DispatchContract | unde
 	"session/queueCleared": { auth: "write", check: checkDispatchSessionQueueCleared },
 	"session/followUpPromoted": { auth: "write", check: checkDispatchSessionFollowUpPromoted },
 	"session/followUpRemoved": { auth: "write", check: checkDispatchSessionFollowUpRemoved },
+	"session/steeringDemoted": { auth: "write", check: checkDispatchSessionSteeringDemoted },
 	"session/compact": { auth: "write", check: checkDispatchSessionCompact },
 	"session/configChanged": { auth: "write", check: checkDispatchSessionConfigChanged },
 };

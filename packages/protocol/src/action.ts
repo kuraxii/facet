@@ -70,6 +70,8 @@ export type SessionAction =
 	| { type: "session/followUpPromoted"; index: number }
 	/** 客户端可派发:从后续消息队列移除指定条目 */
 	| { type: "session/followUpRemoved"; index: number }
+	/** 客户端可派发:将全部待插话消息撤回并退回后续消息队列 */
+	| { type: "session/steeringDemoted" }
 	/** 客户端可派发:手动压缩上下文 */
 	| { type: "session/compact" }
 	/** 主机侧:上下文用量变化，一轮结束或压缩之后重新估算，同时可附带全会话累计统计 */
@@ -111,6 +113,12 @@ export type ChatAction =
 	  }
 	/** 主机侧:会话不会再自动继续,唯一的终局信号 */
 	| { type: "chat/settled"; aborted: boolean }
+	/** 主机侧:中止运行时回收全部未消费排队内容，仅由发起中止的那一端退回输入框 */
+	| {
+			type: "chat/queueReclaimed";
+			targetClientId?: string;
+			items: Array<{ text: string; images?: ImageBlock[] }>;
+	  }
 	/** 主机侧:提示,例如扩展发出的通知 */
 	| { type: "chat/notice"; level: NoticeLevel; message: string }
 	/** 客户端可派发:发送一条消息 */

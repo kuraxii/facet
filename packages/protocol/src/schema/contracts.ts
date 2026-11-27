@@ -471,6 +471,10 @@ export const DISPATCH_SCHEMAS = {
 		auth: "write",
 		action: Type.Object({ type: Type.Literal("session/followUpRemoved"), index: Type.Number() }),
 	},
+	"session/steeringDemoted": {
+		auth: "write",
+		action: Type.Object({ type: Type.Literal("session/steeringDemoted") }),
+	},
 	"session/compact": {
 		auth: "write",
 		action: Type.Object({ type: Type.Literal("session/compact") }),

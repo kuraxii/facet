@@ -7,14 +7,18 @@
  * 待发的图片贴在输入框上沿，可以点添加按钮选、粘贴或直接拖进来。
  */
 import type { ChatActivity } from "@facet/client-core";
-import type {
-	ContextBreakdown,
-	ContextUsage,
-	Message,
-	ModelInfo,
-	SessionStats,
-	SlashCommand,
-	ThinkingLevel,
+import {
+	type AcpConfigOption,
+	type AcpModeState,
+	type AgentCapabilities,
+	type ContextBreakdown,
+	type ContextUsage,
+	type Message,
+	type ModelInfo,
+	PI_AGENT_CAPABILITIES,
+	type SessionStats,
+	type SlashCommand,
+	type ThinkingLevel,
 } from "@facet/protocol";
 import { Brain, FileUp, ImagePlus, Plus, X } from "lucide-react";
 import { type Ref, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -26,6 +30,7 @@ import { ICON_SIZE } from "../styles/visual-contract.ts";
 import { useHoverTip } from "../tip.tsx";
 import { ChevronIcon } from "../transcript/chevron.tsx";
 import { SendIcon, StopIcon } from "../transcript/icons.tsx";
+import { AcpConfigChips } from "./AcpConfigChips.tsx";
 import { ContextPopover } from "./ContextPopover.tsx";
 import { ContextRing, usageLabel, usagePercentShort } from "./ContextRing.tsx";
 import { ComposerEditor, type ComposerHandle } from "./rich-editor/ComposerEditor.tsx";
@@ -132,6 +137,16 @@ export interface ComposerProps {
 	onOpenMentionFile?: ((filePath: string) => void) | undefined;
 	/** 当前会话里用户发过的文字，从旧到新：`↑`/`↓` 按它回溯 */
 	sentHistory?: readonly string[];
+	/** 当前会话代理后端支持的能力集合，缺省按 Pi 完整能力 */
+	capabilities?: AgentCapabilities;
+	/** ACP 会话模式状态 */
+	acpMode?: AcpModeState;
+	/** ACP 动态配置项 */
+	acpConfigOptions?: readonly AcpConfigOption[];
+	/** 切换 ACP 会话模式 */
+	onAcpModeChange?: (modeId: string) => void;
+	/** 修改 ACP 动态配置项 */
+	onAcpConfigOptionChange?: (configId: string, value: string) => void;
 }
 
 /** 模型芯片的显示文本。 */
@@ -217,11 +232,19 @@ export function Composer({
 	draftKey,
 	onOpenMentionFile,
 	sentHistory,
+	capabilities,
+	acpMode,
+	acpConfigOptions,
+	onAcpModeChange,
+	onAcpConfigOptionChange,
 }: ComposerProps) {
 	const { t } = useI18n();
 	const openImagePreview = useImagePreview();
 	// 一排按钮共用一份悬浮提示：谁被悬停就贴谁
 	const tip = useHoverTip();
+	const caps = capabilities ?? PI_AGENT_CAPABILITIES;
+	const canQueueWhileRunning = caps.supportsSteering || caps.supportsFollowUp;
+	const isQueuing = activity === "running" && canQueueWhileRunning;
 
 	// 运行中发送走排队，插入当前轮次；压缩、停止中与连接断开时不接受新输入。
 	// 只有图片没有文字也算一条要发的内容。
@@ -230,13 +253,10 @@ export function Composer({
 		isBlocked !== true &&
 		!isSending &&
 		(value.trim().length > 0 || attachments.length > 0) &&
-		(activity === "idle" || activity === "running");
-	const isQueuing = activity === "running";
+		(activity === "idle" || isQueuing);
 	/** 这一轮还在跑且没内容要发时，按钮换成停止；发送在途时仍留在发送上，免得一下没收住轮次。 */
 	const showsStop = activity !== "idle" && !canSend && !isSending;
-	const [openMenu, setOpenMenu] = useState<"model" | "level" | "attach" | "context" | "stats" | undefined>(
-		undefined,
-	);
+	const [openMenu, setOpenMenu] = useState<string | undefined>(undefined);
 	const [contextBreakdownState, setContextBreakdownState] = useState<{
 		key: string | undefined;
 		data: ContextBreakdown | undefined;
@@ -315,8 +335,9 @@ export function Composer({
 
 	/** 回车发送还是换行随设置走。 */
 	const sendsOnEnter = !shiftEnterToSend;
-	/** 这一路能不能接图片：宿主给了入口、且当前模型收图片 */
-	const acceptsImages = onAddImages !== undefined && canAddImages;
+	/** 这一路能不能接图片：宿主给了入口、当前模型与代理后端都支持收图片 */
+	const effectiveCanAddImages = canAddImages && caps.supportsImages;
+	const acceptsImages = onAddImages !== undefined && effectiveCanAddImages;
 
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: 拖拽与粘贴是浏览器原生行为，这块只做事件委托，不承担键盘操作
@@ -355,7 +376,7 @@ export function Composer({
 				onAddImages?.(files);
 			}}
 			onPaste={(event) => {
-				if (onAddImages === undefined || !canAddImages) {
+				if (!acceptsImages) {
 					return;
 				}
 				const files = pickedFiles(event.clipboardData.files);
@@ -445,9 +466,9 @@ export function Composer({
 							<button
 								type="button"
 								className="chip-pop-item is-row"
-								disabled={onPickImages === undefined || !canAddImages}
+								disabled={onPickImages === undefined || !effectiveCanAddImages}
 								onClick={() => {
-									if (onPickImages === undefined || !canAddImages) {
+									if (onPickImages === undefined || !effectiveCanAddImages) {
 										return;
 									}
 									setOpenMenu(undefined);
@@ -465,93 +486,107 @@ export function Composer({
 					) : null}
 				</div>
 
-				<div className="chip-wrap" ref={modelRef}>
-					<button
-						type="button"
-						className="chip"
-						onClick={() => setOpenMenu(openMenu === "model" ? undefined : "model")}
-						disabled={!canPickModel}
-						aria-expanded={openMenu === "model"}
-						{...tip.handlers(canPickModel ? t("composer.switchModel") : t("composer.currentModel"))}
-					>
-						{modelLabel(model, t("composer.noModel"))}
-						{canPickModel ? <ChevronIcon isOpen={openMenu === "model"} /> : null}
-					</button>
-					{openMenu === "model" ? (
-						// biome-ignore lint/a11y/useSemanticElements: 浮层里是一组按钮，用不到 fieldset 的表单语义
-						<div className="chip-pop" role="group" aria-label={t("composer.chooseModel")}>
-							{grouped.map(([provider, items]) => (
-								<div key={provider} className="chip-pop-group">
-									<p className="chip-pop-head">
-										<span>{provider}</span>
-										{providerAuth?.[provider] === false ? (
-											<span className="chip-pop-note">{t("composer.noCredentials")}</span>
-										) : null}
-									</p>
-									{items.map((item) => {
-										// 没有凭证的提供方下的模型选不了，选中也无法真正切换
-										const usable = providerAuth?.[item.provider] !== false;
-										const isCurrent = model !== undefined && modelKey(model) === modelKey(item);
-										return (
-											<button
-												type="button"
-												key={modelKey(item)}
-												className={isCurrent ? "chip-pop-item is-on" : "chip-pop-item"}
-												disabled={!usable}
-												onClick={() => {
-													onModelChange?.(item);
-													setOpenMenu(undefined);
-												}}
-											>
-												<span className="ell">{item.name}</span>
-												<span className="chip-pop-meta mono">{item.id}</span>
-											</button>
-										);
-									})}
+				{caps.configStyle === "acp" ? (
+					<AcpConfigChips
+						openMenuId={openMenu}
+						onToggleMenu={setOpenMenu}
+						acpMode={acpMode}
+						acpConfigOptions={acpConfigOptions}
+						onAcpModeChange={onAcpModeChange}
+						onAcpConfigOptionChange={onAcpConfigOptionChange}
+					/>
+				) : (
+					<>
+						<div className="chip-wrap" ref={modelRef}>
+							<button
+								type="button"
+								className="chip"
+								onClick={() => setOpenMenu(openMenu === "model" ? undefined : "model")}
+								disabled={!canPickModel}
+								aria-expanded={openMenu === "model"}
+								{...tip.handlers(canPickModel ? t("composer.switchModel") : t("composer.currentModel"))}
+							>
+								{modelLabel(model, t("composer.noModel"))}
+								{canPickModel ? <ChevronIcon isOpen={openMenu === "model"} /> : null}
+							</button>
+							{openMenu === "model" ? (
+								// biome-ignore lint/a11y/useSemanticElements: 浮层里是一组按钮，用不到 fieldset 的表单语义
+								<div className="chip-pop" role="group" aria-label={t("composer.chooseModel")}>
+									{grouped.map(([provider, items]) => (
+										<div key={provider} className="chip-pop-group">
+											<p className="chip-pop-head">
+												<span>{provider}</span>
+												{providerAuth?.[provider] === false ? (
+													<span className="chip-pop-note">{t("composer.noCredentials")}</span>
+												) : null}
+											</p>
+											{items.map((item) => {
+												// 没有凭证的提供方下的模型选不了，选中也无法真正切换
+												const usable = providerAuth?.[item.provider] !== false;
+												const isCurrent = model !== undefined && modelKey(model) === modelKey(item);
+												return (
+													<button
+														type="button"
+														key={modelKey(item)}
+														className={isCurrent ? "chip-pop-item is-on" : "chip-pop-item"}
+														disabled={!usable}
+														onClick={() => {
+															onModelChange?.(item);
+															setOpenMenu(undefined);
+														}}
+													>
+														<span className="ell">{item.name}</span>
+														<span className="chip-pop-meta mono">{item.id}</span>
+													</button>
+												);
+											})}
+										</div>
+									))}
+									{(models ?? []).length === 0 ? (
+										<p className="chip-pop-empty">{t("composer.noModels")}</p>
+									) : null}
 								</div>
-							))}
-							{(models ?? []).length === 0 ? (
-								<p className="chip-pop-empty">{t("composer.noModels")}</p>
 							) : null}
 						</div>
-					) : null}
-				</div>
 
-				<div className="chip-wrap" ref={levelRef}>
-					<button
-						type="button"
-						className="chip"
-						onClick={() => setOpenMenu(openMenu === "level" ? undefined : "level")}
-						disabled={!canPickLevel}
-						aria-expanded={openMenu === "level"}
-						{...tip.handlers(canPickLevel ? t("composer.switchThinking") : t("composer.currentThinking"))}
-						aria-label={t("composer.thinkingLevel", {
-							level: thinkingLevel === undefined ? t("composer.defaultLevel") : LEVEL_LABELS[thinkingLevel],
-						})}
-					>
-						<Brain size={ICON_SIZE.md} />
-						{thinkingLevel === undefined ? t("composer.defaultLevel") : LEVEL_LABELS[thinkingLevel]}
-						{canPickLevel ? <ChevronIcon isOpen={openMenu === "level"} /> : null}
-					</button>
-					{openMenu === "level" ? (
-						// biome-ignore lint/a11y/useSemanticElements: 浮层里是一组按钮，用不到 fieldset 的表单语义
-						<div className="chip-pop" role="group" aria-label={t("composer.chooseThinking")}>
-							{levels.map((level) => (
-								<button
-									type="button"
-									key={level}
-									className={level === thinkingLevel ? "chip-pop-item is-on" : "chip-pop-item"}
-									onClick={() => {
-										onThinkingLevelChange?.(level);
-										setOpenMenu(undefined);
-									}}
-								>
-									<span>{LEVEL_LABELS[level]}</span>
-								</button>
-							))}
+						<div className="chip-wrap" ref={levelRef}>
+							<button
+								type="button"
+								className="chip"
+								onClick={() => setOpenMenu(openMenu === "level" ? undefined : "level")}
+								disabled={!canPickLevel}
+								aria-expanded={openMenu === "level"}
+								{...tip.handlers(canPickLevel ? t("composer.switchThinking") : t("composer.currentThinking"))}
+								aria-label={t("composer.thinkingLevel", {
+									level:
+										thinkingLevel === undefined ? t("composer.defaultLevel") : LEVEL_LABELS[thinkingLevel],
+								})}
+							>
+								<Brain size={ICON_SIZE.md} />
+								{thinkingLevel === undefined ? t("composer.defaultLevel") : LEVEL_LABELS[thinkingLevel]}
+								{canPickLevel ? <ChevronIcon isOpen={openMenu === "level"} /> : null}
+							</button>
+							{openMenu === "level" ? (
+								// biome-ignore lint/a11y/useSemanticElements: 浮层里是一组按钮，用不到 fieldset 的表单语义
+								<div className="chip-pop" role="group" aria-label={t("composer.chooseThinking")}>
+									{levels.map((level) => (
+										<button
+											type="button"
+											key={level}
+											className={level === thinkingLevel ? "chip-pop-item is-on" : "chip-pop-item"}
+											onClick={() => {
+												onThinkingLevelChange?.(level);
+												setOpenMenu(undefined);
+											}}
+										>
+											<span>{LEVEL_LABELS[level]}</span>
+										</button>
+									))}
+								</div>
+							) : null}
 						</div>
-					) : null}
-				</div>
+					</>
+				)}
 
 				<span className="composer-send">
 					<span className="chip-wrap" ref={statsRef}>
@@ -564,40 +599,42 @@ export function Composer({
 							onToggle={() => setOpenMenu(openMenu === "stats" ? undefined : "stats")}
 						/>
 					</span>
-					<span className="chip-wrap" ref={contextRef}>
-						<button
-							type="button"
-							className="composer-status-chip"
-							data-chip="context"
-							onClick={() => setOpenMenu(openMenu === "context" ? undefined : "context")}
-							aria-expanded={openMenu === "context"}
-							aria-label={usageLabel(contextUsage, t)}
-							{...tip.handlers(usageLabel(contextUsage, t))}
-						>
-							<ContextRing usage={contextUsage} />
-							{(() => {
-								const shortPercent = usagePercentShort(contextUsage);
-								return shortPercent === null ? null : <span>{shortPercent}</span>;
-							})()}
-						</button>
-						{openMenu === "context" ? (
-							<ContextPopover
-								contextUsage={contextUsage}
-								breakdown={contextBreakdown}
-								loading={loadingContextDetails}
-								isCompacting={isCompacting}
-								canCompact={canCompact}
-								onCompact={
-									onCompact === undefined
-										? undefined
-										: () => {
-												onCompact();
-												setOpenMenu(undefined);
-											}
-								}
-							/>
-						) : null}
-					</span>
+					{caps.hasContextBreakdown || caps.canCompact ? (
+						<span className="chip-wrap" ref={contextRef}>
+							<button
+								type="button"
+								className="composer-status-chip"
+								data-chip="context"
+								onClick={() => setOpenMenu(openMenu === "context" ? undefined : "context")}
+								aria-expanded={openMenu === "context"}
+								aria-label={usageLabel(contextUsage, t)}
+								{...tip.handlers(usageLabel(contextUsage, t))}
+							>
+								<ContextRing usage={contextUsage} />
+								{(() => {
+									const shortPercent = usagePercentShort(contextUsage);
+									return shortPercent === null ? null : <span>{shortPercent}</span>;
+								})()}
+							</button>
+							{openMenu === "context" ? (
+								<ContextPopover
+									contextUsage={contextUsage}
+									breakdown={contextBreakdown}
+									loading={loadingContextDetails}
+									isCompacting={isCompacting}
+									canCompact={canCompact}
+									onCompact={
+										onCompact === undefined
+											? undefined
+											: () => {
+													onCompact();
+													setOpenMenu(undefined);
+												}
+									}
+								/>
+							) : null}
+						</span>
+					) : null}
 					{/*
 					 * 发送与停止共用一个按钮：有内容要发时是发送（运行中就是排队），
 					 * 没有内容而这一轮还在跑时是停止。位置与尺寸不变，两者互相替换。

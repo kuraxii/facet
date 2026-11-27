@@ -4,7 +4,9 @@
  * 由宿主接到主机上；界面不关心这些调用背后是本地还是远端。
  */
 import type {
+	AcpBackendProfile,
 	AgentDefaults,
+	BackendAvailability,
 	CustomProviderInfo,
 	FacetSettings,
 	ModelInfo,
@@ -69,4 +71,16 @@ export interface SettingsDataSource {
 	diagnostics: () => Promise<string>;
 	/** 保存一段文本到用户选定的文件，取消时返回 false */
 	saveText: (suggestedName: string, text: string) => Promise<boolean>;
+	/** 读取代理后端可用性与自定义 ACP 注册配置 */
+	loadBackends?: () => Promise<{ backends: BackendAvailability[]; profiles: AcpBackendProfile[] }>;
+	/** 保存或更新自定义 ACP 后端配置 */
+	saveAcpBackend?: (
+		profile: AcpBackendProfile,
+	) => Promise<{ backends: BackendAvailability[]; profiles: AcpBackendProfile[] }>;
+	/** 删除自定义 ACP 后端配置 */
+	removeAcpBackend?: (
+		backendId: string,
+	) => Promise<{ backends: BackendAvailability[]; profiles: AcpBackendProfile[] }>;
+	/** 探测指定代理后端 */
+	probeBackend?: (backendId: string) => Promise<BackendAvailability>;
 }

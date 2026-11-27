@@ -598,6 +598,57 @@ describe("双层排队展示", () => {
 		expect(demoted).toBe(1);
 		unmount();
 	});
+
+	it("ACP 能力门控隐藏上下文环并渲染模式与动态配置芯片", async () => {
+		const { DEFAULT_ACP_CAPABILITIES } = await import("@facet/protocol");
+		const onMode = vi.fn();
+		const onOpt = vi.fn();
+		const { container, unmount } = await renderComposer({
+			capabilities: { ...DEFAULT_ACP_CAPABILITIES, supportsImages: true },
+			acpMode: {
+				currentModeId: "default",
+				availableModes: [
+					{ id: "default", name: "Default" },
+					{ id: "plan", name: "Plan" },
+				],
+			},
+			acpConfigOptions: [
+				{
+					id: "model",
+					name: "Model",
+					category: "model",
+					currentValue: "gemini-2.5",
+					options: [
+						{ value: "gemini-2.5", name: "Gemini 2.5" },
+						{ value: "claude-sonnet", name: "Claude Sonnet" },
+					],
+				},
+			],
+			onAcpModeChange: onMode,
+			onAcpConfigOptionChange: onOpt,
+		});
+
+		expect(container.querySelector('[data-chip="context"]')).toBeNull();
+		const chips = [...container.querySelectorAll<HTMLButtonElement>("button.chip")];
+		expect(chips.map((btn) => btn.textContent)).toEqual(["Default", "Gemini 2.5"]);
+
+		chips[0]?.click();
+		await Promise.resolve();
+		const planItem = [...container.querySelectorAll<HTMLButtonElement>(".chip-pop-item")].find((btn) =>
+			btn.textContent?.includes("Plan"),
+		);
+		planItem?.click();
+		expect(onMode).toHaveBeenCalledWith("plan");
+
+		chips[1]?.click();
+		await Promise.resolve();
+		const modelItem = [...container.querySelectorAll<HTMLButtonElement>(".chip-pop-item")].find((btn) =>
+			btn.textContent?.includes("Claude Sonnet"),
+		);
+		modelItem?.click();
+		expect(onOpt).toHaveBeenCalledWith("model", "claude-sonnet");
+		unmount();
+	});
 });
 
 describe("模型与思考档位芯片", () => {

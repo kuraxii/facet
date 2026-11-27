@@ -4,6 +4,18 @@
  * 组件只消费数据侧的投影结果，不接触连接与状态归约，Web 端与桌面端共用同一套。
  */
 
+export type { AcpConfigChipsProps } from "./chat/AcpConfigChips.tsx";
+export { AcpConfigChips } from "./chat/AcpConfigChips.tsx";
+export type { BackendSwitcherProps } from "./chat/BackendSwitcher.tsx";
+export { BackendSwitcher } from "./chat/BackendSwitcher.tsx";
+export {
+	backendIdOf,
+	capabilitiesOf,
+	filterSessionsByBackend,
+	groupConfigChoices,
+	parseCommandArgs,
+	resolveBackendSelection,
+} from "./chat/backend-model.ts";
 export type { ChatOutlineProps } from "./chat/ChatOutline.tsx";
 export { ChatOutline } from "./chat/ChatOutline.tsx";
 export type { ComposerAttachment, ComposerProps } from "./chat/Composer.tsx";

@@ -12,7 +12,7 @@ import {
 	type ProviderInfo,
 	type TerminalLocalSettings,
 } from "@facet/protocol";
-import { Cpu, Info, Keyboard, Palette, SlidersHorizontal, Terminal, X } from "lucide-react";
+import { Bot, Cpu, Info, Keyboard, Palette, SlidersHorizontal, Terminal, X } from "lucide-react";
 import { type ComponentType, Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { IconButton } from "../common/IconButton.tsx";
 import { ListRow } from "../common/ListRow.tsx";
@@ -21,6 +21,7 @@ import { Modal } from "../modal.tsx";
 import { ICON_SIZE } from "../styles/visual-contract.ts";
 import { ModelsSection } from "./ModelsSection.tsx";
 import { AboutSection } from "./settings-about-section.tsx";
+import { SettingsAgentsSection } from "./settings-agents-section.tsx";
 import { AppearanceSection } from "./settings-appearance-section.tsx";
 import type { SettingsDataSource } from "./settings-data-source.ts";
 import { GeneralSection } from "./settings-general-section.tsx";
@@ -29,7 +30,7 @@ import { StatusNote } from "./settings-layout.tsx";
 import { TerminalLocalSection, TerminalSection } from "./settings-terminal-section.tsx";
 
 /** 设置分类。 */
-export type SettingsSection = "general" | "models" | "appearance" | "input" | "terminal" | "about";
+export type SettingsSection = "general" | "models" | "agents" | "appearance" | "input" | "terminal" | "about";
 
 /** 自动保存的延迟：改动停下后等这么久再提交，连续调整只保存最后一次。 */
 const AUTO_SAVE_DELAY_MS = 1000;
@@ -43,6 +44,7 @@ const SECTIONS: ReadonlyArray<{
 	labelKey:
 		| "settings.general"
 		| "settings.models"
+		| "settings.agents"
 		| "settings.appearance"
 		| "settings.input"
 		| "settings.terminal"
@@ -53,6 +55,7 @@ const SECTIONS: ReadonlyArray<{
 }> = [
 	{ key: "general", labelKey: "settings.general", icon: SlidersHorizontal },
 	{ key: "models", labelKey: "settings.models", icon: Cpu },
+	{ key: "agents", labelKey: "settings.agents", icon: Bot },
 	{ key: "appearance", labelKey: "settings.appearance", icon: Palette },
 	{ key: "input", labelKey: "settings.input", icon: Keyboard },
 	{ key: "terminal", labelKey: "settings.terminal", icon: Terminal },
@@ -341,6 +344,14 @@ export function SettingsPage({
 						<section className="set-section">
 							<TerminalLocalSection terminal={localTerminal} onChange={onLocalTerminalChange} />
 						</section>
+					) : null}
+
+					{section === "agents" ? (
+						<fieldset className="set-lock" disabled={!canEdit}>
+							<section className="set-section">
+								<SettingsAgentsSection data={data} />
+							</section>
+						</fieldset>
 					) : null}
 
 					{section === "about" ? <AboutSection about={about} data={data} /> : null}

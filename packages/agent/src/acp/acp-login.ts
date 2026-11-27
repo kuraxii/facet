@@ -6,7 +6,7 @@
  */
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import type { AcpBackendProfile } from "@facet/protocol";
+import type { AcpAgentProfile } from "@facet/protocol";
 import { resolveCommandPath } from "./acp-registry.ts";
 import { spawnAcpProcess, terminateAcpProcess } from "./acp-spawn.ts";
 import { extractAntigravityAuthUrl, prepareAntigravityAuthEnv } from "./antigravity-auth.ts";
@@ -16,7 +16,7 @@ const LOGIN_SUBMIT_TIMEOUT_MS = 30_000;
 
 interface ActiveLoginSession {
 	readonly id: string;
-	readonly backendId: string;
+	readonly agentId: string;
 	readonly child: ChildProcessWithoutNullStreams;
 	readonly stderr: string[];
 	readonly exitPromise: Promise<number | null>;
@@ -27,7 +27,7 @@ export class AcpLoginManager {
 	private readonly sessions = new Map<string, ActiveLoginSession>();
 
 	/** 启动登录子进程并等待授权链接输出。 */
-	async start(profile: AcpBackendProfile): Promise<{ loginId: string; authUrl?: string }> {
+	async start(profile: AcpAgentProfile): Promise<{ loginId: string; authUrl?: string }> {
 		const loginId = randomUUID();
 		const stderr: string[] = [];
 		const child = spawnAcpProcess({
@@ -46,7 +46,7 @@ export class AcpLoginManager {
 
 		const session: ActiveLoginSession = {
 			id: loginId,
-			backendId: profile.id,
+			agentId: profile.id,
 			child,
 			stderr,
 			exitPromise,
@@ -149,7 +149,7 @@ export class AcpLoginManager {
 				const detail = session.stderr.slice(-4).join("\n").trim();
 				throw new Error(detail.length > 0 ? detail : `Sign-in failed (exit=${exitCode ?? "null"})`);
 			}
-			return session.backendId;
+			return session.agentId;
 		} finally {
 			if (timer !== undefined) clearTimeout(timer);
 			terminateAcpProcess(session.child, 1500);

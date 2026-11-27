@@ -1,7 +1,7 @@
 /**
  * 外部 ACP 会话的轻量本地索引。
  *
- * 只保存侧栏展示与恢复需要的元数据（backendId、externalSessionId、cwd、title 与时间戳），
+ * 只保存侧栏展示与恢复需要的元数据（agentId、externalSessionId、cwd、title 与时间戳），
  * 不镜像消息正文；聊天历史在恢复运行态时直接通过 ACP `session/load` 回放。
  */
 import { existsSync, readFileSync } from "node:fs";
@@ -16,10 +16,10 @@ const INDEX_FILENAME = "acp-sessions.json";
 /** 索引里的单条 ACP 会话记录。 */
 export interface AcpSessionRecord {
 	/** 所属 ACP 后端标识 */
-	backendId: string;
+	agentId: string;
 	/** ACP 服务端分配的会话标识 */
 	externalSessionId: string;
-	/** 定位符：`acp://<backendId>/<externalSessionId>` */
+	/** 定位符：`acp://<agentId>/<externalSessionId>` */
 	path: string;
 	/** 规范化后的工作目录 */
 	cwd: string;
@@ -41,7 +41,7 @@ interface StoredIndex {
 function toSummary(record: AcpSessionRecord): SessionSummary {
 	return {
 		id: record.externalSessionId,
-		backendId: record.backendId,
+		agentId: record.agentId,
 		path: record.path,
 		cwd: record.cwd,
 		name: record.name,
@@ -63,12 +63,12 @@ export class AcpSessionIndex {
 	}
 
 	/** 列出 ACP 会话摘要，按最近活跃时间倒序。 */
-	list(cwd?: string, backendId?: string): SessionSummary[] {
+	list(cwd?: string, agentId?: string): SessionSummary[] {
 		this.ensureLoaded();
 		const wantCwd = cwd === undefined ? undefined : normalizeProjectPath(cwd);
 		const items: SessionSummary[] = [];
 		for (const record of this.records.values()) {
-			if (backendId !== undefined && record.backendId !== backendId) {
+			if (agentId !== undefined && record.agentId !== agentId) {
 				continue;
 			}
 			if (wantCwd !== undefined && record.cwd !== wantCwd) {
@@ -93,7 +93,7 @@ export class AcpSessionIndex {
 
 	/** 新建或更新一条 ACP 会话元数据并原子写盘。 */
 	async upsert(input: {
-		backendId: string;
+		agentId: string;
 		externalSessionId: string;
 		cwd: string;
 		name?: string;
@@ -102,11 +102,11 @@ export class AcpSessionIndex {
 		firstMessage?: string;
 	}): Promise<AcpSessionRecord> {
 		this.ensureLoaded();
-		const path = makeAcpLocator(input.backendId, input.externalSessionId);
+		const path = makeAcpLocator(input.agentId, input.externalSessionId);
 		const existing = this.records.get(path);
 		const now = Date.now();
 		const record: AcpSessionRecord = {
-			backendId: input.backendId,
+			agentId: input.agentId,
 			externalSessionId: input.externalSessionId,
 			path,
 			cwd: normalizeProjectPath(input.cwd),
@@ -163,13 +163,13 @@ export class AcpSessionIndex {
 			const list = Array.isArray(parsed.sessions) ? parsed.sessions : [];
 			for (const item of list) {
 				if (
-					typeof item?.backendId === "string" &&
+					typeof item?.agentId === "string" &&
 					typeof item.externalSessionId === "string" &&
 					typeof item.cwd === "string"
 				) {
-					const path = makeAcpLocator(item.backendId, item.externalSessionId);
+					const path = makeAcpLocator(item.agentId, item.externalSessionId);
 					this.records.set(path, {
-						backendId: item.backendId,
+						agentId: item.agentId,
 						externalSessionId: item.externalSessionId,
 						path,
 						cwd: normalizeProjectPath(item.cwd),

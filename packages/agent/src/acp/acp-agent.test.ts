@@ -1,9 +1,9 @@
 import { agent, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
-import type { AcpBackendProfile, SessionEvent } from "@facet/protocol";
+import type { AcpAgentProfile, SessionEvent } from "@facet/protocol";
 import { describe, expect, it, vi } from "vitest";
 import { AcpAgent } from "./acp-agent.ts";
 
-const TEST_PROFILE: AcpBackendProfile = {
+const TEST_PROFILE: AcpAgentProfile = {
 	id: "antigravity",
 	name: "Antigravity",
 	command: "agy",

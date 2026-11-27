@@ -8,13 +8,13 @@
 import { randomUUID } from "node:crypto";
 import { Readable, Writable } from "node:stream";
 import { client, ndJsonStream, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
-import type { AcpBackendProfile, BackendAvailability } from "@facet/protocol";
+import type { AcpAgentProfile, AgentAvailability } from "@facet/protocol";
 import { AcpAgent, formatAcpInitFailure } from "./acp-agent.ts";
 import { AcpLoginManager } from "./acp-login.ts";
 import { AcpRegistryStore, type CommandProbeEnv, resolveCommandPath } from "./acp-registry.ts";
 import { AcpSessionIndex } from "./acp-session-index.ts";
 import { spawnAcpProcess, terminateAcpProcess } from "./acp-spawn.ts";
-import { getAcpBackendAdapter } from "./antigravity-adapter.ts";
+import { getAcpAgentAdapter } from "./antigravity-adapter.ts";
 
 /** 构造 `AcpAgentRuntime` 的参数。 */
 export interface AcpAgentRuntimeOptions {
@@ -42,15 +42,15 @@ export class AcpAgentRuntime {
 	}
 
 	/** 创建一条新的 ACP 会话（先同步建好句柄，由 SessionHub 订阅后调 initialize）。 */
-	create(options: { backendId: string; cwd?: string; name?: string }): AcpAgent {
-		const profile = this.requireEnabledProfile(options.backendId);
+	create(options: { agentId: string; cwd?: string; name?: string }): AcpAgent {
+		const profile = this.requireEnabledProfile(options.agentId);
 		const cwd = options.cwd ?? process.cwd();
 		return new AcpAgent({
 			id: randomUUID(),
 			profile,
 			cwd,
 			name: options.name,
-			adapter: getAcpBackendAdapter(profile.id),
+			adapter: getAcpAgentAdapter(profile.id),
 			onIndexSync: (info) => {
 				void this.index.upsert(info).catch((error) => this.onError?.(error));
 			},
@@ -64,14 +64,14 @@ export class AcpAgentRuntime {
 		if (record === undefined) {
 			throw new Error(`ACP session not found in index: ${locator}`);
 		}
-		const profile = this.requireEnabledProfile(record.backendId);
+		const profile = this.requireEnabledProfile(record.agentId);
 		return new AcpAgent({
 			id: record.externalSessionId,
 			profile,
 			cwd: cwdOverride ?? record.cwd,
 			externalSessionId: record.externalSessionId,
 			name: record.name,
-			adapter: getAcpBackendAdapter(profile.id),
+			adapter: getAcpAgentAdapter(profile.id),
 			onIndexSync: (info) => {
 				void this.index.upsert(info).catch((error) => this.onError?.(error));
 			},
@@ -80,22 +80,22 @@ export class AcpAgentRuntime {
 	}
 
 	/** 启动一次短生命探测子进程，验证目标 ACP CLI 能否完成 initialize 与认证握手。 */
-	async probeBackend(backendId: string): Promise<BackendAvailability> {
-		return await this.registry.probe(backendId, async (profile) => {
+	async probeAgent(agentId: string): Promise<AgentAvailability> {
+		return await this.registry.probe(agentId, async (profile) => {
 			return await runAcpHandshakeProbe(profile);
 		});
 	}
 
 	/** 启动指定 ACP 后端的交互式登录流程（如 `agy acp --login`）。 */
-	async loginStart(backendId: string): Promise<{ loginId: string; authUrl?: string }> {
-		const profile = this.requireEnabledProfile(backendId);
+	async loginStart(agentId: string): Promise<{ loginId: string; authUrl?: string }> {
+		const profile = this.requireEnabledProfile(agentId);
 		return await this.loginManager.start(profile);
 	}
 
 	/** 提交授权码完成 ACP 登录并刷新后端可用状态。 */
-	async loginSubmit(loginId: string, code: string): Promise<BackendAvailability> {
-		const backendId = await this.loginManager.submit(loginId, code);
-		return await this.probeBackend(backendId);
+	async loginSubmit(loginId: string, code: string): Promise<AgentAvailability> {
+		const agentId = await this.loginManager.submit(loginId, code);
+		return await this.probeAgent(agentId);
 	}
 
 	/** 取消正在进行的 ACP 登录流程。 */
@@ -103,19 +103,19 @@ export class AcpAgentRuntime {
 		this.loginManager.cancel(loginId);
 	}
 
-	private requireEnabledProfile(backendId: string): AcpBackendProfile {
-		const profile = this.registry.getProfile(backendId);
+	private requireEnabledProfile(agentId: string): AcpAgentProfile {
+		const profile = this.registry.getProfile(agentId);
 		if (profile === undefined) {
-			throw new Error(`Unknown ACP backend: ${backendId}`);
+			throw new Error(`Unknown ACP agent: ${agentId}`);
 		}
 		if (!profile.enabled) {
-			throw new Error(`ACP backend is disabled: ${profile.name}`);
+			throw new Error(`ACP agent is disabled: ${profile.name}`);
 		}
 		return profile;
 	}
 }
 
-async function runAcpHandshakeProbe(profile: AcpBackendProfile): Promise<{ ok: boolean; issue?: string }> {
+async function runAcpHandshakeProbe(profile: AcpAgentProfile): Promise<{ ok: boolean; issue?: string }> {
 	const stderr: string[] = [];
 	let failFast: ((error: Error) => void) | undefined;
 	const earlyFailure = new Promise<never>((_resolve, reject) => {

@@ -75,7 +75,7 @@ export interface AcpAuthConfig {
 }
 
 /** 具体 ACP 后端适配器契约：引用通用层的 5 个标准模式语义并给出各自实现。 */
-export interface AcpBackendAdapter {
+export interface AcpAgentAdapter {
 	/** 将后端下发的原始模式 id 映射为 Facet 统一模式 id（未识别时返回原始值） */
 	readonly toCanonicalModeId: (wireModeId: string) => CanonicalAcpModeId | string;
 	/** 将 Facet 统一模式 id 映射为发往后端线协议的模式 id */
@@ -383,7 +383,7 @@ interface ActiveToolRecord {
  * 负责维护重放/实时消息的状态拼接与 `Entry` 列表生成，纯内存运算，便于独立单测。
  */
 export class AcpStreamBuilder {
-	private readonly backendId: string;
+	private readonly agentId: string;
 	private readonly entriesList: Entry[] = [];
 	private nextEntrySeq = 1;
 	private currentAssistant: AssistantMessage | undefined;
@@ -393,8 +393,8 @@ export class AcpStreamBuilder {
 	private currentTitle: string | undefined;
 	private readonly toCanonicalModeId?: (wireModeId: string) => string;
 
-	constructor(backendId: string, toCanonicalModeId?: (wireModeId: string) => string) {
-		this.backendId = backendId;
+	constructor(agentId: string, toCanonicalModeId?: (wireModeId: string) => string) {
+		this.agentId = agentId;
 		this.toCanonicalModeId = toCanonicalModeId;
 	}
 
@@ -486,8 +486,8 @@ export class AcpStreamBuilder {
 					this.currentAssistant = {
 						role: "assistant",
 						content: [],
-						provider: this.backendId,
-						model: this.backendId,
+						provider: this.agentId,
+						model: this.agentId,
 						usage: { ...EMPTY_USAGE, cost: { ...EMPTY_USAGE.cost } },
 						stopReason: options.replay ? "stop" : "pending",
 						timestamp: ts,
@@ -674,8 +674,8 @@ export class AcpStreamBuilder {
 		this.currentAssistant = {
 			role: "assistant",
 			content: [],
-			provider: this.backendId,
-			model: this.backendId,
+			provider: this.agentId,
+			model: this.agentId,
 			usage: { ...EMPTY_USAGE, cost: { ...EMPTY_USAGE.cost } },
 			stopReason: replay ? "stop" : "pending",
 			timestamp: ts,

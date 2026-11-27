@@ -6,7 +6,7 @@
  */
 import { accessSync, constants, existsSync, readFileSync, statSync } from "node:fs";
 import { join, posix, resolve, win32 } from "node:path";
-import { type AcpBackendProfile, type BackendAvailability, PI_BACKEND_ID } from "@facet/protocol";
+import { type AcpAgentProfile, type AgentAvailability, PI_AGENT_ID } from "@facet/protocol";
 import { writeFileAtomic } from "../atomic-write.ts";
 
 /** 注册表文件格式版本。 */
@@ -19,7 +19,7 @@ export const ACP_REGISTRY_FILENAME = "acp-agents.json";
 export const ACP_REGISTRY_ENV = "FACET_ACP_AGENTS_PATH";
 
 /** 内置 ACP 预设清单（不可彻底删除，仅允许禁用或覆盖参数）。 */
-export const BUILTIN_ACP_PROFILES: readonly AcpBackendProfile[] = [
+export const BUILTIN_ACP_PROFILES: readonly AcpAgentProfile[] = [
 	{
 		id: "antigravity",
 		name: "Antigravity",
@@ -39,15 +39,15 @@ export interface CommandProbeEnv {
 	readonly isExecutable?: (candidate: string) => boolean;
 }
 
-/** 自定义探测回调：用于 `probeBackend` 时尝试握手或检错。 */
-export type BackendHandshakeProbe = (
-	profile: AcpBackendProfile,
+/** 自定义探测回调：用于 `probeAgent` 时尝试握手或检错。 */
+export type AgentHandshakeProbe = (
+	profile: AcpAgentProfile,
 	binaryPath: string,
 ) => Promise<{ ok: boolean; issue?: string }>;
 
 interface StoredRegistry {
 	version: number;
-	profiles: AcpBackendProfile[];
+	profiles: AcpAgentProfile[];
 }
 
 function readEnvPath(env: CommandProbeEnv): string {
@@ -146,7 +146,7 @@ export function resolveCommandPath(command: string, env: CommandProbeEnv = {}): 
 export function normalizeAcpProfile(
 	raw: unknown,
 	builtInIds: ReadonlySet<string>,
-): AcpBackendProfile | undefined {
+): AcpAgentProfile | undefined {
 	if (typeof raw !== "object" || raw === null) {
 		return undefined;
 	}
@@ -154,7 +154,7 @@ export function normalizeAcpProfile(
 	const id = typeof record.id === "string" ? record.id.trim() : "";
 	const name = typeof record.name === "string" ? record.name.trim() : "";
 	const command = typeof record.command === "string" ? record.command.trim() : "";
-	if (id.length === 0 || id === PI_BACKEND_ID || name.length === 0 || command.length === 0) {
+	if (id.length === 0 || id === PI_AGENT_ID || name.length === 0 || command.length === 0) {
 		return undefined;
 	}
 	const args = Array.isArray(record.args)
@@ -190,10 +190,10 @@ export function normalizeAcpProfile(
 
 /** 合并内置预设与磁盘存储配置：内置项始终保留，同 id 用户覆盖优先。 */
 export function mergeAcpProfiles(
-	stored: readonly AcpBackendProfile[],
-	builtIns: readonly AcpBackendProfile[] = BUILTIN_ACP_PROFILES,
-): AcpBackendProfile[] {
-	const byId = new Map<string, AcpBackendProfile>();
+	stored: readonly AcpAgentProfile[],
+	builtIns: readonly AcpAgentProfile[] = BUILTIN_ACP_PROFILES,
+): AcpAgentProfile[] {
+	const byId = new Map<string, AcpAgentProfile>();
 	for (const item of builtIns) {
 		byId.set(item.id, { ...item, args: [...item.args], builtIn: true });
 	}
@@ -215,9 +215,9 @@ export function mergeAcpProfiles(
 
 /** 返回单个 ACP 后端的基础可执行性状态（不拉起长连进程）。 */
 export function inspectAcpAvailability(
-	profile: AcpBackendProfile,
+	profile: AcpAgentProfile,
 	env: CommandProbeEnv = {},
-): BackendAvailability {
+): AgentAvailability {
 	if (!profile.enabled) {
 		return {
 			id: profile.id,
@@ -259,14 +259,14 @@ export function inspectAcpAvailability(
  */
 export class AcpRegistryStore {
 	readonly filePath: string;
-	private readonly builtIns: readonly AcpBackendProfile[];
+	private readonly builtIns: readonly AcpAgentProfile[];
 	private readonly probeEnv: CommandProbeEnv;
-	/** 缓存上次通过 probeBackend 拿到的深度预检结果 */
+	/** 缓存上次通过 probeAgent 拿到的深度预检结果 */
 	private readonly probeCache = new Map<string, { issue?: string; checkedAt: number }>();
 
 	constructor(options: {
 		agentDir: string;
-		builtIns?: readonly AcpBackendProfile[];
+		builtIns?: readonly AcpAgentProfile[];
 		probeEnv?: CommandProbeEnv;
 	}) {
 		const envPath = process.env[ACP_REGISTRY_ENV];
@@ -279,20 +279,20 @@ export class AcpRegistryStore {
 	}
 
 	/** 列出已合并内置预设的完整配置清单。 */
-	listProfiles(): AcpBackendProfile[] {
+	listProfiles(): AcpAgentProfile[] {
 		const stored = this.readStored();
 		return mergeAcpProfiles(stored, this.builtIns);
 	}
 
 	/** 按 id 获取单条配置。 */
-	getProfile(id: string): AcpBackendProfile | undefined {
+	getProfile(id: string): AcpAgentProfile | undefined {
 		return this.listProfiles().find((item) => item.id === id);
 	}
 
 	/** 返回包含 Pi 与全部 ACP 后端的可用性列表。 */
-	listAvailability(): BackendAvailability[] {
-		const piItem: BackendAvailability = {
-			id: PI_BACKEND_ID,
+	listAvailability(): AgentAvailability[] {
+		const piItem: AgentAvailability = {
+			id: PI_AGENT_ID,
 			kind: "pi",
 			name: "Pi",
 			available: true,
@@ -311,11 +311,11 @@ export class AcpRegistryStore {
 	}
 
 	/** 保存或更新一条 ACP 配置，写入后清理对应预检缓存。 */
-	async saveProfile(input: AcpBackendProfile): Promise<AcpBackendProfile[]> {
+	async saveProfile(input: AcpAgentProfile): Promise<AcpAgentProfile[]> {
 		const builtInIds = new Set(this.builtIns.map((item) => item.id));
 		const normalized = normalizeAcpProfile(input, builtInIds);
 		if (normalized === undefined) {
-			throw new Error(`Invalid ACP backend profile: ${input.id}`);
+			throw new Error(`Invalid ACP agent profile: ${input.id}`);
 		}
 		const current = this.readStored();
 		const next = [...current.filter((item) => item.id !== normalized.id), normalized];
@@ -325,22 +325,22 @@ export class AcpRegistryStore {
 	}
 
 	/** 删除一条自定义 ACP 配置（内置预设拒绝删除）。 */
-	async removeProfile(backendId: string): Promise<AcpBackendProfile[]> {
-		if (backendId === PI_BACKEND_ID || this.builtIns.some((item) => item.id === backendId)) {
-			throw new Error(`Built-in backend cannot be removed: ${backendId}`);
+	async removeProfile(agentId: string): Promise<AcpAgentProfile[]> {
+		if (agentId === PI_AGENT_ID || this.builtIns.some((item) => item.id === agentId)) {
+			throw new Error(`Built-in agent cannot be removed: ${agentId}`);
 		}
 		const current = this.readStored();
-		const next = current.filter((item) => item.id !== backendId);
+		const next = current.filter((item) => item.id !== agentId);
 		await this.writeStored(next);
-		this.probeCache.delete(backendId);
+		this.probeCache.delete(agentId);
 		return this.listProfiles();
 	}
 
 	/** 对指定后端执行可达性与可选的握手探测，并记下失败原因。 */
-	async probe(backendId: string, handshakeProbe?: BackendHandshakeProbe): Promise<BackendAvailability> {
-		if (backendId === PI_BACKEND_ID) {
+	async probe(agentId: string, handshakeProbe?: AgentHandshakeProbe): Promise<AgentAvailability> {
+		if (agentId === PI_AGENT_ID) {
 			return {
-				id: PI_BACKEND_ID,
+				id: PI_AGENT_ID,
 				kind: "pi",
 				name: "Pi",
 				available: true,
@@ -348,26 +348,26 @@ export class AcpRegistryStore {
 				builtIn: true,
 			};
 		}
-		const profile = this.getProfile(backendId);
+		const profile = this.getProfile(agentId);
 		if (profile === undefined) {
-			throw new Error(`Unknown backend: ${backendId}`);
+			throw new Error(`Unknown agent: ${agentId}`);
 		}
 		const base = inspectAcpAvailability(profile, this.probeEnv);
 		if (!base.available || base.binaryPath === undefined || handshakeProbe === undefined) {
-			this.probeCache.delete(backendId);
+			this.probeCache.delete(agentId);
 			return base;
 		}
 		const check = await handshakeProbe(profile, base.binaryPath);
 		if (check.ok) {
-			this.probeCache.delete(backendId);
+			this.probeCache.delete(agentId);
 			return base;
 		}
 		const issue = check.issue ?? "Backend initialization probe failed";
-		this.probeCache.set(backendId, { issue, checkedAt: Date.now() });
+		this.probeCache.set(agentId, { issue, checkedAt: Date.now() });
 		return { ...base, available: false, issue };
 	}
 
-	private readStored(): AcpBackendProfile[] {
+	private readStored(): AcpAgentProfile[] {
 		if (!existsSync(this.filePath)) {
 			return [];
 		}
@@ -377,13 +377,13 @@ export class AcpRegistryStore {
 			const builtInIds = new Set(this.builtIns.map((item) => item.id));
 			return list
 				.map((item) => normalizeAcpProfile(item, builtInIds))
-				.filter((item): item is AcpBackendProfile => item !== undefined);
+				.filter((item): item is AcpAgentProfile => item !== undefined);
 		} catch {
 			return [];
 		}
 	}
 
-	private async writeStored(profiles: AcpBackendProfile[]): Promise<void> {
+	private async writeStored(profiles: AcpAgentProfile[]): Promise<void> {
 		const payload: StoredRegistry = { version: REGISTRY_SCHEMA_VERSION, profiles };
 		await writeFileAtomic(this.filePath, `${JSON.stringify(payload, null, "\t")}\n`);
 	}

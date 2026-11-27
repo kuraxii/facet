@@ -30,7 +30,7 @@ import type { ModelMutationOptions, PromptOptions } from "./types.ts";
 /** 由 SessionHub 统一托管的代理实例契约。 */
 export interface ManagedAgent {
 	readonly id: string;
-	readonly backendId: string;
+	readonly agentId: string;
 	readonly file: string | undefined;
 	readonly name: string | undefined;
 	readonly capabilities: AgentCapabilities;

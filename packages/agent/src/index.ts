@@ -5,7 +5,7 @@
  */
 export type { AcpAgentOptions, AcpTransportTarget } from "./acp/acp-agent.ts";
 export { AcpAgent, formatAcpInitFailure } from "./acp/acp-agent.ts";
-export type { BackendHandshakeProbe, CommandProbeEnv } from "./acp/acp-registry.ts";
+export type { AgentHandshakeProbe, CommandProbeEnv } from "./acp/acp-registry.ts";
 export {
 	ACP_REGISTRY_ENV,
 	ACP_REGISTRY_FILENAME,

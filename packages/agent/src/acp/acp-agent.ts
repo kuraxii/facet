@@ -20,7 +20,7 @@ import {
 	type Stream,
 } from "@agentclientprotocol/sdk";
 import {
-	type AcpBackendProfile,
+	type AcpAgentProfile,
 	type AcpConfigOption,
 	type AcpModeState,
 	type AgentCapabilities,
@@ -52,7 +52,7 @@ import type { ManagedAgent } from "../agent-contract.ts";
 import type { QueuedMessageItem } from "../queue-state.ts";
 import type { ModelMutationOptions, PromptOptions } from "../types.ts";
 import {
-	type AcpBackendAdapter,
+	type AcpAgentAdapter,
 	AcpStreamBuilder,
 	isCanonicalAcpModeId,
 	normalizeAcpSessionState,
@@ -78,16 +78,16 @@ interface PendingPermission {
 
 /** `AcpAgent` 连接目标工厂：生产用 stdio 子进程，测试可注入内存 `AgentApp` 或自定义 `Stream`。 */
 export type AcpTransportTarget =
-	| { kind: "spawn"; profile: AcpBackendProfile; cwd: string }
-	| { kind: "stream"; stream: Stream; profile: AcpBackendProfile; cwd: string }
-	| { kind: "in_process"; app: AgentApp; profile: AcpBackendProfile; cwd: string };
+	| { kind: "spawn"; profile: AcpAgentProfile; cwd: string }
+	| { kind: "stream"; stream: Stream; profile: AcpAgentProfile; cwd: string }
+	| { kind: "in_process"; app: AgentApp; profile: AcpAgentProfile; cwd: string };
 
 /** 构造 `AcpAgent` 的选项。 */
 export interface AcpAgentOptions {
 	/** Facet 内部分配的稳定会话标识 */
 	id: string;
 	/** 后端配置 */
-	profile: AcpBackendProfile;
+	profile: AcpAgentProfile;
 	/** 工作目录 */
 	cwd: string;
 	/** 恢复已有 ACP 会话时的外部 sessionId；缺省表示新建 */
@@ -97,10 +97,10 @@ export interface AcpAgentOptions {
 	/** 测试可覆写传输连接目标 */
 	transport?: AcpTransportTarget;
 	/** 后端专属行为适配器（可选） */
-	adapter?: AcpBackendAdapter;
+	adapter?: AcpAgentAdapter;
 	/** 会话建好或每轮收尾后通知上层刷新轻量索引 */
 	onIndexSync?: (info: {
-		backendId: string;
+		agentId: string;
 		externalSessionId: string;
 		cwd: string;
 		name?: string;
@@ -113,7 +113,7 @@ export interface AcpAgentOptions {
 export function formatAcpInitFailure(
 	error: unknown,
 	stderrLines: readonly string[],
-	profile: AcpBackendProfile,
+	profile: AcpAgentProfile,
 ): string {
 	const base = error instanceof Error ? error.message : String(error);
 	const detail = stderrLines.slice(-6).join("\n").trim();
@@ -127,11 +127,11 @@ export function formatAcpInitFailure(
 /** 单个外部 ACP Agent 会话适配器。 */
 export class AcpAgent implements ManagedAgent {
 	readonly id: string;
-	readonly backendId: string;
+	readonly agentId: string;
 	readonly cwd: string;
-	private readonly profile: AcpBackendProfile;
+	private readonly profile: AcpAgentProfile;
 	private readonly transportTarget: AcpTransportTarget;
-	private readonly adapter?: AcpBackendAdapter;
+	private readonly adapter?: AcpAgentAdapter;
 	private readonly onIndexSync?: AcpAgentOptions["onIndexSync"];
 	private readonly onError?: (error: unknown) => void;
 
@@ -162,7 +162,7 @@ export class AcpAgent implements ManagedAgent {
 
 	constructor(options: AcpAgentOptions) {
 		this.id = options.id;
-		this.backendId = options.profile.id;
+		this.agentId = options.profile.id;
 		this.profile = options.profile;
 		this.cwd = options.cwd;
 		this.externalSessionId = options.externalSessionId;
@@ -175,13 +175,13 @@ export class AcpAgent implements ManagedAgent {
 		this.adapter = options.adapter;
 		this.onIndexSync = options.onIndexSync;
 		this.onError = options.onError;
-		this.builder = new AcpStreamBuilder(this.backendId, this.adapter?.toCanonicalModeId);
+		this.builder = new AcpStreamBuilder(this.agentId, this.adapter?.toCanonicalModeId);
 	}
 
 	get file(): string | undefined {
 		return this.externalSessionId === undefined
 			? undefined
-			: makeAcpLocator(this.backendId, this.externalSessionId);
+			: makeAcpLocator(this.agentId, this.externalSessionId);
 	}
 
 	get name(): string | undefined {
@@ -581,7 +581,7 @@ export class AcpAgent implements ManagedAgent {
 			);
 		}
 		if (options.streamingBehavior !== undefined || this.isBusy) {
-			throw new Error("ACP backend does not support queueing while running");
+			throw new Error("ACP agent does not support queueing while running");
 		}
 		this.abortRequested = false;
 		this.setPhase("starting");
@@ -635,11 +635,11 @@ export class AcpAgent implements ManagedAgent {
 	}
 
 	async steer(): Promise<QueueDisposition> {
-		throw new Error("ACP backend does not support steering");
+		throw new Error("ACP agent does not support steering");
 	}
 
 	async followUp(): Promise<QueueDisposition> {
-		throw new Error("ACP backend does not support followUp queue");
+		throw new Error("ACP agent does not support followUp queue");
 	}
 
 	async abort(): Promise<QueuedMessageItem[]> {
@@ -657,7 +657,7 @@ export class AcpAgent implements ManagedAgent {
 	}
 
 	demoteSteering(): void {
-		throw new Error("ACP backend does not support steering demotion");
+		throw new Error("ACP agent does not support steering demotion");
 	}
 
 	clearQueue(): QueuedInput {
@@ -665,11 +665,11 @@ export class AcpAgent implements ManagedAgent {
 	}
 
 	async promoteFollowUp(): Promise<void> {
-		throw new Error("ACP backend does not support followUp queue");
+		throw new Error("ACP agent does not support followUp queue");
 	}
 
 	removeFollowUp(): void {
-		throw new Error("ACP backend does not support followUp queue");
+		throw new Error("ACP agent does not support followUp queue");
 	}
 
 	setName(name: string): void {
@@ -680,7 +680,7 @@ export class AcpAgent implements ManagedAgent {
 	}
 
 	async compact(): Promise<void> {
-		throw new Error("ACP backend does not support manual compaction");
+		throw new Error("ACP agent does not support manual compaction");
 	}
 
 	async setModel(_ref: ModelRef, _options?: ModelMutationOptions): Promise<ModelInfo> {
@@ -696,7 +696,7 @@ export class AcpAgent implements ManagedAgent {
 	}
 
 	setActiveTools(): void {
-		throw new Error("ACP backend does not support setActiveTools");
+		throw new Error("ACP agent does not support setActiveTools");
 	}
 
 	async setAcpMode(modeId: string): Promise<void> {
@@ -861,7 +861,7 @@ export class AcpAgent implements ManagedAgent {
 	}
 
 	async revertTo(): Promise<string | undefined> {
-		throw new Error("ACP backend does not support revertTo");
+		throw new Error("ACP agent does not support revertTo");
 	}
 
 	leafEntryId(): string | null {
@@ -872,7 +872,7 @@ export class AcpAgent implements ManagedAgent {
 	snapshot(): SessionSnapshot {
 		return {
 			id: this.id,
-			backendId: this.backendId,
+			agentId: this.agentId,
 			capabilities: this.capabilities,
 			...(this.modeState === undefined ? {} : { acpMode: this.modeState }),
 			...(this.configOptions.length === 0 ? {} : { acpConfigOptions: this.configOptions }),
@@ -929,7 +929,7 @@ export class AcpAgent implements ManagedAgent {
 			return;
 		}
 		this.onIndexSync?.({
-			backendId: this.backendId,
+			agentId: this.agentId,
 			externalSessionId: this.externalSessionId,
 			cwd: this.cwd,
 			name: this.name,

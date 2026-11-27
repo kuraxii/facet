@@ -19,14 +19,14 @@ describe("ACP 轻量会话索引", () => {
 	it("支持写入、按目录与后端筛选、改名和删除", async () => {
 		const index = new AcpSessionIndex(dir);
 		await index.upsert({
-			backendId: "antigravity",
+			agentId: "antigravity",
 			externalSessionId: "s1",
 			cwd: "/work/a",
 			modified: 100,
 			firstMessage: "分析日志",
 		});
 		await index.upsert({
-			backendId: "claude",
+			agentId: "claude",
 			externalSessionId: "s2",
 			cwd: "/work/b",
 			modified: 200,

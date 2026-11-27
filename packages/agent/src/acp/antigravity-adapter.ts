@@ -1,11 +1,11 @@
 /**
  * Antigravity ACP 后端适配器实现。
  *
- * 引用通用层定义的 `CanonicalAcpModeId`（5 个标准语义）与 `AcpBackendAdapter` 契约，
+ * 引用通用层定义的 `CanonicalAcpModeId`（5 个标准语义）与 `AcpAgentAdapter` 契约，
  * 在此实现 Antigravity 自身的模式映射与权限决策逻辑。
  */
 import type { RequestPermissionRequest } from "@agentclientprotocol/sdk";
-import type { AcpBackendAdapter, AcpPermissionDecision, CanonicalAcpModeId } from "./acp-events.ts";
+import type { AcpAgentAdapter, AcpPermissionDecision, CanonicalAcpModeId } from "./acp-events.ts";
 import { extractAntigravityAuthUrl, prepareAntigravityAuthEnv } from "./antigravity-auth.ts";
 
 /** 文件编辑类工具类型（`auto-accept-edits` 模式下自动放行）。 */
@@ -53,7 +53,7 @@ export function decideAntigravityPermission(
 }
 
 /** Antigravity 后端适配器。 */
-export const ANTIGRAVITY_ACP_ADAPTER: AcpBackendAdapter = {
+export const ANTIGRAVITY_ACP_ADAPTER: AcpAgentAdapter = {
 	toCanonicalModeId: (wireModeId) => WIRE_TO_CANONICAL[wireModeId] ?? wireModeId,
 	toWireModeId: (canonicalModeId) => CANONICAL_TO_WIRE[canonicalModeId],
 	decidePermission: decideAntigravityPermission,
@@ -65,6 +65,6 @@ export const ANTIGRAVITY_ACP_ADAPTER: AcpBackendAdapter = {
 };
 
 /** 按后端标识获取可选的 ACP 后端适配器。 */
-export function getAcpBackendAdapter(backendId: string): AcpBackendAdapter | undefined {
-	return backendId === "antigravity" ? ANTIGRAVITY_ACP_ADAPTER : undefined;
+export function getAcpAgentAdapter(agentId: string): AcpAgentAdapter | undefined {
+	return agentId === "antigravity" ? ANTIGRAVITY_ACP_ADAPTER : undefined;
 }

@@ -9,7 +9,7 @@ import {
 	type ModelInfo,
 	type ModelRef,
 	PI_AGENT_CAPABILITIES,
-	PI_BACKEND_ID,
+	PI_AGENT_ID,
 	type PromptDisposition,
 	type QueueDisposition,
 	type QueuedInput,
@@ -103,7 +103,7 @@ export class PiAgent {
 	/** 会话 id，与持久化文件里的会话 id 一致 */
 	readonly id: string;
 	/** 所属代理后端标识 */
-	readonly backendId = PI_BACKEND_ID;
+	readonly agentId = PI_AGENT_ID;
 	/** 原生 Pi 会话能力集合 */
 	readonly capabilities = PI_AGENT_CAPABILITIES;
 	/** 会话的工作目录，创建后不再变化 */
@@ -724,7 +724,7 @@ export class PiAgent {
 	snapshot(): SessionSnapshot {
 		return {
 			id: this.id,
-			backendId: this.backendId,
+			agentId: this.agentId,
 			capabilities: this.capabilities,
 			initialization: this.initialization,
 			extensionUi: this.ui?.snapshot(),

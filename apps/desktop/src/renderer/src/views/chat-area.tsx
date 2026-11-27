@@ -189,7 +189,6 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 							onCopyText={copyText}
 							scrollElement={transcript.scrollElement}
 							reclaim={reclaim}
-							renames={chat?.renames}
 							emptyHint={t("app.emptyHint")}
 						/>
 					</div>

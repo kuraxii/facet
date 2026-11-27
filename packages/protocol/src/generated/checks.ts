@@ -1053,6 +1053,32 @@ function buildDispatchSessionQueueCleared(): (value: unknown) => boolean {
 const checkDispatchSessionQueueCleared = buildDispatchSessionQueueCleared();
 
 /**
+ * session/followUpPromoted 的动作判断。
+ *
+ * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
+ */
+function buildDispatchSessionFollowUpPromoted(): (value: unknown) => boolean {
+	// @ts-ignore
+	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && (("type" in value && "index" in value) && ((typeof value.type === "string" && value.type === "session/followUpPromoted") && Number.isFinite(value.index)))));
+	return check_0;
+}
+
+const checkDispatchSessionFollowUpPromoted = buildDispatchSessionFollowUpPromoted();
+
+/**
+ * session/followUpRemoved 的动作判断。
+ *
+ * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
+ */
+function buildDispatchSessionFollowUpRemoved(): (value: unknown) => boolean {
+	// @ts-ignore
+	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && (("type" in value && "index" in value) && ((typeof value.type === "string" && value.type === "session/followUpRemoved") && Number.isFinite(value.index)))));
+	return check_0;
+}
+
+const checkDispatchSessionFollowUpRemoved = buildDispatchSessionFollowUpRemoved();
+
+/**
  * session/compact 的动作判断。
  *
  * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
@@ -1166,6 +1192,8 @@ export const DISPATCH_CONTRACTS: Readonly<Record<string, DispatchContract | unde
 	"session/titleChanged": { auth: "write", check: checkDispatchSessionTitleChanged },
 	"session/pendingMessageSet": { auth: "write", check: checkDispatchSessionPendingMessageSet },
 	"session/queueCleared": { auth: "write", check: checkDispatchSessionQueueCleared },
+	"session/followUpPromoted": { auth: "write", check: checkDispatchSessionFollowUpPromoted },
+	"session/followUpRemoved": { auth: "write", check: checkDispatchSessionFollowUpRemoved },
 	"session/compact": { auth: "write", check: checkDispatchSessionCompact },
 	"session/configChanged": { auth: "write", check: checkDispatchSessionConfigChanged },
 };

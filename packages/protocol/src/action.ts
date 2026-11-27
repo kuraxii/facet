@@ -65,6 +65,10 @@ export type SessionAction =
 	| { type: "session/pendingMessageSet"; kind: "steering" | "queued"; text: string }
 	/** 客户端可派发:清空排队 */
 	| { type: "session/queueCleared" }
+	/** 客户端可派发:将指定后续消息转为插话立即发送 */
+	| { type: "session/followUpPromoted"; index: number }
+	/** 客户端可派发:从后续消息队列移除指定条目 */
+	| { type: "session/followUpRemoved"; index: number }
 	/** 客户端可派发:手动压缩上下文 */
 	| { type: "session/compact" }
 	/** 主机侧:上下文用量变化，一轮结束或压缩之后重新估算，同时可附带全会话累计统计 */

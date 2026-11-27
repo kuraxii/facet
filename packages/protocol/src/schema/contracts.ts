@@ -463,6 +463,14 @@ export const DISPATCH_SCHEMAS = {
 		auth: "write",
 		action: Type.Object({ type: Type.Literal("session/queueCleared") }),
 	},
+	"session/followUpPromoted": {
+		auth: "write",
+		action: Type.Object({ type: Type.Literal("session/followUpPromoted"), index: Type.Number() }),
+	},
+	"session/followUpRemoved": {
+		auth: "write",
+		action: Type.Object({ type: Type.Literal("session/followUpRemoved"), index: Type.Number() }),
+	},
 	"session/compact": {
 		auth: "write",
 		action: Type.Object({ type: Type.Literal("session/compact") }),

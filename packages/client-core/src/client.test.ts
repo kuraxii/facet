@@ -1408,4 +1408,34 @@ describe("扩展交互状态", () => {
 		);
 		expect(reclaimed).toHaveLength(1);
 	});
+
+	it("支持 ACP 模式与动态配置派发及 session/acpStateChanged 归约更新", async () => {
+		const { client, transport } = createClient(0);
+		await client.openSession("/tmp/s1.jsonl");
+		expect(client.sessionView()?.state.backendId).toBe("pi");
+		expect(client.sessionView()?.state.capabilities.configStyle).toBe("pi");
+
+		client.setAcpMode("plan");
+		client.setAcpConfigOption("model", "gemini-2.5");
+		expect(transport.dispatched.slice(-2).map((item) => item.action)).toEqual([
+			{ type: "session/acpModeSet", modeId: "plan" },
+			{ type: "session/acpConfigOptionSet", configId: "model", value: "gemini-2.5" },
+		]);
+
+		transport.emit(SESSION, {
+			type: "session/acpStateChanged",
+			mode: { currentModeId: "plan", availableModes: [{ id: "plan", name: "Plan" }] },
+			configOptions: [
+				{
+					id: "model",
+					name: "Model",
+					category: "model",
+					currentValue: "gemini-2.5",
+					options: [{ value: "gemini-2.5", name: "Gemini 2.5" }],
+				},
+			],
+		});
+		expect(client.sessionView()?.state.acpMode?.currentModeId).toBe("plan");
+		expect(client.sessionView()?.state.acpConfigOptions).toHaveLength(1);
+	});
 });

@@ -121,6 +121,20 @@ export function reduceSession(view: SessionView, action: Action): SessionView {
 			return action.thinkingLevel === undefined || view.state.thinkingLevel === action.thinkingLevel
 				? view
 				: { ...view, state: { ...view.state, thinkingLevel: action.thinkingLevel } };
+		case "session/acpStateChanged": {
+			const nextMode = action.mode === undefined ? view.state.acpMode : action.mode;
+			const nextConfigOptions =
+				action.configOptions === undefined ? view.state.acpConfigOptions : action.configOptions;
+			if (same(view.state.acpMode, nextMode) && same(view.state.acpConfigOptions, nextConfigOptions)) {
+				return view;
+			}
+			return {
+				...view,
+				state: { ...view.state, acpMode: nextMode, acpConfigOptions: nextConfigOptions },
+			};
+		}
+		case "session/acpModeSet":
+		case "session/acpConfigOptionSet":
 		case "session/pendingMessageSet":
 		case "session/queueCleared":
 		case "session/followUpPromoted":
@@ -336,6 +350,9 @@ export function reduceChat(view: ChatView, action: Action): ChatView {
 		case "session/queueChanged":
 		case "session/titleChanged":
 		case "session/configChanged":
+		case "session/acpStateChanged":
+		case "session/acpModeSet":
+		case "session/acpConfigOptionSet":
 		case "session/pendingMessageSet":
 		case "session/queueCleared":
 		case "session/followUpPromoted":

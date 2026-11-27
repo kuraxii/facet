@@ -8,9 +8,11 @@
  * 传输按结构约定,不引入 transport 包,两者处于同一层。
  */
 import type {
+	AcpBackendProfile,
 	Action,
 	ActionFrame,
 	AgentDefaults,
+	BackendAvailability,
 	Capability,
 	Channel,
 	ClientRole,
@@ -508,10 +510,39 @@ export class SessionClient {
 		return items.map((item) => item.summary);
 	}
 
-	/** 列出会话。指定 cwd 时只列该目录,主机上的全部会话用空参数。 */
-	async listSessions(cwd?: string): Promise<readonly SessionListItem[]> {
-		const result = await this.transport.request("listSessions", cwd === undefined ? {} : { cwd });
+	/** 列出会话。指定 cwd / backendId 时仅取匹配子集。 */
+	async listSessions(cwd?: string, backendId?: string): Promise<readonly SessionListItem[]> {
+		const params: RequestParams["listSessions"] = {
+			...(cwd === undefined ? {} : { cwd }),
+			...(backendId === undefined ? {} : { backendId }),
+		};
+		const result = await this.transport.request("listSessions", params);
 		return result.sessions;
+	}
+
+	/** 查询主机可用的代理后端与 ACP 注册配置。 */
+	async listBackends(): Promise<{ backends: BackendAvailability[]; profiles: AcpBackendProfile[] }> {
+		return await this.transport.request("listBackends", {});
+	}
+
+	/** 保存或更新一条外部 ACP 后端配置。 */
+	async saveAcpBackend(
+		profile: AcpBackendProfile,
+	): Promise<{ backends: BackendAvailability[]; profiles: AcpBackendProfile[] }> {
+		return await this.transport.request("saveAcpBackend", { profile });
+	}
+
+	/** 删除一条自定义 ACP 后端配置。 */
+	async removeAcpBackend(
+		backendId: string,
+	): Promise<{ backends: BackendAvailability[]; profiles: AcpBackendProfile[] }> {
+		return await this.transport.request("removeAcpBackend", { backendId });
+	}
+
+	/** 对指定代理后端执行可用性与握手探测。 */
+	async probeBackend(backendId: string): Promise<BackendAvailability> {
+		const result = await this.transport.request("probeBackend", { backendId });
+		return result.backend;
 	}
 
 	/** 列出用户添加的项目。 */
@@ -1204,6 +1235,23 @@ export class SessionClient {
 	demoteSteering(): number {
 		return this.transport.dispatch(this.requireOpened().sessionChannel, {
 			type: "session/steeringDemoted",
+		});
+	}
+
+	/** 切换当前 ACP 会话的工作模式。 */
+	setAcpMode(modeId: string): number {
+		return this.transport.dispatch(this.requireOpened().sessionChannel, {
+			type: "session/acpModeSet",
+			modeId,
+		});
+	}
+
+	/** 修改当前 ACP 会话的动态配置项。 */
+	setAcpConfigOption(configId: string, value: string): number {
+		return this.transport.dispatch(this.requireOpened().sessionChannel, {
+			type: "session/acpConfigOptionSet",
+			configId,
+			value,
 		});
 	}
 

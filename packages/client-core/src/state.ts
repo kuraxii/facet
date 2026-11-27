@@ -5,23 +5,28 @@
  * 视图是纯数据,由动作归约出新值,界面按需订阅。
  */
 
-import type {
-	Channel,
-	ContextUsage,
-	DeltaKind,
-	Entry,
-	ExtensionUiState,
-	Maintenance,
-	Message,
-	ModelInfo,
-	NoticeLevel,
-	QueuedInput,
-	SessionInitialization,
-	SessionSnapshot,
-	SessionStats,
-	ThinkingLevel,
-	ToolOutput,
-	TurnPhase,
+import {
+	type AcpConfigOption,
+	type AcpModeState,
+	type AgentCapabilities,
+	type Channel,
+	type ContextUsage,
+	type DeltaKind,
+	type Entry,
+	type ExtensionUiState,
+	type Maintenance,
+	type Message,
+	type ModelInfo,
+	type NoticeLevel,
+	PI_AGENT_CAPABILITIES,
+	PI_BACKEND_ID,
+	type QueuedInput,
+	type SessionInitialization,
+	type SessionSnapshot,
+	type SessionStats,
+	type ThinkingLevel,
+	type ToolOutput,
+	type TurnPhase,
 } from "@facet/protocol";
 
 /** 一条工具调用在客户端的呈现状态。 */
@@ -81,6 +86,14 @@ export interface NoticeView {
  * 订阅时由主机快照建立,之后由会话通道的动作就地更新;同一个字段只有这一个来源。
  */
 export interface SessionState {
+	/** 所属代理后端标识 */
+	readonly backendId: string;
+	/** 当前会话支持的功能能力集合 */
+	readonly capabilities: AgentCapabilities;
+	/** ACP 会话模式状态（仅 ACP 后端可能存在） */
+	readonly acpMode: AcpModeState | undefined;
+	/** ACP 动态配置项列表（仅 ACP 后端可能存在） */
+	readonly acpConfigOptions: readonly AcpConfigOption[];
 	/** 扩展初始化状态，独立于本轮生命周期。 */
 	readonly initialization: SessionInitialization;
 	/** 可重连恢复的扩展交互状态。 */
@@ -167,6 +180,10 @@ export function createSessionView(channel: Channel, snapshot?: SessionSnapshot):
 	return {
 		channel,
 		state: {
+			backendId: snapshot?.backendId ?? PI_BACKEND_ID,
+			capabilities: snapshot?.capabilities ?? PI_AGENT_CAPABILITIES,
+			acpMode: snapshot?.acpMode,
+			acpConfigOptions: snapshot?.acpConfigOptions ?? [],
 			initialization: snapshot?.initialization ?? { kind: "ready" },
 			extensionUi: snapshot?.extensionUi ?? { prompts: [] },
 			file: snapshot?.file,

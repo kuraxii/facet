@@ -12,6 +12,7 @@ import {
 	ChatTranscript,
 	Composer,
 	type ComposerHandle,
+	capabilitiesOf,
 	ExtensionPromptCard,
 	ICON_SIZE,
 	outlineIsActive,
@@ -109,6 +110,7 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 	const { t } = useI18n();
 	const client = useHostClient();
 	const providerAuth = host.catalog.auth;
+	const capabilities = capabilitiesOf(sessionView.state.capabilities);
 	/** 已发消息按条记忆：流式期间每帧只有末尾那条换新，回溯用的列表不必重算 */
 	const sentHistory = useMemo(() => sentTexts(transcript.items), [transcript.items]);
 	const { sessionMessages, streamingChars } = useMemo(() => {
@@ -175,13 +177,13 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 					<div className="column chat-grid" data-quote-source>
 						<ChatTranscript
 							items={transcript.items}
-							canFork={canFork}
+							canFork={canFork && capabilities.canFork}
 							onFork={(beforeEntryId) =>
 								session.withTrust(sessionCwd, () => {
 									void session.runSessionAction(async () => (await client.fork(beforeEntryId)).file);
 								})
 							}
-							canRevert={canFork}
+							canRevert={canFork && capabilities.canRevert}
 							onRevert={composer.revertTo}
 							maintenance={sessionView.state.maintenance}
 							isRunning={activity !== "idle"}
@@ -215,12 +217,14 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 					{sessionView.state.initialization.kind === "failed" ? (
 						<p className="dialog-error">{sessionView.state.initialization.message}</p>
 					) : null}
-					<QueueStrip
-						queued={queued}
-						onPromoteFollowUp={composer.promoteFollowUp}
-						onEditFollowUp={composer.editFollowUp}
-						onRemoveFollowUp={composer.removeFollowUp}
-					/>
+					{capabilities.supportsFollowUp ? (
+						<QueueStrip
+							queued={queued}
+							onPromoteFollowUp={composer.promoteFollowUp}
+							onEditFollowUp={composer.editFollowUp}
+							onRemoveFollowUp={composer.removeFollowUp}
+						/>
+					) : null}
 					{sessionView.state.extensionUi.prompts[0] === undefined ? null : (
 						<ExtensionPromptCard
 							key={`${host.host?.hostId}:${sessionView.channel}:${sessionView.state.extensionUi.prompts[0].requestId}`}
@@ -248,7 +252,11 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 						}))}
 						onPickImages={composer.pickImages}
 						onAddImages={composer.addImages}
-						canAddImages={sessionView.state.model?.input.includes("image") ?? false}
+						canAddImages={
+							capabilities.configStyle === "acp"
+								? capabilities.supportsImages
+								: (sessionView.state.model?.input.includes("image") ?? false)
+						}
 						onRemoveAttachment={composer.removeImage}
 						attachmentNotice={composer.imageNotice}
 						onStop={() => client.cancel()}
@@ -260,17 +268,24 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 						providerAuth={providerAuth}
 						onModelChange={(next) => client.setModel({ provider: next.provider, id: next.id })}
 						onThinkingLevelChange={(level) => client.setThinkingLevel(level)}
+						capabilities={capabilities}
+						acpMode={sessionView.state.acpMode}
+						acpConfigOptions={sessionView.state.acpConfigOptions}
+						onAcpModeChange={composer.setAcpMode}
+						onAcpConfigOptionChange={composer.setAcpConfigOption}
 						shiftEnterToSend={localInput.sendKey === "shiftEnter"}
 						isBlocked={isBlocked}
 						canStop={host.isOnline && host.host?.role !== "viewer"}
 						contextUsage={sessionView.state.contextUsage}
-						onLoadContextDetails={() => client.contextDetails()}
+						onLoadContextDetails={
+							capabilities.hasContextBreakdown ? () => client.contextDetails() : undefined
+						}
 						sessionStats={sessionView.state.stats}
 						sessionMessages={sessionMessages}
 						streamingChars={streamingChars}
 						isCompacting={activity === "compacting"}
-						canCompact={activity === "idle"}
-						onCompact={() => client.compact()}
+						canCompact={activity === "idle" && capabilities.canCompact}
+						onCompact={capabilities.canCompact ? () => client.compact() : undefined}
 						mentionFiles={mentionFiles}
 						draftKey={composer.draftKey}
 						sentHistory={sentHistory}

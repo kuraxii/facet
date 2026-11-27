@@ -19,11 +19,14 @@ import type {
 	TerminalLocalSettings,
 } from "@facet/protocol";
 import {
+	BackendSwitcher,
 	Button,
 	CodeThemeProvider,
 	type ComposerHandle,
 	CreateProjectDialog,
+	capabilitiesOf,
 	EmptyState,
+	filterSessionsByBackend,
 	HostSwitcher,
 	ICON_SIZE,
 	IconButton,
@@ -213,8 +216,29 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 			saveAgentDefaults: (patch) => client.setAgentDefaults(patch),
 			diagnostics: () => client.diagnostics(),
 			saveText: (suggestedName, text) => bridge.saveText(suggestedName, text),
+			loadBackends: () => client.listBackends(),
+			saveAcpBackend: (profile) =>
+				client.saveAcpBackend(profile).then((res) => {
+					void session.refreshBackends();
+					return res;
+				}),
+			removeAcpBackend: (backendId) =>
+				client.removeAcpBackend(backendId).then((res) => {
+					void session.refreshBackends();
+					return res;
+				}),
+			probeBackend: (backendId) =>
+				client.probeBackend(backendId).then((backend) => {
+					void session.refreshBackends();
+					return backend;
+				}),
 		}),
-		[client, host.refreshCatalog],
+		[client, host.refreshCatalog, session.refreshBackends],
+	);
+	const capabilities = capabilitiesOf(sessionView?.state.capabilities);
+	const visibleSessions = useMemo(
+		() => filterSessionsByBackend(session.sessions, session.selectedBackendId),
+		[session.sessions, session.selectedBackendId],
 	);
 	const providerAuth = host.catalog.auth;
 	const draftCommand = parseCommand(composer.draft.trim());
@@ -228,7 +252,8 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 		activity === "stopping" ||
 		(sessionView !== undefined && sessionView.state.initialization.kind !== "ready") ||
 		(sessionView?.state.extensionUi.prompts.length ?? 0) > 0 ||
-		(!isExtensionCommand &&
+		(capabilities.configStyle === "pi" &&
+			!isExtensionCommand &&
 			(sessionView?.state.model === undefined || providerAuth[sessionView.state.model.provider] === false));
 	const queued = sessionView?.state.queued ?? { steering: [], followUp: [] };
 	const canFork =
@@ -426,7 +451,7 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 						/>
 					) : null}
 					<SessionSidebar
-						sessions={session.sessions}
+						sessions={visibleSessions}
 						projects={session.projects}
 						activeFile={session.activeFile}
 						statuses={session.statuses}
@@ -464,6 +489,13 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 						}
 						isOpen={shell.isDrawerOpen}
 						onNavigate={shell.closeDrawer}
+						backendSwitcher={
+							<BackendSwitcher
+								backends={session.backends}
+								selectedBackendId={session.selectedBackendId}
+								onSelect={session.selectBackend}
+							/>
+						}
 						hostSwitcher={
 							<HostSwitcher
 								localEndpoint={LOCAL_TARGET}
@@ -515,7 +547,7 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 
 					<SessionSearch
 						isOpen={shell.isSearchOpen}
-						sessions={session.sessions}
+						sessions={visibleSessions}
 						activeFile={session.activeFile}
 						statuses={session.statuses}
 						onClose={() => shell.setSearchOpen(false)}

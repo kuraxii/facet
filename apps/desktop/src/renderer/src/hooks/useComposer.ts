@@ -141,6 +141,10 @@ export interface Composer {
 	editFollowUp: (index: number) => void;
 	/** 删除指定索引的后续消息 */
 	removeFollowUp: (index: number) => void;
+	/** 切换当前 ACP 会话工作模式 */
+	setAcpMode: (modeId: string) => void;
+	/** 修改当前 ACP 会话动态配置项 */
+	setAcpConfigOption: (configId: string, value: string) => void;
 	/** 把一批文件加入待发图片 */
 	addImages: (files: readonly File[]) => void;
 	/** 打开系统选图窗口 */
@@ -527,6 +531,22 @@ export function useComposer(options: ComposerOptions): Composer {
 		[client],
 	);
 
+	/** 切换当前 ACP 会话的工作模式。 */
+	const setAcpMode = useCallback(
+		(modeId: string) => {
+			client.setAcpMode(modeId);
+		},
+		[client],
+	);
+
+	/** 修改当前 ACP 会话的动态配置项。 */
+	const setAcpConfigOption = useCallback(
+		(configId: string, value: string) => {
+			client.setAcpConfigOption(configId, value);
+		},
+		[client],
+	);
+
 	useEffect(() => {
 		return client.onSent((text) => {
 			// 只收掉刚发出的那段，等待期间新输入的内容保留
@@ -643,6 +663,8 @@ export function useComposer(options: ComposerOptions): Composer {
 		promoteFollowUp,
 		editFollowUp,
 		removeFollowUp,
+		setAcpMode,
+		setAcpConfigOption,
 		addImages,
 		pickImages,
 		removeImage,

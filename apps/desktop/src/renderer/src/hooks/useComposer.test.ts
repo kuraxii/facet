@@ -8,6 +8,7 @@
  * 接着发。图片编码用假的顶掉，好数它被调了几次。
  */
 import type { ReclaimedQueueItem, SessionClient, SessionView } from "@facet/client-core";
+import { PI_AGENT_CAPABILITIES, PI_BACKEND_ID } from "@facet/protocol";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -35,6 +36,10 @@ function sessionView(file: string, hasPendingSend: boolean): SessionView {
 	return {
 		channel: `session:/${file}` as SessionView["channel"],
 		state: {
+			backendId: PI_BACKEND_ID,
+			capabilities: PI_AGENT_CAPABILITIES,
+			acpMode: undefined,
+			acpConfigOptions: [],
 			initialization: { kind: "ready" },
 			extensionUi: { prompts: [] },
 			file,

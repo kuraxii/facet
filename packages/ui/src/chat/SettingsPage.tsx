@@ -5,12 +5,17 @@
  * 保存失败时保留用户正在编辑的输入，可以直接重试。
  */
 import type { LanguageSetting } from "@facet/i18n";
-import { DEFAULT_SETTINGS, type FacetSettings, type ProviderInfo } from "@facet/protocol";
-import { Cpu, Info, Keyboard, Palette, Terminal, X } from "lucide-react";
+import {
+	DEFAULT_SETTINGS,
+	type FacetSettings,
+	type NotificationSettings,
+	type ProviderInfo,
+	type TerminalLocalSettings,
+} from "@facet/protocol";
+import { Cpu, Info, Keyboard, Palette, SlidersHorizontal, Terminal, X } from "lucide-react";
 import { type ComponentType, Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { IconButton } from "../common/IconButton.tsx";
 import { ListRow } from "../common/ListRow.tsx";
-import { Select } from "../common/select.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { Modal } from "../modal.tsx";
 import { ICON_SIZE } from "../styles/visual-contract.ts";
@@ -18,13 +23,13 @@ import { ModelsSection } from "./ModelsSection.tsx";
 import { AboutSection } from "./settings-about-section.tsx";
 import { AppearanceSection } from "./settings-appearance-section.tsx";
 import type { SettingsDataSource } from "./settings-data-source.ts";
+import { GeneralSection } from "./settings-general-section.tsx";
 import { InputSection } from "./settings-input-section.tsx";
-import { SettingsGroup, SettingsRow, StatusNote } from "./settings-layout.tsx";
-import { TerminalSection } from "./settings-terminal-section.tsx";
-import { UI_SCALE_STEPS } from "./ui-scale.ts";
+import { StatusNote } from "./settings-layout.tsx";
+import { TerminalLocalSection, TerminalSection } from "./settings-terminal-section.tsx";
 
 /** 设置分类。 */
-export type SettingsSection = "models" | "appearance" | "input" | "terminal" | "about";
+export type SettingsSection = "general" | "models" | "appearance" | "input" | "terminal" | "about";
 
 /** 自动保存的延迟：改动停下后等这么久再提交，连续调整只保存最后一次。 */
 const AUTO_SAVE_DELAY_MS = 1000;
@@ -36,6 +41,7 @@ type SectionIcon = ComponentType<{ size?: number; className?: string; "aria-hidd
 const SECTIONS: ReadonlyArray<{
 	key: SettingsSection;
 	labelKey:
+		| "settings.general"
 		| "settings.models"
 		| "settings.appearance"
 		| "settings.input"
@@ -45,6 +51,7 @@ const SECTIONS: ReadonlyArray<{
 	/** 这一项前是否插一条导航分隔线，把信息类入口与设置分组拉开 */
 	dividerBefore?: boolean;
 }> = [
+	{ key: "general", labelKey: "settings.general", icon: SlidersHorizontal },
 	{ key: "models", labelKey: "settings.models", icon: Cpu },
 	{ key: "appearance", labelKey: "settings.appearance", icon: Palette },
 	{ key: "input", labelKey: "settings.input", icon: Keyboard },
@@ -89,6 +96,14 @@ export interface SettingsPageProps {
 	localInput?: FacetSettings["input"];
 	/** 更新本机输入配置 */
 	onLocalInputChange?: (input: FacetSettings["input"]) => void;
+	/** 本机优先的桌面通知配置 */
+	localNotifications?: NotificationSettings;
+	/** 更新本机桌面通知配置 */
+	onLocalNotificationsChange?: (notifications: NotificationSettings) => void;
+	/** 本机优先的终端交互配置 */
+	localTerminal?: TerminalLocalSettings;
+	/** 更新本机终端交互配置 */
+	onLocalTerminalChange?: (terminal: TerminalLocalSettings) => void;
 	/**
 	 * 这条连接能不能改设置。
 	 *
@@ -116,6 +131,10 @@ export function SettingsPage({
 	onLocalAppearanceChange,
 	localInput,
 	onLocalInputChange,
+	localNotifications,
+	onLocalNotificationsChange,
+	localTerminal,
+	onLocalTerminalChange,
 }: SettingsPageProps) {
 	const { t } = useI18n();
 	/** 已加载的设置；为空表示还没读到 */
@@ -282,37 +301,15 @@ export function SettingsPage({
 				</header>
 
 				<div className="set-content">
-					{section === "appearance" &&
-					((uiScale !== undefined && onUiScaleChange !== undefined) ||
-						(languageSetting !== undefined && onLanguageChange !== undefined)) ? (
-						<section className="set-section">
-							<SettingsGroup label={t("settings.local")}>
-								{languageSetting === undefined || onLanguageChange === undefined ? null : (
-									<SettingsRow title={t("settings.language")}>
-										<Select
-											value={languageSetting}
-											options={[
-												{ value: "auto", label: t("language.system") },
-												{ value: "en", label: t("language.en") },
-												{ value: "zh-CN", label: t("language.zh-CN") },
-											]}
-											onChange={(value) => onLanguageChange(value as LanguageSetting)}
-											ariaLabel={t("settings.language")}
-										/>
-									</SettingsRow>
-								)}
-								{uiScale === undefined || onUiScaleChange === undefined ? null : (
-									<SettingsRow title={t("settings.uiScale")}>
-										<Select
-											value={String(uiScale)}
-											options={UI_SCALE_STEPS.map((step) => ({ value: String(step), label: `${step}%` }))}
-											onChange={(value) => onUiScaleChange(Number(value))}
-											ariaLabel={t("settings.uiScale")}
-										/>
-									</SettingsRow>
-								)}
-							</SettingsGroup>
-						</section>
+					{section === "general" ? (
+						<GeneralSection
+							uiScale={uiScale}
+							onUiScaleChange={onUiScaleChange}
+							languageSetting={languageSetting}
+							onLanguageChange={onLanguageChange}
+							localNotifications={localNotifications}
+							onLocalNotificationsChange={onLocalNotificationsChange}
+						/>
 					) : null}
 
 					{section === "appearance" && appearanceLocal ? (
@@ -337,6 +334,12 @@ export function SettingsPage({
 									onLocalInputChange(next.input);
 								}}
 							/>
+						</section>
+					) : null}
+
+					{section === "terminal" && localTerminal !== undefined && onLocalTerminalChange !== undefined ? (
+						<section className="set-section">
+							<TerminalLocalSection terminal={localTerminal} onChange={onLocalTerminalChange} />
 						</section>
 					) : null}
 

@@ -7,12 +7,59 @@
  *
  * 清单是主机此刻的状态，不是设置的一部分：切走再回来要重取，读不到就在原地说事实并给重试。
  */
-import type { FacetSettings, TerminalProfileInfo } from "@facet/protocol";
+import type { FacetSettings, TerminalLocalSettings, TerminalProfileInfo } from "@facet/protocol";
 import { useCallback, useEffect, useState } from "react";
+import { Input } from "../common/Input.tsx";
 import { Select } from "../common/select.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import type { SettingsDataSource } from "./settings-data-source.ts";
 import { SettingsGroup, SettingsRow, StatusNote } from "./settings-layout.tsx";
+
+/** 终端交互偏好（本机生效，不依赖主机权限与连接）。 */
+export function TerminalLocalSection({
+	terminal,
+	onChange,
+}: {
+	/** 当前本机终端交互偏好 */
+	terminal: TerminalLocalSettings;
+	/** 更新本机终端交互偏好 */
+	onChange: (next: TerminalLocalSettings) => void;
+}): React.JSX.Element {
+	const { t } = useI18n();
+	return (
+		<SettingsGroup label={t("settings.terminalPage.display")}>
+			<SettingsRow title={t("settings.terminalPage.cursorBlink")}>
+				<input
+					type="checkbox"
+					role="switch"
+					aria-checked={terminal.cursorBlink}
+					className="set-switch"
+					checked={terminal.cursorBlink}
+					onChange={(event) => onChange({ ...terminal, cursorBlink: event.target.checked })}
+					aria-label={t("settings.terminalPage.cursorBlink")}
+				/>
+			</SettingsRow>
+			<SettingsRow title={t("settings.terminalPage.scrollback")}>
+				<Input
+					size="md"
+					type="number"
+					min={500}
+					max={50000}
+					step={500}
+					value={terminal.scrollback}
+					onChange={(event) => {
+						const next = Number(event.target.value);
+						if (Number.isFinite(next)) {
+							const clamped = Math.min(50000, Math.max(500, Math.round(next / 500) * 500));
+							onChange({ ...terminal, scrollback: clamped });
+						}
+					}}
+					aria-label={t("settings.terminalPage.scrollback")}
+				/>
+			</SettingsRow>
+		</SettingsGroup>
+	);
+}
 
 /** 终端设置分节。 */
 export function TerminalSection({

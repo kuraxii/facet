@@ -11,11 +11,13 @@ import { SettingsPage } from "./SettingsPage.tsx";
 const markup = renderToStaticMarkup(
 	<I18nProvider language="zh-CN">
 		<SettingsPage
-			section="appearance"
+			section="general"
 			onSectionChange={() => {}}
 			onClose={() => {}}
 			languageSetting="auto"
 			onLanguageChange={() => {}}
+			localNotifications={{ enabled: true, onSettled: true, onNeedsInput: false }}
+			onLocalNotificationsChange={() => {}}
 			data={{
 				loadSettings: async () => {
 					throw new Error("不该在渲染时读设置");
@@ -59,12 +61,13 @@ describe("设置窗", () => {
 
 	it("标题栏带关闭按钮，两段式布局在右侧头部展示当前分类标题", () => {
 		expect(markup).toContain('aria-label="关闭设置"');
-		expect(markup).toContain('<h2 class="set-main-title">外观</h2>');
+		expect(markup).toContain('<h2 class="set-main-title">通用</h2>');
 	});
 
-	it("外观页提供语言选择", () => {
+	it("通用页提供语言选择与桌面通知开关", () => {
 		expect(markup).toContain('aria-label="语言"');
 		expect(markup).toContain("跟随系统");
+		expect(markup).toContain('aria-label="桌面通知"');
 	});
 
 	it("传入本地外观配置时不受 canEdit 限制且直接渲染本地外观控件", () => {

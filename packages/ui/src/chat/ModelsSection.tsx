@@ -11,6 +11,7 @@ import type {
 	ModelInfo,
 	ModelRef,
 	ProviderInfo,
+	QueueDeliveryMode,
 	ThinkingLevel,
 } from "@facet/protocol";
 import { Plus } from "lucide-react";
@@ -155,6 +156,9 @@ export function ModelsSection({
 	const changeDefaults = async (patch: {
 		model?: ModelRef;
 		thinkingLevel?: ThinkingLevel | null;
+		autoCompaction?: boolean;
+		steeringMode?: QueueDeliveryMode;
+		followUpMode?: QueueDeliveryMode;
 	}): Promise<void> => {
 		setIsSavingDefaults(true);
 		try {
@@ -243,6 +247,48 @@ export function ModelsSection({
 							});
 						}}
 						ariaLabel={t("settings.modelsPage.defaultThinking")}
+					/>
+				</SettingsRow>
+				<SettingsRow title={t("settings.modelsPage.autoCompaction")}>
+					<input
+						type="checkbox"
+						role="switch"
+						aria-checked={defaults?.autoCompaction ?? true}
+						className="set-switch"
+						disabled={isSavingDefaults || defaults === undefined}
+						checked={defaults?.autoCompaction ?? true}
+						onChange={(event) => {
+							void changeDefaults({ autoCompaction: event.target.checked });
+						}}
+						aria-label={t("settings.modelsPage.autoCompaction")}
+					/>
+				</SettingsRow>
+				<SettingsRow title={t("settings.modelsPage.steeringMode")}>
+					<Select
+						value={defaults?.steeringMode ?? "one-at-a-time"}
+						options={[
+							{ value: "one-at-a-time", label: t("settings.modelsPage.queueOneAtATime") },
+							{ value: "all", label: t("settings.modelsPage.queueAll") },
+						]}
+						disabled={isSavingDefaults || defaults === undefined}
+						onChange={(value) => {
+							void changeDefaults({ steeringMode: value as QueueDeliveryMode });
+						}}
+						ariaLabel={t("settings.modelsPage.steeringMode")}
+					/>
+				</SettingsRow>
+				<SettingsRow title={t("settings.modelsPage.followUpMode")}>
+					<Select
+						value={defaults?.followUpMode ?? "one-at-a-time"}
+						options={[
+							{ value: "one-at-a-time", label: t("settings.modelsPage.queueOneAtATime") },
+							{ value: "all", label: t("settings.modelsPage.queueAll") },
+						]}
+						disabled={isSavingDefaults || defaults === undefined}
+						onChange={(value) => {
+							void changeDefaults({ followUpMode: value as QueueDeliveryMode });
+						}}
+						ariaLabel={t("settings.modelsPage.followUpMode")}
 					/>
 				</SettingsRow>
 			</SettingsGroup>

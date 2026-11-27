@@ -1370,4 +1370,42 @@ describe("扩展交互状态", () => {
 		expect(sent).toHaveBeenCalledExactlyOnceWith("/ask");
 		expect(client.chatView()?.items).toEqual([]);
 	});
+
+	it("demoteSteering 派发 session/steeringDemoted，onQueueReclaimed 仅响应本端实时回收帧", async () => {
+		const { client, transport } = createClient(0);
+		await client.openSession("/tmp/s1.jsonl");
+		const reclaimed: Array<{ items: unknown[]; sessionId: string }> = [];
+		client.onQueueReclaimed((items, sessionId) => reclaimed.push({ items, sessionId }));
+
+		client.demoteSteering();
+		expect(transport.dispatched.at(-1)?.action).toEqual({ type: "session/steeringDemoted" });
+
+		// 发往其他客户端的回收帧不触发回调
+		transport.emit(CHAT, {
+			type: "chat/queueReclaimed",
+			targetClientId: "other",
+			items: [{ text: "忽略" }],
+		});
+		expect(reclaimed).toEqual([]);
+
+		// 发往本端 ("c") 的实时新帧触发回调
+		transport.emit(CHAT, {
+			type: "chat/queueReclaimed",
+			targetClientId: "c",
+			items: [{ text: "第一条" }, { text: "第二条" }],
+		});
+		expect(reclaimed).toEqual([{ items: [{ text: "第一条" }, { text: "第二条" }], sessionId: "s1" }]);
+
+		// 重复或旧序号帧不再重复回填
+		transport.emit(
+			CHAT,
+			{
+				type: "chat/queueReclaimed",
+				targetClientId: "c",
+				items: [{ text: "旧帧" }],
+			},
+			2,
+		);
+		expect(reclaimed).toHaveLength(1);
+	});
 });

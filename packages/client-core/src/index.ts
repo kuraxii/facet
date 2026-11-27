@@ -7,6 +7,7 @@
 export type {
 	HostHandshake,
 	OpenedSession,
+	ReclaimedQueueItem,
 	SendOptions,
 	SessionClientOptions,
 	SessionTransport,

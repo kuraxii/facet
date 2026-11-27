@@ -125,9 +125,11 @@ export function reduceSession(view: SessionView, action: Action): SessionView {
 		case "session/queueCleared":
 		case "session/followUpPromoted":
 		case "session/followUpRemoved":
+		case "session/steeringDemoted":
 		case "session/compact":
 			return view;
 		case "chat/inputHandled":
+		case "chat/queueReclaimed":
 		case "chat/messageAppended":
 		case "chat/messageUpdated":
 		case "chat/entryCommitted":
@@ -324,6 +326,7 @@ export function reduceChat(view: ChatView, action: Action): ChatView {
 		case "chat/inputHandled":
 		case "chat/turnStarted":
 		case "chat/turnCancelled":
+		case "chat/queueReclaimed":
 			return view;
 		case "session/initialized":
 		case "session/uiChanged":
@@ -337,6 +340,7 @@ export function reduceChat(view: ChatView, action: Action): ChatView {
 		case "session/queueCleared":
 		case "session/followUpPromoted":
 		case "session/followUpRemoved":
+		case "session/steeringDemoted":
 		case "session/compact":
 		case "session/usageChanged":
 		case "models/loginEvent":

@@ -158,6 +158,14 @@ function isUnknownSession(error: unknown): boolean {
 	);
 }
 
+/** 中止回合时被主机退回给发起端的待发送排队消息。 */
+export interface ReclaimedQueueItem {
+	/** 消息纯文本（可能为空字符串，如仅附图）。 */
+	text: string;
+	/** 附带的图片列表。 */
+	images?: ImageBlock[];
+}
+
 export class SessionClient {
 	private readonly transport: SessionTransport;
 	private readonly initialPages: number;
@@ -177,6 +185,7 @@ export class SessionClient {
 	/** 当前激活的会话 id */
 	private activeId: string | undefined;
 	private readonly sentListeners = new Set<(text: string) => void>();
+	private readonly reclaimListeners = new Set<(items: ReclaimedQueueItem[], sessionId: string) => void>();
 	/** 是否已经挂了缺口监听,避免重复注册 */
 	private isGapWatched = false;
 	/** 项目信任查询缓存，切换标签时不重复请求 */
@@ -1191,11 +1200,26 @@ export class SessionClient {
 		});
 	}
 
+	/** 将全部待插话消息退回到后续排队队列头部。 */
+	demoteSteering(): number {
+		return this.transport.dispatch(this.requireOpened().sessionChannel, {
+			type: "session/steeringDemoted",
+		});
+	}
+
 	/** 主机确认收到这条消息后回调,带上当时的文本。 */
 	onSent(listener: (text: string) => void): () => void {
 		this.sentListeners.add(listener);
 		return () => {
 			this.sentListeners.delete(listener);
+		};
+	}
+
+	/** 中止后主机把未消费的排队消息退回给触发端时回调,由界面还原到输入框。 */
+	onQueueReclaimed(listener: (items: ReclaimedQueueItem[], sessionId: string) => void): () => void {
+		this.reclaimListeners.add(listener);
+		return () => {
+			this.reclaimListeners.delete(listener);
 		};
 	}
 
@@ -1585,6 +1609,16 @@ export class SessionClient {
 		// 分支指针挪过之后，活动分支换成另一条，已装载的历史整段作废
 		if (frame.channel === opened.chatChannel && frame.action.type === "chat/branchMoved") {
 			void this.reloadRecent(runtime, true).catch(() => undefined);
+			return;
+		}
+		// 中止回收只发给触发端（未指明目标端时由所有在线端兜底，且仅限实时新帧）
+		if (frame.channel === opened.chatChannel && frame.action.type === "chat/queueReclaimed") {
+			const { targetClientId, items } = frame.action;
+			if (items.length > 0 && (targetClientId === undefined || targetClientId === this.handshake?.clientId)) {
+				for (const listener of [...this.reclaimListeners]) {
+					listener(items, opened.sessionId);
+				}
+			}
 		}
 	}
 

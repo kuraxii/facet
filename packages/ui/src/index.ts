@@ -89,12 +89,14 @@ export {
 } from "./chat/sidebar-model.ts";
 export {
 	clampSidebarWidth,
+	readSidebarCollapsed,
 	readSidebarWidth,
 	SIDEBAR_DEFAULT_WIDTH,
 	SIDEBAR_MAX_WIDTH,
 	SIDEBAR_MIN_WIDTH,
 	SIDEBAR_WIDTH_BOUNDS,
 	type SidebarStorage,
+	writeSidebarCollapsed,
 	writeSidebarWidth,
 } from "./chat/sidebar-state.ts";
 export type { TrustDialogProps } from "./chat/TrustDialog.tsx";
@@ -172,7 +174,9 @@ export {
 	FILE_TREE_MIN_WIDTH,
 	FILE_TREE_WIDTH_BOUNDS,
 	fileTreeMaxWidth,
+	readFileTreeOpen,
 	readFileTreeWidth,
+	writeFileTreeOpen,
 	writeFileTreeWidth,
 } from "./panel/file-tree-state.ts";
 export type { FilesPaneProps } from "./panel/files-pane.tsx";

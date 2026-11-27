@@ -35,6 +35,7 @@ export const FILE_TREE_WIDTH_BOUNDS: PaneWidthBounds = {
 
 /** 本地存储用的键。 */
 const WIDTH_KEY = "facet.files.treeWidth";
+const OPEN_KEY = "facet.files.treeOpen";
 
 /** 读写本地存储的最小接口，测试里换成假的实现。 */
 export interface FileTreeStorage {
@@ -69,4 +70,14 @@ export function readFileTreeWidth(storage: FileTreeStorage): number {
 /** 写入宽度。 */
 export function writeFileTreeWidth(storage: FileTreeStorage, width: number): void {
 	storage.setItem(WIDTH_KEY, String(clampFileTreeWidth(width)));
+}
+
+/** 读出文件树开关状态，未记录时默认展开（true）。 */
+export function readFileTreeOpen(storage: FileTreeStorage): boolean {
+	return storage.getItem(OPEN_KEY) !== "0";
+}
+
+/** 写入文件树开关状态。 */
+export function writeFileTreeOpen(storage: FileTreeStorage, open: boolean): void {
+	storage.setItem(OPEN_KEY, open ? "1" : "0");
 }

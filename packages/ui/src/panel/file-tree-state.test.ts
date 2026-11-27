@@ -13,7 +13,9 @@ import {
 	FILE_TREE_MIN_WIDTH,
 	type FileTreeStorage,
 	fileTreeMaxWidth,
+	readFileTreeOpen,
 	readFileTreeWidth,
+	writeFileTreeOpen,
 	writeFileTreeWidth,
 } from "./file-tree-state.ts";
 
@@ -75,5 +77,15 @@ describe("悬浮文件树的宽度", () => {
 		expect(fileTreeMaxWidth(200)).toBe(FILE_TREE_MIN_WIDTH);
 		// 读不懂的容器宽按上限处理
 		expect(fileTreeMaxWidth(Number.NaN)).toBe(FILE_TREE_MAX_WIDTH);
+	});
+
+	it("读写文件树开关状态，默认展开", () => {
+		const storage = createStorage();
+		expect(readFileTreeOpen(storage)).toBe(true);
+		writeFileTreeOpen(storage, false);
+		expect(storage.data["facet.files.treeOpen"]).toBe("0");
+		expect(readFileTreeOpen(storage)).toBe(false);
+		writeFileTreeOpen(storage, true);
+		expect(readFileTreeOpen(storage)).toBe(true);
 	});
 });

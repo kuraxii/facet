@@ -5,7 +5,7 @@
  * 保存失败时保留用户正在编辑的输入，可以直接重试。
  */
 import type { LanguageSetting } from "@facet/i18n";
-import type { FacetSettings, ProviderInfo } from "@facet/protocol";
+import { DEFAULT_SETTINGS, type FacetSettings, type ProviderInfo } from "@facet/protocol";
 import { Cpu, Info, Keyboard, Palette, Terminal, X } from "lucide-react";
 import { type ComponentType, Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { IconButton } from "../common/IconButton.tsx";
@@ -81,6 +81,14 @@ export interface SettingsPageProps {
 	languageSetting?: LanguageSetting;
 	/** 修改本机语言 */
 	onLanguageChange?: (setting: LanguageSetting) => void;
+	/** 本机优先的外观配置；提供后直接本地读写，不受主机权限与切换影响 */
+	localAppearance?: FacetSettings["appearance"];
+	/** 更新本机外观配置 */
+	onLocalAppearanceChange?: (appearance: FacetSettings["appearance"]) => void;
+	/** 本机优先的输入配置；提供后直接本地读写，不受主机权限与切换影响 */
+	localInput?: FacetSettings["input"];
+	/** 更新本机输入配置 */
+	onLocalInputChange?: (input: FacetSettings["input"]) => void;
 	/**
 	 * 这条连接能不能改设置。
 	 *
@@ -104,6 +112,10 @@ export function SettingsPage({
 	onUiScaleChange,
 	languageSetting,
 	onLanguageChange,
+	localAppearance,
+	onLocalAppearanceChange,
+	localInput,
+	onLocalInputChange,
 }: SettingsPageProps) {
 	const { t } = useI18n();
 	/** 已加载的设置；为空表示还没读到 */
@@ -139,16 +151,21 @@ export function SettingsPage({
 		}
 	}, [data]);
 
-	// 模型、外观、输入三个分类共用同一份设置，进入时读一次
+	const appearanceLocal = localAppearance !== undefined && onLocalAppearanceChange !== undefined;
+	const inputLocal = localInput !== undefined && onLocalInputChange !== undefined;
+	const needsHostSettings =
+		section === "terminal" ||
+		section === "models" ||
+		(section === "appearance" && !appearanceLocal) ||
+		(section === "input" && !inputLocal);
+
+	// 只有依赖主机设置的分节才需要从服务端加载
 	useEffect(() => {
-		if (section === "about") {
-			return;
-		}
-		if (settings !== undefined) {
+		if (!needsHostSettings || settings !== undefined) {
 			return;
 		}
 		void loadSettings();
-	}, [loadSettings, section, settings]);
+	}, [loadSettings, needsHostSettings, settings]);
 
 	// 提供方现在挂在模型页里
 	useEffect(() => {
@@ -298,12 +315,34 @@ export function SettingsPage({
 						</section>
 					) : null}
 
+					{section === "appearance" && appearanceLocal ? (
+						<section className="set-section">
+							<AppearanceSection
+								draft={{ ...DEFAULT_SETTINGS, appearance: localAppearance }}
+								patch={(change) => {
+									const next = change({ ...DEFAULT_SETTINGS, appearance: localAppearance });
+									onLocalAppearanceChange(next.appearance);
+								}}
+								onPreview={onAppearancePreview}
+							/>
+						</section>
+					) : null}
+
+					{section === "input" && inputLocal ? (
+						<section className="set-section">
+							<InputSection
+								draft={{ ...DEFAULT_SETTINGS, input: localInput }}
+								patch={(change) => {
+									const next = change({ ...DEFAULT_SETTINGS, input: localInput });
+									onLocalInputChange(next.input);
+								}}
+							/>
+						</section>
+					) : null}
+
 					{section === "about" ? <AboutSection about={about} data={data} /> : null}
 
-					{section === "models" ||
-					section === "appearance" ||
-					section === "input" ||
-					section === "terminal" ? (
+					{needsHostSettings ? (
 						<fieldset className="set-lock" disabled={!canEdit}>
 							<section className="set-section">
 								{loadError === undefined ? null : (
@@ -323,10 +362,10 @@ export function SettingsPage({
 												onReloadProviders={() => void loadProviders()}
 											/>
 										) : null}
-										{section === "appearance" ? (
+										{section === "appearance" && !appearanceLocal ? (
 											<AppearanceSection draft={draft} patch={patch} onPreview={onAppearancePreview} />
 										) : null}
-										{section === "input" ? <InputSection draft={draft} patch={patch} /> : null}
+										{section === "input" && !inputLocal ? <InputSection draft={draft} patch={patch} /> : null}
 										{section === "terminal" ? (
 											<TerminalSection draft={draft} patch={patch} data={data} />
 										) : null}

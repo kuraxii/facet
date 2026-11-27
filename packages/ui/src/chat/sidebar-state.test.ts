@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
 	clampSidebarWidth,
+	readSidebarCollapsed,
 	readSidebarWidth,
 	SIDEBAR_DEFAULT_WIDTH,
 	SIDEBAR_MAX_WIDTH,
 	SIDEBAR_MIN_WIDTH,
 	type SidebarStorage,
+	writeSidebarCollapsed,
 	writeSidebarWidth,
 } from "./sidebar-state.ts";
 
@@ -40,5 +42,15 @@ describe("侧栏宽度", () => {
 		writeSidebarWidth(storage, 100);
 		expect(storage.values.get("facet.sidebar.width")).toBe(String(SIDEBAR_MIN_WIDTH));
 		expect(readSidebarWidth(storage)).toBe(SIDEBAR_MIN_WIDTH);
+	});
+
+	it("读写侧栏收起意图，默认展开", () => {
+		const storage = memoryStorage();
+		expect(readSidebarCollapsed(storage)).toBe(false);
+		writeSidebarCollapsed(storage, true);
+		expect(storage.values.get("facet.sidebar.collapsed")).toBe("1");
+		expect(readSidebarCollapsed(storage)).toBe(true);
+		writeSidebarCollapsed(storage, false);
+		expect(readSidebarCollapsed(storage)).toBe(false);
 	});
 });

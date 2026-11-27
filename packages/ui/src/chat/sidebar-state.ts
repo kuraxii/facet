@@ -22,6 +22,7 @@ export const SIDEBAR_WIDTH_BOUNDS: PaneWidthBounds = {
 
 /** 本地存储用的键。 */
 const WIDTH_KEY = "facet.sidebar.width";
+const COLLAPSED_KEY = "facet.sidebar.collapsed";
 
 /** 读写本地存储的最小接口，测试里换成假的实现。 */
 export interface SidebarStorage {
@@ -42,4 +43,14 @@ export function readSidebarWidth(storage: SidebarStorage): number {
 /** 写入侧栏宽度。 */
 export function writeSidebarWidth(storage: SidebarStorage, width: number): void {
 	storage.setItem(WIDTH_KEY, String(clampSidebarWidth(width)));
+}
+
+/** 从本地存储读出侧栏收起意图，未存过默认展开（false）。 */
+export function readSidebarCollapsed(storage: SidebarStorage): boolean {
+	return storage.getItem(COLLAPSED_KEY) === "1";
+}
+
+/** 写入侧栏收起意图。 */
+export function writeSidebarCollapsed(storage: SidebarStorage, collapsed: boolean): void {
+	storage.setItem(COLLAPSED_KEY, collapsed ? "1" : "0");
 }

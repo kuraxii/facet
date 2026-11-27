@@ -527,8 +527,8 @@ export class PiAgentFactory {
 	/**
 	 * pi 的默认设置。
 	 *
-	 * 读的是 pi 自己的设置（`agentDir/settings.json` 里的 `defaultProvider`、`defaultModel` 与
-	 * `defaultThinkingLevel`），新建会话时由 pi 用它开局，facet 不另存一份。
+	 * 读的是 pi 自己的设置（`agentDir/settings.json` 里的默认模型、思考档位、自动压缩与
+	 * 排队投递方式），新建会话时由 pi 用它开局，facet 不另存一份。
 	 */
 	agentDefaults(): AgentDefaults {
 		const settings = this.piSettings();
@@ -542,6 +542,9 @@ export class PiAgentFactory {
 		return {
 			...(model === undefined ? {} : { model }),
 			...(thinkingLevel === undefined ? {} : { thinkingLevel }),
+			autoCompaction: settings.getCompactionEnabled(),
+			steeringMode: settings.getSteeringMode(),
+			followUpMode: settings.getFollowUpMode(),
 		};
 	}
 
@@ -551,7 +554,13 @@ export class PiAgentFactory {
 	 * `thinkingLevel` 传 `null` 表示清掉这一项，交回模型自己决定——pi 的
 	 * `SettingsManager` 没有删除接口，所以直接改它持有的那份全局设置再存。
 	 */
-	async setAgentDefaults(patch: { model?: ModelRef; thinkingLevel?: ThinkingLevel | null }): Promise<void> {
+	async setAgentDefaults(patch: {
+		model?: ModelRef;
+		thinkingLevel?: ThinkingLevel | null;
+		autoCompaction?: boolean;
+		steeringMode?: "one-at-a-time" | "all";
+		followUpMode?: "one-at-a-time" | "all";
+	}): Promise<void> {
 		const settings = this.piSettings();
 		if (patch.model !== undefined) {
 			settings.setDefaultModelAndProvider(patch.model.provider, patch.model.id);
@@ -560,6 +569,15 @@ export class PiAgentFactory {
 			// null 表示清掉这一项：pi 落盘时值为 undefined 的键会被丢掉
 			const level = patch.thinkingLevel === null ? undefined : patch.thinkingLevel;
 			settings.setDefaultThinkingLevel(level as ThinkingLevel);
+		}
+		if (patch.autoCompaction !== undefined) {
+			settings.setCompactionEnabled(patch.autoCompaction);
+		}
+		if (patch.steeringMode !== undefined) {
+			settings.setSteeringMode(patch.steeringMode);
+		}
+		if (patch.followUpMode !== undefined) {
+			settings.setFollowUpMode(patch.followUpMode);
 		}
 		await settings.flush();
 		const failure = settings.drainErrors()[0];

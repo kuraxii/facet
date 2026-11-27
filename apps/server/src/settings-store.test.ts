@@ -65,13 +65,13 @@ describe("设置读取", () => {
 		expect(settings).not.toHaveProperty("defaultModel");
 		// 模型可见性已经去掉，旧文件里留下的这个字段直接丢掉
 		expect(settings).not.toHaveProperty("hiddenModels");
+		expect(settings.appearance).not.toHaveProperty("outlineScale");
 		expect(settings.appearance.theme).toBe(DEFAULT_SETTINGS.appearance.theme);
 		expect(settings.appearance.reducedMotion).toBe(true);
 		expect(settings.input.sendKey).toBe(DEFAULT_SETTINGS.input.sendKey);
 		expect(settings.layout.sidebarWidth).toBe(200);
 		expect(settings.appearance.codeTheme).toBe(DEFAULT_SETTINGS.appearance.codeTheme);
 		expect(settings.appearance.liveMotion).toBe("pulse");
-		expect(settings.appearance.outlineScale).toBe(200);
 	});
 
 	it("终端 shell 的标识原样留着，没有时是自动", async () => {

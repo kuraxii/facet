@@ -27,14 +27,14 @@ describe("ACP 后端管理 RPC", () => {
 	let dir: string;
 
 	beforeEach(async () => {
-		dir = await mkdtemp(join(tmpdir(), "facet-backend-rpc-"));
+		dir = await mkdtemp(join(tmpdir(), "facet-agent-rpc-"));
 	});
 
 	afterEach(async () => {
 		await rm(dir, { recursive: true, force: true });
 	});
 
-	it("支持 listBackends 并按管理档鉴权 ACP 登录", async () => {
+	it("支持 listAgents 并按管理档鉴权 ACP 登录", async () => {
 		const acpRuntime = new AcpAgentRuntime({
 			agentDir: dir,
 			probeEnv: {
@@ -49,10 +49,10 @@ describe("ACP 后端管理 RPC", () => {
 			audit: { record: () => {} },
 		} as unknown as RpcContext;
 
-		const listed = (await handleRequest(context, makeConnection("operator"), "listBackends", {})) as {
-			backends: Array<{ id: string; available: boolean }>;
+		const listed = (await handleRequest(context, makeConnection("operator"), "listAgents", {})) as {
+			agents: Array<{ id: string; available: boolean }>;
 		};
-		expect(listed.backends.map((b) => [b.id, b.available])).toEqual([
+		expect(listed.agents.map((b) => [b.id, b.available])).toEqual([
 			["pi", true],
 			["antigravity", true],
 		]);
@@ -60,7 +60,7 @@ describe("ACP 后端管理 RPC", () => {
 		// 非管理员无法发起 ACP 登录
 		await expect(
 			handleRequest(context, makeConnection("operator", "web"), "acpLoginStart", {
-				backendId: "antigravity",
+				agentId: "antigravity",
 			}),
 		).rejects.toMatchObject({ code: "rejected" });
 	});

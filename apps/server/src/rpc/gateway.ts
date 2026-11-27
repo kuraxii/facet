@@ -31,7 +31,7 @@ import {
 	toProtocolError,
 } from "./context.ts";
 import { DispatchLog } from "./dispatch-log.ts";
-import { backendHandlers } from "./handlers/backend-handlers.ts";
+import { agentHandlers } from "./handlers/agent-handlers.ts";
 import type { DispatchHandlerMap } from "./handlers/chat-handlers.ts";
 import { chatHandlers } from "./handlers/chat-handlers.ts";
 import { sessionHandlers } from "./handlers/session-handlers.ts";
@@ -58,7 +58,7 @@ export const REQUEST_HANDLERS: RequestHandlerMap = {
 	...sessionHandlers,
 	...terminalHandlers,
 	...systemHandlers,
-	...backendHandlers,
+	...agentHandlers,
 };
 
 /** 判断这条连接能不能调用某个权限档的方法。 */

@@ -284,7 +284,7 @@ describe("终端的权限", () => {
 		expect(hello.capabilities).not.toContain("terminal");
 		const result = await local.request("createTerminal", { cwd: dir, cols: 80, rows: 24 });
 		expect(result.ok).toBe(false);
-		expect(result.message).toBe("This host has no terminal backend");
+		expect(result.message).toBe("This host has no terminal agent");
 	});
 });
 

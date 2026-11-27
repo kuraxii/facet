@@ -32,7 +32,7 @@ import type {
 	SessionStatus,
 	SlashCommand,
 } from "@facet/protocol";
-import { isAcpLocator, makeChannel, PI_BACKEND_ID, parseAcpLocator, parseChannel } from "@facet/protocol";
+import { isAcpLocator, makeChannel, PI_AGENT_ID, parseAcpLocator, parseChannel } from "@facet/protocol";
 import { ActionProjector } from "./action-projector.ts";
 import { EventLog, replayAndSubscribe } from "./event-log.ts";
 import { debugLog, errorLog } from "./log.ts";
@@ -333,14 +333,14 @@ export class SessionHub<A extends HubAgent = ManagedAgent> {
 	}
 
 	/** 建一个新会话并登记。Pi 会话立即建文件；ACP 会话待初始化分配外部 id 后补全定位符。 */
-	async createSession(options: PiAgentLaunchOptions & { backendId?: string } = {}): Promise<SessionSnapshot> {
-		const backendId = options.backendId;
-		if (backendId !== undefined && backendId !== PI_BACKEND_ID) {
+	async createSession(options: PiAgentLaunchOptions & { agentId?: string } = {}): Promise<SessionSnapshot> {
+		const agentId = options.agentId;
+		if (agentId !== undefined && agentId !== PI_AGENT_ID) {
 			if (this.acpRuntime === undefined) {
-				throw new Error(`ACP runtime is unavailable for backend: ${backendId}`);
+				throw new Error(`ACP runtime is unavailable for agent: ${agentId}`);
 			}
 			const agent = this.acpRuntime.create({
-				backendId,
+				agentId,
 				cwd: options.cwd,
 				name: options.name,
 			});
@@ -363,7 +363,7 @@ export class SessionHub<A extends HubAgent = ManagedAgent> {
 	/**
 	 * 按会话定位符取会话,已登记时复用。
 	 *
-	 * 支持本地 `.jsonl` 文件（Pi）与 `acp://<backendId>/<externalSessionId>`（ACP）。
+	 * 支持本地 `.jsonl` 文件（Pi）与 `acp://<agentId>/<externalSessionId>`（ACP）。
 	 */
 	async openSession(file: string, cwd?: string): Promise<SessionSnapshot> {
 		if (isAcpLocator(file)) {

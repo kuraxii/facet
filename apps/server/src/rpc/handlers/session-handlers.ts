@@ -6,7 +6,7 @@
  */
 import {
 	type Channel,
-	PI_BACKEND_ID,
+	PI_AGENT_ID,
 	parseChannel,
 	type RequestParams,
 	type RequestResults,
@@ -51,17 +51,17 @@ export const sessionHandlers: Pick<RequestHandlerMap, SessionMethod> = {
 	}),
 
 	listSessions: async (params, context: RpcContext): Promise<RequestResults["listSessions"]> => {
-		const backendFilter = params.backendId;
+		const agentFilter = params.agentId;
 		const piSessions =
-			backendFilter === undefined || backendFilter === PI_BACKEND_ID
+			agentFilter === undefined || agentFilter === PI_AGENT_ID
 				? (await context.factory.listSessions(params.cwd)).map((summary) => ({
-						backendId: PI_BACKEND_ID,
+						agentId: PI_AGENT_ID,
 						...summary,
 					}))
 				: [];
 		const acpSessions =
-			backendFilter === undefined || backendFilter !== PI_BACKEND_ID
-				? (context.acpRuntime?.index.list(params.cwd, backendFilter) ?? [])
+			agentFilter === undefined || agentFilter !== PI_AGENT_ID
+				? (context.acpRuntime?.index.list(params.cwd, agentFilter) ?? [])
 				: [];
 		const sessions = [...piSessions, ...acpSessions].sort((left, right) => right.modified - left.modified);
 		// 清单已经回给端了，可以在背景里补齐剩下的摘要
@@ -85,7 +85,7 @@ export const sessionHandlers: Pick<RequestHandlerMap, SessionMethod> = {
 		const cwd = params.cwd === undefined ? undefined : await resolveProjectDirectory(params.cwd);
 		return await context.hub.createSession({
 			...(cwd === undefined ? {} : { cwd }),
-			backendId: params.backendId,
+			agentId: params.agentId,
 			model: params.model,
 			thinkingLevel: params.thinkingLevel,
 			tools: params.tools,

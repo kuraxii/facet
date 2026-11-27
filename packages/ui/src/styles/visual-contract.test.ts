@@ -311,6 +311,9 @@ const RUNTIME_SET_VARS: readonly string[] = [
 	"--panel-box-width",
 	// 速度仪指针旋转角：由 `SessionStatsPopover.tsx` 按实时 tok/s 写到速度芯片元素上
 	"--gauge-deg",
+	// 工作区标签拖拽重排：跟手横向位移与邻项让位偏移（`workspace-tab-bar.tsx` 写入）
+	"--tab-drag-x",
+	"--tab-shift",
 ];
 
 describe("变量都有定义", () => {

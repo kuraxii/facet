@@ -199,6 +199,7 @@ export {
 	PANEL_TABS,
 	PANEL_WIDTH_BOUNDS,
 	readPanelState,
+	reorderPanelTabs,
 	writePanelState,
 } from "./panel/panel-state.ts";
 export type { RightPanelProps } from "./panel/right-panel.tsx";

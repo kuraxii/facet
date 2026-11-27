@@ -322,6 +322,48 @@
 	place-items: center;
 }
 
+/* 拖拽重排期间：被拖胶囊抬升并 1:1 跟手平移，邻项按 `--tab-shift` 平滑让位，同时压住无关悬停与关闭按钮 */
+.workspace-tabs[data-reordering="true"] {
+	cursor: grabbing;
+}
+
+.workspace-tabs[data-reordering="true"] .workspace-tab-shell:not([data-dragging="true"]) {
+	transform: translateX(var(--tab-shift, 0px));
+	transition:
+		transform var(--dur-fast) var(--ease-standard),
+		background-color var(--dur-fast) var(--ease-standard);
+}
+
+.workspace-tabs[data-reordering="true"] .workspace-tab-shell:not([data-dragging="true"]):hover {
+	background: transparent;
+}
+
+.workspace-tabs[data-reordering="true"] .workspace-tab-shell[data-selected="true"]:hover {
+	background: var(--bg-active);
+}
+
+.workspace-tabs[data-reordering="true"] .workspace-tab {
+	mask-image: none;
+}
+
+.workspace-tabs[data-reordering="true"] .workspace-tab-close {
+	opacity: 0;
+	pointer-events: none;
+}
+
+.workspace-tab-shell[data-dragging="true"] {
+	z-index: var(--z-content-local);
+	transform: translateX(var(--tab-drag-x, 0px));
+	background: var(--bg-elevated);
+	box-shadow: var(--shadow-popover);
+	cursor: grabbing;
+}
+
+.workspace-tab-shell[data-dragging="true"] .workspace-tab {
+	color: var(--fg-default);
+	cursor: grabbing;
+}
+
 /*
  * 容器窄到一档（`< 420px`，右栏被拖到下限时就是这一段）：间距收紧，把宽度让给标签本身。
  *

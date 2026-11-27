@@ -1,29 +1,29 @@
 /**
  * 工作区标签栏。
  *
- * 右栏里已打开的工具标签（文件、变更、终端）的切换器。它是纯展示组件：条目、当前项与回调
- * 都由调用方给，组件不知道每一条对应哪个业务，也不在这里发请求；`+` 菜单是独立的一枚
- * 按钮（`WorkspaceTabMenu`），不混进标签栏的键盘序列。
+ * 右栏里已打开的工具标签（文件、变更、提交图谱、终端）的切换器。它是纯展示组件：条目、
+ * 当前项与回调都由调用方给，组件不知道每一条对应哪个业务，也不在这里发请求；`+` 菜单是
+ * 独立的一枚按钮（`WorkspaceTabMenu`），不混进标签栏的键盘序列。
  *
- * 同一个组件用在两处：展开态顶带右格与抽屉顶头，两处都是横向一条，宽度差别很大。标签因此
- * 不压缩：文字永远在，放不下就横着滚；鼠标只有竖向滚轮，所以滚轮也接到横向上，并且带一段
- * 逐帧收窄的滑动（见 `useTabStripScroll`）。
+ * 同一个组件用在展开态顶带右格，标签不压缩：文字永远在，放不下就横着滚；鼠标竖向滚轮也
+ * 接到横向上（见 `useTabStripScroll`）。传入 `onReorder` 后支持指针拖拽调整标签顺序
+ * （见 `useTabStripDrag`）。
  */
 
 import { X } from "lucide-react";
 import {
+	type CSSProperties,
 	type KeyboardEvent as ReactKeyboardEvent,
 	type ReactNode,
-	type RefObject,
 	useCallback,
-	useEffect,
 	useRef,
-	useState,
 } from "react";
 import { Badge } from "../common/Badge.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { ICON_SIZE } from "../styles/visual-contract.ts";
 import type { RightPanelTab } from "./panel-state.ts";
+import { useTabStripDrag } from "./use-tab-drag.ts";
+import { useTabStripFade, useTabStripScroll } from "./use-tab-strip.ts";
 
 /**
  * 工作区的工具标识。
@@ -58,6 +58,8 @@ export interface WorkspaceTabBarProps {
 	onSelect: (id: WorkspaceTabId) => void;
 	/** 关掉一条；不给时不显示关闭按钮 */
 	onClose?: ((id: WorkspaceTabId) => void) | undefined;
+	/** 拖拽重排完成后的新顺序；不给时不启用拖拽 */
+	onReorder?: ((orderedIds: readonly WorkspaceTabId[]) => void) | undefined;
 	/** 组件自己的类名 */
 	className?: string;
 	/** 标签栏的无障碍名称；不给时用界面里那句默认的 */
@@ -66,209 +68,30 @@ export interface WorkspaceTabBarProps {
 	controlsId?: string;
 }
 
-/**
- * 每一帧收掉剩余距离的比例。
- *
- * 0.28 时一格滚轮（约 100px）在 12 帧左右（≈200ms）走完，起手快、到尾巴自然慢下来，
- * 与系统里那种"滑一下"的手感接近。一次给满（1）就是瞬移，给太小则显得拖沓。
- */
-const TAB_SCROLL_EASING = 0.28;
-
-/**
- * 要不要做这段滑动动画。
- *
- * 与样式里的 `--dur-*` 数是同一套判断：系统偏好与设置项任一成立就减动效，此时直接落位。
- */
-function wantsSmoothScroll(): boolean {
-	if (typeof document === "undefined") {
-		return false;
-	}
-	if (document.documentElement.dataset.motion === "reduced") {
-		return false;
-	}
-	return !(
-		typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
-	);
-}
-
-/**
- * 标签栏的横向滚动。
- *
- * 两件事共用一份「目标位置」：滚轮/触控板横滚，以及当前项切过去时把它带回可视范围。
- * 自己维护目标值而不直接读 `scrollLeft`——动画途中 `scrollLeft` 是中间位置，快速连滚时
- * `scrollLeft += delta` 会把上一段动画吃掉，滚得越快反而越走不动。
- *
- * 滚轮部分：React 的 `onWheel` 挂在根节点上且是**被动**监听，里面 `preventDefault()` 不
- * 生效，所以挂原生监听并标 `passive: false`。标签栏本身没有可滚的纵向内容，吃掉这个事件
- * 不会影响别处；没溢出时直接放行，让外层照旧处理。触控板横向滑动给的是 `deltaX`，鼠标
- * 竖滚给的是 `deltaY`：取绝对值大的那个方向，两种设备都能滚。
- *
- * 带回可视范围：新开的标签排在末尾、容器窄时它就在滚动区外面，键盘切到看不见的那一条也
- * 一样。这里只改标签栏自己的 `scrollLeft`，不调 `scrollIntoView`——那会把外壳的横向滚动
- * 一起带走。
- */
-function useTabStripScroll(
-	barRef: RefObject<HTMLDivElement | null>,
-	buttonsRef: RefObject<Map<WorkspaceTabId, HTMLButtonElement>>,
-	activeId: WorkspaceTabId | null,
-): void {
-	/** 动画要走到哪儿；`null` 表示没有在走 */
-	const targetRef = useRef<number | null>(null);
-	/** 在跑的那一帧；0 表示没在跑 */
-	const frameRef = useRef(0);
-
-	/** 逐帧走向目标位置 */
-	const glide = useCallback(
-		function step(): void {
-			const bar = barRef.current;
-			const target = targetRef.current;
-			if (bar === null || target === null) {
-				frameRef.current = 0;
-				return;
-			}
-			const remaining = target - bar.scrollLeft;
-			if (Math.abs(remaining) < 1) {
-				bar.scrollLeft = target;
-				targetRef.current = null;
-				frameRef.current = 0;
-				return;
-			}
-			bar.scrollLeft += remaining * TAB_SCROLL_EASING;
-			frameRef.current = requestAnimationFrame(step);
-		},
-		[barRef],
-	);
-
-	/** 走向某个位置（已夹在可滚范围内）；减动效时直接落位 */
-	const scrollTo = useCallback(
-		(next: number): void => {
-			const bar = barRef.current;
-			if (bar === null) {
-				return;
-			}
-			const max = bar.scrollWidth - bar.clientWidth;
-			targetRef.current = Math.min(max, Math.max(0, next));
-			if (!wantsSmoothScroll()) {
-				bar.scrollLeft = targetRef.current;
-				targetRef.current = null;
-				return;
-			}
-			if (frameRef.current === 0) {
-				frameRef.current = requestAnimationFrame(glide);
-			}
-		},
-		[barRef, glide],
-	);
-
-	useEffect(() => {
-		const bar = barRef.current;
-		if (bar === null) {
-			return;
-		}
-		const onWheel = (event: WheelEvent): void => {
-			if (bar.scrollWidth <= bar.clientWidth) {
-				return;
-			}
-			const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
-			if (delta === 0) {
-				return;
-			}
-			event.preventDefault();
-			scrollTo((targetRef.current ?? bar.scrollLeft) + delta);
-		};
-		bar.addEventListener("wheel", onWheel, { passive: false });
-		return () => {
-			bar.removeEventListener("wheel", onWheel);
-			if (frameRef.current !== 0) {
-				cancelAnimationFrame(frameRef.current);
-			}
-			frameRef.current = 0;
-			targetRef.current = null;
-		};
-	}, [barRef, scrollTo]);
-
-	// 依赖只有当前项：新开一条标签时它就是新那条，切换与追加都会走到这里
-	useEffect(() => {
-		const bar = barRef.current;
-		const button = activeId === null ? undefined : buttonsRef.current.get(activeId);
-		if (bar === null || button === undefined) {
-			return;
-		}
-		const barRect = bar.getBoundingClientRect();
-		const buttonRect = button.getBoundingClientRect();
-		const from = targetRef.current ?? bar.scrollLeft;
-		if (buttonRect.left < barRect.left) {
-			scrollTo(from - (barRect.left - buttonRect.left));
-		} else if (buttonRect.right > barRect.right) {
-			scrollTo(from + (buttonRect.right - barRect.right));
-		}
-	}, [activeId, barRef, buttonsRef, scrollTo]);
-}
-
-/** 标签溢出状态：只有真的被左右边界裁住时才亮起对应一侧的渐隐遮罩。 */
-interface TabStripFade {
-	left: boolean;
-	right: boolean;
-}
-
-/** 跟踪横向标签栏两端是否存在溢出裁切，避免在全部放得下时误加边缘渐隐。 */
-function useTabStripFade(
-	barRef: RefObject<HTMLDivElement | null>,
-	itemCount: number,
-	activeId: WorkspaceTabId | null,
-): TabStripFade {
-	const [fade, setFade] = useState<TabStripFade>({ left: false, right: false });
-
-	const sync = useCallback((): void => {
-		const bar = barRef.current;
-		if (bar === null) {
-			return;
-		}
-		// 留 1px 容差吸收亚像素滚动取整误差
-		const left = bar.scrollLeft > 1;
-		const right = bar.scrollLeft + bar.clientWidth < bar.scrollWidth - 1;
-		setFade((current) => (current.left === left && current.right === right ? current : { left, right }));
-	}, [barRef]);
-
-	useEffect(() => {
-		// itemCount / activeId 变更后重算一次渐隐状态（依赖显式参与判定而非多余分支）
-		void itemCount;
-		void activeId;
-		sync();
-	}, [activeId, itemCount, sync]);
-
-	useEffect(() => {
-		const bar = barRef.current;
-		if (bar === null) {
-			return;
-		}
-		bar.addEventListener("scroll", sync, { passive: true });
-		const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(sync);
-		observer?.observe(bar);
-		return () => {
-			bar.removeEventListener("scroll", sync);
-			observer?.disconnect();
-		};
-	}, [barRef, sync]);
-
-	return fade;
-}
-
 export function WorkspaceTabBar({
 	items,
 	activeId,
 	onSelect,
 	onClose,
+	onReorder,
 	className,
 	ariaLabel,
 	controlsId,
 }: WorkspaceTabBarProps): ReactNode {
 	const { t } = useI18n();
 	const barRef = useRef<HTMLDivElement | null>(null);
+	const shellRefs = useRef(new Map<WorkspaceTabId, HTMLDivElement>());
 	const buttonRefs = useRef(new Map<WorkspaceTabId, HTMLButtonElement>());
+	const itemIds = items.map((item) => item.id);
 
 	useTabStripScroll(barRef, buttonRefs, activeId);
 	const fade = useTabStripFade(barRef, items.length, activeId);
+	const { dragPreview, onTabPointerDown, consumeSuppressedClick } = useTabStripDrag(
+		barRef,
+		shellRefs,
+		itemIds,
+		onReorder,
+	);
 
 	const enabled = items.filter((item) => item.disabled !== true);
 	/** 焦点位：当前项可用就落在它身上，否则落在第一条可用项上 */
@@ -352,9 +175,17 @@ export function WorkspaceTabBar({
 			aria-label={ariaLabel ?? t("panel.tabs")}
 			data-fade-left={fade.left ? "true" : undefined}
 			data-fade-right={fade.right ? "true" : undefined}
+			data-reordering={dragPreview === null ? undefined : "true"}
 		>
 			{items.map((item) => {
 				const selected = activeId === item.id;
+				const isDragging = dragPreview?.draggedId === item.id;
+				const shift = dragPreview === null ? 0 : (dragPreview.shifts[item.id] ?? 0);
+				const shellStyle: CSSProperties | undefined = isDragging
+					? ({ "--tab-drag-x": `${dragPreview.dx}px` } as CSSProperties)
+					: shift !== 0
+						? ({ "--tab-shift": `${shift}px` } as CSSProperties)
+						: undefined;
 				const closeLabel = t("panel.closeTab", { name: item.label });
 				return (
 					/*
@@ -363,9 +194,18 @@ export function WorkspaceTabBar({
 					 */
 					<div
 						key={item.id}
+						ref={(node) => {
+							if (node === null) {
+								shellRefs.current.delete(item.id);
+							} else {
+								shellRefs.current.set(item.id, node);
+							}
+						}}
 						className={onClose === undefined ? "workspace-tab-shell" : "workspace-tab-shell is-closable"}
 						role="presentation"
 						data-selected={selected ? "true" : undefined}
+						data-dragging={isDragging ? "true" : undefined}
+						style={shellStyle}
 						onAuxClick={(event) => {
 							// 中键关闭：与浏览器标签一致
 							if (event.button === 1 && onClose !== undefined) {
@@ -389,8 +229,12 @@ export function WorkspaceTabBar({
 									buttonRefs.current.set(item.id, node);
 								}
 							}}
+							onPointerDown={(event) => onTabPointerDown(event, item.id)}
 							onKeyDown={(event) => onKeyDown(event, item.id)}
 							onClick={() => {
+								if (consumeSuppressedClick(item.id)) {
+									return;
+								}
 								if (item.disabled !== true) {
 									onSelect(item.id);
 								}

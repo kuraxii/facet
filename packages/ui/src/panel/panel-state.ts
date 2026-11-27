@@ -142,6 +142,36 @@ export function closePanelTab(state: RightPanelState, tab: RightPanelTab): Right
 	return normalizePanelState({ ...state, openTabs, activeTab });
 }
 
+/**
+ * 重排已打开的标签顺序。
+ *
+ * 只保留当前已打开集合里的标签并按去重后的新顺序排列，若输入遗漏了某个已开标签则补回末尾；
+ * 顺序未变化时原样返回。只改显示顺序，不碰激活项与开关状态。
+ */
+export function reorderPanelTabs(
+	state: RightPanelState,
+	nextOrder: readonly RightPanelTab[],
+): RightPanelState {
+	const openTabs: RightPanelTab[] = [];
+	for (const tab of nextOrder) {
+		if (state.openTabs.includes(tab) && !openTabs.includes(tab)) {
+			openTabs.push(tab);
+		}
+	}
+	for (const tab of state.openTabs) {
+		if (!openTabs.includes(tab)) {
+			openTabs.push(tab);
+		}
+	}
+	if (
+		openTabs.length === state.openTabs.length &&
+		openTabs.every((tab, index) => tab === state.openTabs[index])
+	) {
+		return normalizePanelState(state);
+	}
+	return normalizePanelState({ ...state, openTabs });
+}
+
 /** 读标签串：必须是 JSON 数组，元素按出现顺序去重，读不懂的项丢掉。 */
 function readTabs(raw: string | null): readonly RightPanelTab[] | undefined {
 	if (raw === null) {

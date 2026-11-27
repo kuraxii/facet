@@ -16,6 +16,7 @@ import {
 	type PanelStorage,
 	type RightPanelState,
 	readPanelState,
+	reorderPanelTabs,
 	writePanelState,
 } from "./panel-state.ts";
 
@@ -228,6 +229,31 @@ describe("closePanelTab", () => {
 	it("关一个没开着的标签是空操作", () => {
 		const before = state({ openTabs: ["files"], activeTab: "files" });
 		expect(closePanelTab(before, "terminal")).toEqual(before);
+	});
+});
+
+describe("reorderPanelTabs", () => {
+	it("按给定顺序重排已打开的标签，保留激活项与宽度", () => {
+		const before = state({
+			openTabs: ["files", "changes", "git-graph", "terminal"],
+			activeTab: "changes",
+			width: 560,
+		});
+		const next = reorderPanelTabs(before, ["terminal", "changes", "files", "git-graph"]);
+		expect(next.openTabs).toEqual(["terminal", "changes", "files", "git-graph"]);
+		expect(next.activeTab).toBe("changes");
+		expect(next.width).toBe(560);
+	});
+
+	it("过滤未打开与重复标签，遗漏的已开标签补回末尾", () => {
+		const before = state({ openTabs: ["files", "changes", "terminal"], activeTab: "files" });
+		const next = reorderPanelTabs(before, ["terminal", "git-graph", "terminal", "files"]);
+		expect(next.openTabs).toEqual(["terminal", "files", "changes"]);
+	});
+
+	it("顺序一致时不制造无意义的副本改动", () => {
+		const before = state({ openTabs: ["files", "changes"], activeTab: "files" });
+		expect(reorderPanelTabs(before, ["files", "changes"])).toEqual(before);
 	});
 });
 

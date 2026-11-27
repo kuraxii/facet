@@ -58,25 +58,34 @@ function mount(props: Partial<WorkspaceTabBarProps> = {}): {
 	container: HTMLDivElement;
 	onSelect: ReturnType<typeof vi.fn>;
 	onClose: ReturnType<typeof vi.fn>;
+	onReorder: ReturnType<typeof vi.fn>;
 	rerender: (next: Partial<WorkspaceTabBarProps>) => void;
 } {
 	const container = document.createElement("div");
 	document.body.append(container);
 	const onSelect = vi.fn();
 	const onClose = vi.fn();
+	const onReorder = vi.fn();
 	const root = createRoot(container);
 	const show = (next: Partial<WorkspaceTabBarProps>): void => {
 		act(() => {
 			root.render(
 				<I18nProvider language="zh-CN">
-					<WorkspaceTabBar items={ITEMS} activeId="files" onSelect={onSelect} onClose={onClose} {...next} />
+					<WorkspaceTabBar
+						items={ITEMS}
+						activeId="files"
+						onSelect={onSelect}
+						onClose={onClose}
+						onReorder={onReorder}
+						{...next}
+					/>
 				</I18nProvider>,
 			);
 		});
 	};
 	show(props);
 	unmount = () => root.unmount();
-	return { container, onSelect, onClose, rerender: show };
+	return { container, onSelect, onClose, onReorder, rerender: show };
 }
 
 /** 取所有标签按钮。 */
@@ -334,5 +343,120 @@ describe("工作区标签栏", () => {
 		});
 		expect(bar.dataset.fadeLeft).toBe("true");
 		expect(bar.dataset.fadeRight).toBeUndefined();
+	});
+
+	/** 给标签栏与各外壳装上递增的水平矩形，便于测真实拖拽阈值与让位。 */
+	function mockShellRects(container: HTMLElement): void {
+		const bar = barOf(container);
+		bar.getBoundingClientRect = () => ({ left: 0, right: 300, width: 300, top: 0, bottom: 26 }) as DOMRect;
+		const shells = Array.from(container.querySelectorAll<HTMLDivElement>(".workspace-tab-shell"));
+		shells.forEach((shell, index) => {
+			const left = index * 82;
+			shell.getBoundingClientRect = () =>
+				({ left, right: left + 80, width: 80, top: 0, bottom: 26 }) as DOMRect;
+		});
+	}
+
+	it("按住标签向右拖过邻项中点后提交新顺序，且松手后不误触选中", () => {
+		const { container, onReorder, onSelect } = mount();
+		mockShellRects(container);
+		const firstTab = tab(container, "文件");
+
+		act(() => {
+			firstTab.dispatchEvent(
+				new PointerEvent("pointerdown", { button: 0, clientX: 40, clientY: 13, pointerId: 1, bubbles: true }),
+			);
+		});
+		// 未达 4px 阈值时不进入拖拽
+		act(() => {
+			window.dispatchEvent(
+				new PointerEvent("pointermove", { clientX: 42, clientY: 13, pointerId: 1, bubbles: true }),
+			);
+		});
+		expect(barOf(container).dataset.reordering).toBeUndefined();
+
+		// 向右拖动 90px：越过「变更」中点（122），进入拖拽并让邻项左移
+		act(() => {
+			window.dispatchEvent(
+				new PointerEvent("pointermove", { clientX: 130, clientY: 13, pointerId: 1, bubbles: true }),
+			);
+		});
+		const bar = barOf(container);
+		expect(bar.dataset.reordering).toBe("true");
+		const shells = Array.from(container.querySelectorAll<HTMLDivElement>(".workspace-tab-shell"));
+		expect(shells[0]?.dataset.dragging).toBe("true");
+		expect(shells[0]?.style.getPropertyValue("--tab-drag-x")).toBe("90px");
+		expect(shells[1]?.style.getPropertyValue("--tab-shift")).toBe("-82px");
+
+		act(() => {
+			window.dispatchEvent(
+				new PointerEvent("pointerup", { button: 0, clientX: 130, clientY: 13, pointerId: 1, bubbles: true }),
+			);
+		});
+		expect(bar.dataset.reordering).toBeUndefined();
+		expect(onReorder).toHaveBeenCalledTimes(1);
+		expect(onReorder).toHaveBeenCalledWith(["changes", "files", "terminal"]);
+
+		// 紧随拖拽松手补发的 click 不应切走激活项
+		act(() => {
+			firstTab.click();
+		});
+		expect(onSelect).not.toHaveBeenCalled();
+	});
+
+	it("拖拽过程中按 Escape 取消并消费默认事件，不提交重排", () => {
+		const { container, onReorder } = mount();
+		mockShellRects(container);
+		act(() => {
+			tab(container, "文件").dispatchEvent(
+				new PointerEvent("pointerdown", { button: 0, clientX: 40, clientY: 13, pointerId: 1, bubbles: true }),
+			);
+			window.dispatchEvent(
+				new PointerEvent("pointermove", { clientX: 130, clientY: 13, pointerId: 1, bubbles: true }),
+			);
+		});
+		const esc = new KeyboardEvent("keydown", { key: "Escape", cancelable: true, bubbles: true });
+		act(() => {
+			window.dispatchEvent(esc);
+		});
+		expect(esc.defaultPrevented).toBe(true);
+		expect(barOf(container).dataset.reordering).toBeUndefined();
+		expect(onReorder).not.toHaveBeenCalled();
+	});
+
+	it("右键按下、点关闭按钮或未传 onReorder 时不启动拖拽", () => {
+		const { container, rerender } = mount();
+		mockShellRects(container);
+		act(() => {
+			tab(container, "文件").dispatchEvent(
+				new PointerEvent("pointerdown", { button: 2, clientX: 40, clientY: 13, pointerId: 1, bubbles: true }),
+			);
+			window.dispatchEvent(
+				new PointerEvent("pointermove", { clientX: 130, clientY: 13, pointerId: 1, bubbles: true }),
+			);
+		});
+		expect(barOf(container).dataset.reordering).toBeUndefined();
+
+		const closeBtn = container.querySelector<HTMLButtonElement>(".workspace-tab-close");
+		act(() => {
+			closeBtn?.dispatchEvent(
+				new PointerEvent("pointerdown", { button: 0, clientX: 70, clientY: 13, pointerId: 2, bubbles: true }),
+			);
+			window.dispatchEvent(
+				new PointerEvent("pointermove", { clientX: 160, clientY: 13, pointerId: 2, bubbles: true }),
+			);
+		});
+		expect(barOf(container).dataset.reordering).toBeUndefined();
+
+		rerender({ onReorder: undefined });
+		act(() => {
+			tab(container, "文件").dispatchEvent(
+				new PointerEvent("pointerdown", { button: 0, clientX: 40, clientY: 13, pointerId: 3, bubbles: true }),
+			);
+			window.dispatchEvent(
+				new PointerEvent("pointermove", { clientX: 130, clientY: 13, pointerId: 3, bubbles: true }),
+			);
+		});
+		expect(barOf(container).dataset.reordering).toBeUndefined();
 	});
 });

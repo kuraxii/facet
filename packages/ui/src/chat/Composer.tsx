@@ -7,7 +7,15 @@
  * 待发的图片贴在输入框上沿，可以点添加按钮选、粘贴或直接拖进来。
  */
 import type { ChatActivity } from "@facet/client-core";
-import type { ContextUsage, ModelInfo, SlashCommand, ThinkingLevel } from "@facet/protocol";
+import type {
+	ContextBreakdown,
+	ContextUsage,
+	Message,
+	ModelInfo,
+	SessionStats,
+	SlashCommand,
+	ThinkingLevel,
+} from "@facet/protocol";
 import { Brain, FileUp, ImagePlus, Plus, X } from "lucide-react";
 import { type Ref, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FACET_FILE_DRAG_MIME } from "../common/file-drag.ts";
@@ -18,8 +26,10 @@ import { ICON_SIZE } from "../styles/visual-contract.ts";
 import { useHoverTip } from "../tip.tsx";
 import { ChevronIcon } from "../transcript/chevron.tsx";
 import { SendIcon, StopIcon } from "../transcript/icons.tsx";
-import { ContextRing, usageDetailText, usageLabel, usagePercentText } from "./ContextRing.tsx";
+import { ContextPopover } from "./ContextPopover.tsx";
+import { ContextRing, usageLabel, usagePercentShort } from "./ContextRing.tsx";
 import { ComposerEditor, type ComposerHandle } from "./rich-editor/ComposerEditor.tsx";
+import { SessionStatsChip } from "./SessionStatsPopover.tsx";
 
 /** 输入区里一张待发的图片。 */
 export interface ComposerAttachment {
@@ -89,6 +99,14 @@ export interface ComposerProps {
 	canStop?: boolean;
 	/** 上下文用量，未估算出来时为空 */
 	contextUsage?: ContextUsage | undefined;
+	/** 按需加载当前活动分支的上下文明细 */
+	onLoadContextDetails?: (() => Promise<ContextBreakdown>) | undefined;
+	/** 全会话累计统计（含已被压缩掉的历史） */
+	sessionStats?: SessionStats | undefined;
+	/** 已加载的消息列表，用于在 UI 层计算 tok/s 速度 */
+	sessionMessages?: readonly Message[];
+	/** 流式输出中的字符总量，用于实时估算生成速度 */
+	streamingChars?: number;
 	/** 是否正在压缩上下文 */
 	isCompacting?: boolean;
 	/** 能否手动压缩，这一轮在跑时不能 */
@@ -185,6 +203,10 @@ export function Composer({
 	isSending = false,
 	canStop = activity === "running",
 	contextUsage,
+	onLoadContextDetails,
+	sessionStats,
+	sessionMessages = [],
+	streamingChars = 0,
 	isCompacting = false,
 	canCompact = true,
 	onCompact,
@@ -212,7 +234,15 @@ export function Composer({
 	const isQueuing = activity === "running";
 	/** 这一轮还在跑且没内容要发时，按钮换成停止；发送在途时仍留在发送上，免得一下没收住轮次。 */
 	const showsStop = activity !== "idle" && !canSend && !isSending;
-	const [openMenu, setOpenMenu] = useState<"model" | "level" | "attach" | "context" | undefined>(undefined);
+	const [openMenu, setOpenMenu] = useState<"model" | "level" | "attach" | "context" | "stats" | undefined>(
+		undefined,
+	);
+	const [contextBreakdownState, setContextBreakdownState] = useState<{
+		key: string | undefined;
+		data: ContextBreakdown | undefined;
+	}>({ key: draftKey, data: undefined });
+	const [loadingContextDetails, setLoadingContextDetails] = useState(false);
+	const contextBreakdown = contextBreakdownState.key === draftKey ? contextBreakdownState.data : undefined;
 	/** 有文件悬在输入区上方，界面据此给出可投放的样子 */
 	const [isDropping, setIsDropping] = useState(false);
 	/** 输入区外框：`@` 与 `/` 两处补全菜单都挂在它下面 */
@@ -234,6 +264,35 @@ export function Composer({
 	const attachRef = useDismiss(openMenu === "attach", () => setOpenMenu(undefined));
 	const levelRef = useDismiss(openMenu === "level", () => setOpenMenu(undefined));
 	const contextRef = useDismiss(openMenu === "context", () => setOpenMenu(undefined));
+	const statsRef = useDismiss(openMenu === "stats", () => setOpenMenu(undefined));
+	const contextRefreshKey = `${draftKey ?? ""}:${contextUsage?.tokens ?? ""}:${contextUsage?.contextWindow ?? 0}:${isCompacting ? "1" : "0"}`;
+
+	useEffect(() => {
+		if (openMenu !== "context" || onLoadContextDetails === undefined || isCompacting) {
+			return;
+		}
+		// `contextRefreshKey` 变化时重新拉取当前分支明细，保证压缩或切会话后展示最新数据
+		void contextRefreshKey;
+		let cancelled = false;
+		setLoadingContextDetails(true);
+		void onLoadContextDetails()
+			.then((details) => {
+				if (!cancelled) {
+					setContextBreakdownState({ key: draftKey, data: details });
+				}
+			})
+			.catch(() => {
+				// 按需拉取失败时保留基础 contextUsage 展示
+			})
+			.finally(() => {
+				if (!cancelled) {
+					setLoadingContextDetails(false);
+				}
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [openMenu, onLoadContextDetails, draftKey, isCompacting, contextRefreshKey]);
 	// 没有给出可选模型时退化成只展示的芯片
 	const canPickModel = models !== undefined && onModelChange !== undefined;
 	const levels =
@@ -495,43 +554,48 @@ export function Composer({
 				</div>
 
 				<span className="composer-send">
+					<span className="chip-wrap" ref={statsRef}>
+						<SessionStatsChip
+							messages={sessionMessages}
+							streamingChars={streamingChars}
+							isStreaming={activity === "running"}
+							sessionStats={sessionStats}
+							isOpen={openMenu === "stats"}
+							onToggle={() => setOpenMenu(openMenu === "stats" ? undefined : "stats")}
+						/>
+					</span>
 					<span className="chip-wrap" ref={contextRef}>
 						<button
 							type="button"
-							className="ctx-chip"
+							className="composer-status-chip"
+							data-chip="context"
 							onClick={() => setOpenMenu(openMenu === "context" ? undefined : "context")}
 							aria-expanded={openMenu === "context"}
 							aria-label={usageLabel(contextUsage, t)}
 							{...tip.handlers(usageLabel(contextUsage, t))}
 						>
 							<ContextRing usage={contextUsage} />
+							{(() => {
+								const shortPercent = usagePercentShort(contextUsage);
+								return shortPercent === null ? null : <span>{shortPercent}</span>;
+							})()}
 						</button>
 						{openMenu === "context" ? (
-							// biome-ignore lint/a11y/useSemanticElements: 浮层是说明加一个按钮，用不到 fieldset 的表单语义
-							<div className="chip-pop is-context" role="group" aria-label={t("composer.contextUsage")}>
-								<p className="ctx-pop-title">{t("composer.contextWindow")}</p>
-								<p className="ctx-pop-value">
-									{isCompacting
-										? t("composer.compacting")
-										: (usagePercentText(contextUsage, t) ?? t("composer.noData"))}
-								</p>
-								{isCompacting || usageDetailText(contextUsage) === null ? null : (
-									<p className="ctx-pop-detail">{usageDetailText(contextUsage)}</p>
-								)}
-								{onCompact === undefined ? null : (
-									<button
-										type="button"
-										className="ctx-pop-action"
-										onClick={() => {
-											onCompact();
-											setOpenMenu(undefined);
-										}}
-										disabled={!canCompact || isCompacting}
-									>
-										{t("composer.compact")}
-									</button>
-								)}
-							</div>
+							<ContextPopover
+								contextUsage={contextUsage}
+								breakdown={contextBreakdown}
+								loading={loadingContextDetails}
+								isCompacting={isCompacting}
+								canCompact={canCompact}
+								onCompact={
+									onCompact === undefined
+										? undefined
+										: () => {
+												onCompact();
+												setOpenMenu(undefined);
+											}
+								}
+							/>
 						) : null}
 					</span>
 					{/*

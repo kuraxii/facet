@@ -309,6 +309,8 @@ const RUNTIME_SET_VARS: readonly string[] = [
 	"--scroll-inset",
 	// 右栏顶格与本体自身的实占宽副本（`layout/panel-width.ts` `writePanelWidth` 写入）
 	"--panel-box-width",
+	// 速度仪指针旋转角：由 `SessionStatsPopover.tsx` 按实时 tok/s 写到速度芯片元素上
+	"--gauge-deg",
 ];
 
 describe("变量都有定义", () => {

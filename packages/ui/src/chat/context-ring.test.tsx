@@ -10,6 +10,7 @@ import {
 	usageDetailText,
 	usageLabel,
 	usageLevel,
+	usagePercentShort,
 	usagePercentText,
 } from "./ContextRing.tsx";
 
@@ -29,8 +30,11 @@ describe("上下文用量环", () => {
 	it("浮层中间与底行的文案", () => {
 		const usage = { tokens: 393_000, contextWindow: 1_048_576, percent: 37.4 };
 		expect(usagePercentText(usage)).toBe("已使用 37%");
+		expect(usagePercentShort(usage)).toBe("37%");
 		expect(usageDetailText(usage)).toBe("393k / 1m tokens");
 		expect(usagePercentText(undefined)).toBeNull();
+		expect(usagePercentShort(undefined)).toBeNull();
+		expect(usagePercentShort({ tokens: 100, contextWindow: 0, percent: 50 })).toBeNull();
 		expect(usageDetailText({ tokens: null, contextWindow: 200_000, percent: null })).toBeNull();
 	});
 

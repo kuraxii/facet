@@ -8,6 +8,8 @@ export type { ChatOutlineProps } from "./chat/ChatOutline.tsx";
 export { ChatOutline } from "./chat/ChatOutline.tsx";
 export type { ComposerAttachment, ComposerProps } from "./chat/Composer.tsx";
 export { Composer } from "./chat/Composer.tsx";
+export type { ContextPopoverProps } from "./chat/ContextPopover.tsx";
+export { ContextPopover } from "./chat/ContextPopover.tsx";
 export type { ContextRingProps, UsageLevel } from "./chat/ContextRing.tsx";
 export { ContextRing, formatTokens, usageLabel, usageLevel } from "./chat/ContextRing.tsx";
 export type { CreateProjectDialogProps } from "./chat/CreateProjectDialog.tsx";
@@ -43,6 +45,8 @@ export type { SessionSearchProps } from "./chat/SessionSearch.tsx";
 export { SessionSearch } from "./chat/SessionSearch.tsx";
 export type { SessionSidebarProps } from "./chat/SessionSidebar.tsx";
 export { SessionSidebar } from "./chat/SessionSidebar.tsx";
+export type { SessionStatsChipProps } from "./chat/SessionStatsPopover.tsx";
+export { SessionStatsChip } from "./chat/SessionStatsPopover.tsx";
 export type {
 	SettingsDataSource,
 	SettingsPageProps,
@@ -51,6 +55,21 @@ export type {
 export { SettingsPage } from "./chat/SettingsPage.tsx";
 export type { SshPasswordDialogProps } from "./chat/SshPasswordDialog.tsx";
 export { SshPasswordDialog } from "./chat/SshPasswordDialog.tsx";
+export type {
+	AlignedContextBreakdown,
+	AlignedContextCategory,
+	CacheHitBreakdown,
+	SessionTelemetry,
+} from "./chat/session-telemetry.ts";
+export {
+	alignContextBreakdown,
+	computeCacheHitBreakdown,
+	computeSessionTelemetry,
+	estimateStreamingTps,
+	formatTelemetryCost,
+	formatTelemetryDuration,
+	messageTps,
+} from "./chat/session-telemetry.ts";
 export type { SidebarHeaderProps } from "./chat/sidebar-header.tsx";
 export { SidebarHeader } from "./chat/sidebar-header.tsx";
 export type {

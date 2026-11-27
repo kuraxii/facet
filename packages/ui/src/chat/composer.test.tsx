@@ -667,6 +667,22 @@ describe("模型与思考档位芯片", () => {
 		expect(chip?.textContent).toContain("无模型");
 		unmount();
 	});
+
+	it("上下文用量有效时在按钮旁展示百分比", async () => {
+		const { container, rerender, unmount } = await renderComposer({
+			contextUsage: { tokens: 83_400, contextWindow: 200_000, percent: 41.7 },
+		});
+		const ctxChip = container.querySelector<HTMLButtonElement>(
+			'button.composer-status-chip[data-chip="context"]',
+		);
+		expect(ctxChip?.textContent).toBe("42%");
+		rerender(createElement(Composer, composerProps({ contextUsage: undefined })));
+		expect(
+			container.querySelector<HTMLButtonElement>('button.composer-status-chip[data-chip="context"]')
+				?.textContent,
+		).toBe("");
+		unmount();
+	});
 });
 
 describe("发送受阻", () => {

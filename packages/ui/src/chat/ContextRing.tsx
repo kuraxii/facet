@@ -53,6 +53,15 @@ export function usageDetailText(usage: ContextUsage | undefined): string | null 
 	return `${formatTokens(usage.tokens)} / ${formatTokens(usage.contextWindow)} tokens`;
 }
 
+/** 输入栏按钮旁展示的紧凑百分比，用量未知时为 null。 */
+export function usagePercentShort(usage: ContextUsage | undefined): string | null {
+	if (usage === undefined || usage.tokens === null || usage.percent === null || usage.contextWindow <= 0) {
+		return null;
+	}
+	const clamped = Math.max(0, Math.min(100, usage.percent));
+	return `${Math.round(clamped)}%`;
+}
+
 /** 占用比例的档位：普通、提醒、危险。 */
 export type UsageLevel = "normal" | "warn" | "danger";
 

@@ -143,6 +143,25 @@ function buildRequestSnapshot(): (value: unknown) => boolean {
 const checkRequestSnapshot = buildRequestSnapshot();
 
 /**
+ * contextDetails 的参数判断。
+ *
+ * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
+ */
+function buildRequestContextDetails(): (value: unknown) => boolean {
+	// @ts-ignore
+	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && ("sessionId" in value && typeof value.sessionId === "string")));
+	return (value: unknown): boolean => {
+		if (!check_0(value)) return false;
+		const source = value as Record<string, unknown>;
+		return (
+			typeof source.sessionId === "string" && source.sessionId.length > 0
+		);
+	};
+}
+
+const checkRequestContextDetails = buildRequestContextDetails();
+
+/**
  * entries 的参数判断。
  *
  * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
@@ -1082,6 +1101,7 @@ export const REQUEST_CONTRACTS: Readonly<Record<string, RequestContract | undefi
 	"openSession": { auth: "public", check: checkRequestOpenSession },
 	"forkSession": { auth: "write", check: checkRequestForkSession },
 	"snapshot": { auth: "public", check: checkRequestSnapshot },
+	"contextDetails": { auth: "public", check: checkRequestContextDetails },
 	"entries": { auth: "public", check: checkRequestEntries },
 	"entriesAfter": { auth: "public", check: checkRequestEntriesAfter },
 	"subscribe": { auth: "public", check: checkRequestSubscribe },

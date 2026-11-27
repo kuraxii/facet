@@ -4,7 +4,14 @@ import type { ExtensionUiState, SessionInitialization } from "./extension-ui.ts"
 import type { Message } from "./message.ts";
 import type { ModelInfo, ModelRef, ProviderLoginEvent, ThinkingLevel } from "./model.ts";
 import type { StreamingBehavior } from "./request.ts";
-import type { ContextUsage, Maintenance, SessionStatus, SessionSummary, TurnPhase } from "./session.ts";
+import type {
+	ContextUsage,
+	Maintenance,
+	SessionStats,
+	SessionStatus,
+	SessionSummary,
+	TurnPhase,
+} from "./session.ts";
 import type { TerminalAction } from "./terminal.ts";
 
 /** 会话清单动作。主机推给所有订阅清单通道的端,多端看到同一份列表。 */
@@ -60,8 +67,8 @@ export type SessionAction =
 	| { type: "session/queueCleared" }
 	/** 客户端可派发:手动压缩上下文 */
 	| { type: "session/compact" }
-	/** 主机侧:上下文用量变化，一轮结束或压缩之后重新估算 */
-	| { type: "session/usageChanged"; usage: ContextUsage | undefined }
+	/** 主机侧:上下文用量变化，一轮结束或压缩之后重新估算，同时可附带全会话累计统计 */
+	| { type: "session/usageChanged"; usage: ContextUsage | undefined; stats?: SessionStats }
 	/** 客户端可派发:变更模型、思考档位或激活的工具 */
 	| {
 			type: "session/configChanged";

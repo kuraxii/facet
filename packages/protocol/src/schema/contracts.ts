@@ -147,6 +147,11 @@ export const REQUEST_SCHEMAS = {
 		params: Type.Object({ sessionId: SessionId }),
 		nonEmpty: ["sessionId"],
 	},
+	contextDetails: {
+		auth: "public",
+		params: Type.Object({ sessionId: SessionId }),
+		nonEmpty: ["sessionId"],
+	},
 	entries: {
 		auth: "public",
 		params: Type.Object({

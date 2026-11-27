@@ -100,6 +100,86 @@ export interface ContextUsage {
 	percent: number | null;
 }
 
+/**
+ * 上下文拆解的分类标识，粒度与 pi-context-view 的 Usage 分类一致。
+ */
+export type ContextCategoryId =
+	| "system-prompt"
+	| "context-files"
+	| "skills"
+	| "built-in-tools"
+	| "custom-tools"
+	| "mcp-tools"
+	| "user-messages"
+	| "assistant-messages"
+	| "assistant-thinking"
+	| "tool-calls"
+	| "tool-output"
+	| "extensions"
+	| "compacted-data";
+
+/** 某个分类下的单条子项明细，如单个指令文件、Skill、工具定义或某类工具输出。 */
+export interface ContextBreakdownItem {
+	/** 分类内稳定标识 */
+	id: string;
+	/** 展示名称，如段名、文件路径、Skill 名或工具名 */
+	label: string;
+	/** 估算的 token 数 */
+	tokens: number;
+	/** 聚合的条目数（消息或工具结果类目使用） */
+	count?: number;
+	/** 补充说明，如工具来源或文件路径 */
+	detail?: string;
+}
+
+/** 上下文拆解中的一级分类。 */
+export interface ContextBreakdownCategory {
+	/** 分类标识 */
+	id: ContextCategoryId;
+	/** 该分类占用的估算 token 数 */
+	tokens: number;
+	/** 子项明细，按 token 降序排列 */
+	items?: ContextBreakdownItem[];
+}
+
+/** 最近一次有效助手响应回报的请求输入/输出用量，用于展示缓存复用情况。 */
+export interface ContextRequestCacheUsage {
+	/** 非缓存新增输入 token */
+	input: number;
+	/** 输出 token */
+	output: number;
+	/** 命中缓存读取 token */
+	cacheRead: number;
+	/** 写入缓存 token */
+	cacheWrite: number;
+	/** 推理 token */
+	reasoning: number;
+}
+
+/** 当前活动分支的上下文窗口分项拆解。 */
+export interface ContextBreakdown {
+	/** 当前模型的上下文窗口上限；未知模型时为 0 */
+	contextWindow: number;
+	/** pi 回报的上下文基准 token 数；刚压缩完等未知阶段为空 */
+	reportedTokens: number | null;
+	/** pi 回报的上下文占用百分比；未知时为空 */
+	reportedPercent: number | null;
+	/** 全部可见分类的估算 token 总和 */
+	estimatedTokens: number;
+	/** 非空的一级分类列表，按请求结构顺序排列 */
+	categories: ContextBreakdownCategory[];
+	/** 当前通过 codemode 或 deferred 隐藏声明的工具名列表 */
+	hiddenTools: string[];
+	/** 当前活动分支上的压缩次数 */
+	compactions: number;
+	/** 本轮是否由扩展通过 forceSystemPrompt 整段覆写了系统提示词 */
+	forcedPrompt?: boolean;
+	/** 开启自动压缩时的预留 token 阈值 */
+	autoCompactReserveTokens?: number;
+	/** 最近一次有效助手响应的缓存命中拆解 */
+	latestRequestUsage?: ContextRequestCacheUsage;
+}
+
 /** 全会话累计的 token 用量，包含已被压缩掉的历史。 */
 export interface TokenTotals {
 	input: number;

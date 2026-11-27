@@ -15,7 +15,7 @@ import type { GitCommitDetail, GitCommits, GitDiff, GitStatus } from "./git.ts";
 import type { AgentDefaults, CustomProviderInfo, ModelInfo, ProviderInfo, UpstreamModel } from "./model.ts";
 import type { ProjectInfo } from "./project.ts";
 import type { REQUEST_SCHEMAS } from "./schema/contracts.ts";
-import type { Entry, SessionListItem, SessionSnapshot } from "./session.ts";
+import type { ContextBreakdown, Entry, SessionListItem, SessionSnapshot } from "./session.ts";
 import type { FacetSettings } from "./settings.ts";
 import type { TerminalInfo, TerminalProfileInfo } from "./terminal.ts";
 
@@ -229,6 +229,7 @@ export interface RequestResults {
 	openSession: SessionSnapshot;
 	forkSession: SessionSnapshot;
 	snapshot: SessionSnapshot;
+	contextDetails: ContextBreakdown;
 	entries: { entries: Entry[]; nextCursor: string | undefined };
 	/** 末端为当前叶子,按从早到晚排列 */
 	entriesAfter: { entries: Entry[]; leafId: string | null };

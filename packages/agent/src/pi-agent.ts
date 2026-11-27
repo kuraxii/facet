@@ -1,14 +1,8 @@
-import type {
-	AgentSession,
-	AgentSessionEvent,
-	ModelRuntime,
-	SessionEntry,
-} from "@earendil-works/pi-coding-agent";
+import type { AgentSession, AgentSessionEvent, ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type {
 	ContextBreakdown,
 	ContextUsage,
 	Entry,
-	EntryKind,
 	ImageBlock,
 	Maintenance,
 	Message,
@@ -30,6 +24,7 @@ import type {
 } from "@facet/protocol";
 import { buildContextBreakdown, type ContextObserverState } from "./context-breakdown/index.ts";
 import { toMessage, toMessages, toModelInfo } from "./convert.ts";
+import { collectCommittedEntries, toEntry } from "./entry-commit.ts";
 import {
 	reduceTurnState,
 	sameTurnState,
@@ -63,27 +58,6 @@ export interface PiAgentContext {
 	initialize?: () => Promise<void>;
 	/** 运行期上下文观察态，用于补充 hiddenTools 与 forcedPrompt 信息。 */
 	contextObserver?: Readonly<ContextObserverState>;
-}
-
-/** 把持久化条目转成对外条目，只保留界面需要的字段。 */
-function toEntry(entry: SessionEntry): Entry {
-	const base: Entry = {
-		id: entry.id,
-		parentId: entry.parentId,
-		kind: entry.type as EntryKind,
-		timestamp: entry.timestamp,
-	};
-	switch (entry.type) {
-		case "message":
-			return { ...base, message: toMessage(entry.message) };
-		case "compaction":
-		case "branch_summary":
-			return { ...base, summary: entry.summary };
-		case "session_info":
-			return { ...base, name: entry.name };
-		default:
-			return base;
-	}
 }
 
 /**
@@ -149,6 +123,16 @@ export class PiAgent {
 	private branch: BranchSnapshot | undefined;
 	/** 由 Facet 持有的待发后续消息（本轮结束后统一合并发出，支持单条转插话、编辑与删除） */
 	private followUpQueue: Array<{ text: string; images?: ImageBlock[] }> = [];
+	/** 已对外同步过的最新持久化叶子 id，用来增量取出刚写盘的条目 */
+	private lastCommittedLeafId: string | null;
+	/** 本会话内 `message_start` 的递增序号，与投影层的 `m*` 标识一一对应 */
+	private messageSeq = 0;
+	/** 原始 pi 消息对象到生成序号的映射，用于在写盘后精准归属到流式消息 */
+	private readonly startedMessages = new WeakMap<object, number>();
+	/** 自定义消息条目不保存原消息引用，按生成顺序归属 */
+	private readonly pendingCustomMessageSeqs: number[] = [];
+	/** 是否已安排微任务补发刚落盘的条目 */
+	private commitFlushScheduled = false;
 
 	/** 构造后立即订阅，保证首次 prompt 之前的运行不会漏事件。 */
 	constructor(context: PiAgentContext) {
@@ -164,6 +148,7 @@ export class PiAgent {
 		this.stopUi = this.ui?.subscribe((ui) => this.emit({ type: "ui", ui }));
 		this.id = this.session.sessionId;
 		this.cwd = this.session.sessionManager.getCwd();
+		this.lastCommittedLeafId = this.session.sessionManager.getLeafId();
 		this.unsubscribeSession = this.session.subscribe((event) => {
 			this.handleSessionEvent(event);
 		});
@@ -537,6 +522,8 @@ export class PiAgent {
 		if (result.cancelled) {
 			throw new Error("Revert was cancelled");
 		}
+		this.lastCommittedLeafId = this.session.sessionManager.getLeafId();
+		this.pendingCustomMessageSeqs.length = 0;
 		return result.editorText;
 	}
 
@@ -746,6 +733,21 @@ export class PiAgent {
 	 * 当成上一轮的残留清掉，侧栏就再也不显示未读的完成与失败。
 	 */
 	private handleSessionEvent(event: AgentSessionEvent): void {
+		if (
+			event.type === "turn_end" ||
+			event.type === "agent_settled" ||
+			event.type === "compaction_end" ||
+			event.type === "entry_appended"
+		) {
+			this.flushCommittedEntries();
+		}
+		if (event.type === "message_start") {
+			this.messageSeq += 1;
+			this.startedMessages.set(event.message, this.messageSeq);
+			if ((event.message as { role?: unknown }).role === "custom") {
+				this.pendingCustomMessageSeqs.push(this.messageSeq);
+			}
+		}
 		const failure = this.trackFailure(event);
 		this.dispatchTurn({ kind: "event", event });
 		for (const mapped of toSessionEvents(event)) {
@@ -758,6 +760,9 @@ export class PiAgent {
 				continue;
 			}
 			this.emit(mapped.type === "settled" ? { ...mapped, failure } : mapped);
+		}
+		if (event.type === "message_end") {
+			this.scheduleCommitFlush();
 		}
 		// 正常收尾后，把 Facet 缓存的后续消息一次性合并发出（支持图片附件一并携带）
 		if (
@@ -808,6 +813,44 @@ export class PiAgent {
 			return failure;
 		}
 		return undefined;
+	}
+
+	/** 在 `message_end` 返回并同步写盘后的微任务里补发已落盘条目。 */
+	private scheduleCommitFlush(): void {
+		if (this.commitFlushScheduled) {
+			return;
+		}
+		this.commitFlushScheduled = true;
+		queueMicrotask(() => {
+			this.commitFlushScheduled = false;
+			this.flushCommittedEntries();
+		});
+	}
+
+	/** 扫描自上次同步之后新增的活动分支条目，逐条发出 `entry_committed`。 */
+	private flushCommittedEntries(): void {
+		if (this.disposed) {
+			return;
+		}
+		const leafId = this.session.sessionManager.getLeafId();
+		if (leafId === this.lastCommittedLeafId) {
+			return;
+		}
+		const previousLeafId = this.lastCommittedLeafId;
+		this.lastCommittedLeafId = leafId;
+		const items = collectCommittedEntries(
+			this.session.sessionManager.getBranch(),
+			previousLeafId,
+			this.startedMessages,
+			this.pendingCustomMessageSeqs,
+		);
+		for (const item of items) {
+			this.emit({
+				type: "entry_committed",
+				entry: item.entry,
+				...(item.messageSeq === undefined ? {} : { messageSeq: item.messageSeq }),
+			});
+		}
 	}
 
 	/** 逐个通知订阅方。单个订阅方抛错只上报，不影响其余订阅方收到事件。 */

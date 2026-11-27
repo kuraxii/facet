@@ -122,6 +122,8 @@ export function reduceSession(view: SessionView, action: Action): SessionView {
 				: { ...view, state: { ...view.state, thinkingLevel: action.thinkingLevel } };
 		case "session/pendingMessageSet":
 		case "session/queueCleared":
+		case "session/followUpPromoted":
+		case "session/followUpRemoved":
 		case "session/compact":
 			return view;
 		case "chat/inputHandled":
@@ -276,6 +278,8 @@ export function reduceChat(view: ChatView, action: Action): ChatView {
 		case "session/configChanged":
 		case "session/pendingMessageSet":
 		case "session/queueCleared":
+		case "session/followUpPromoted":
+		case "session/followUpRemoved":
 		case "session/compact":
 		case "session/usageChanged":
 		case "models/loginEvent":

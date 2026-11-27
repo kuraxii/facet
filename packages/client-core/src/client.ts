@@ -1235,6 +1235,22 @@ export class SessionClient {
 		return this.transport.dispatch(this.requireOpened().sessionChannel, { type: "session/queueCleared" });
 	}
 
+	/** 将指定索引的后续排队消息转为插话立即发送。 */
+	promoteFollowUp(index: number): number {
+		return this.transport.dispatch(this.requireOpened().sessionChannel, {
+			type: "session/followUpPromoted",
+			index,
+		});
+	}
+
+	/** 从后续排队消息中移除指定条目。 */
+	removeFollowUp(index: number): number {
+		return this.transport.dispatch(this.requireOpened().sessionChannel, {
+			type: "session/followUpRemoved",
+			index,
+		});
+	}
+
 	/** 主机确认收到这条消息后回调,带上当时的文本。 */
 	onSent(listener: (text: string) => void): () => void {
 		this.sentListeners.add(listener);

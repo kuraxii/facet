@@ -236,12 +236,7 @@
 	 * 正文在中间那列自己收——正文与导航轨因此在数学上不可能重叠。
 	 */
 	--chat-gutter-min: var(--space-10);
-	/*
-	 * 导航轨的总占位宽：轨宽加两侧各一段间距。
-	 *
-	 * `--outline-rail-width` 已经乘过 `--outline-scale`，所以这条会跟着用户的导航缩放一起
-	 * 长大，正文那列自动避让，不需要脚本再算一次。
-	 */
+	/* 导航轨的总占位宽：轨宽加两侧各一段间距，正文列据它避让，不需要脚本再算一次。 */
 	--outline-slot: calc(var(--outline-rail-width) + var(--outline-inset) * 2);
 	/*
 	 * 正文两侧轨道共用的下限：有导航时至少要让出竖轨那一份，没有导航时退回 `--chat-gutter-min`。
@@ -392,24 +387,21 @@
 	/* 左栏分隔条压进列表内容的宽度：只压 1px，其余命中区落在接缝外侧，贴右缘的滚动条照旧可点 */
 	--sidebar-hit-inset: 1px;
 	--divider-highlight: color-mix(in srgb, var(--fg-muted) 28%, var(--border-default));
-	/* 对话导航的缩放倍数，由设置里的百分比写入；下面每个尺寸都是它的倍数 */
-	--outline-scale: 1;
-	/* 对话导航竖轨：离主区左缘的间距、轨宽、轨内边距、短条静止尺寸、当前轮次的加宽倍数
-	   （黄金比例）、指针附近的额外放大，基准值都是 px，实际值再乘缩放 */
-	/* 竖轨到主区左缘的间距是固定的，不随缩放变 */
+	/* 对话导航竖轨：离主区右缘的间距、轨宽、轨内边距、短条静止尺寸、当前轮次的加宽倍数
+	   （黄金比例）、指针附近的额外放大 */
 	--outline-inset: 8px;
-	--outline-rail-width: calc(36px * var(--outline-scale));
+	--outline-rail-width: 36px;
 	--outline-rail-inset: 0px;
-	--outline-slot-size: calc(8px * var(--outline-scale));
-	--outline-pill-width: calc(10px * var(--outline-scale));
-	--outline-pill-height: calc(2px * var(--outline-scale));
+	--outline-slot-size: 8px;
+	--outline-pill-width: 10px;
+	--outline-pill-height: 2px;
 	--outline-pill-active-scale: 1.618;
-	--outline-pill-grow-width: calc(12px * var(--outline-scale));
-	--outline-pill-grow-height: calc(2px * var(--outline-scale));
+	--outline-pill-grow-width: 12px;
+	--outline-pill-grow-height: 2px;
 	/* 竖轨顶部「补一页更早的历史」那块热区的高度，以及里面三个点的直径与间距 */
-	--outline-more-height: calc(14px * var(--outline-scale));
-	--outline-more-dot: calc(2.5px * var(--outline-scale));
-	--outline-more-dot-gap: calc(2px * var(--outline-scale));
+	--outline-more-height: 14px;
+	--outline-more-dot: 2.5px;
+	--outline-more-dot-gap: 2px;
 	/* 过程组的缩进：竖线到行内容的距离，以及竖线本身相对正文列的位置
 	   （后者来自展开箭头字形在图标盒子里的内缩，改箭头图标时跟着调） */
 	--indent-rail-offset: 16px;

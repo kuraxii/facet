@@ -85,7 +85,6 @@ describe("设置窗", () => {
 						terminalFontSize: 12.5,
 						reducedMotion: false,
 						liveMotion: "pulse",
-						outlineScale: 100,
 					}}
 					onLocalAppearanceChange={() => {}}
 					data={{

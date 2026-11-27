@@ -128,23 +128,6 @@ export function AppearanceSection({
 						aria-label={t("settings.appearancePage.reducedMotion")}
 					/>
 				</SettingsRow>
-				<SettingsRow title={t("settings.appearancePage.outlineScale")}>
-					<Input
-						size="md"
-						type="number"
-						min={50}
-						max={200}
-						step={5}
-						value={appearance.outlineScale}
-						onChange={(event) => {
-							const next = Number(event.target.value);
-							if (Number.isFinite(next)) {
-								patchAppearance({ outlineScale: next });
-							}
-						}}
-						aria-label={t("settings.appearancePage.outlineScale")}
-					/>
-				</SettingsRow>
 			</SettingsGroup>
 
 			<SettingsGroup label={t("settings.appearancePage.fonts")}>

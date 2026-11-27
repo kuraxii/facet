@@ -156,7 +156,7 @@ const SCALE_DECLARATIONS: readonly (readonly [string, string])[] = [
 const NAMED_DECLARATIONS: readonly (readonly [string, string])[] = [
 	["--chat-column-max", `${VISUAL_PX.readingColumnMax}px`],
 	["--outline-inset", `${VISUAL_PX.outlineRail.inset}px`],
-	["--outline-rail-width", `calc(${VISUAL_PX.outlineRail.width}px * var(--outline-scale))`],
+	["--outline-rail-width", `${VISUAL_PX.outlineRail.width}px`],
 	["--workspace-menu-edge", `${VISUAL_PX.popover.menuEdge}px`],
 	["--workspace-menu-offset", `${VISUAL_PX.popover.menuOffset}px`],
 	["--tool-tip-gap", `${VISUAL_PX.popover.tipGap}px`],

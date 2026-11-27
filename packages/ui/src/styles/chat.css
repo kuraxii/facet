@@ -91,7 +91,7 @@
 	justify-content: flex-end;
 	padding: 0 var(--outline-rail-inset) 0 0;
 	border: 0;
-	border-radius: calc(4px * var(--outline-scale));
+	border-radius: var(--radius-sm);
 	background: transparent;
 }
 
@@ -136,7 +136,7 @@
 .outline-preview {
 	position: absolute;
 	top: 50%;
-	right: calc(var(--outline-rail-width) + 2px * var(--outline-scale));
+	right: calc(var(--outline-rail-width) + var(--space-1));
 	display: flex;
 	width: 260px;
 	min-height: 48px;

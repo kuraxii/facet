@@ -772,15 +772,11 @@ export class SessionClient {
 		model?: ModelRef;
 		thinkingLevel?: ThinkingLevel | null;
 		autoCompaction?: boolean;
-		steeringMode?: "one-at-a-time" | "all";
-		followUpMode?: "one-at-a-time" | "all";
 	}): Promise<AgentDefaults> {
 		return await this.transport.request("setAgentDefaults", {
 			...(patch.model === undefined ? {} : { model: patch.model }),
 			...(patch.thinkingLevel === undefined ? {} : { thinkingLevel: patch.thinkingLevel }),
 			...(patch.autoCompaction === undefined ? {} : { autoCompaction: patch.autoCompaction }),
-			...(patch.steeringMode === undefined ? {} : { steeringMode: patch.steeringMode }),
-			...(patch.followUpMode === undefined ? {} : { followUpMode: patch.followUpMode }),
 		});
 	}
 

@@ -399,6 +399,77 @@
 	border-color: var(--accent-fg);
 }
 
+/* 后续消息卡片：位于输入区上方，默认收在圆角描边卡片内，支持单条转插话、编辑与删除 */
+.queue-card {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+	margin-bottom: var(--space-4);
+	padding: var(--space-4) var(--space-6);
+	border: 1px solid var(--border-subtle);
+	border-radius: var(--radius-xl);
+	background: var(--bg-canvas);
+}
+
+.queue-card-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-4);
+	min-width: 0;
+}
+
+.queue-card-meta {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	min-width: 0;
+}
+
+.queue-card-title {
+	flex: none;
+	font-size: var(--text-ui);
+	font-weight: 500;
+	color: var(--fg-default);
+}
+
+.queue-card-hint {
+	font-size: var(--text-xs);
+	color: var(--fg-subtle);
+}
+
+.queue-card-list {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.queue-card-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-4);
+	min-width: 0;
+}
+
+.queue-card-text {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-size: var(--text-ui);
+	color: var(--fg-default);
+}
+
+.queue-card-actions {
+	display: flex;
+	flex: none;
+	align-items: center;
+	gap: var(--space-1);
+	color: var(--fg-muted);
+}
+
 /*
  * 消息里的图片：一条消息的几张并排，排在正文上方。
  *

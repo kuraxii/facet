@@ -8,11 +8,11 @@
  * 传输按结构约定,不引入 transport 包,两者处于同一层。
  */
 import type {
-	AcpBackendProfile,
+	AcpAgentProfile,
 	Action,
 	ActionFrame,
+	AgentAvailability,
 	AgentDefaults,
-	BackendAvailability,
 	Capability,
 	Channel,
 	ClientRole,
@@ -510,36 +510,36 @@ export class SessionClient {
 		return items.map((item) => item.summary);
 	}
 
-	/** 列出会话。指定 cwd / backendId 时仅取匹配子集。 */
-	async listSessions(cwd?: string, backendId?: string): Promise<readonly SessionListItem[]> {
+	/** 列出会话。指定 cwd / agentId 时仅取匹配子集。 */
+	async listSessions(cwd?: string, agentId?: string): Promise<readonly SessionListItem[]> {
 		const params: RequestParams["listSessions"] = {
 			...(cwd === undefined ? {} : { cwd }),
-			...(backendId === undefined ? {} : { backendId }),
+			...(agentId === undefined ? {} : { agentId }),
 		};
 		const result = await this.transport.request("listSessions", params);
 		return result.sessions;
 	}
 
 	/** 查询主机可用的代理后端与 ACP 注册配置。 */
-	async listBackends(): Promise<{ backends: BackendAvailability[]; profiles: AcpBackendProfile[] }> {
-		return await this.transport.request("listBackends", {});
+	async listAgents(): Promise<{ agents: AgentAvailability[]; profiles: AcpAgentProfile[] }> {
+		return await this.transport.request("listAgents", {});
 	}
 
 	/** 对指定代理后端执行可用性与握手探测。 */
-	async probeBackend(backendId: string): Promise<BackendAvailability> {
-		const result = await this.transport.request("probeBackend", { backendId });
-		return result.backend;
+	async probeAgent(agentId: string): Promise<AgentAvailability> {
+		const result = await this.transport.request("probeAgent", { agentId });
+		return result.agent;
 	}
 
 	/** 启动指定 ACP 后端的交互式登录流程。 */
-	async acpLoginStart(backendId: string): Promise<{ loginId: string; authUrl?: string }> {
-		return await this.transport.request("acpLoginStart", { backendId });
+	async acpLoginStart(agentId: string): Promise<{ loginId: string; authUrl?: string }> {
+		return await this.transport.request("acpLoginStart", { agentId });
 	}
 
 	/** 提交授权码完成 ACP 登录并返回最新后端状态。 */
-	async acpLoginSubmit(loginId: string, code: string): Promise<BackendAvailability> {
+	async acpLoginSubmit(loginId: string, code: string): Promise<AgentAvailability> {
 		const result = await this.transport.request("acpLoginSubmit", { loginId, code });
-		return result.backend;
+		return result.agent;
 	}
 
 	/** 取消正在进行的 ACP 登录流程。 */

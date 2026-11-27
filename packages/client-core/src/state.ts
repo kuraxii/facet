@@ -19,7 +19,7 @@ import {
 	type ModelInfo,
 	type NoticeLevel,
 	PI_AGENT_CAPABILITIES,
-	PI_BACKEND_ID,
+	PI_AGENT_ID,
 	type QueuedInput,
 	type SessionInitialization,
 	type SessionSnapshot,
@@ -87,7 +87,7 @@ export interface NoticeView {
  */
 export interface SessionState {
 	/** 所属代理后端标识 */
-	readonly backendId: string;
+	readonly agentId: string;
 	/** 当前会话支持的功能能力集合 */
 	readonly capabilities: AgentCapabilities;
 	/** ACP 会话模式状态（仅 ACP 后端可能存在） */
@@ -180,7 +180,7 @@ export function createSessionView(channel: Channel, snapshot?: SessionSnapshot):
 	return {
 		channel,
 		state: {
-			backendId: snapshot?.backendId ?? PI_BACKEND_ID,
+			agentId: snapshot?.agentId ?? PI_AGENT_ID,
 			capabilities: snapshot?.capabilities ?? PI_AGENT_CAPABILITIES,
 			acpMode: snapshot?.acpMode,
 			acpConfigOptions: snapshot?.acpConfigOptions ?? [],

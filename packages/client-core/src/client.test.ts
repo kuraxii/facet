@@ -1412,7 +1412,7 @@ describe("扩展交互状态", () => {
 	it("支持 ACP 模式与动态配置派发及 session/acpStateChanged 归约更新", async () => {
 		const { client, transport } = createClient(0);
 		await client.openSession("/tmp/s1.jsonl");
-		expect(client.sessionView()?.state.backendId).toBe("pi");
+		expect(client.sessionView()?.state.agentId).toBe("pi");
 		expect(client.sessionView()?.state.capabilities.configStyle).toBe("pi");
 
 		client.setAcpMode("plan");

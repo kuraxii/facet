@@ -1,26 +1,28 @@
 import type { AgentSession, AgentSessionEvent, ModelRuntime } from "@earendil-works/pi-coding-agent";
-import type {
-	ContextBreakdown,
-	ContextUsage,
-	Entry,
-	ImageBlock,
-	Maintenance,
-	Message,
-	ModelInfo,
-	ModelRef,
-	PromptDisposition,
-	QueueDisposition,
-	QueuedInput,
-	SessionEvent,
-	SessionEventListener,
-	SessionInitialization,
-	SessionSnapshot,
-	SessionStats,
-	SlashCommand,
-	ThinkingLevel,
-	ToolInfo,
-	TurnPhase,
-	UiResponse,
+import {
+	type ContextBreakdown,
+	type ContextUsage,
+	type Entry,
+	type ImageBlock,
+	type Maintenance,
+	type Message,
+	type ModelInfo,
+	type ModelRef,
+	PI_AGENT_CAPABILITIES,
+	PI_BACKEND_ID,
+	type PromptDisposition,
+	type QueueDisposition,
+	type QueuedInput,
+	type SessionEvent,
+	type SessionEventListener,
+	type SessionInitialization,
+	type SessionSnapshot,
+	type SessionStats,
+	type SlashCommand,
+	type ThinkingLevel,
+	type ToolInfo,
+	type TurnPhase,
+	type UiResponse,
 } from "@facet/protocol";
 import { buildContextBreakdown, type ContextObserverState } from "./context-breakdown/index.ts";
 import { toMessage, toMessages, toModelInfo } from "./convert.ts";
@@ -100,6 +102,10 @@ export const FACET_COMMANDS: readonly SlashCommand[] = [
 export class PiAgent {
 	/** 会话 id，与持久化文件里的会话 id 一致 */
 	readonly id: string;
+	/** 所属代理后端标识 */
+	readonly backendId = PI_BACKEND_ID;
+	/** 原生 Pi 会话能力集合 */
+	readonly capabilities = PI_AGENT_CAPABILITIES;
 	/** 会话的工作目录，创建后不再变化 */
 	readonly cwd: string;
 	private readonly session: AgentSession;
@@ -718,6 +724,8 @@ export class PiAgent {
 	snapshot(): SessionSnapshot {
 		return {
 			id: this.id,
+			backendId: this.backendId,
+			capabilities: this.capabilities,
 			initialization: this.initialization,
 			extensionUi: this.ui?.snapshot(),
 			file: this.file,

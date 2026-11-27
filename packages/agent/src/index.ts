@@ -3,6 +3,24 @@
  *
  * 只放出 PiAgent、PiAgentFactory 与 facet 自有类型，pi SDK 的类型不外露。
  */
+export type { AcpAgentOptions, AcpTransportTarget } from "./acp/acp-agent.ts";
+export { AcpAgent, formatAcpInitFailure } from "./acp/acp-agent.ts";
+export type { BackendHandshakeProbe, CommandProbeEnv } from "./acp/acp-registry.ts";
+export {
+	ACP_REGISTRY_ENV,
+	ACP_REGISTRY_FILENAME,
+	AcpRegistryStore,
+	BUILTIN_ACP_PROFILES,
+	inspectAcpAvailability,
+	mergeAcpProfiles,
+	normalizeAcpProfile,
+	resolveCommandPath,
+} from "./acp/acp-registry.ts";
+export type { AcpAgentRuntimeOptions } from "./acp/acp-runtime.ts";
+export { AcpAgentRuntime } from "./acp/acp-runtime.ts";
+export type { AcpSessionRecord } from "./acp/acp-session-index.ts";
+export { AcpSessionIndex } from "./acp/acp-session-index.ts";
+export type { ManagedAgent } from "./agent-contract.ts";
 export { writeFileAtomic } from "./atomic-write.ts";
 export type { CustomModelEntry, CustomProviderEntry } from "./model-config-store.ts";
 export { InvalidProviderError } from "./model-config-store.ts";

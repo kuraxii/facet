@@ -13,12 +13,13 @@
 		"test": "vitest run"
 	},
 	"dependencies": {
+		"@agentclientprotocol/sdk": "^2.12.0",
 		"@earendil-works/pi-ai": "1.6.1",
 		"@earendil-works/pi-coding-agent": "1.6.1",
 		"@facet/plugin-ask-user-question": "*",
+		"@facet/plugin-session-names": "*",
 		"@facet/protocol": "*",
-		"typebox": "1.3.27",
-		"@facet/plugin-session-names": "*"
+		"typebox": "1.3.27"
 	},
 	"devDependencies": {
 		"typescript": "^5.9.0",

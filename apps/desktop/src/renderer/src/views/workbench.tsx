@@ -19,14 +19,14 @@ import type {
 	TerminalLocalSettings,
 } from "@facet/protocol";
 import {
-	BackendSwitcher,
+	AgentsSwitcher,
 	Button,
 	CodeThemeProvider,
 	type ComposerHandle,
 	CreateProjectDialog,
 	capabilitiesOf,
 	EmptyState,
-	filterSessionsByBackend,
+	filterSessionsByAgent,
 	HostSwitcher,
 	ICON_SIZE,
 	IconButton,
@@ -216,26 +216,26 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 			saveAgentDefaults: (patch) => client.setAgentDefaults(patch),
 			diagnostics: () => client.diagnostics(),
 			saveText: (suggestedName, text) => bridge.saveText(suggestedName, text),
-			loadBackends: () => client.listBackends(),
-			probeBackend: (backendId) =>
-				client.probeBackend(backendId).then((backend) => {
-					void session.refreshBackends();
-					return backend;
+			loadAgents: () => client.listAgents(),
+			probeAgent: (agentId) =>
+				client.probeAgent(agentId).then((agent) => {
+					void session.refreshAgents();
+					return agent;
 				}),
-			acpLoginStart: (backendId) => client.acpLoginStart(backendId),
+			acpLoginStart: (agentId) => client.acpLoginStart(agentId),
 			acpLoginSubmit: (loginId, code) =>
-				client.acpLoginSubmit(loginId, code).then((backend) => {
-					void session.refreshBackends();
-					return backend;
+				client.acpLoginSubmit(loginId, code).then((agent) => {
+					void session.refreshAgents();
+					return agent;
 				}),
 			acpLoginCancel: (loginId) => client.acpLoginCancel(loginId),
 		}),
-		[client, host.refreshCatalog, session.refreshBackends],
+		[client, host.refreshCatalog, session.refreshAgents],
 	);
 	const capabilities = capabilitiesOf(sessionView?.state.capabilities);
 	const visibleSessions = useMemo(
-		() => filterSessionsByBackend(session.sessions, session.selectedBackendId),
-		[session.sessions, session.selectedBackendId],
+		() => filterSessionsByAgent(session.sessions, session.selectedAgentId),
+		[session.sessions, session.selectedAgentId],
 	);
 	const providerAuth = host.catalog.auth;
 	const draftCommand = parseCommand(composer.draft.trim());
@@ -486,11 +486,11 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 						}
 						isOpen={shell.isDrawerOpen}
 						onNavigate={shell.closeDrawer}
-						backendSwitcher={
-							<BackendSwitcher
-								backends={session.backends}
-								selectedBackendId={session.selectedBackendId}
-								onSelect={session.selectBackend}
+						agentSwitcher={
+							<AgentsSwitcher
+								agents={session.agents}
+								selectedAgentId={session.selectedAgentId}
+								onSelect={session.selectAgent}
 							/>
 						}
 						hostSwitcher={

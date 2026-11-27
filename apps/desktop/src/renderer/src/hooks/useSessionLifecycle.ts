@@ -6,13 +6,13 @@
  */
 import type { SessionClient } from "@facet/client-core";
 import {
-	type BackendAvailability,
-	PI_BACKEND_ID,
+	type AgentAvailability,
+	PI_AGENT_ID,
 	type ProjectInfo,
 	type SessionStatus,
 	type SessionSummary,
 } from "@facet/protocol";
-import { resolveBackendSelection, samePath } from "@facet/ui";
+import { resolveAgentSelection, samePath } from "@facet/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ScopedStorage } from "../local-storage.ts";
 import type { HostWorkspaceSnapshot } from "../workspace-state.ts";
@@ -20,10 +20,10 @@ import type { HostWorkspaceSnapshot } from "../workspace-state.ts";
 /** 工作区存储里上次选中会话与新建目录的键。 */
 const ACTIVE_SESSION_KEY = "facet.session.activeFile";
 const CREATE_CWD_KEY = "facet.session.createCwd";
-const SELECTED_BACKEND_KEY = "facet.session.backendId";
+const SELECTED_BACKEND_KEY = "facet.session.agentId";
 
-const DEFAULT_BACKENDS: readonly BackendAvailability[] = [
-	{ id: PI_BACKEND_ID, kind: "pi", name: "Pi", available: true, enabled: true, builtIn: true },
+const DEFAULT_BACKENDS: readonly AgentAvailability[] = [
+	{ id: PI_AGENT_ID, kind: "pi", name: "Pi", available: true, enabled: true, builtIn: true },
 ];
 
 function readStoredSessionPath(storage: ScopedStorage | undefined, key: string): string | undefined {
@@ -181,9 +181,9 @@ export interface SessionLifecycle {
 	/** 主机上的会话清单 */
 	sessions: readonly SessionSummary[];
 	/** 主机可用的代理后端列表 */
-	backends: readonly BackendAvailability[];
+	agents: readonly AgentAvailability[];
 	/** 侧栏当前选中的后端标识（仅控制侧栏列表与新建会话归属） */
-	selectedBackendId: string;
+	selectedAgentId: string;
 	/** 各会话的活动状态，侧栏行首的状态点用它 */
 	statuses: ReadonlyMap<string, SessionStatus>;
 	/** 当前打开的会话文件 */
@@ -205,9 +205,9 @@ export interface SessionLifecycle {
 	/** 拉一次项目清单，返回这一份 */
 	refreshProjects: () => Promise<readonly ProjectInfo[] | undefined>;
 	/** 刷新代理后端可用性清单 */
-	refreshBackends: () => Promise<readonly BackendAvailability[] | undefined>;
+	refreshAgents: () => Promise<readonly AgentAvailability[] | undefined>;
 	/** 切换侧栏当前浏览与新建会话的代理后端（不影响右侧正打开的会话） */
-	selectBackend: (backendId: string) => void;
+	selectAgent: (agentId: string) => void;
 	/** 打开一个会话；已经缓存过的直接切过去 */
 	openSession: (path: string, knownCwd?: string) => void;
 	/** 新建会话 */
@@ -260,9 +260,9 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 	const [sessions, setSessions] = useState<readonly SessionSummary[]>(() =>
 		client.store.sessionList().map((entry) => entry.summary),
 	);
-	const [backends, setBackends] = useState<readonly BackendAvailability[]>(DEFAULT_BACKENDS);
-	const [selectedBackendId, setSelectedBackendId] = useState<string>(
-		() => readStoredSessionPath(storage, SELECTED_BACKEND_KEY) ?? PI_BACKEND_ID,
+	const [agents, setBackends] = useState<readonly AgentAvailability[]>(DEFAULT_BACKENDS);
+	const [selectedAgentId, setSelectedBackendId] = useState<string>(
+		() => readStoredSessionPath(storage, SELECTED_BACKEND_KEY) ?? PI_AGENT_ID,
 	);
 	const [statuses, setStatuses] = useState<ReadonlyMap<string, SessionStatus>>(() => statusesOf(client));
 	const [activeFile, setActiveFile] = useState<string | undefined>(
@@ -302,9 +302,9 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 			} else {
 				storage.removeItem(CREATE_CWD_KEY);
 			}
-			storage.setItem(SELECTED_BACKEND_KEY, selectedBackendId);
+			storage.setItem(SELECTED_BACKEND_KEY, selectedAgentId);
 		}
-	}, [snapshot, storage, activeFile, createCwd, selectedBackendId]);
+	}, [snapshot, storage, activeFile, createCwd, selectedAgentId]);
 	const [sessionError, setSessionError] = useState<SessionErrorNotice | undefined>(undefined);
 	const [trustPrompt, setTrustPrompt] = useState<TrustPrompt | undefined>(undefined);
 	const listSeq = useRef(0);
@@ -366,19 +366,19 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 	}, [client]);
 
 	/** 拉一次代理后端列表，并校对当前选中后端仍然有效。 */
-	const refreshBackends = useCallback(async (): Promise<readonly BackendAvailability[] | undefined> => {
+	const refreshAgents = useCallback(async (): Promise<readonly AgentAvailability[] | undefined> => {
 		try {
-			const res = await client.listBackends();
-			setBackends(res.backends);
-			setSelectedBackendId((current) => resolveBackendSelection(res.backends, current));
-			return res.backends;
+			const res = await client.listAgents();
+			setBackends(res.agents);
+			setSelectedBackendId((current) => resolveAgentSelection(res.agents, current));
+			return res.agents;
 		} catch {
 			return undefined;
 		}
 	}, [client]);
 
-	const selectBackend = useCallback((backendId: string) => {
-		setSelectedBackendId(backendId);
+	const selectAgent = useCallback((agentId: string) => {
+		setSelectedBackendId(agentId);
 	}, []);
 
 	/**
@@ -394,7 +394,7 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 		}
 		let cancelled = false;
 		void (async () => {
-			void refreshBackends();
+			void refreshAgents();
 			const list = await refreshProjects();
 			const pool = (await refreshSessions()) ?? [];
 			if (cancelled) {
@@ -428,7 +428,7 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 		return () => {
 			cancelled = true;
 		};
-	}, [client, connectEpoch, projectDir, refreshBackends, refreshProjects, refreshSessions]);
+	}, [client, connectEpoch, projectDir, refreshAgents, refreshProjects, refreshSessions]);
 
 	/**
 	 * 跑一次会话切换类操作。
@@ -557,7 +557,7 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 	);
 	openSessionRef.current = openSession;
 
-	/** 新建会话：Pi 默认模型与思考档位交给 pi；ACP 后端由选中的 backendId 决定。 */
+	/** 新建会话：Pi 默认模型与思考档位交给 pi；ACP 后端由选中的 agentId 决定。 */
 	const createSession = useCallback(
 		(cwd: string) => {
 			withTrust(cwd, () => {
@@ -565,7 +565,7 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 					async () => {
 						const opened = await client.createSession({
 							...(cwd.length > 0 ? { cwd } : {}),
-							...(selectedBackendId === PI_BACKEND_ID ? {} : { backendId: selectedBackendId }),
+							...(selectedAgentId === PI_AGENT_ID ? {} : { agentId: selectedAgentId }),
 						});
 						return opened.file;
 					},
@@ -578,7 +578,7 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 				);
 			});
 		},
-		[client, onSessionOpened, runSessionAction, selectedBackendId, withTrust],
+		[client, onSessionOpened, runSessionAction, selectedAgentId, withTrust],
 	);
 
 	/**
@@ -701,8 +701,8 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 
 	return {
 		sessions,
-		backends,
-		selectedBackendId,
+		agents,
+		selectedAgentId,
 		statuses,
 		activeFile,
 		projects,
@@ -713,8 +713,8 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 		trustPrompt,
 		refreshSessions,
 		refreshProjects,
-		refreshBackends,
-		selectBackend,
+		refreshAgents,
+		selectAgent,
 		openSession,
 		createSession,
 		selectSession,

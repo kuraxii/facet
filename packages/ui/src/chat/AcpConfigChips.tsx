@@ -5,10 +5,8 @@
  * 几何，将 ACP 服务端下发的 `mode` 与 `configOptions` 渲染为可交互的下拉芯片。
  */
 import type { AcpConfigOption, AcpModeState } from "@facet/protocol";
-import { SlidersHorizontal } from "lucide-react";
 import { type ReactNode, useEffect } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
-import { ICON_SIZE } from "../styles/visual-contract.ts";
 import { ChevronIcon } from "../transcript/chevron.tsx";
 import { groupConfigChoices } from "./backend-model.ts";
 
@@ -56,6 +54,7 @@ export function AcpConfigChips({
 	const hasMode = acpMode !== undefined && acpMode.availableModes.length > 0;
 	const currentMode = acpMode?.availableModes.find((m) => m.id === acpMode.currentModeId);
 	const modeMenuId = "acp-mode";
+	const visibleConfigOptions = acpConfigOptions.filter((option) => option.category !== "mode");
 
 	return (
 		<>
@@ -68,7 +67,6 @@ export function AcpConfigChips({
 						aria-expanded={openMenuId === modeMenuId}
 						onClick={() => onToggleMenu(openMenuId === modeMenuId ? undefined : modeMenuId)}
 					>
-						<SlidersHorizontal size={ICON_SIZE.sm} />
 						<span>{currentMode?.name ?? acpMode.currentModeId ?? t("composer.acpMode")}</span>
 						{onAcpModeChange !== undefined ? <ChevronIcon isOpen={openMenuId === modeMenuId} /> : null}
 					</button>
@@ -93,7 +91,7 @@ export function AcpConfigChips({
 				</div>
 			)}
 
-			{acpConfigOptions.map((option) => {
+			{visibleConfigOptions.map((option) => {
 				const menuId = `acp-opt:${option.id}`;
 				const activeChoice = option.options.find((c) => c.value === option.currentValue);
 				const grouped = groupConfigChoices(option.options);

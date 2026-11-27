@@ -623,6 +623,13 @@ describe("双层排队展示", () => {
 						{ value: "claude-sonnet", name: "Claude Sonnet" },
 					],
 				},
+				{
+					id: "mode",
+					name: "Mode",
+					category: "mode",
+					currentValue: "default",
+					options: [{ value: "default", name: "Default" }],
+				},
 			],
 			onAcpModeChange: onMode,
 			onAcpConfigOptionChange: onOpt,
@@ -631,6 +638,7 @@ describe("双层排队展示", () => {
 		expect(container.querySelector('[data-chip="context"]')).toBeNull();
 		const chips = [...container.querySelectorAll<HTMLButtonElement>("button.chip")];
 		expect(chips.map((btn) => btn.textContent)).toEqual(["Default", "Gemini 2.5"]);
+		expect(chips[0]?.querySelectorAll("svg")).toHaveLength(1); // 仅保留下拉箭头，不再有左侧图标
 
 		chips[0]?.click();
 		await Promise.resolve();

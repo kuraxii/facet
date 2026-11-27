@@ -16,6 +16,8 @@ export interface ShellPanelActions {
 	openTab: (tab: RightPanelTab) => void;
 	/** 关掉一个标签 */
 	closeTab: (tab: RightPanelTab) => void;
+	/** 按给定顺序重排已打开的标签 */
+	reorderTabs: (tabs: readonly RightPanelTab[]) => void;
 	/** 改「想不想开」 */
 	setOpen: (open: boolean) => void;
 	/** 进出宽展开（`⤢` / `⤡`） */
@@ -78,6 +80,8 @@ export interface ShellLayout {
 	setPanelTab: (tab: RightPanelTab) => void;
 	/** 关掉一个工具标签 */
 	closePanelTab: (tab: RightPanelTab) => void;
+	/** 重排右栏已打开的工具标签顺序 */
+	reorderPanelTabs: (tabs: readonly RightPanelTab[]) => void;
 	/** `⤢` 与 `⤡` */
 	togglePanelExpanded: () => void;
 	/** 收起左抽屉 */
@@ -177,6 +181,8 @@ export interface WorkspaceShell {
 	setPanelTab: (tab: RightPanelTab) => void;
 	/** 关掉一个工具标签；最后一个关掉后右栏停在启动清单上，不跟着收起 */
 	closePanelTab: (tab: RightPanelTab) => void;
+	/** 按给定顺序重排右栏已打开的工具标签并写回本地 */
+	reorderPanelTabs: (tabs: readonly RightPanelTab[]) => void;
 	/** 改索引栏宽度并写回本地：拖动松手时提交一次 */
 	/** `⤢` 与 `⤡`：进出宽展开 */
 	togglePanelExpanded: () => void;

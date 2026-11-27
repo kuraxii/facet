@@ -12,6 +12,7 @@ import {
 	type RightPanelTab,
 	readPanelState,
 	closePanelTab as removePanelTab,
+	reorderPanelTabs as sortPanelTabs,
 	writePanelState,
 } from "@facet/ui";
 import { useCallback, useState } from "react";
@@ -32,6 +33,8 @@ export interface WorkspacePanels {
 	openTab: (tab: RightPanelTab) => void;
 	/** 关掉一个标签（不看档位） */
 	closeTab: (tab: RightPanelTab) => void;
+	/** 按给定顺序重排已打开的标签 */
+	reorderTabs: (tabs: readonly RightPanelTab[]) => void;
 	/** 改「想不想开」，不碰标签集合 */
 	setOpen: (open: boolean) => void;
 	/** 进出宽展开 */
@@ -76,6 +79,13 @@ export function useWorkspacePanels(storage: ScopedStorage): WorkspacePanels {
 		[update],
 	);
 
+	const reorderTabs = useCallback(
+		(tabs: readonly RightPanelTab[]) => {
+			update((current) => sortPanelTabs(current, tabs));
+		},
+		[update],
+	);
+
 	const setOpen = useCallback(
 		(open: boolean) => {
 			update({ open });
@@ -97,6 +107,7 @@ export function useWorkspacePanels(storage: ScopedStorage): WorkspacePanels {
 		update,
 		openTab,
 		closeTab,
+		reorderTabs,
 		setOpen,
 		toggleExpanded,
 		collapseExpanded,

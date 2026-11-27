@@ -170,6 +170,14 @@ export function useShellLayout(options: ShellLayoutOptions): ShellLayout {
 		[panelActions],
 	);
 
+	/** 重排右栏已打开的标签顺序。 */
+	const reorderPanelTabs = useCallback(
+		(tabs: readonly RightPanelTab[]) => {
+			panelActions.reorderTabs(tabs);
+		},
+		[panelActions],
+	);
+
 	const togglePanelExpanded = panelActions.toggleExpanded;
 	return {
 		isNarrow,
@@ -196,6 +204,7 @@ export function useShellLayout(options: ShellLayoutOptions): ShellLayout {
 		togglePanel,
 		setPanelTab,
 		closePanelTab,
+		reorderPanelTabs,
 		togglePanelExpanded,
 		closeDrawer: drawers.closeDrawer,
 	};

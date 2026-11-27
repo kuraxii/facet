@@ -63,6 +63,7 @@ export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShel
 		togglePanel: layout.togglePanel,
 		setPanelTab: layout.setPanelTab,
 		closePanelTab: layout.closePanelTab,
+		reorderPanelTabs: layout.reorderPanelTabs,
 		togglePanelExpanded: layout.togglePanelExpanded,
 		panel: panels.panel,
 		isSearchOpen: chrome.isSearchOpen,

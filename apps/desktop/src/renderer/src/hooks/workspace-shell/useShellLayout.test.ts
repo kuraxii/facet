@@ -86,6 +86,9 @@ function actionsStub(): ShellPanelActions & { calls: string[] } {
 		closeTab: () => {
 			calls.push("closeTab");
 		},
+		reorderTabs: () => {
+			calls.push("reorderTabs");
+		},
 		setOpen: (open: boolean) => {
 			calls.push(`setOpen:${String(open)}`);
 		},

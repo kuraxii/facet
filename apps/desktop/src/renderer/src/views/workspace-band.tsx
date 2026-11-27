@@ -55,6 +55,7 @@ export function WorkspacePanelControls({
 				activeId={shell.panel.activeTab}
 				onSelect={onSelectTab}
 				onClose={onCloseTab}
+				onReorder={shell.reorderPanelTabs}
 				controlsId={controlsId}
 			/>
 			{/*

@@ -527,8 +527,8 @@ export class PiAgentFactory {
 	/**
 	 * pi 的默认设置。
 	 *
-	 * 读的是 pi 自己的设置（`agentDir/settings.json` 里的默认模型、思考档位、自动压缩与
-	 * 排队投递方式），新建会话时由 pi 用它开局，facet 不另存一份。
+	 * 读的是 pi 自己的设置（`agentDir/settings.json` 里的默认模型、思考档位与自动压缩），
+	 * 新建会话时由 pi 用它开局，facet 不另存一份。
 	 */
 	agentDefaults(): AgentDefaults {
 		const settings = this.piSettings();
@@ -543,8 +543,6 @@ export class PiAgentFactory {
 			...(model === undefined ? {} : { model }),
 			...(thinkingLevel === undefined ? {} : { thinkingLevel }),
 			autoCompaction: settings.getCompactionEnabled(),
-			steeringMode: settings.getSteeringMode(),
-			followUpMode: settings.getFollowUpMode(),
 		};
 	}
 
@@ -558,8 +556,6 @@ export class PiAgentFactory {
 		model?: ModelRef;
 		thinkingLevel?: ThinkingLevel | null;
 		autoCompaction?: boolean;
-		steeringMode?: "one-at-a-time" | "all";
-		followUpMode?: "one-at-a-time" | "all";
 	}): Promise<void> {
 		const settings = this.piSettings();
 		if (patch.model !== undefined) {
@@ -572,12 +568,6 @@ export class PiAgentFactory {
 		}
 		if (patch.autoCompaction !== undefined) {
 			settings.setCompactionEnabled(patch.autoCompaction);
-		}
-		if (patch.steeringMode !== undefined) {
-			settings.setSteeringMode(patch.steeringMode);
-		}
-		if (patch.followUpMode !== undefined) {
-			settings.setFollowUpMode(patch.followUpMode);
 		}
 		await settings.flush();
 		const failure = settings.drainErrors()[0];
@@ -797,6 +787,9 @@ export class PiAgentFactory {
 			resourceLoader,
 			sessionManager,
 		});
+		// 统一为全部发送，避免排队多条消息时逐条滞留
+		session.setSteeringMode("all");
+		session.setFollowUpMode("all");
 
 		const onError = options.onError ?? this.onError;
 		const ui =

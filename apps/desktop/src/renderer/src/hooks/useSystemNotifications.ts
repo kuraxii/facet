@@ -9,6 +9,7 @@
  */
 
 import type { SessionClient } from "@facet/client-core";
+import { DEFAULT_NOTIFICATION_SETTINGS, type NotificationSettings } from "@facet/protocol";
 import { useI18n } from "@facet/ui";
 import { useEffect, useRef } from "react";
 import { bridge } from "../bridge.ts";
@@ -31,6 +32,8 @@ export interface SystemNotificationOptions {
 	readonly client: SessionClient;
 	/** 点了通知之后切到那个会话 */
 	readonly onOpen: (path: string) => void;
+	/** 本机通知开关与触发粒度；省略时全开 */
+	readonly settings?: NotificationSettings;
 }
 
 /** 读一次全部会话的判据。 */
@@ -42,14 +45,26 @@ function readSignals(client: SessionClient): SignalMap {
 	return next;
 }
 
+function shouldSendKind(kind: NotificationKind, settings: NotificationSettings): boolean {
+	if (!settings.enabled) {
+		return false;
+	}
+	if (kind === "needsInput") {
+		return settings.onNeedsInput;
+	}
+	return settings.onSettled;
+}
+
 export function useSystemNotifications(options: SystemNotificationOptions): void {
-	const { client, onOpen } = options;
+	const { client, onOpen, settings = DEFAULT_NOTIFICATION_SETTINGS } = options;
 	const { t } = useI18n();
-	// 回调随渲染变化，但订阅只建一次：语言与切会话的动作都经 ref 取最新那一份
+	// 回调与配置随渲染变化，但订阅只建一次：语言、切会话与过滤策略都经 ref 取最新那一份
 	const translate = useRef(t);
 	translate.current = t;
 	const open = useRef(onOpen);
 	open.current = onOpen;
+	const policy = useRef(settings);
+	policy.current = settings;
 
 	useEffect(() => {
 		const notify = bridge.notify;
@@ -63,7 +78,9 @@ export function useSystemNotifications(options: SystemNotificationOptions): void
 			const events = collectNotifications(previous, next);
 			previous = next;
 			for (const event of events) {
-				void notify({ file: event.file, body: translate.current(BODY_KEYS[event.kind]) });
+				if (shouldSendKind(event.kind, policy.current)) {
+					void notify({ file: event.file, body: translate.current(BODY_KEYS[event.kind]) });
+				}
 			}
 		});
 	}, [client]);

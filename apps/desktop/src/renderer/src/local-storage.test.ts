@@ -1,16 +1,24 @@
 /**
  * 分作用域持久化适配器测试：验证主机隔离、旧 localStorage 迁移与本地外观读写。
  */
-import { DEFAULT_SETTINGS } from "@facet/protocol";
+import {
+	DEFAULT_NOTIFICATION_SETTINGS,
+	DEFAULT_SETTINGS,
+	DEFAULT_TERMINAL_LOCAL_SETTINGS,
+} from "@facet/protocol";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	appStorage,
 	hasLocalAppearance,
 	readLocalAppearance,
 	readLocalInput,
+	readLocalNotifications,
+	readLocalTerminal,
 	workspaceStorage,
 	writeLocalAppearance,
 	writeLocalInput,
+	writeLocalNotifications,
+	writeLocalTerminal,
 } from "./local-storage.ts";
 
 describe("local-storage 分作用域适配", () => {
@@ -100,5 +108,25 @@ describe("local-storage 分作用域适配", () => {
 		writeLocalInput({ sendKey: "shiftEnter" });
 		expect(readLocalInput()).toEqual({ sendKey: "shiftEnter" });
 		expect(setLocalInput).toHaveBeenCalledWith({ sendKey: "shiftEnter" });
+	});
+
+	it("读写本机通知与终端交互偏好并裁剪非法回滚行数", () => {
+		Object.defineProperty(globalThis, "window", {
+			value: {
+				facet: {
+					localState: { storage: { app: {}, workspaces: {} } },
+					setScopedStorage: () => {},
+				},
+			},
+			configurable: true,
+		});
+
+		expect(readLocalNotifications()).toEqual(DEFAULT_NOTIFICATION_SETTINGS);
+		writeLocalNotifications({ enabled: false, onSettled: true, onNeedsInput: false });
+		expect(readLocalNotifications()).toEqual({ enabled: false, onSettled: true, onNeedsInput: false });
+
+		expect(readLocalTerminal()).toEqual(DEFAULT_TERMINAL_LOCAL_SETTINGS);
+		writeLocalTerminal({ cursorBlink: false, scrollback: 999999 });
+		expect(readLocalTerminal()).toEqual({ cursorBlink: false, scrollback: 50000 });
 	});
 });

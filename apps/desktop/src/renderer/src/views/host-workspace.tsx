@@ -9,7 +9,12 @@
  */
 import { chatActivity } from "@facet/client-core";
 import type { LanguageSetting } from "@facet/i18n";
-import type { AppearanceSettings, InputSettings } from "@facet/protocol";
+import type {
+	AppearanceSettings,
+	InputSettings,
+	NotificationSettings,
+	TerminalLocalSettings,
+} from "@facet/protocol";
 import { appendQuote, type ComposerHandle, TextMenu } from "@facet/ui";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { bridge } from "../bridge.ts";
@@ -42,6 +47,12 @@ export interface HostWorkspaceProps {
 	/** 本机优先的输入偏好 */
 	localInput: InputSettings;
 	onLocalInputChange: (input: InputSettings) => void;
+	/** 本机优先的通知偏好 */
+	localNotifications: NotificationSettings;
+	onLocalNotificationsChange: (notifications: NotificationSettings) => void;
+	/** 本机优先的终端交互偏好 */
+	localTerminal: TerminalLocalSettings;
+	onLocalTerminalChange: (terminal: TerminalLocalSettings) => void;
 }
 
 export function HostWorkspace({
@@ -52,6 +63,10 @@ export function HostWorkspace({
 	onLocalAppearanceChange,
 	localInput,
 	onLocalInputChange,
+	localNotifications,
+	onLocalNotificationsChange,
+	localTerminal,
+	onLocalTerminalChange,
 }: HostWorkspaceProps): React.JSX.Element {
 	const toast = useToast();
 	const runtime = useHostRuntime();
@@ -100,7 +115,7 @@ export function HostWorkspace({
 
 	// 系统通知只订阅这台主机的会话：换主机时这棵子树整份卸载，订阅也跟着换；
 	// 点通知后切到那个会话，走的是侧栏同一个入口
-	useSystemNotifications({ client, onOpen: session.selectSession });
+	useSystemNotifications({ client, onOpen: session.selectSession, settings: localNotifications });
 
 	// 续订回不来（会话文件已经不在了）时退回没有会话的状态，连接本身照常可用
 	useEffect(() => {
@@ -132,6 +147,7 @@ export function HostWorkspace({
 		connectEpoch: host.connectEpoch,
 		snapshot: runtime.workspace,
 		showToast: toast.show,
+		localTerminal,
 	});
 
 	/** 终端分页此刻显示哪一个终端；为空时从清单里挑一个 */
@@ -268,6 +284,10 @@ export function HostWorkspace({
 				onLocalAppearanceChange={onLocalAppearanceChange}
 				localInput={localInput}
 				onLocalInputChange={onLocalInputChange}
+				localNotifications={localNotifications}
+				onLocalNotificationsChange={onLocalNotificationsChange}
+				localTerminal={localTerminal}
+				onLocalTerminalChange={onLocalTerminalChange}
 				workspaceStorage={wsStorage}
 				openedSessionId={openedSessionId}
 				terminalId={terminalId}

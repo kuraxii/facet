@@ -5,7 +5,12 @@
  * 界面里不会同时存在两台主机的节点。后台连着的主机由运行时自己维持，不占 DOM。
  */
 import type { LanguageSetting } from "@facet/i18n";
-import type { AppearanceSettings, InputSettings } from "@facet/protocol";
+import type {
+	AppearanceSettings,
+	InputSettings,
+	NotificationSettings,
+	TerminalLocalSettings,
+} from "@facet/protocol";
 import { I18nProvider, ImagePreviewProvider } from "@facet/ui";
 import { useCallback, useEffect, useState } from "react";
 import { bridge } from "./bridge.ts";
@@ -17,8 +22,12 @@ import { HostRuntimeProvider } from "./host-context.tsx";
 import {
 	readLocalAppearance,
 	readLocalInput,
+	readLocalNotifications,
+	readLocalTerminal,
 	writeLocalAppearance,
 	writeLocalInput,
+	writeLocalNotifications,
+	writeLocalTerminal,
 } from "./local-storage.ts";
 import { ToastProvider } from "./toast-provider.tsx";
 import { BootScreen } from "./views/boot-screen.tsx";
@@ -30,8 +39,15 @@ interface AppViewProps {
 	onLanguageChange: (setting: LanguageSetting) => void;
 	localAppearance: AppearanceSettings;
 	onLocalAppearanceChange: (appearance: AppearanceSettings) => void;
+	/** 本机优先的输入偏好 */
 	localInput: InputSettings;
 	onLocalInputChange: (input: InputSettings) => void;
+	/** 本机优先的通知偏好 */
+	localNotifications: NotificationSettings;
+	onLocalNotificationsChange: (notifications: NotificationSettings) => void;
+	/** 本机优先的终端交互偏好 */
+	localTerminal: TerminalLocalSettings;
+	onLocalTerminalChange: (terminal: TerminalLocalSettings) => void;
 }
 
 /** 界面语言与本机外观从本机桥读入，BootScreen 与各主机工作区共用同一份真值。 */
@@ -40,6 +56,8 @@ export function App(): React.JSX.Element {
 	const [language, setLanguage] = useState(bridge.language);
 	const [localAppearance, setLocalAppearance] = useState<AppearanceSettings>(readLocalAppearance);
 	const [localInput, setLocalInput] = useState<InputSettings>(readLocalInput);
+	const [localNotifications, setLocalNotifications] = useState<NotificationSettings>(readLocalNotifications);
+	const [localTerminal, setLocalTerminal] = useState<TerminalLocalSettings>(readLocalTerminal);
 
 	// 界面语言换了就同步到根节点：读屏按它选发音，浏览器按它断行
 	useEffect(() => {
@@ -76,6 +94,16 @@ export function App(): React.JSX.Element {
 		writeLocalInput(next);
 	}, []);
 
+	const changeNotifications = useCallback((next: NotificationSettings) => {
+		setLocalNotifications(next);
+		writeLocalNotifications(next);
+	}, []);
+
+	const changeTerminal = useCallback((next: TerminalLocalSettings) => {
+		setLocalTerminal(next);
+		writeLocalTerminal(next);
+	}, []);
+
 	return (
 		<I18nProvider language={language}>
 			<ToastProvider>
@@ -87,6 +115,10 @@ export function App(): React.JSX.Element {
 						onLocalAppearanceChange={changeAppearance}
 						localInput={localInput}
 						onLocalInputChange={changeInput}
+						localNotifications={localNotifications}
+						onLocalNotificationsChange={changeNotifications}
+						localTerminal={localTerminal}
+						onLocalTerminalChange={changeTerminal}
 					/>
 				</ImagePreviewProvider>
 			</ToastProvider>
@@ -101,6 +133,10 @@ function AppView({
 	onLocalAppearanceChange,
 	localInput,
 	onLocalInputChange,
+	localNotifications,
+	onLocalNotificationsChange,
+	localTerminal,
+	onLocalTerminalChange,
 }: AppViewProps) {
 	const hosts = useHosts();
 	const host = useHostConnection({ runtime: hosts.runtime, hosts });
@@ -123,6 +159,10 @@ function AppView({
 				onLocalAppearanceChange={onLocalAppearanceChange}
 				localInput={localInput}
 				onLocalInputChange={onLocalInputChange}
+				localNotifications={localNotifications}
+				onLocalNotificationsChange={onLocalNotificationsChange}
+				localTerminal={localTerminal}
+				onLocalTerminalChange={onLocalTerminalChange}
 			/>
 		</HostRuntimeProvider>
 	);

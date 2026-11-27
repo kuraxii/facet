@@ -5,7 +5,11 @@
  * 那一层，这里只通过传进来的标签动作推动，不反向依赖它。
  */
 import type { TerminalClient } from "@facet/client-core";
-import type { TerminalInfo } from "@facet/protocol";
+import {
+	DEFAULT_TERMINAL_LOCAL_SETTINGS,
+	type TerminalInfo,
+	type TerminalLocalSettings,
+} from "@facet/protocol";
 import type { ToastInput } from "@facet/ui";
 import type { TerminalAppearance } from "@facet/ui-terminal";
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
@@ -17,7 +21,7 @@ import type { HostWorkspaceSnapshot } from "../workspace-state.ts";
  * 字体与字号是 CSS 变量，xterm 只吃具体值，所以每次外观变化都要重新读一次计算样式；
  * 主题切换时前景、光标与选区色也跟着变，一并重读。
  */
-function readTerminalAppearance(): TerminalAppearance {
+function readTerminalAppearance(local: TerminalLocalSettings): TerminalAppearance {
 	const styles = getComputedStyle(document.documentElement);
 	const read = (name: string, fallback: string): string => styles.getPropertyValue(name).trim() || fallback;
 	/**
@@ -39,8 +43,8 @@ function readTerminalAppearance(): TerminalAppearance {
 		fontFamily: read("--font-terminal", "ui-monospace, monospace"),
 		fontSize: Number.parseFloat(read("--terminal-size", "12.5px")),
 		lineHeight: 1.35,
-		cursorBlink: true,
-		scrollback: 5000,
+		cursorBlink: local.cursorBlink,
+		scrollback: local.scrollback,
 		foreground: read("--fg-default", "#1a1a1e"),
 		cursor: read("--accent-fg", "#2563eb"),
 		selection: read("--bg-active", "#e4e4e7"),
@@ -64,6 +68,8 @@ export interface TerminalPanelOptions {
 	snapshot?: HostWorkspaceSnapshot;
 	/** 弹一条轻提示：开终端失败时给事实与重试入口 */
 	showToast: (input: Omit<ToastInput, "now">) => void;
+	/** 本机终端交互偏好（光标闪烁、回滚行数） */
+	localTerminal?: TerminalLocalSettings;
 }
 
 export interface TerminalPanel {
@@ -82,9 +88,19 @@ export interface TerminalPanel {
 }
 
 export function useTerminalPanel(options: TerminalPanelOptions): TerminalPanel {
-	const { client, canUseTerminal, cwd, connectEpoch, snapshot, showToast } = options;
-	const [terminals, setTerminals] = useState<TerminalInfo[]>([]);
-	const [appearance, setAppearance] = useState<TerminalAppearance>(readTerminalAppearance);
+	const {
+		client,
+		canUseTerminal,
+		cwd,
+		connectEpoch,
+		snapshot,
+		showToast,
+		localTerminal = DEFAULT_TERMINAL_LOCAL_SETTINGS,
+	} = options;
+	const [terminals, setTerminals] = useState<TerminalInfo[]>(() => []);
+	const [appearance, setAppearance] = useState<TerminalAppearance>(() =>
+		readTerminalAppearance(localTerminal),
+	);
 	// 本端关掉的终端跟着主机走：切回来时同一批终端不该又冒出来
 	const closedTerminalIds = useRef(snapshot?.closedTerminalIds ?? new Set<string>());
 
@@ -110,17 +126,17 @@ export function useTerminalPanel(options: TerminalPanelOptions): TerminalPanel {
 		void refreshTerminals();
 	}, [connectEpoch]);
 
-	// 首次渲染时外观变量可能还没写到根节点上，挂载后补读一次
+	// 首次渲染时外观变量可能还没写到根节点上，挂载后与本机终端偏好变化时同步读取
 	useEffect(() => {
-		setAppearance(readTerminalAppearance());
-	}, []);
+		setAppearance(readTerminalAppearance(localTerminal));
+	}, [localTerminal]);
 
 	// 外观变化（含设置页里的预览）后重读终端那份计算样式
 	useEffect(() => {
-		const onAppearance = (): void => setAppearance(readTerminalAppearance());
+		const onAppearance = (): void => setAppearance(readTerminalAppearance(localTerminal));
 		window.addEventListener("facet:appearance-changed", onAppearance);
 		return () => window.removeEventListener("facet:appearance-changed", onAppearance);
-	}, []);
+	}, [localTerminal]);
 
 	/** 在当前目录开一个终端；成功时把它的信息交回去，由上层摆标签。 */
 	const openTerminal = useCallback(async (): Promise<TerminalInfo | undefined> => {

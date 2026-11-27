@@ -49,7 +49,7 @@ export interface ShellChrome {
 export function useShellChrome(appearance: AppearanceSettings): ShellChrome {
 	const [isSearchOpen, setIsSearchOpen] = useState(false);
 	const [view, setView] = useState<"chat" | "settings">("chat");
-	const [settingsSection, setSettingsSection] = useState<SettingsSection>("models");
+	const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
 	const [uiScale, setUiScale] = useState(bridge.uiScale);
 	const [zoomBadge, setZoomBadge] = useState<number | undefined>(undefined);
 	/** 缩放浮层的定时器 */

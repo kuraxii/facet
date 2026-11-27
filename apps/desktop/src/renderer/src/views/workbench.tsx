@@ -12,7 +12,12 @@
 import type { ChatView } from "@facet/client-core";
 import { chatActivity } from "@facet/client-core";
 import type { LanguageSetting } from "@facet/i18n";
-import type { AppearanceSettings, InputSettings } from "@facet/protocol";
+import type {
+	AppearanceSettings,
+	InputSettings,
+	NotificationSettings,
+	TerminalLocalSettings,
+} from "@facet/protocol";
 import {
 	Button,
 	CodeThemeProvider,
@@ -82,6 +87,12 @@ export interface WorkbenchProps {
 	/** 本机优先的输入偏好 */
 	localInput: InputSettings;
 	onLocalInputChange: (input: InputSettings) => void;
+	/** 本机优先的通知偏好 */
+	localNotifications: NotificationSettings;
+	onLocalNotificationsChange: (notifications: NotificationSettings) => void;
+	/** 本机优先的终端交互偏好 */
+	localTerminal: TerminalLocalSettings;
+	onLocalTerminalChange: (terminal: TerminalLocalSettings) => void;
 	/** 按主机端点隔离的持久化存储 */
 	workspaceStorage?: ScopedStorage;
 	/** 当前会话标识 */
@@ -114,6 +125,10 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 		onLocalAppearanceChange,
 		localInput,
 		onLocalInputChange,
+		localNotifications,
+		onLocalNotificationsChange,
+		localTerminal,
+		onLocalTerminalChange,
 		workspaceStorage,
 		openedSessionId,
 		terminalId,
@@ -531,6 +546,10 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 							onLocalAppearanceChange={onLocalAppearanceChange}
 							localInput={localInput}
 							onLocalInputChange={onLocalInputChange}
+							localNotifications={localNotifications}
+							onLocalNotificationsChange={onLocalNotificationsChange}
+							localTerminal={localTerminal}
+							onLocalTerminalChange={onLocalTerminalChange}
 							// 浏览器入口改不了主机配置，桌面与 SSH 通道可以
 							canEdit={host.host?.canManage === true}
 						/>

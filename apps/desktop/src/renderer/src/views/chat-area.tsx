@@ -8,6 +8,7 @@ import type { ChatView, SessionView, TextPart, TranscriptItem } from "@facet/cli
 import type { InputSettings, Message, QueuedInput } from "@facet/protocol";
 import {
 	ArrowDownIcon,
+	baseName,
 	ChatOutline,
 	ChatTranscript,
 	Composer,
@@ -158,6 +159,87 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 		}),
 		[chat, reclaimCut, activity, transcript.isLoadingOlder, sessionView.channel, client],
 	);
+	const composerElement = (
+		<Composer
+			ref={composerInput}
+			value={composer.draft}
+			onChange={composer.updateDraft}
+			onSend={composer.send}
+			isSending={composer.isSending}
+			attachments={composer.pendingImages.map((item) => ({
+				id: item.id,
+				name: item.name,
+				previewUrl: item.previewUrl,
+			}))}
+			onPickImages={composer.pickImages}
+			onAddImages={composer.addImages}
+			canAddImages={
+				capabilities.configStyle === "acp"
+					? capabilities.supportsImages
+					: (sessionView.state.model?.input.includes("image") ?? false)
+			}
+			onRemoveAttachment={composer.removeImage}
+			attachmentNotice={composer.imageNotice}
+			onStop={() => client.cancel()}
+			activity={activity}
+			model={sessionView.state.model}
+			thinkingLevel={sessionView.state.thinkingLevel}
+			thinkingLevels={sessionView.state.availableThinkingLevels}
+			models={host.catalog.models}
+			providerAuth={providerAuth}
+			onModelChange={(next) => client.setModel({ provider: next.provider, id: next.id })}
+			onThinkingLevelChange={(level) => client.setThinkingLevel(level)}
+			capabilities={capabilities}
+			acpMode={sessionView.state.acpMode}
+			acpConfigOptions={sessionView.state.acpConfigOptions}
+			onAcpModeChange={composer.setAcpMode}
+			onAcpConfigOptionChange={composer.setAcpConfigOption}
+			shiftEnterToSend={localInput.sendKey === "shiftEnter"}
+			isBlocked={isBlocked}
+			canStop={host.isOnline && host.host?.role !== "viewer"}
+			contextUsage={sessionView.state.contextUsage}
+			onLoadContextDetails={capabilities.hasContextBreakdown ? () => client.contextDetails() : undefined}
+			sessionStats={sessionView.state.stats}
+			sessionMessages={sessionMessages}
+			streamingChars={streamingChars}
+			isCompacting={activity === "compacting"}
+			canCompact={activity === "idle" && capabilities.canCompact}
+			onCompact={capabilities.canCompact ? () => client.compact() : undefined}
+			mentionFiles={mentionFiles}
+			draftKey={composer.draftKey}
+			sentHistory={sentHistory}
+			onOpenMentionFile={onOpenMentionFile}
+			commands={[...composer.commands]}
+			onRunCommand={(command, args) => {
+				composer.runFacetCommand(command.name, args);
+			}}
+		/>
+	);
+	if (
+		transcript.items.length === 0 &&
+		activity === "idle" &&
+		queued.steering.length === 0 &&
+		sessionView.state.extensionUi.prompts.length === 0
+	) {
+		const projectName =
+			sessionCwd !== undefined && sessionCwd.length > 0 ? baseName(sessionCwd) || sessionCwd : undefined;
+		return (
+			<div className="empty-wrap">
+				{errorBar}
+				{sessionView.state.initialization.kind === "failed" ? (
+					<p className="dialog-error">{sessionView.state.initialization.message}</p>
+				) : null}
+				<div className="empty-main">
+					<h1 className="empty-title">
+						{projectName === undefined
+							? t("empty.title")
+							: t("empty.titleInProject", { project: projectName })}
+					</h1>
+					{composerElement}
+				</div>
+			</div>
+		);
+	}
 	return (
 		<>
 			<ChatOutline
@@ -192,7 +274,6 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 							onCopyText={copyText}
 							scrollElement={transcript.scrollElement}
 							reclaim={reclaim}
-							emptyHint={t("app.emptyHint")}
 						/>
 						<SteeringMessages steering={queued.steering} onDemoteSteering={composer.demoteSteering} />
 					</div>
@@ -239,62 +320,7 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 							}}
 						/>
 					)}
-					<Composer
-						ref={composerInput}
-						value={composer.draft}
-						onChange={composer.updateDraft}
-						onSend={composer.send}
-						isSending={composer.isSending}
-						attachments={composer.pendingImages.map((item) => ({
-							id: item.id,
-							name: item.name,
-							previewUrl: item.previewUrl,
-						}))}
-						onPickImages={composer.pickImages}
-						onAddImages={composer.addImages}
-						canAddImages={
-							capabilities.configStyle === "acp"
-								? capabilities.supportsImages
-								: (sessionView.state.model?.input.includes("image") ?? false)
-						}
-						onRemoveAttachment={composer.removeImage}
-						attachmentNotice={composer.imageNotice}
-						onStop={() => client.cancel()}
-						activity={activity}
-						model={sessionView.state.model}
-						thinkingLevel={sessionView.state.thinkingLevel}
-						thinkingLevels={sessionView.state.availableThinkingLevels}
-						models={host.catalog.models}
-						providerAuth={providerAuth}
-						onModelChange={(next) => client.setModel({ provider: next.provider, id: next.id })}
-						onThinkingLevelChange={(level) => client.setThinkingLevel(level)}
-						capabilities={capabilities}
-						acpMode={sessionView.state.acpMode}
-						acpConfigOptions={sessionView.state.acpConfigOptions}
-						onAcpModeChange={composer.setAcpMode}
-						onAcpConfigOptionChange={composer.setAcpConfigOption}
-						shiftEnterToSend={localInput.sendKey === "shiftEnter"}
-						isBlocked={isBlocked}
-						canStop={host.isOnline && host.host?.role !== "viewer"}
-						contextUsage={sessionView.state.contextUsage}
-						onLoadContextDetails={
-							capabilities.hasContextBreakdown ? () => client.contextDetails() : undefined
-						}
-						sessionStats={sessionView.state.stats}
-						sessionMessages={sessionMessages}
-						streamingChars={streamingChars}
-						isCompacting={activity === "compacting"}
-						canCompact={activity === "idle" && capabilities.canCompact}
-						onCompact={capabilities.canCompact ? () => client.compact() : undefined}
-						mentionFiles={mentionFiles}
-						draftKey={composer.draftKey}
-						sentHistory={sentHistory}
-						onOpenMentionFile={onOpenMentionFile}
-						commands={[...composer.commands]}
-						onRunCommand={(command, args) => {
-							composer.runFacetCommand(command.name, args);
-						}}
-					/>
+					{composerElement}
 				</div>
 			</div>
 		</>

@@ -118,15 +118,15 @@ const GROUP_LABELS: Record<GroupKey, string> = {
 	earlier: "Earlier",
 };
 
-/** 取路径末段作名称，末段为空时回退成原值。 */
+/** 取路径末段作名称（兼容 `/` 与 `\`），末段为空时回退成原值。 */
 export function baseName(path: string): string {
-	const segments = path.split("/").filter((segment) => segment.length > 0);
+	const segments = path.split(/[/\\]/).filter((segment) => segment.length > 0);
 	return segments[segments.length - 1] ?? path;
 }
 
-/** 目录的比较键，忽略末尾斜杠。 */
+/** 目录的比较键，忽略末尾斜杠（兼容 `/` 与 `\`）。 */
 function pathKey(path: string): string {
-	return path.replace(/\/+$/, "");
+	return path.replace(/[/\\]+$/, "");
 }
 
 /** 两个目录是否指向同一处,忽略末尾斜杠。 */
@@ -323,7 +323,7 @@ function listProjects(added: readonly ProjectInfo[], sessions: readonly SessionS
 		options.push({
 			id: project.id,
 			cwd: project.cwd,
-			name: project.name ?? baseName(project.cwd),
+			name: project.name !== undefined ? baseName(project.name) : baseName(project.cwd),
 			host: undefined,
 			sessionCount: counts.get(key)?.count ?? 0,
 		});

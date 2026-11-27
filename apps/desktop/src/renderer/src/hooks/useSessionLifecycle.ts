@@ -210,8 +210,8 @@ export interface SessionLifecycle {
 	selectAgent: (agentId: string) => void;
 	/** 打开一个会话；已经缓存过的直接切过去 */
 	openSession: (path: string, knownCwd?: string) => void;
-	/** 新建会话 */
-	createSession: (cwd: string) => void;
+	/** 新建会话；传入 initialPrompt 时在会话创建完成后自动发送首条消息 */
+	createSession: (cwd: string, initialPrompt?: string) => void;
 	/** 侧栏与搜索用的稳定回调：直接选会话 */
 	selectSession: (path: string) => void;
 	/** 侧栏用的稳定回调：记下目录并新建会话 */
@@ -559,12 +559,13 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 
 	/** 新建会话：Pi 默认模型与思考档位交给 pi；ACP 后端由选中的 agentId 决定。 */
 	const createSession = useCallback(
-		(cwd: string) => {
-			withTrust(cwd, () => {
+		(cwd: string, initialPrompt?: string) => {
+			const normalizedCwd = cwd.length > 0 ? cwd : undefined;
+			withTrust(normalizedCwd, () => {
 				runSessionAction(
 					async () => {
 						const opened = await client.createSession({
-							...(cwd.length > 0 ? { cwd } : {}),
+							...(normalizedCwd !== undefined ? { cwd: normalizedCwd } : {}),
 							...(selectedAgentId === PI_AGENT_ID ? {} : { agentId: selectedAgentId }),
 						});
 						return opened.file;
@@ -574,6 +575,10 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 							return;
 						}
 						onSessionOpened?.(file);
+						const trimmed = initialPrompt?.trim();
+						if (trimmed && trimmed.length > 0) {
+							client.send(trimmed);
+						}
 					},
 				);
 			});

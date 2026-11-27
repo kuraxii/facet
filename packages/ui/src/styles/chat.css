@@ -1173,19 +1173,17 @@
 	font-weight: 600;
 }
 
-.empty-hint {
-	margin: 0;
-	max-width: 420px;
-	color: var(--fg-subtle);
-	font-size: var(--text-xs);
-	line-height: var(--leading-ui);
-	overflow-wrap: anywhere;
+.empty-main .composer {
+	width: 100%;
+	max-width: var(--chat-column-max);
+	text-align: left;
 }
 
-.empty-actions {
+.empty-selectors {
 	display: flex;
-	gap: var(--space-4);
-	margin-top: 6px;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--space-2);
 }
 
 /* 窄档：只把最小留白收一档，轨道与对齐关系不变 */

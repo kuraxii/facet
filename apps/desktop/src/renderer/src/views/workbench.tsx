@@ -46,7 +46,15 @@ import {
 	type WorkspaceTabId,
 } from "@facet/ui";
 import { X } from "lucide-react";
-import { type CSSProperties, type ReactNode, type RefObject, useCallback, useMemo, useRef } from "react";
+import {
+	type CSSProperties,
+	type ReactNode,
+	type RefObject,
+	useCallback,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { AppFrame } from "../app-frame.tsx";
 import { bridge } from "../bridge.ts";
 import type { Composer } from "../hooks/useComposer.ts";
@@ -258,7 +266,8 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 		sessionView?.state.maintenance === undefined &&
 		sessionView?.state.initialization.kind === "ready" &&
 		sessionView.state.extensionUi.prompts.length === 0;
-	const emptyCreateCwd = session.createCwd.length > 0 ? session.createCwd : session.projects[0]?.cwd;
+	/** 草稿欢迎页选中的项目目录（undefined 表示未关联项目） */
+	const [draftCwd, setDraftCwd] = useState<string | undefined>(undefined);
 	const errorBar =
 		session.sessionError === undefined ? null : (
 			<div className="session-error">
@@ -334,14 +343,21 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 			<div className="empty-wrap">
 				{errorBar}
 				<EmptyState
-					cwd={emptyCreateCwd}
+					hostName={host.host?.hostName ?? t("app.localHost")}
+					cwd={draftCwd}
+					projects={session.projects}
+					agents={session.agents}
+					selectedAgentId={session.selectedAgentId}
+					onSelectCwd={setDraftCwd}
+					onSelectAgent={session.selectAgent}
 					canCreate={host.phase === "ready"}
-					onCreate={() => {
-						if (emptyCreateCwd !== undefined) {
-							session.createSession(emptyCreateCwd);
-						}
+					onSend={(text) => {
+						session.createSession(draftCwd ?? "", text);
 					}}
 					onAddProject={session.openProjectDialog}
+					shiftEnterToSend={localInput.sendKey === "shiftEnter"}
+					models={host.catalog.models}
+					providerAuth={host.catalog.auth}
 				/>
 			</div>
 		) : (
@@ -454,7 +470,11 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 						statuses={session.statuses}
 						createCwd={session.createCwd}
 						onSelect={session.selectSession}
-						onCreate={session.createSessionAt}
+						onCreate={(cwd) => {
+							setDraftCwd(cwd);
+							session.resetActive();
+						}}
+						onStartNew={session.resetActive}
 						canCreate={host.phase === "ready"}
 						onAddProject={session.openProjectDialog}
 						isSearchOpen={shell.isSearchOpen}

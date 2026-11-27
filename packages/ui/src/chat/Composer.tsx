@@ -21,7 +21,7 @@ import {
 	type ThinkingLevel,
 } from "@facet/protocol";
 import { Brain, FileUp, ImagePlus, Plus, X } from "lucide-react";
-import { type Ref, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, type Ref, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FACET_FILE_DRAG_MIME } from "../common/file-drag.ts";
 import { IconButton } from "../common/IconButton.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
@@ -147,6 +147,8 @@ export interface ComposerProps {
 	onAcpModeChange?: (modeId: string) => void;
 	/** 修改 ACP 动态配置项 */
 	onAcpConfigOptionChange?: (configId: string, value: string) => void;
+	/** 输入框顶部的额外选择栏（例如新建引导页的 Host / Project / Agent 芯片） */
+	header?: ReactNode;
 }
 
 /** 模型芯片的显示文本。 */
@@ -237,6 +239,7 @@ export function Composer({
 	acpConfigOptions,
 	onAcpModeChange,
 	onAcpConfigOptionChange,
+	header,
 }: ComposerProps) {
 	const { t } = useI18n();
 	const openImagePreview = useImagePreview();
@@ -388,6 +391,7 @@ export function Composer({
 				onAddImages(files);
 			}}
 		>
+			{header}
 			{attachments.length === 0 ? null : (
 				<div className="composer-files">
 					{attachments.map((item, index) => (

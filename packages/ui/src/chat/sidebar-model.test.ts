@@ -50,11 +50,14 @@ describe("路径与标题", () => {
 	it("取路径末段", () => {
 		expect(baseName("/work/facet")).toBe("facet");
 		expect(baseName("/work/facet/")).toBe("facet");
+		expect(baseName("D:\\User\\Desktop\\ZTools")).toBe("ZTools");
+		expect(baseName("D:\\User\\Desktop\\ZTools\\")).toBe("ZTools");
 		expect(baseName("facet")).toBe("facet");
 	});
 
 	it("末尾斜杠不影响目录比较", () => {
 		expect(samePath("/work/facet/", "/work/facet")).toBe(true);
+		expect(samePath("D:\\User\\Desktop\\facet\\", "D:\\User\\Desktop\\facet")).toBe(true);
 		expect(samePath("/work/facet", "/work/linx-icp")).toBe(false);
 	});
 

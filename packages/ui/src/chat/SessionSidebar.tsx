@@ -59,6 +59,8 @@ export interface SessionSidebarProps {
 	onSelect: (path: string) => void;
 	/** 在指定目录新建会话 */
 	onCreate: (cwd: string) => void;
+	/** 进入新建会话的草稿欢迎页 */
+	onStartNew?: () => void;
 	/** 新建是否可用，连接未就绪时不可用 */
 	canCreate: boolean;
 	/** 打开添加项目 */
@@ -150,6 +152,7 @@ export const SessionSidebar = memo(function SessionSidebar({
 	hostStatus,
 	isOpen = true,
 	onNavigate,
+	onStartNew,
 }: SessionSidebarProps) {
 	const { t, i18n } = useI18n();
 	// 侧栏里能悬停出说明的地方共用一份提示
@@ -310,6 +313,11 @@ export const SessionSidebar = memo(function SessionSidebar({
 				size="md"
 				className="sb-new"
 				onClick={() => {
+					if (onStartNew !== undefined) {
+						onStartNew();
+						onNavigate?.();
+						return;
+					}
 					// 没有可用的项目目录时不给「新建会话」：这台主机上还没有目录可选，
 					// 直接把添加项目摆出来，免得把空路径交给主机
 					if (newSessionCwd.length === 0) {
@@ -322,7 +330,11 @@ export const SessionSidebar = memo(function SessionSidebar({
 				}}
 				disabled={!canCreate}
 				{...tip.handlers(
-					newSessionCwd.length === 0 ? t("common.addProject") : t("sidebar.newIn", { cwd: newSessionCwd }),
+					onStartNew !== undefined
+						? t("common.newSession")
+						: newSessionCwd.length === 0
+							? t("common.addProject")
+							: t("sidebar.newIn", { cwd: newSessionCwd }),
 				)}
 			>
 				<Plus size={ICON_SIZE.md} />

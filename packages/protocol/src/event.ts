@@ -8,7 +8,7 @@ import type { ToolOutput } from "./content.ts";
 import type { ExtensionUiState, SessionInitialization } from "./extension-ui.ts";
 import type { Message } from "./message.ts";
 import type { ModelInfo, ThinkingLevel } from "./model.ts";
-import type { EntryKind, Maintenance, TurnPhase } from "./session.ts";
+import type { Entry, EntryKind, Maintenance, TurnPhase } from "./session.ts";
 
 /** 提示级别，用于扩展或主机侧发出的通知。 */
 export type NoticeLevel = "info" | "warning" | "error";
@@ -54,6 +54,8 @@ export type SessionEvent =
 	| { type: "queue"; steering: string[]; followUp: string[] }
 	/** 追加了一个持久化条目,entryId 可作为读取游标 */
 	| { type: "entry"; entryId: string; parentId: string | null; kind: EntryKind }
+	/** 会话条目已写盘：若对应先前的某条流式消息，messageSeq 指向该消息的生成序号 */
+	| { type: "entry_committed"; entry: Entry; messageSeq?: number }
 	| { type: "name"; name: string | undefined }
 	| {
 			type: "model";

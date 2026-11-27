@@ -6,6 +6,7 @@ import type { ModelInfo, ModelRef, ProviderLoginEvent, ThinkingLevel } from "./m
 import type { StreamingBehavior } from "./request.ts";
 import type {
 	ContextUsage,
+	Entry,
 	Maintenance,
 	SessionStats,
 	SessionStatus,
@@ -91,6 +92,8 @@ export type ChatAction =
 	| { type: "chat/messageAppended"; messageId: string; message: Message }
 	/** 主机侧:消息完成或追加新内容,沿用 messageAppended 的 messageId */
 	| { type: "chat/messageUpdated"; messageId: string; message: Message }
+	/** 主机侧:会话条目已落盘；若对应流式消息则经 messageId 原地补齐 entry，不再替换视图标识 */
+	| { type: "chat/entryCommitted"; messageId?: string; entry: Entry }
 	/** 主机侧:流式增量,partIndex 对应消息内容块的下标 */
 	| { type: "chat/delta"; messageId: string; partIndex: number; kind: DeltaKind; delta: string }
 	/** 主机侧:工具开始执行 */

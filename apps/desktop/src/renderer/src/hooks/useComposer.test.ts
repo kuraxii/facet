@@ -46,6 +46,7 @@ function sessionView(file: string, hasPendingSend: boolean): SessionView {
 			phase: "idle",
 			maintenance: undefined,
 			contextUsage: undefined,
+			stats: undefined,
 			queued: { steering: [], followUp: [] },
 			hasPendingSend,
 		},

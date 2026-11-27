@@ -18,6 +18,7 @@ import type {
 	QueuedInput,
 	SessionInitialization,
 	SessionSnapshot,
+	SessionStats,
 	ThinkingLevel,
 	ToolOutput,
 	TurnPhase,
@@ -99,6 +100,8 @@ export interface SessionState {
 	readonly maintenance: Maintenance | undefined;
 	/** 上下文用量，刚压缩完或估算不出来时为空 */
 	readonly contextUsage: ContextUsage | undefined;
+	/** 全会话累计统计（含已被压缩掉的历史） */
+	readonly stats: SessionStats | undefined;
 	readonly queued: QueuedInput;
 	/**
 	 * 本端有没有一条已经发出去、还没被主机确认的一轮消息。
@@ -177,6 +180,7 @@ export function createSessionView(channel: Channel, snapshot?: SessionSnapshot):
 			phase: snapshot?.phase ?? "idle",
 			maintenance: snapshot?.maintenance,
 			contextUsage: snapshot?.contextUsage,
+			stats: snapshot?.stats,
 			queued: snapshot?.queued ?? { steering: [], followUp: [] },
 			// 快照只描述主机那边的状态；在途发送是本端记账，建视图时一律从「没有」起
 			hasPendingSend: false,

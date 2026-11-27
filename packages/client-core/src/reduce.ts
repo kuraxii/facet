@@ -73,11 +73,13 @@ export function reduceSession(view: SessionView, action: Action): SessionView {
 				return view;
 			}
 			return { ...view, state: { ...view.state, phase: action.phase, maintenance: action.maintenance } };
-		case "session/usageChanged":
-			if (same(view.state.contextUsage, action.usage)) {
+		case "session/usageChanged": {
+			const nextStats = action.stats === undefined ? view.state.stats : action.stats;
+			if (same(view.state.contextUsage, action.usage) && same(view.state.stats, nextStats)) {
 				return view;
 			}
-			return { ...view, state: { ...view.state, contextUsage: action.usage } };
+			return { ...view, state: { ...view.state, contextUsage: action.usage, stats: nextStats } };
+		}
 		case "session/modelChanged":
 			if (
 				same(view.state.model, action.model) &&

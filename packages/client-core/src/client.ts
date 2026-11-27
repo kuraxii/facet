@@ -14,6 +14,7 @@ import type {
 	Capability,
 	Channel,
 	ClientRole,
+	ContextBreakdown,
 	CustomProviderInfo,
 	CustomProviderInput,
 	Entry,
@@ -1415,6 +1416,12 @@ export class SessionClient {
 			runtime.commands = result.commands;
 		}
 		return result.commands;
+	}
+
+	/** 按需查询当前活动分支的上下文窗口分项拆解。 */
+	async contextDetails(): Promise<ContextBreakdown> {
+		const runtime = this.requireRuntime();
+		return await this.transport.request("contextDetails", { sessionId: runtime.opened.snapshot.id });
 	}
 
 	/**

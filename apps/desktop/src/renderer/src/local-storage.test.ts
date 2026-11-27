@@ -129,4 +129,32 @@ describe("local-storage 分作用域适配", () => {
 		writeLocalTerminal({ cursorBlink: false, scrollback: 999999 });
 		expect(readLocalTerminal()).toEqual({ cursorBlink: false, scrollback: 50000 });
 	});
+
+	it("bridge.localState 被 contextBridge 深冻结时仍可正常读写而不抛错", () => {
+		const frozenBridge = Object.freeze({
+			localState: Object.freeze({
+				storage: Object.freeze({
+					app: Object.freeze({}),
+					workspaces: Object.freeze({}),
+				}),
+			}),
+			setScopedStorage: vi.fn(),
+			setLocalAppearance: vi.fn(),
+			setLocalInput: vi.fn(),
+		});
+		Object.defineProperty(globalThis, "window", {
+			value: { facet: frozenBridge },
+			configurable: true,
+		});
+
+		appStorage.setItem("facet.sidebar.collapsed", "1");
+		expect(appStorage.getItem("facet.sidebar.collapsed")).toBe("1");
+		workspaceStorage("local").setItem("facet.panel.open", "1");
+		expect(workspaceStorage("local").getItem("facet.panel.open")).toBe("1");
+		writeLocalAppearance({ ...DEFAULT_SETTINGS.appearance, theme: "claude" });
+		expect(readLocalAppearance().theme).toBe("claude");
+		writeLocalInput({ sendKey: "shiftEnter" });
+		expect(readLocalInput().sendKey).toBe("shiftEnter");
+		expect(frozenBridge.setScopedStorage).toHaveBeenCalledTimes(2);
+	});
 });

@@ -39,14 +39,40 @@ function fallbackStorage(): Storage | undefined {
 	}
 }
 
+/**
+ * 渲染进程内的可写本地状态缓存，按桥对象实例隔离。
+ *
+ * Electron `contextBridge.exposeInMainWorld` 会深冻结暴露给渲染进程的对象；直接修改
+ * `window.facet.localState` 会在严格模式下抛出 `TypeError` 导致首帧崩溃，因此这里始终
+ * 拷贝一份普通对象在渲染侧维护，同时通过 IPC 异步同步回主进程。
+ */
+const stateCache = new WeakMap<Partial<FacetBridge>, BridgeLocalState>();
+
+function cloneLocalState(raw: BridgeLocalState | undefined): BridgeLocalState {
+	const workspaces: Record<string, Record<string, string>> = {};
+	if (raw?.storage?.workspaces !== undefined) {
+		for (const [scope, bucket] of Object.entries(raw.storage.workspaces)) {
+			workspaces[scope] = { ...bucket };
+		}
+	}
+	return {
+		...(raw?.appearance === undefined ? {} : { appearance: { ...raw.appearance } }),
+		...(raw?.input === undefined ? {} : { input: { ...raw.input } }),
+		storage: {
+			app: { ...raw?.storage?.app },
+			workspaces,
+		},
+	};
+}
+
 function ensureLocalState(bridge: Partial<FacetBridge>): BridgeLocalState {
-	if (bridge.localState === undefined) {
-		bridge.localState = {};
+	const cached = stateCache.get(bridge);
+	if (cached !== undefined) {
+		return cached;
 	}
-	if (bridge.localState.storage === undefined) {
-		bridge.localState.storage = {};
-	}
-	return bridge.localState;
+	const cloned = cloneLocalState(bridge.localState);
+	stateCache.set(bridge, cloned);
+	return cloned;
 }
 
 function readScopeBucket(state: BridgeLocalState, scope: string): Record<string, string> {
@@ -131,12 +157,16 @@ export function workspaceStorage(endpoint: string): ScopedStorage {
 
 /** 本地是否已经保存过本机外观配置。 */
 export function hasLocalAppearance(): boolean {
-	return currentBridge()?.localState?.appearance !== undefined;
+	const bridge = currentBridge();
+	return bridge !== undefined && ensureLocalState(bridge).appearance !== undefined;
 }
 
 /** 读取本机优先的外观配置，未配置时回落到默认值。 */
 export function readLocalAppearance(): AppearanceSettings {
-	return currentBridge()?.localState?.appearance ?? DEFAULT_SETTINGS.appearance;
+	const bridge = currentBridge();
+	return bridge === undefined
+		? DEFAULT_SETTINGS.appearance
+		: (ensureLocalState(bridge).appearance ?? DEFAULT_SETTINGS.appearance);
 }
 
 /** 保存本机优先的外观配置到本机持久化存储。 */
@@ -152,12 +182,16 @@ export function writeLocalAppearance(appearance: AppearanceSettings): void {
 
 /** 本地是否已经保存过输入偏好。 */
 export function hasLocalInput(): boolean {
-	return currentBridge()?.localState?.input !== undefined;
+	const bridge = currentBridge();
+	return bridge !== undefined && ensureLocalState(bridge).input !== undefined;
 }
 
 /** 读取本机优先的输入偏好，未配置时回落到默认值。 */
 export function readLocalInput(): InputSettings {
-	return currentBridge()?.localState?.input ?? DEFAULT_SETTINGS.input;
+	const bridge = currentBridge();
+	return bridge === undefined
+		? DEFAULT_SETTINGS.input
+		: (ensureLocalState(bridge).input ?? DEFAULT_SETTINGS.input);
 }
 
 /** 保存本机优先的输入偏好。 */

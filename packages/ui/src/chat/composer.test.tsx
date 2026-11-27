@@ -1,13 +1,6 @@
+import { deleteCharBackward, undo } from "@codemirror/commands";
+import type { EditorView } from "@codemirror/view";
 import type { ModelInfo, SlashCommand } from "@facet/protocol";
-import {
-	$getRoot,
-	$getSelection,
-	$isRangeSelection,
-	FORMAT_TEXT_COMMAND,
-	type LexicalEditor,
-	PASTE_COMMAND,
-	UNDO_COMMAND,
-} from "lexical";
 import { act, createElement, type ReactElement, type RefObject, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -346,22 +339,11 @@ describe("命令面板", () => {
 		{ name: "review", description: "审查改动", source: "skill", handler: "pi" },
 	] as SlashCommand[];
 
-	/** 把光标放到编辑器里最后一个文本节点的末尾。 */
+	/** 把光标放到编辑器内容末尾。 */
 	async function caretAtLastText(rendered: EditorRendered): Promise<void> {
 		await act(async () => {
 			rendered.editorElement.focus();
-			const texts = rendered.container.querySelectorAll(".composer-editor [data-lexical-text]");
-			const last = texts[texts.length - 1]?.lastChild ?? null;
-			if (last === null) {
-				throw new Error("编辑器里没有文字");
-			}
-			const range = document.createRange();
-			range.setStart(last, (last.textContent ?? "").length);
-			range.collapse(true);
-			const selection = window.getSelection();
-			selection?.removeAllRanges();
-			selection?.addRange(range);
-			document.dispatchEvent(new Event("selectionchange"));
+			rendered.editor.dispatch({ selection: { anchor: rendered.editor.state.doc.length } });
 		});
 	}
 
@@ -527,37 +509,27 @@ describe("命令面板", () => {
 		const capsule = rendered.container.querySelector(".composer-command");
 		expect(capsule?.textContent).toBe("/review");
 		expect(capsule?.getAttribute("data-command")).toBe("review");
-		// 胶囊后面跟着一个空格，光标停在那儿等参数
-		expect(capsule?.nextElementSibling?.textContent).toBe(" ");
 		expect(rendered.draft()).toBe("/review ");
-
-		// 原子性来自 token 模式：退格整块删除、光标整块跳过。jsdom 没有布局，编辑器的
-		// 按字符删除在这里是空操作，所以只断言语义，不模拟那一下按键。
-		const mode = rendered.editor.getEditorState().read(() => {
-			const node = $getRoot()
-				.getAllTextNodes()
-				.find((item) => item.getType() === "slash-command");
-			return node?.getMode() ?? null;
-		});
-		expect(mode).toBe("token");
 
 		// 接着写的参数落在胶囊之后，胶囊本身不受影响
 		await typeText(rendered.editor, "看下 diff");
 		expect(rendered.draft()).toBe("/review 看下 diff");
 		expect(rendered.container.querySelector(".composer-command")?.textContent).toBe("/review");
+
+		// 紧挨着胶囊按退格会整块删掉胶囊，而不是只删最后一个字母
+		await act(async () => {
+			rendered.editor.dispatch({ selection: { anchor: "/review".length } });
+			deleteCharBackward(rendered.editor);
+		});
+		expect(rendered.draft()).toBe(" 看下 diff");
 		rendered.unmount();
 	});
 
-	it("第二段与代码块里的斜杠不弹面板", async () => {
+	it("第二行开头的斜杠不弹面板", async () => {
 		const second = await renderEditor("第一行\n\n/co", false, { commands });
 		await caretAtLastText(second);
 		expect(second.container.querySelector('[role="listbox"]')).toBeNull();
 		second.unmount();
-
-		const code = await renderEditor("```\n/co\n```", false, { commands });
-		await caretAtLastText(code);
-		expect(code.container.querySelector('[role="listbox"]')).toBeNull();
-		code.unmount();
 	});
 
 	it("已有命令胶囊之后不再弹面板", async () => {
@@ -721,7 +693,7 @@ function editorRoutes(shiftEnterToSend: boolean): ComposerKeyRoutes {
 function EditorHost(props: {
 	initial: string;
 	shiftEnterToSend: boolean;
-	editorRef: RefObject<LexicalEditor | null>;
+	editorRef: RefObject<EditorView | null>;
 	handleRef: RefObject<ComposerHandle | null>;
 	mentionFiles?: readonly string[];
 	commands?: readonly SlashCommand[];
@@ -753,19 +725,19 @@ function EditorHost(props: {
 	);
 }
 
-/** 一份渲染好的富文本输入域。 */
+/** 一份渲染好的输入域。 */
 interface EditorRendered extends Rendered {
 	/** 输入域根节点 */
 	editorElement: HTMLElement;
 	/** 编辑器实例，用例靠它模拟输入 */
-	editor: LexicalEditor;
+	editor: EditorView;
 	/** 对外的命令式句柄 */
 	handle: ComposerHandle;
 	/** 最近一次回传给父级的草稿 */
 	draft: () => string;
 }
 
-/** 挂一个受控的富文本输入域。 */
+/** 挂一个受控的输入域。 */
 async function renderEditor(
 	initial: string,
 	shiftEnterToSend: boolean,
@@ -776,7 +748,7 @@ async function renderEditor(
 		onOpenMentionFile?: ((filePath: string) => void) | undefined;
 	} = {},
 ): Promise<EditorRendered> {
-	const editorRef: RefObject<LexicalEditor | null> = { current: null };
+	const editorRef: RefObject<EditorView | null> = { current: null };
 	const handleRef: RefObject<ComposerHandle | null> = { current: null };
 	let latest = initial;
 	const rendered = await render(
@@ -803,23 +775,10 @@ async function renderEditor(
 	return { ...rendered, editorElement, editor, handle, draft: () => latest };
 }
 
-/**
- * 在光标处打一段字。
- *
- * jsdom 没有原生编辑，字符写不进 contenteditable，只能走编辑器自己的插入：对模型来说
- * 与用户敲进来是同一个结果。
- */
-async function typeText(editor: LexicalEditor, text: string): Promise<void> {
+/** 在光标处插入一段文本。 */
+async function typeText(editor: EditorView, text: string): Promise<void> {
 	await act(async () => {
-		editor.update(
-			() => {
-				const selection = $getSelection();
-				if ($isRangeSelection(selection)) {
-					selection.insertText(text);
-				}
-			},
-			{ discrete: true },
-		);
+		editor.dispatch(editor.state.replaceSelection(text), { userEvent: "input" });
 	});
 }
 
@@ -840,79 +799,38 @@ function rectAt(top: number, height: number): DOMRect {
 	} as DOMRect;
 }
 
-/** 输入域顶层块的名字，用来确认引用有没有干净地结束。 */
-function topBlocks(container: HTMLElement): string[] {
-	return [...container.querySelectorAll(".composer-editor > *")].map((node) => node.tagName.toLowerCase());
-}
-
-describe("块级结构换行", () => {
+describe("列表自动续行", () => {
 	for (const shiftEnterToSend of [false, true]) {
 		const mode = shiftEnterToSend ? "Shift+回车发送" : "回车发送";
-		/** 这一档设置下「换行」是哪一个组合：回车发送时靠 Shift，反之回车就是换行 */
 		const newlineKey = shiftEnterToSend ? {} : { shiftKey: true };
 
-		it(`${mode}：引用里换一次行继续写引用，再换行退回普通段落`, async () => {
-			const rendered = await renderEditor("> quote", shiftEnterToSend);
+		it(`${mode}：输入 1. 内容 后换行自动递增序号，空列表项再换行退出列表`, async () => {
+			const rendered = await renderEditor("1. 第一条", shiftEnterToSend);
 			await focusEditor(rendered.editorElement);
 
-			// 第一下：引用内换行，竖线接着往下画
 			await pressKey(rendered.editorElement, "Enter", newlineKey);
-			expect(rendered.draft()).toBe("> quote\n> ");
+			expect(rendered.draft()).toBe("1. 第一条\n2. ");
 
-			// 第二下：站在末尾空行上，退出引用另起一段
+			await typeText(rendered.editor, "第二条");
 			await pressKey(rendered.editorElement, "Enter", newlineKey);
-			await typeText(rendered.editor, "normal");
+			expect(rendered.draft()).toBe("1. 第一条\n2. 第二条\n3. ");
 
-			expect(rendered.draft()).toBe("> quote\nnormal");
-			expect(topBlocks(rendered.container)).toEqual(["blockquote", "p"]);
+			// 空列表项再次按换行：清掉 "3. " 前缀，回到空行
+			await pressKey(rendered.editorElement, "Enter", newlineKey);
+			expect(rendered.draft()).toBe("1. 第一条\n2. 第二条\n");
 			rendered.unmount();
 		});
 	}
 
-	it("引用中间换行只是续行，不退出引用", async () => {
-		const rendered = await renderEditor("> first\n> second", false);
-		await focusEditor(rendered.editorElement);
-		// 光标挪到引用第一行开头：不是末尾那道空行，换行应当就地插一行
-		await act(async () => {
-			const text = rendered.editorElement.querySelector("blockquote [data-lexical-text]")?.firstChild;
-			if (text === undefined || text === null) {
-				throw new Error("引用里的文字没有渲染出来");
-			}
-			const range = document.createRange();
-			range.setStart(text, 0);
-			range.collapse(true);
-			const selection = window.getSelection();
-			selection?.removeAllRanges();
-			selection?.addRange(range);
-			document.dispatchEvent(new Event("selectionchange"));
-		});
-
-		await pressKey(rendered.editorElement, "Enter", { shiftKey: true });
-		expect(topBlocks(rendered.container)).toEqual(["blockquote"]);
-		expect(rendered.draft()).toBe("> \n> first\n> second");
-		rendered.unmount();
-	});
-
-	it("空引用上连按两次换行会整块收掉", async () => {
-		const rendered = await renderEditor("> ", false);
+	it("无序列表按换行同样续写，空项再换行清除前缀", async () => {
+		const rendered = await renderEditor("- 第一项", false);
 		await focusEditor(rendered.editorElement);
 
-		// 第一下在引用里起一行，第二下退出：一个字都没有的引用不该留下一条空竖线
 		await pressKey(rendered.editorElement, "Enter", { shiftKey: true });
-		expect(topBlocks(rendered.container)).toEqual(["blockquote"]);
+		expect(rendered.draft()).toBe("- 第一项\n- ");
+
 		await pressKey(rendered.editorElement, "Enter", { shiftKey: true });
-		expect(topBlocks(rendered.container)).toEqual(["p"]);
-		expect(rendered.draft()).toBe("");
-		rendered.unmount();
-	});
-
-	it("空的引用块在开头退格会变回普通段落", async () => {
-		const rendered = await renderEditor("> ", false);
-		await focusEditor(rendered.editorElement);
-
-		await pressKey(rendered.editorElement, "Backspace");
-		expect(rendered.container.querySelector("blockquote")).toBeNull();
-		expect(topBlocks(rendered.container)).toEqual(["p"]);
+		expect(rendered.draft()).toBe("- 第一项\n");
 		rendered.unmount();
 	});
 });
@@ -967,17 +885,14 @@ describe("@文件补全", () => {
 		await pressKey(rendered.editorElement, "Enter");
 		await act(async () => {});
 
-		// 原子性来自 token 模式：退格整块删除、光标整块跳过。jsdom 没有布局，编辑器的
-		// 按字符删除在这里是空操作，所以只断言语义，不模拟那一下按键。
-		const mode = rendered.editor.getEditorState().read(() => {
-			const mention = $getRoot()
-				.getAllTextNodes()
-				.find((node) => node.getType() === "file-mention");
-			return mention?.getMode() ?? null;
-		});
-		expect(mode).toBe("token");
-		// 对外仍然是完整路径
 		expect(rendered.draft()).toBe("@src/a.ts ");
+
+		// 紧挨着胶囊末尾退格：atomicRanges 保证整块删掉胶囊，而不是只删末尾字符
+		await act(async () => {
+			rendered.editor.dispatch({ selection: { anchor: "@src/a.ts".length } });
+			deleteCharBackward(rendered.editor);
+		});
+		expect(rendered.draft()).toBe(" ");
 		rendered.unmount();
 	});
 
@@ -1050,62 +965,9 @@ describe("@文件补全", () => {
 		expect(rendered.container.querySelector(".composer-mention-pop")).toBeNull();
 		rendered.unmount();
 	});
-
-	it("代码块里打 @ 不弹菜单", async () => {
-		const rendered = await renderEditor("```\nconst a = 1;\n```", false, { mentionFiles: FILES });
-		await focusEditor(rendered.editorElement);
-		// 光标放到代码块最后一行
-		await act(async () => {
-			rendered.editorElement.focus();
-			const text = rendered.container.querySelector(".composer-code-block [data-lexical-text]")?.lastChild;
-			if (text === null || text === undefined) {
-				throw new Error("代码块没有渲染出来");
-			}
-			const range = document.createRange();
-			range.setStart(text, (text.textContent ?? "").length);
-			range.collapse(true);
-			const selection = window.getSelection();
-			selection?.removeAllRanges();
-			selection?.addRange(range);
-			document.dispatchEvent(new Event("selectionchange"));
-		});
-		await typeInEditor(rendered, "@");
-		expect(rendered.container.querySelector(".composer-mention-pop")).toBeNull();
-		rendered.unmount();
-	});
 });
 
-describe("代码块", () => {
-	/** 把光标放到代码块第一行开头。 */
-	async function caretAtCodeStart(rendered: EditorRendered): Promise<void> {
-		await act(async () => {
-			rendered.editorElement.focus();
-			const text = rendered.container.querySelector(".composer-code-block [data-lexical-text]")?.firstChild;
-			if (text === null || text === undefined) {
-				throw new Error("代码块没有渲染出来");
-			}
-			const range = document.createRange();
-			range.setStart(text, 0);
-			range.collapse(true);
-			const selection = window.getSelection();
-			selection?.removeAllRanges();
-			selection?.addRange(range);
-			document.dispatchEvent(new Event("selectionchange"));
-		});
-	}
-
-	it("代码块里 Tab 缩进两格,Shift+Tab 撤回", async () => {
-		const rendered = await renderEditor("```\nconst a = 1;\n```", false);
-		await caretAtCodeStart(rendered);
-
-		await pressKey(rendered.editorElement, "Tab");
-		expect(rendered.draft()).toBe("```\n  const a = 1;\n```");
-
-		await pressKey(rendered.editorElement, "Tab", { shiftKey: true });
-		expect(rendered.draft()).toBe("```\nconst a = 1;\n```");
-		rendered.unmount();
-	});
-
+describe("普通文本Tab焦点链", () => {
 	it("普通段落里 Tab 保持焦点链,不插空格", async () => {
 		const rendered = await renderEditor("你好", false);
 		await focusEditor(rendered.editorElement);
@@ -1117,25 +979,22 @@ describe("代码块", () => {
 });
 
 describe("命令式句柄", () => {
-	it("appendQuote 插入引用块,光标落在其后的空段落", async () => {
+	it("appendQuote 按纯文本引用格式插入草稿", async () => {
 		const rendered = await renderEditor("", false);
 		await act(async () => {
 			rendered.handle.appendQuote("line 1\nline 2");
 		});
 
-		expect(topBlocks(rendered.container)).toEqual(["blockquote", "p"]);
-		expect(rendered.container.querySelector("blockquote")?.textContent).toBe("line 1line 2");
 		expect(rendered.draft()).toBe("> line 1\n> line 2\n");
 		rendered.unmount();
 	});
 
-	it("已有内容时引用块接在后面", async () => {
+	it("已有内容时引用文字接在后面", async () => {
 		const rendered = await renderEditor("先写的一段", false);
 		await act(async () => {
 			rendered.handle.appendQuote("被引用的文字");
 		});
 
-		expect(topBlocks(rendered.container)).toEqual(["p", "blockquote", "p"]);
 		expect(rendered.draft()).toBe("先写的一段\n> 被引用的文字\n");
 		rendered.unmount();
 	});
@@ -1210,7 +1069,7 @@ function dragEvent(
  */
 function SessionHost(props: {
 	activeKey: string;
-	editorRef: RefObject<LexicalEditor | null>;
+	editorRef: RefObject<EditorView | null>;
 	onDrafts: (key: string, draft: string) => void;
 }): ReactElement {
 	const [drafts, setDrafts] = useState<Readonly<Record<string, string>>>({});
@@ -1236,7 +1095,7 @@ function SessionHost(props: {
 
 describe("按会话隔离的撤销栈", () => {
 	it("切走再切回来,各自只撤自己那一份", async () => {
-		const editorRef: RefObject<LexicalEditor | null> = { current: null };
+		const editorRef: RefObject<EditorView | null> = { current: null };
 		const seen: string[] = [];
 		const host = (activeKey: string): ReactElement =>
 			createElement(SessionHost, {
@@ -1250,9 +1109,9 @@ describe("按会话隔离的撤销栈", () => {
 		if (editorElement === null || editor === null) {
 			throw new Error("编辑器没有渲染出来");
 		}
-		const undo = async (): Promise<void> => {
+		const runUndo = async (): Promise<void> => {
 			await act(async () => {
-				editor.dispatchCommand(UNDO_COMMAND, undefined);
+				undo(editor);
 			});
 		};
 
@@ -1264,24 +1123,24 @@ describe("按会话隔离的撤销栈", () => {
 		// 切到会话 b，写另一段
 		rendered.rerender(host("b"));
 		await act(async () => {});
-		expect(editorElement.textContent).toBe("");
+		expect(editor.state.doc.toString()).toBe("");
 		await focusEditor(editorElement);
 		await typeText(editor, "会话乙的内容");
 		expect(seen.at(-1)).toBe("b:会话乙的内容");
 
 		// 在 b 里撤销：只撤掉 b 的那一段，草稿不会被 b 恢复时铺进来的内容顶掉，
 		// 更不会冒出 a 的内容
-		await undo();
-		expect(editorElement.textContent).toBe("");
-		expect(editorElement.textContent).not.toContain("会话甲");
+		await runUndo();
+		expect(editor.state.doc.toString()).toBe("");
+		expect(editor.state.doc.toString()).not.toContain("会话甲");
 
 		// 再写一点留痕，然后切回 a：a 的草稿还在，撤销栈也还在原处
 		await typeText(editor, "会话乙的内容");
 		rendered.rerender(host("a"));
 		await act(async () => {});
-		expect(editorElement.textContent).toBe("会话甲的内容");
-		await undo();
-		expect(editorElement.textContent).toBe("");
+		expect(editor.state.doc.toString()).toBe("会话甲的内容");
+		await runUndo();
+		expect(editor.state.doc.toString()).toBe("");
 		rendered.unmount();
 	});
 });
@@ -1410,11 +1269,13 @@ describe("已发消息的历史回溯", () => {
 	});
 
 	it("有草稿时 ArrowUp 还是光标上移", async () => {
-		const rendered = await renderEditor("自己写的内容", false, { sentHistory: HISTORY });
+		const rendered = await renderEditor("第一行\n自己写的内容", false, { sentHistory: HISTORY });
 		await focusEditor(rendered.editorElement);
-		const event = await pressKey(rendered.editorElement, "ArrowUp");
-		expect(event.defaultPrevented).toBe(false);
-		expect(rendered.draft()).toBe("自己写的内容");
+		expect(rendered.editor.state.doc.lineAt(rendered.editor.state.selection.main.head).number).toBe(2);
+
+		await pressKey(rendered.editorElement, "ArrowUp");
+		expect(rendered.draft()).toBe("第一行\n自己写的内容");
+		expect(rendered.editor.state.doc.lineAt(rendered.editor.state.selection.main.head).number).toBe(1);
 		rendered.unmount();
 	});
 
@@ -1446,8 +1307,7 @@ describe("已发消息的历史回溯", () => {
 	});
 });
 
-describe("路线 B：提示词源码优先", () => {
-	/** 一段典型的手写提示词：只有代码块是真结构件，其余都该原样留在屏幕上 */
+describe("纯文本与零转义", () => {
 	const PROMPT = [
 		"## 标题",
 		"1. **加粗**",
@@ -1458,61 +1318,42 @@ describe("路线 B：提示词源码优先", () => {
 		"```",
 	].join("\n");
 
-	it("`⌘/Ctrl+B` 这类格式命令被吃掉，草稿里不出现星号", async () => {
-		const rendered = await renderEditor("普通文字", false);
-		await focusEditor(rendered.editorElement);
-
-		const handled = await act(async () => rendered.editor.dispatchCommand(FORMAT_TEXT_COMMAND, "bold"));
-		// 命令被接管：默认的加粗不会发生
-		expect(handled).toBe(true);
-		expect(rendered.draft()).toBe("普通文字");
-		const formats = rendered.editor.getEditorState().read(() =>
-			$getRoot()
-				.getAllTextNodes()
-				.map((node) => node.getFormat()),
-		);
-		expect(formats.every((format) => format === 0)).toBe(true);
-		rendered.unmount();
-	});
-
-	it("粘贴带 Markdown 记号的提示词：原样展示，草稿逐字符一致", async () => {
+	it("粘贴带 Markdown 记号的提示词：原样展示，草稿逐字符一致且不转义", async () => {
 		const rendered = await renderEditor("", false);
 		await focusEditor(rendered.editorElement);
 
-		// jsdom 没有真的剪贴板事件，按插件读到的那几个字段造一个
 		let prevented = false;
-		const event = {
-			clipboardData: { files: [], getData: () => PROMPT },
-			preventDefault: () => {
-				prevented = true;
-			},
-		} as unknown as ClipboardEvent;
+		const event = new Event("paste", { bubbles: true, cancelable: true }) as ClipboardEvent;
+		Object.defineProperty(event, "clipboardData", {
+			value: { files: [], getData: () => PROMPT },
+		});
+		const origPreventDefault = event.preventDefault.bind(event);
+		event.preventDefault = () => {
+			prevented = true;
+			origPreventDefault();
+		};
 		await act(async () => {
-			rendered.editor.dispatchCommand(PASTE_COMMAND, event);
+			rendered.editorElement.dispatchEvent(event);
 		});
 		expect(prevented).toBe(true);
-		expect(rendered.draft()).toBe(PROMPT);
-		// 粘贴和"切会话恢复"走同一套解析：围栏是代码块，其余四行是原文
-		expect(topBlocks(rendered.container)).toEqual(["p", "p", "p", "p", "code"]);
-		rendered.unmount();
-	});
-
-	it("切会话铺回来的草稿只有代码块是结构件，其余是原文", async () => {
-		const rendered = await renderEditor(PROMPT, false);
-		// 顶层块：四个普通段落 + 一个代码块
-		expect(topBlocks(rendered.container)).toEqual(["p", "p", "p", "p", "code"]);
 		expect(rendered.draft()).toBe(PROMPT);
 		expect(rendered.draft()).not.toContain("\\");
 		rendered.unmount();
 	});
 
-	it("`↑` 回填的历史消息也按原文铺开", async () => {
+	it("切会话铺回来的草稿逐字符保留原文", async () => {
+		const rendered = await renderEditor(PROMPT, false);
+		expect(rendered.draft()).toBe(PROMPT);
+		expect(rendered.draft()).not.toContain("\\");
+		rendered.unmount();
+	});
+
+	it("`↑` 回填的历史消息按原文铺开", async () => {
 		const rendered = await renderEditor("", false, { sentHistory: [PROMPT] });
 		await focusEditor(rendered.editorElement);
 
 		await pressKey(rendered.editorElement, "ArrowUp");
 		expect(rendered.draft()).toBe(PROMPT);
-		expect(topBlocks(rendered.container)).toEqual(["p", "p", "p", "p", "code"]);
 		rendered.unmount();
 	});
 });

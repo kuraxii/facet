@@ -131,9 +131,6 @@
 	--composer-padding-left: 16px;
 	--composer-font-size: var(--text-body);
 	--composer-line-height: 1.6;
-	/* 输入区富文本的缩进：引用块竖线到正文的距离，以及那条竖线自身的宽度 */
-	--composer-quote-inset: 10px;
-	--composer-quote-rule: 2px;
 	/* 两枚胶囊的左右内边距：`@文件` 与 `/命令` 共用一份几何 */
 	--composer-chip-padding-x: 3px;
 	/* 图片预览：右上角的动作与底部的缩放条到窗口边缘的距离 */

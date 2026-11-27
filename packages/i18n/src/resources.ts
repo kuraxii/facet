@@ -90,10 +90,7 @@ export const en = {
 		createHint: "The session will be created in {{cwd}}.",
 	},
 	queue: {
-		label_one: "{{count}} queued message",
-		label_other: "{{count}} queued messages",
-		mergeHint: "withdrawing merges them into one",
-		withdraw: "Withdraw queued messages",
+		demoteSteering: "Move to follow-up queue",
 		followUpTitle: "Follow-up",
 		followUpHint: "Sends after agent finishes working",
 		toggleList: "Toggle follow-up list",
@@ -688,9 +685,7 @@ export const zhCN = {
 		createHint: "会话会在 {{cwd}} 里创建。",
 	},
 	queue: {
-		label_other: "排队 {{count}} 条",
-		mergeHint: "收回后合并为一条",
-		withdraw: "收回排队内容",
+		demoteSteering: "退回后续队列",
 		followUpTitle: "后续消息",
 		followUpHint: "当前任务完成后发送",
 		toggleList: "展开或收起后续消息",

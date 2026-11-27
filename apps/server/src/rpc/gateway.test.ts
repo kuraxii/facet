@@ -377,7 +377,7 @@ describe("契约表", () => {
 
 	it("派发白名单只含客户端动作", () => {
 		const types = Object.keys(DISPATCH_CONTRACTS);
-		expect(types).toHaveLength(8);
+		expect(types).toHaveLength(10);
 		expect(types.every((type) => type.startsWith("chat/") || type.startsWith("session/"))).toBe(true);
 		expect(types).not.toContain("chat/delta");
 		expect(types).not.toContain("sessions/changed");

@@ -15,6 +15,8 @@ export type DispatchableAction =
 	| { type: "session/titleChanged"; title: string }
 	| { type: "session/pendingMessageSet"; kind: "steering" | "queued"; text: string }
 	| { type: "session/queueCleared" }
+	| { type: "session/followUpPromoted"; index: number }
+	| { type: "session/followUpRemoved"; index: number }
 	| { type: "session/compact" }
 	| {
 			type: "session/configChanged";
@@ -119,6 +121,20 @@ export const chatHandlers: DispatchHandlerMap = {
 	"session/queueCleared": async (_action, { context, sessionId }) => {
 		await context.hub.withSession(sessionId, async (agent) => {
 			agent.clearQueue();
+		});
+		return undefined;
+	},
+
+	"session/followUpPromoted": async (action, { context, sessionId }) => {
+		await context.hub.withSession(sessionId, async (agent) => {
+			await agent.promoteFollowUp(action.index);
+		});
+		return undefined;
+	},
+
+	"session/followUpRemoved": async (action, { context, sessionId }) => {
+		await context.hub.withSession(sessionId, async (agent) => {
+			agent.removeFollowUp(action.index);
 		});
 		return undefined;
 	},

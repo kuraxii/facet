@@ -4,7 +4,12 @@
  * 连接、主机上下文与错误映射都放这里：网关与各领域处理器只依赖这些类型，不依赖端点的
  * 承载方式（WebSocket / 字节流 / HTTP 升级）。
  */
-import { InvalidProviderError, type PiAgentFactory, ProviderLoginBusyError } from "@facet/agent";
+import {
+	type AcpAgentRuntime,
+	InvalidProviderError,
+	type PiAgentFactory,
+	ProviderLoginBusyError,
+} from "@facet/agent";
 import type { Channel, ClientEntry, ClientRole, ErrorCode, OutboundFrame } from "@facet/protocol";
 import type { AuditLog } from "../audit.ts";
 import type { ServerConfig } from "../config.ts";
@@ -68,6 +73,7 @@ export interface Connection {
 export interface RpcContext {
 	readonly config: ServerConfig;
 	readonly factory: PiAgentFactory;
+	readonly acpRuntime?: AcpAgentRuntime;
 	readonly hub: SessionHub;
 	readonly projectStore: ProjectStore;
 	readonly settingsStore: SettingsStore;

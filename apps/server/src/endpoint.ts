@@ -13,7 +13,7 @@ import { chmod, mkdir, rm } from "node:fs/promises";
 import { createServer as createHttpServer } from "node:http";
 import { createServer as createSocketServer, type Socket } from "node:net";
 import { dirname, join } from "node:path";
-import type { PiAgentFactory } from "@facet/agent";
+import type { AcpAgentRuntime, PiAgentFactory } from "@facet/agent";
 import {
 	type ClientRole,
 	encodeFrame,
@@ -177,6 +177,7 @@ async function handleFrame(context: RpcContext, connection: Connection, text: st
 export async function startEndpoint(options: {
 	config: ServerConfig;
 	factory: PiAgentFactory;
+	acpRuntime?: AcpAgentRuntime;
 	hub: SessionHub;
 	projectStore: ProjectStore;
 	settingsStore: SettingsStore;
@@ -201,6 +202,7 @@ export async function startEndpoint(options: {
 	const context: RpcContext = {
 		config: options.config,
 		factory: options.factory,
+		acpRuntime: options.acpRuntime,
 		hub: options.hub,
 		projectStore: options.projectStore,
 		settingsStore: options.settingsStore,

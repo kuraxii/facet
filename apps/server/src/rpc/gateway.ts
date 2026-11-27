@@ -31,6 +31,7 @@ import {
 	toProtocolError,
 } from "./context.ts";
 import { DispatchLog } from "./dispatch-log.ts";
+import { backendHandlers } from "./handlers/backend-handlers.ts";
 import type { DispatchHandlerMap } from "./handlers/chat-handlers.ts";
 import { chatHandlers } from "./handlers/chat-handlers.ts";
 import { sessionHandlers } from "./handlers/session-handlers.ts";
@@ -49,7 +50,7 @@ export type RequestHandler<K extends RequestMethod> = (
 	connection: Connection,
 ) => Promise<RequestResults[K]> | RequestResults[K];
 
-/** 全部请求方法的处理器表。50 个方法缺一不可。 */
+/** 全部请求方法的处理器表。 */
 export type RequestHandlerMap = { [K in RequestMethod]: RequestHandler<K> };
 
 /** 合并各领域处理器；任何一域漏了方法，这里就缺键。 */
@@ -57,6 +58,7 @@ export const REQUEST_HANDLERS: RequestHandlerMap = {
 	...sessionHandlers,
 	...terminalHandlers,
 	...systemHandlers,
+	...backendHandlers,
 };
 
 /** 判断这条连接能不能调用某个权限档的方法。 */

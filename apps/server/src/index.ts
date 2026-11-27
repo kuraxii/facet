@@ -4,8 +4,8 @@
  * 装配共享的运行时、会话登记与端点监听，供嵌入方（桌面主进程）与独立进程共用。
  */
 import { join } from "node:path";
-import { PiAgentFactory, projectIdOf } from "@facet/agent";
-import { modelsChannelFor, sessionsChannelFor } from "@facet/protocol";
+import { AcpAgentRuntime, PiAgentFactory, projectIdOf } from "@facet/agent";
+import { isAcpLocator, modelsChannelFor, sessionsChannelFor } from "@facet/protocol";
 import { loadServerConfig, type ServerConfig } from "./config.ts";
 import { type EndpointHandle, startEndpoint } from "./endpoint.ts";
 import { IGNORED_DIRECTORIES } from "./files.ts";
@@ -67,6 +67,10 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 		agentDir: config.agentDir,
 		sessionDir: config.sessionDir,
 	});
+	const acpRuntime = new AcpAgentRuntime({
+		agentDir: factory.agentDir,
+		onError: (error) => console.error("ACP runtime error", error),
+	});
 	const hostIdentity = await loadOrCreateHostId({ dataDir: config.dataDir });
 	const hostId = hostIdentity.id;
 	const sessions = new SessionsChannel(config.replayLimit);
@@ -97,6 +101,7 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 	let sessionIndex: SessionIndex | undefined;
 	const hub = new SessionHub({
 		factory,
+		acpRuntime,
 		replayLimit: config.replayLimit,
 		idleCloseMs: config.sessionIdleMs,
 		onSessionChanged: (file, change) => sessionIndex?.note(file, change),
@@ -107,7 +112,8 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 		channel: sessions,
 		uri: sessionsChannelFor(hostId),
 		source: {
-			summaryOf: (file) => factory.sessionSummary(file),
+			summaryOf: (file) =>
+				isAcpLocator(file) ? Promise.resolve(acpRuntime.index.summaryOf(file)) : factory.sessionSummary(file),
 			statusOf: (file) => hub.statusOf(file),
 		},
 		onCwd: (cwd) => void ensureProject(cwd),
@@ -183,6 +189,7 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 	const endpoint = await startEndpoint({
 		config,
 		factory,
+		acpRuntime,
 		hub,
 		projectStore,
 		settingsStore,

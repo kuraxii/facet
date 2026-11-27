@@ -25,7 +25,9 @@ export type DispatchableAction =
 			thinkingLevel?: string;
 			activeToolNames?: string[];
 			persist?: boolean;
-	  };
+	  }
+	| { type: "session/acpModeSet"; modeId: string }
+	| { type: "session/acpConfigOptionSet"; configId: string; value: string };
 
 /** 一次派发带上来的上下文。 */
 export interface DispatchCall {
@@ -167,6 +169,26 @@ export const chatHandlers: DispatchHandlerMap = {
 			if (action.activeToolNames !== undefined) {
 				agent.setActiveTools(action.activeToolNames);
 			}
+		});
+		return undefined;
+	},
+
+	"session/acpModeSet": async (action, { context, sessionId }) => {
+		await context.hub.withSession(sessionId, async (agent) => {
+			if (agent.setAcpMode === undefined) {
+				throw new RequestError("rejected", "Current session does not support ACP modes");
+			}
+			await agent.setAcpMode(action.modeId);
+		});
+		return undefined;
+	},
+
+	"session/acpConfigOptionSet": async (action, { context, sessionId }) => {
+		await context.hub.withSession(sessionId, async (agent) => {
+			if (agent.setAcpConfigOption === undefined) {
+				throw new RequestError("rejected", "Current session does not support ACP config options");
+			}
+			await agent.setAcpConfigOption(action.configId, action.value);
 		});
 		return undefined;
 	},

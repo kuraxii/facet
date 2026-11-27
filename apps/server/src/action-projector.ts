@@ -133,6 +133,14 @@ export class ActionProjector {
 				return [chat({ type: "chat/settled", aborted: event.aborted })];
 			case "notice":
 				return [chat({ type: "chat/notice", level: event.level, message: event.message })];
+			case "acp_state":
+				return [
+					session({
+						type: "session/acpStateChanged",
+						...(event.mode === undefined ? {} : { mode: event.mode }),
+						...(event.configOptions === undefined ? {} : { configOptions: event.configOptions }),
+					}),
+				];
 			default:
 				return [];
 		}

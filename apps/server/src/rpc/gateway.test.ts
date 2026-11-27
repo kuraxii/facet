@@ -396,11 +396,40 @@ describe("派发去重", () => {
 		});
 		await vi.waitFor(() => expect(demoteSteering).toHaveBeenCalledTimes(1));
 	});
+
+	it("session/acpModeSet 与 session/acpConfigOptionSet 派发到当前会话适配器", async () => {
+		const setAcpMode = vi.fn(async () => {});
+		const setAcpConfigOption = vi.fn(async () => {});
+		const context = makeContext({
+			hub: {
+				busyFiles: () => [],
+				lastSeq: () => 0,
+				withSession: async (_id: string, work: (agent: never) => Promise<void>) => {
+					await work({ setAcpMode, setAcpConfigOption } as never);
+				},
+			},
+		});
+		const connection = makeConnection();
+		await handleDispatch(context, connection, {
+			channel: "session:/s1",
+			action: { type: "session/acpModeSet", modeId: "plan" },
+			clientSeq: 11,
+		});
+		await handleDispatch(context, connection, {
+			channel: "session:/s1",
+			action: { type: "session/acpConfigOptionSet", configId: "model", value: "gemini-2.5" },
+			clientSeq: 12,
+		});
+		await vi.waitFor(() => {
+			expect(setAcpMode).toHaveBeenCalledWith("plan");
+			expect(setAcpConfigOption).toHaveBeenCalledWith("model", "gemini-2.5");
+		});
+	});
 });
 
 describe("契约表", () => {
 	it("每个方法的权限档只在生成物里声明一次", () => {
-		expect(Object.keys(REQUEST_CONTRACTS)).toHaveLength(58);
+		expect(Object.keys(REQUEST_CONTRACTS)).toHaveLength(62);
 		expect(REQUEST_CONTRACTS.contextDetails?.auth).toBe("public");
 		expect(REQUEST_CONTRACTS.respondUi?.auth).toBe("write");
 		expect(REQUEST_CONTRACTS.saveCredential?.auth).toBe("admin");
@@ -418,7 +447,7 @@ describe("契约表", () => {
 
 	it("派发白名单只含客户端动作", () => {
 		const types = Object.keys(DISPATCH_CONTRACTS);
-		expect(types).toHaveLength(11);
+		expect(types).toHaveLength(13);
 		expect(types.every((type) => type.startsWith("chat/") || type.startsWith("session/"))).toBe(true);
 		expect(types).not.toContain("chat/delta");
 		expect(types).not.toContain("sessions/changed");

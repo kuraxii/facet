@@ -12,7 +12,9 @@
 import { rm, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
+	type AcpAgentRuntime,
 	type ForkPiAgentOptions,
+	type ManagedAgent,
 	type OpenPiAgentOptions,
 	type PiAgent,
 	type PiAgentLaunchOptions,
@@ -30,7 +32,7 @@ import type {
 	SessionStatus,
 	SlashCommand,
 } from "@facet/protocol";
-import { makeChannel, parseChannel } from "@facet/protocol";
+import { isAcpLocator, makeChannel, PI_BACKEND_ID, parseAcpLocator, parseChannel } from "@facet/protocol";
 import { ActionProjector } from "./action-projector.ts";
 import { EventLog, replayAndSubscribe } from "./event-log.ts";
 import { debugLog, errorLog } from "./log.ts";
@@ -60,7 +62,10 @@ export type HubAgent = Pick<
 	| "revertTo"
 	| "leafEntryId"
 	| "dispose"
->;
+> & {
+	setAcpMode?(modeId: string): Promise<void>;
+	setAcpConfigOption?(configId: string, value: string): Promise<void>;
+};
 
 /** 建会话用的工厂,收窄成登记表需要的三个入口,便于测试注入假实现。 */
 export interface AgentFactory<A extends HubAgent> {
@@ -182,8 +187,8 @@ export interface SessionLease {
 interface SessionState<A extends HubAgent> {
 	/** 主键,来自会话文件头部 */
 	readonly sessionId: string;
-	/** 归一化后的会话文件,内存会话为空 */
-	readonly file: string | undefined;
+	/** 归一化后的会话定位符（本地文件或 acp://），新建 ACP 会话初始化完成前可能暂空 */
+	file: string | undefined;
 	agent: A | undefined;
 	unsubscribe: (() => void) | undefined;
 	/** 正在看这个会话的端 */
@@ -249,6 +254,8 @@ function sameStatus(left: SessionStatus, right: SessionStatus): boolean {
 export interface SessionHubOptions<A extends HubAgent> {
 	/** 建会话用的工厂 */
 	readonly factory: AgentFactory<A>;
+	/** 外部 ACP 会话运行时，缺省时仅支持 Pi 会话 */
+	readonly acpRuntime?: AcpAgentRuntime;
 	/** 每个通道保留的动作条数 */
 	readonly replayLimit?: number;
 	/** entries 未指定条数时的默认页大小 */
@@ -282,17 +289,18 @@ async function fileExists(file: string): Promise<boolean> {
 	}
 }
 
-/** 会话文件路径归一化,同一文件的不同写法落到同一个键。 */
+/** 会话定位符归一化：ACP URI 原样保留，本地文件解析成绝对路径。 */
 function normalizeFile(file: string): string {
-	return resolve(file);
+	return isAcpLocator(file) ? file : resolve(file);
 }
 
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 500;
 const DEFAULT_IDLE_CLOSE_MS = 5 * 60 * 1000;
 
-export class SessionHub<A extends HubAgent = PiAgent> {
+export class SessionHub<A extends HubAgent = ManagedAgent> {
 	private readonly factory: AgentFactory<A>;
+	private readonly acpRuntime: AcpAgentRuntime | undefined;
 	private readonly replayLimit: number;
 	private readonly pageSize: { default: number; max: number };
 	private readonly idleCloseMs: number;
@@ -300,6 +308,7 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 
 	constructor(options: SessionHubOptions<A>) {
 		this.factory = options.factory;
+		this.acpRuntime = options.acpRuntime;
 		this.replayLimit = options.replayLimit ?? 512;
 		this.pageSize = {
 			default: options.defaultPageSize ?? DEFAULT_PAGE_SIZE,
@@ -323,8 +332,28 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		}
 	}
 
-	/** 建一个新会话并登记。会话文件立即建立,之后每条完成的消息追加写盘。 */
-	async createSession(options: PiAgentLaunchOptions = {}): Promise<SessionSnapshot> {
+	/** 建一个新会话并登记。Pi 会话立即建文件；ACP 会话待初始化分配外部 id 后补全定位符。 */
+	async createSession(options: PiAgentLaunchOptions & { backendId?: string } = {}): Promise<SessionSnapshot> {
+		const backendId = options.backendId;
+		if (backendId !== undefined && backendId !== PI_BACKEND_ID) {
+			if (this.acpRuntime === undefined) {
+				throw new Error(`ACP runtime is unavailable for backend: ${backendId}`);
+			}
+			const agent = this.acpRuntime.create({
+				backendId,
+				cwd: options.cwd,
+				name: options.name,
+			});
+			try {
+				await agent.initialize();
+			} catch (error) {
+				agent.dispose();
+				throw error;
+			}
+			this.attach(agent as unknown as A);
+			this.noteSessions(agent.file, "changed");
+			return this.snapshotRow(this.requireRow(agent.id));
+		}
 		const agent = await this.factory.create({ ...options, deferInitialization: true });
 		this.attach(agent);
 		this.noteSessions(agent.file === undefined ? undefined : normalizeFile(agent.file), "changed");
@@ -332,12 +361,14 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 	}
 
 	/**
-	 * 按会话文件取会话,已登记时复用。
+	 * 按会话定位符取会话,已登记时复用。
 	 *
-	 * 一个会话文件在主机上只能有一份运行态:两份会写同一个文件、各自维护条目树,
-	 * 而登记表按会话 id 索引,后来者会覆盖先到的订阅者。并发打开同一文件共用一次建立。
+	 * 支持本地 `.jsonl` 文件（Pi）与 `acp://<backendId>/<externalSessionId>`（ACP）。
 	 */
 	async openSession(file: string, cwd?: string): Promise<SessionSnapshot> {
+		if (isAcpLocator(file)) {
+			return await this.openAcpSession(file, cwd);
+		}
 		const key = normalizeFile(file);
 		// 尚未写入首条消息的会话也有运行内文件路径，可以直接复用。
 		const sessionId = this.sessionIdByFile(key) ?? (await this.factory.peekSessionId(key));
@@ -385,6 +416,67 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 			row.opening = undefined;
 		}
 		this.noteSessions(key, "changed");
+		return this.snapshotRow(row);
+	}
+
+	private async openAcpSession(locator: string, cwd?: string): Promise<SessionSnapshot> {
+		const acpRuntime = this.acpRuntime;
+		if (acpRuntime === undefined) {
+			throw new SessionFileMissingError(locator);
+		}
+		const parsed = parseAcpLocator(locator);
+		if (parsed === undefined || acpRuntime.index.summaryOf(locator) === undefined) {
+			throw new SessionFileMissingError(locator);
+		}
+		const existingId = this.sessionIdByFile(locator) ?? parsed.externalSessionId;
+		const existing = this.table.get(existingId);
+		if (existing !== undefined) {
+			if (existing.opening !== undefined) {
+				await existing.opening;
+			}
+			this.noteSessions(locator, "changed");
+			return this.snapshotRow(existing);
+		}
+		const row: SessionState<A> = {
+			sessionId: existingId,
+			file: locator,
+			agent: undefined,
+			unsubscribe: undefined,
+			holders: new Set(),
+			holds: 0,
+			pendingRelease: false,
+			tail: Promise.resolve(),
+			phase: "opening",
+			opening: undefined,
+			closeTimer: undefined,
+			cancelEpoch: 0,
+			wasCompacting: false,
+			settle: undefined,
+			seenAt: 0,
+			lastStatus: { activity: "idle", settle: undefined, pendingInput: 0, seenAt: 0 },
+			lastUsedAt: Date.now(),
+			channels: new Map(),
+			projector: new ActionProjector(existingId),
+		};
+		row.opening = (async () => {
+			const agent = acpRuntime.open(locator, cwd) as unknown as A;
+			row.agent = agent;
+			row.phase = "open";
+			row.unsubscribe = agent.subscribe((event) => this.onAgentEvent(row, event));
+			this.startInitialization(row);
+			this.noteStatus(row);
+			this.settle(row);
+		})();
+		this.table.set(existingId, row);
+		try {
+			await row.opening;
+		} catch (error) {
+			this.table.delete(existingId);
+			throw error;
+		} finally {
+			row.opening = undefined;
+		}
+		this.noteSessions(locator, "changed");
 		return this.snapshotRow(row);
 	}
 
@@ -549,6 +641,20 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 	 */
 	async renameSession(file: string, name: string | undefined): Promise<void> {
 		const trimmed = name?.trim() ?? "";
+		if (isAcpLocator(file)) {
+			if (this.acpRuntime === undefined || this.acpRuntime.index.summaryOf(file) === undefined) {
+				throw new SessionFileMissingError(file);
+			}
+			const sessionId = this.sessionIdByFile(file);
+			if (sessionId !== undefined && this.table.has(sessionId)) {
+				await this.withSession(sessionId, async (agent) => {
+					agent.setName(trimmed);
+				});
+			}
+			await this.acpRuntime.index.rename(file, trimmed);
+			this.noteSessions(file, "changed");
+			return;
+		}
 		const key = normalizeFile(file);
 		if (!(await fileExists(key))) {
 			throw new SessionFileMissingError(key);
@@ -576,6 +682,23 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 	 * agent 一并销毁。会话文件之外的产物不动。
 	 */
 	async deleteSession(file: string): Promise<void> {
+		if (isAcpLocator(file)) {
+			if (this.acpRuntime === undefined) {
+				throw new SessionFileMissingError(file);
+			}
+			const sessionId = this.sessionIdByFile(file);
+			const row = sessionId === undefined ? undefined : this.table.get(sessionId);
+			if (row !== undefined) {
+				row.pendingRelease = false;
+				this.drop(row);
+			}
+			const removed = await this.acpRuntime.index.remove(file);
+			if (!removed && row === undefined) {
+				throw new SessionFileMissingError(file);
+			}
+			this.noteSessions(file, "removed");
+			return;
+		}
 		const key = normalizeFile(file);
 		if (!(await fileExists(key))) {
 			throw new SessionFileMissingError(key);
@@ -993,6 +1116,13 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 
 	/** 把 pi 事件转成动作推给订阅者,并按事件重新判断寿命。 */
 	private onAgentEvent(row: SessionState<A>, event: Parameters<Parameters<A["subscribe"]>[0]>[0]): void {
+		if (event.type === "initialized" && row.agent?.file !== undefined) {
+			const normalized = normalizeFile(row.agent.file);
+			if (row.file !== normalized) {
+				row.file = normalized;
+				this.noteSessions(row.file, "changed");
+			}
+		}
 		for (const projected of row.projector.project(event)) {
 			this.publish(row, projected.channel, projected.action);
 			// 改名与一轮结束都会改会话摘要里的字段，推一份新的给所有端

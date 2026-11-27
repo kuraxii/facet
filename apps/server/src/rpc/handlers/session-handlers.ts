@@ -4,7 +4,13 @@
  * 每个处理器只拿到已经校验过的参数与主机上下文，不做形状检查：参数由
  * `generated/checks.ts` 的契约在网关里挡过一道，这里只处理语义。
  */
-import { type Channel, parseChannel, type RequestParams, type RequestResults } from "@facet/protocol";
+import {
+	type Channel,
+	PI_BACKEND_ID,
+	parseChannel,
+	type RequestParams,
+	type RequestResults,
+} from "@facet/protocol";
 import { type Connection, RequestError, type RpcContext } from "../context.ts";
 import type { RequestHandlerMap } from "../gateway.ts";
 import {
@@ -45,7 +51,19 @@ export const sessionHandlers: Pick<RequestHandlerMap, SessionMethod> = {
 	}),
 
 	listSessions: async (params, context: RpcContext): Promise<RequestResults["listSessions"]> => {
-		const sessions = await context.factory.listSessions(params.cwd);
+		const backendFilter = params.backendId;
+		const piSessions =
+			backendFilter === undefined || backendFilter === PI_BACKEND_ID
+				? (await context.factory.listSessions(params.cwd)).map((summary) => ({
+						backendId: PI_BACKEND_ID,
+						...summary,
+					}))
+				: [];
+		const acpSessions =
+			backendFilter === undefined || backendFilter !== PI_BACKEND_ID
+				? (context.acpRuntime?.index.list(params.cwd, backendFilter) ?? [])
+				: [];
+		const sessions = [...piSessions, ...acpSessions].sort((left, right) => right.modified - left.modified);
 		// 清单已经回给端了，可以在背景里补齐剩下的摘要
 		context.onSessionsListed?.();
 		// 每条带上主机侧此刻的状态，端重连之后一次往返就能把本地那份对齐
@@ -67,6 +85,7 @@ export const sessionHandlers: Pick<RequestHandlerMap, SessionMethod> = {
 		const cwd = params.cwd === undefined ? undefined : await resolveProjectDirectory(params.cwd);
 		return await context.hub.createSession({
 			...(cwd === undefined ? {} : { cwd }),
+			backendId: params.backendId,
 			model: params.model,
 			thinkingLevel: params.thinkingLevel,
 			tools: params.tools,

@@ -135,8 +135,9 @@ export function HostWorkspace({
 	const sessionCwd = sessionView?.state.cwd;
 	/** 终端能力：主机没装 pty 后端时不给入口 */
 	const canUseTerminal = host.host?.capabilities.includes("terminal") ?? false;
-	/** 新建终端的启动目录：跟着当前会话，没有会话时用第一个项目 */
-	const terminalCwd = sessionCwd ?? session.projects[0]?.cwd;
+	/** 新建终端的启动目录：依次取当前会话目录、首个项目目录、已保存的新建目录 */
+	const terminalCwd =
+		sessionCwd ?? session.projects[0]?.cwd ?? (session.createCwd.length > 0 ? session.createCwd : undefined);
 
 	const shell = useWorkspaceShell({ appearance: localAppearance, endpoint: host.endpoint });
 
@@ -148,6 +149,7 @@ export function HostWorkspace({
 		snapshot: runtime.workspace,
 		showToast: toast.show,
 		localTerminal,
+		autoOpen: shell.isPanelOpen && shell.panel.activeTab === "terminal",
 	});
 
 	/** 终端分页此刻显示哪一个终端；为空时从清单里挑一个 */

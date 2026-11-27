@@ -70,6 +70,51 @@ export interface TerminalPanelOptions {
 	showToast: (input: Omit<ToastInput, "now">) => void;
 	/** 本机终端交互偏好（光标闪烁、回滚行数） */
 	localTerminal?: TerminalLocalSettings;
+	/** 界面当前是否正展示着终端标签；同步完成后若没有存活 shell 则自动拉起一个 */
+	autoOpen?: boolean;
+}
+
+/** 判定自动拉起新终端所需的纯状态快照。 */
+export interface AutoOpenTerminalInput {
+	/** 主机是否有终端能力 */
+	canUseTerminal: boolean;
+	/** 界面当前是否正展示着终端标签 */
+	autoOpen: boolean;
+	/** 当前连接代次 */
+	connectEpoch: number;
+	/** 已完成终端清单同步的连接代次 */
+	syncedEpoch: number;
+	/** 已触发过自动拉起的连接代次 */
+	autoOpenedEpoch: number;
+	/** 当前连接期内的终端数量（已过滤重启遗留空壳） */
+	liveTerminalCount: number;
+}
+
+/**
+ * 过滤掉主机重启前遗留的 `restored` 空壳记录。
+ *
+ * `terminals.json` 读回来的记录已没有 PTY 进程且回滚缓冲为空，无法输入或恢复原 shell；
+ * 当前运行期内自行退出的终端 `restored` 为 `false`，仍保留给界面展示退出码。
+ */
+export function liveTerminalsOf(terminals: readonly TerminalInfo[]): TerminalInfo[] {
+	return terminals.filter((item) => !item.restored);
+}
+
+/**
+ * 判断此刻是否应为恢复过来的终端标签自动拉起一个新 shell。
+ *
+ * 必须等本次连接代次的 `listTerminals` 同步完再判断（避免在重连瞬间重复新建），
+ * 且每个 `connectEpoch` 最多自动触发一次，失败或用户后续手动关掉标签时不反复拉起。
+ */
+export function shouldAutoOpenTerminal(input: AutoOpenTerminalInput): boolean {
+	return (
+		input.canUseTerminal &&
+		input.autoOpen &&
+		input.connectEpoch > 0 &&
+		input.syncedEpoch === input.connectEpoch &&
+		input.autoOpenedEpoch !== input.connectEpoch &&
+		input.liveTerminalCount === 0
+	);
 }
 
 export interface TerminalPanel {
@@ -96,18 +141,22 @@ export function useTerminalPanel(options: TerminalPanelOptions): TerminalPanel {
 		snapshot,
 		showToast,
 		localTerminal = DEFAULT_TERMINAL_LOCAL_SETTINGS,
+		autoOpen = false,
 	} = options;
 	const [terminals, setTerminals] = useState<TerminalInfo[]>(() => []);
+	const [syncedEpoch, setSyncedEpoch] = useState(0);
 	const [appearance, setAppearance] = useState<TerminalAppearance>(() =>
 		readTerminalAppearance(localTerminal),
 	);
 	// 本端关掉的终端跟着主机走：切回来时同一批终端不该又冒出来
 	const closedTerminalIds = useRef(snapshot?.closedTerminalIds ?? new Set<string>());
+	/** 已自动拉起过默认 shell 的连接代次，避免同一代次重复创建或失败死循环 */
+	const autoOpenedEpoch = useRef(0);
 
-	/** 重新取终端清单。连不上或主机没有终端能力时按空处理。 */
+	/** 重新取终端清单（过滤重启前遗留空壳）。连不上或主机没有终端能力时按空处理。 */
 	const refreshTerminals = useCallback(async (): Promise<readonly TerminalInfo[]> => {
 		try {
-			const list = await client.list();
+			const list = liveTerminalsOf(await client.list());
 			setTerminals(list);
 			return list;
 		} catch {
@@ -122,8 +171,16 @@ export function useTerminalPanel(options: TerminalPanelOptions): TerminalPanel {
 		if (connectEpoch === 0) {
 			return;
 		}
+		let cancelled = false;
 		closedTerminalIds.current.clear();
-		void refreshTerminals();
+		void refreshTerminals().then(() => {
+			if (!cancelled) {
+				setSyncedEpoch(connectEpoch);
+			}
+		});
+		return () => {
+			cancelled = true;
+		};
 	}, [connectEpoch]);
 
 	// 首次渲染时外观变量可能还没写到根节点上，挂载后与本机终端偏好变化时同步读取
@@ -168,6 +225,24 @@ export function useTerminalPanel(options: TerminalPanelOptions): TerminalPanel {
 		},
 		[client, refreshTerminals],
 	);
+
+	// 界面恢复了上次打开着的终端标签且同步完清单后仍没有存活 shell 时，自动拉起一个新的 shell
+	useEffect(() => {
+		if (
+			!shouldAutoOpenTerminal({
+				canUseTerminal,
+				autoOpen,
+				connectEpoch,
+				syncedEpoch,
+				autoOpenedEpoch: autoOpenedEpoch.current,
+				liveTerminalCount: terminals.length,
+			})
+		) {
+			return;
+		}
+		autoOpenedEpoch.current = connectEpoch;
+		void openTerminal();
+	}, [autoOpen, canUseTerminal, connectEpoch, openTerminal, syncedEpoch, terminals.length]);
 
 	return {
 		terminals,

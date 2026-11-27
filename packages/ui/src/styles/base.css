@@ -340,6 +340,8 @@
 	 * 折叠态与窄档抽屉态为 0（见 `chrome.css` 的 `.app`）。列轨道与顶带格子都只读这一层。
 	 */
 	--sidebar-width: 272px;
+	/* 页脚 Host / Agents 浮层的最大宽度，避免侧栏拖宽时浮层跟着拉得过宽 */
+	--host-pop-max-width: 248px;
 	--panel-width: 0px;
 	/* 窗口按钮簇的总宽：三个按钮排成一组，固定贴在窗口右上角 */
 	--window-controls-width: calc(var(--window-button-width) * 3);

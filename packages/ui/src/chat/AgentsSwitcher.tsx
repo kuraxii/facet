@@ -61,7 +61,7 @@ export function AgentsSwitcher({ agents, selectedAgentId, onSelect }: AgentsSwit
 				<span className="ell">{activeLabel}</span>
 			</Button>
 			{isOpen ? (
-				// biome-ignore lint/a11y/useSemanticElements: 浮层里是一份代理后端列表，不需要 fieldset 语义
+				// biome-ignore lint/a11y/useSemanticElements: 浮层里是一份 Agent 列表，不需要 fieldset 语义
 				<div className="host-pop" role="group" aria-label={t("sidebar.agentList")}>
 					<ul className="host-list">
 						{agents.map((agent) => {
@@ -70,7 +70,7 @@ export function AgentsSwitcher({ agents, selectedAgentId, onSelect }: AgentsSwit
 								? t("sidebar.agentDisabled")
 								: !agent.available
 									? t("sidebar.agentUnavailable")
-									: agent.kind.toUpperCase();
+									: undefined;
 							return (
 								<li key={agent.id} className={isSelected ? "host-row is-on" : "host-row"}>
 									<button
@@ -83,7 +83,7 @@ export function AgentsSwitcher({ agents, selectedAgentId, onSelect }: AgentsSwit
 									>
 										<i className={agent.available ? "dot" : "dot is-off"} />
 										<span className="host-name">{agent.name}</span>
-										<span className="host-addr mono">{statusText}</span>
+										{statusText === undefined ? null : <span className="host-addr mono">{statusText}</span>}
 									</button>
 								</li>
 							);

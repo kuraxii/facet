@@ -531,6 +531,7 @@
 }
 
 .sb-foot {
+	position: relative;
 	display: flex;
 	flex: none;
 	align-items: center;
@@ -575,17 +576,18 @@
 	font-size: var(--text-xs);
 }
 
-/* 主机切换：页脚按钮与弹出的清单 */
+/* 主机与 Agent 切换：页脚按钮与弹出的清单 */
 .host-switch {
-	position: relative;
+	display: flex;
 }
 
 .host-pop {
 	position: absolute;
 	bottom: calc(100% + 8px);
-	left: 0;
+	left: var(--sidebar-edge);
+	right: var(--sidebar-edge);
 	z-index: var(--z-popup);
-	width: 248px;
+	max-width: var(--host-pop-max-width);
 	padding: var(--space-3);
 	border-radius: var(--radius-lg);
 	background: var(--bg-elevated);

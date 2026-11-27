@@ -403,16 +403,6 @@
 		color var(--dur-fast) var(--ease-standard);
 }
 
-.window-btn-icon {
-	width: 10px;
-	height: 10px;
-	fill: none;
-	stroke: currentColor;
-	stroke-width: 1.1;
-	stroke-linecap: square;
-	stroke-linejoin: miter;
-}
-
 .window-btn:hover {
 	background: var(--bg-hover);
 	color: var(--fg-default);

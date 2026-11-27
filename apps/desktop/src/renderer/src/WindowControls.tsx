@@ -5,7 +5,8 @@
  * 透明的 `.app-drag` 与侧栏头部承担。双击拖动区切换最大化由 Chromium 处理。浏览器里跑同一份
  * 界面时桥上没有这些方法，这组按钮不渲染。
  */
-import { useHoverTip, useI18n } from "@facet/ui";
+import { ICON_SIZE, useHoverTip, useI18n } from "@facet/ui";
+import { Copy, Minus, Square, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 /** 标题栏需要的窗口动作，缺任一项就不渲染。 */
@@ -35,41 +36,6 @@ export function readWindowControls(bridge: {
 	return { minimize, toggleMaximize, close, onWindowState };
 }
 
-/** 窗口最小化几何线形（1px 锐利折角，匹配 Windows 原生标题栏）。 */
-function MinimizeGlyph() {
-	return (
-		<svg viewBox="0 0 10 10" className="window-btn-icon" aria-hidden="true">
-			<path d="M 0 5 H 10" shapeRendering="crispEdges" />
-		</svg>
-	);
-}
-
-/** 窗口最大化 / 还原几何线形。 */
-function MaximizeGlyph({ restored }: { restored: boolean }) {
-	if (restored) {
-		return (
-			<svg viewBox="0 0 10 10" className="window-btn-icon" aria-hidden="true">
-				<path d="M 2.5 2.5 V 0.5 H 9.5 V 7.5 H 7.5" shapeRendering="crispEdges" />
-				<rect x="0.5" y="2.5" width="7" height="7" shapeRendering="crispEdges" />
-			</svg>
-		);
-	}
-	return (
-		<svg viewBox="0 0 10 10" className="window-btn-icon" aria-hidden="true">
-			<rect x="0.5" y="0.5" width="9" height="9" shapeRendering="crispEdges" />
-		</svg>
-	);
-}
-
-/** 窗口关闭几何线形。 */
-function CloseGlyph() {
-	return (
-		<svg viewBox="0 0 10 10" className="window-btn-icon" aria-hidden="true">
-			<path d="M 0.75 0.75 L 9.25 9.25 M 9.25 0.75 L 0.75 9.25" />
-		</svg>
-	);
-}
-
 export function WindowControls({ controls }: { controls: WindowControls }) {
 	const { t } = useI18n();
 	// 三个按钮共用一份悬浮提示：贴到窗口右上角，portal 出去不会被顶带裁掉
@@ -88,7 +54,7 @@ export function WindowControls({ controls }: { controls: WindowControls }) {
 					{...tip.handlers(t("window.minimize"))}
 					onClick={() => controls.minimize()}
 				>
-					<MinimizeGlyph />
+					<Minus size={ICON_SIZE.md} aria-hidden="true" />
 				</button>
 				<button
 					type="button"
@@ -97,7 +63,11 @@ export function WindowControls({ controls }: { controls: WindowControls }) {
 					{...tip.handlers(isMaximized ? t("window.restore") : t("window.maximize"))}
 					onClick={() => controls.toggleMaximize()}
 				>
-					<MaximizeGlyph restored={isMaximized} />
+					{isMaximized ? (
+						<Copy size={ICON_SIZE.md} aria-hidden="true" />
+					) : (
+						<Square size={ICON_SIZE.md} aria-hidden="true" />
+					)}
 				</button>
 				<button
 					type="button"
@@ -106,7 +76,7 @@ export function WindowControls({ controls }: { controls: WindowControls }) {
 					{...tip.handlers(t("window.close"))}
 					onClick={() => controls.close()}
 				>
-					<CloseGlyph />
+					<X size={ICON_SIZE.md} aria-hidden="true" />
 				</button>
 			</div>
 			{tip.render()}

@@ -1,4 +1,4 @@
-import type { AcpConfigOption, AcpModeState } from "./backend.ts";
+import type { AcpConfigOption, AcpModeState } from "./agent.ts";
 import type { ImageBlock, ToolOutput } from "./content.ts";
 import type { DeltaKind, NoticeLevel } from "./event.ts";
 import type { ExtensionUiState, SessionInitialization } from "./extension-ui.ts";

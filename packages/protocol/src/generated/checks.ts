@@ -34,7 +34,7 @@ const checkRequestRespondUi = buildRequestRespondUi();
  */
 function buildRequestListSessions(): (value: unknown) => boolean {
 	// @ts-ignore
-	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && ((value.cwd === undefined || (!("cwd" in value) || typeof value.cwd === "string")) && (value.backendId === undefined || (!("backendId" in value) || typeof value.backendId === "string")))));
+	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && ((value.cwd === undefined || (!("cwd" in value) || typeof value.cwd === "string")) && (value.agentId === undefined || (!("agentId" in value) || typeof value.agentId === "string")))));
 	return check_0;
 }
 
@@ -79,7 +79,7 @@ const checkRequestBusySessions = buildRequestBusySessions();
  */
 function buildRequestCreateSession(): (value: unknown) => boolean {
 	// @ts-ignore
-	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && (((((((value.cwd === undefined || (!("cwd" in value) || typeof value.cwd === "string")) && (value.backendId === undefined || (!("backendId" in value) || typeof value.backendId === "string"))) && (value.model === undefined || (!("model" in value) || ((typeof value.model === "object" && value.model !== null && !(Array.isArray(value.model))) && (("provider" in value.model && "id" in value.model) && (typeof value.model.provider === "string" && typeof value.model.id === "string")))))) && (value.thinkingLevel === undefined || (!("thinkingLevel" in value) || (((((((typeof value.thinkingLevel === "string" && value.thinkingLevel === "off") || (typeof value.thinkingLevel === "string" && value.thinkingLevel === "minimal")) || (typeof value.thinkingLevel === "string" && value.thinkingLevel === "low")) || (typeof value.thinkingLevel === "string" && value.thinkingLevel === "medium")) || (typeof value.thinkingLevel === "string" && value.thinkingLevel === "high")) || (typeof value.thinkingLevel === "string" && value.thinkingLevel === "xhigh")) || (typeof value.thinkingLevel === "string" && value.thinkingLevel === "max"))))) && (value.tools === undefined || (!("tools" in value) || (Array.isArray(value.tools) && value.tools.every((element, index) => (typeof element === "string")))))) && (value.excludeTools === undefined || (!("excludeTools" in value) || (Array.isArray(value.excludeTools) && value.excludeTools.every((element, index) => (typeof element === "string")))))) && (value.name === undefined || (!("name" in value) || typeof value.name === "string")))));
+	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && (((((((value.cwd === undefined || (!("cwd" in value) || typeof value.cwd === "string")) && (value.agentId === undefined || (!("agentId" in value) || typeof value.agentId === "string"))) && (value.model === undefined || (!("model" in value) || ((typeof value.model === "object" && value.model !== null && !(Array.isArray(value.model))) && (("provider" in value.model && "id" in value.model) && (typeof value.model.provider === "string" && typeof value.model.id === "string")))))) && (value.thinkingLevel === undefined || (!("thinkingLevel" in value) || (((((((typeof value.thinkingLevel === "string" && value.thinkingLevel === "off") || (typeof value.thinkingLevel === "string" && value.thinkingLevel === "minimal")) || (typeof value.thinkingLevel === "string" && value.thinkingLevel === "low")) || (typeof value.thinkingLevel === "string" && value.thinkingLevel === "medium")) || (typeof value.thinkingLevel === "string" && value.thinkingLevel === "high")) || (typeof value.thinkingLevel === "string" && value.thinkingLevel === "xhigh")) || (typeof value.thinkingLevel === "string" && value.thinkingLevel === "max"))))) && (value.tools === undefined || (!("tools" in value) || (Array.isArray(value.tools) && value.tools.every((element, index) => (typeof element === "string")))))) && (value.excludeTools === undefined || (!("excludeTools" in value) || (Array.isArray(value.excludeTools) && value.excludeTools.every((element, index) => (typeof element === "string")))))) && (value.name === undefined || (!("name" in value) || typeof value.name === "string")))));
 	return check_0;
 }
 
@@ -853,36 +853,36 @@ function buildRequestRemoveCustomProvider(): (value: unknown) => boolean {
 const checkRequestRemoveCustomProvider = buildRequestRemoveCustomProvider();
 
 /**
- * listBackends 的参数判断。
+ * listAgents 的参数判断。
  *
  * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
  */
-function buildRequestListBackends(): (value: unknown) => boolean {
+function buildRequestListAgents(): (value: unknown) => boolean {
 	// @ts-ignore
 	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && true));
 	return check_0;
 }
 
-const checkRequestListBackends = buildRequestListBackends();
+const checkRequestListAgents = buildRequestListAgents();
 
 /**
- * probeBackend 的参数判断。
+ * probeAgent 的参数判断。
  *
  * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
  */
-function buildRequestProbeBackend(): (value: unknown) => boolean {
+function buildRequestProbeAgent(): (value: unknown) => boolean {
 	// @ts-ignore
-	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && ("backendId" in value && typeof value.backendId === "string")));
+	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && ("agentId" in value && typeof value.agentId === "string")));
 	return (value: unknown): boolean => {
 		if (!check_0(value)) return false;
 		const source = value as Record<string, unknown>;
 		return (
-			typeof source.backendId === "string" && source.backendId.length > 0
+			typeof source.agentId === "string" && source.agentId.length > 0
 		);
 	};
 }
 
-const checkRequestProbeBackend = buildRequestProbeBackend();
+const checkRequestProbeAgent = buildRequestProbeAgent();
 
 /**
  * acpLoginStart 的参数判断。
@@ -891,12 +891,12 @@ const checkRequestProbeBackend = buildRequestProbeBackend();
  */
 function buildRequestAcpLoginStart(): (value: unknown) => boolean {
 	// @ts-ignore
-	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && ("backendId" in value && typeof value.backendId === "string")));
+	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && ("agentId" in value && typeof value.agentId === "string")));
 	return (value: unknown): boolean => {
 		if (!check_0(value)) return false;
 		const source = value as Record<string, unknown>;
 		return (
-			typeof source.backendId === "string" && source.backendId.length > 0
+			typeof source.agentId === "string" && source.agentId.length > 0
 		);
 	};
 }
@@ -1298,8 +1298,8 @@ export const REQUEST_CONTRACTS: Readonly<Record<string, RequestContract | undefi
 	"fetchProviderModels": { auth: "admin", check: checkRequestFetchProviderModels },
 	"saveCustomProvider": { auth: "admin", check: checkRequestSaveCustomProvider },
 	"removeCustomProvider": { auth: "admin", check: checkRequestRemoveCustomProvider },
-	"listBackends": { auth: "public", check: checkRequestListBackends },
-	"probeBackend": { auth: "admin", check: checkRequestProbeBackend },
+	"listAgents": { auth: "public", check: checkRequestListAgents },
+	"probeAgent": { auth: "admin", check: checkRequestProbeAgent },
 	"acpLoginStart": { auth: "admin", check: checkRequestAcpLoginStart },
 	"acpLoginSubmit": { auth: "admin", check: checkRequestAcpLoginSubmit },
 	"acpLoginCancel": { auth: "admin", check: checkRequestAcpLoginCancel },

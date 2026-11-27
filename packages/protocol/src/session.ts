@@ -1,7 +1,7 @@
 /**
  * 会话状态、历史条目与统计。
  */
-import type { AcpConfigOption, AcpModeState, AgentCapabilities } from "./backend.ts";
+import type { AcpConfigOption, AcpModeState, AgentCapabilities } from "./agent.ts";
 import type { ExtensionUiState, SessionInitialization } from "./extension-ui.ts";
 import type { Message } from "./message.ts";
 import type { ModelInfo, ThinkingLevel } from "./model.ts";
@@ -211,8 +211,8 @@ export interface SessionStats {
 /** 会话索引项，用于侧栏的项目分组与最近会话。 */
 export interface SessionSummary {
 	id: string;
-	/** 所属代理后端标识；缺省按 "pi" 处理 */
-	backendId?: string;
+	/** 所属代理标识；缺省按 "pi" 处理 */
+	agentId?: string;
 	/** 会话定位符（Pi 为文件路径，ACP 为 acp:// 定位符） */
 	path: string;
 	/** 会话创建时的工作目录，之后不再变化 */
@@ -297,8 +297,8 @@ export interface SessionListItem {
 /** 接入方一次拿到的完整会话状态，用于对齐界面。消息体与历史走条目读取。 */
 export interface SessionSnapshot {
 	id: string;
-	/** 所属代理后端标识；缺省按 "pi" 处理 */
-	backendId?: string;
+	/** 所属代理标识；缺省按 "pi" 处理 */
+	agentId?: string;
 	/** 该会话支持的能力集合；缺省按 Pi 完整能力处理 */
 	capabilities?: AgentCapabilities;
 	/** ACP 会话模式状态（仅 configStyle === "acp" 时存在） */

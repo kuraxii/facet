@@ -4,7 +4,7 @@
  * 事件都是可序列化的纯数据，主机侧产生、端点原样转发、界面按 type 分派。
  * run_end 之后仍可能有重试与排队工作，需要等待 settled 才能判定会话不再自动继续。
  */
-import type { AcpConfigOption, AcpModeState } from "./backend.ts";
+import type { AcpConfigOption, AcpModeState } from "./agent.ts";
 import type { ToolOutput } from "./content.ts";
 import type { ExtensionUiState, SessionInitialization } from "./extension-ui.ts";
 import type { Message } from "./message.ts";

@@ -8,21 +8,19 @@
 /** 代理后端种类。 */
 export type AgentKind = "pi" | "acp";
 
-/** 原生 Pi 后端固定标识。 */
-export const PI_BACKEND_ID = "pi";
+/** 原生 Pi 代理固定标识。 */
+export const PI_AGENT_ID = "pi";
 
 /** 外部 ACP 会话定位符前缀，用于与本地 .jsonl 文件路径区分。 */
 export const ACP_LOCATOR_PREFIX = "acp://";
 
-/** 构建 ACP 会话定位符：`acp://<backendId>/<externalSessionId>`。 */
-export function makeAcpLocator(backendId: string, externalSessionId: string): string {
-	return `${ACP_LOCATOR_PREFIX}${encodeURIComponent(backendId)}/${encodeURIComponent(externalSessionId)}`;
+/** 构建 ACP 会话定位符：`acp://<agentId>/<externalSessionId>`。 */
+export function makeAcpLocator(agentId: string, externalSessionId: string): string {
+	return `${ACP_LOCATOR_PREFIX}${encodeURIComponent(agentId)}/${encodeURIComponent(externalSessionId)}`;
 }
 
 /** 解析 ACP 会话定位符；若格式不符返回 undefined。 */
-export function parseAcpLocator(
-	locator: string,
-): { backendId: string; externalSessionId: string } | undefined {
+export function parseAcpLocator(locator: string): { agentId: string; externalSessionId: string } | undefined {
 	if (!locator.startsWith(ACP_LOCATOR_PREFIX)) {
 		return undefined;
 	}
@@ -32,12 +30,12 @@ export function parseAcpLocator(
 		return undefined;
 	}
 	try {
-		const backendId = decodeURIComponent(rest.slice(0, slash));
+		const agentId = decodeURIComponent(rest.slice(0, slash));
 		const externalSessionId = decodeURIComponent(rest.slice(slash + 1));
-		if (backendId.length === 0 || externalSessionId.length === 0) {
+		if (agentId.length === 0 || externalSessionId.length === 0) {
 			return undefined;
 		}
-		return { backendId, externalSessionId };
+		return { agentId, externalSessionId };
 	} catch {
 		return undefined;
 	}
@@ -149,8 +147,8 @@ export interface AcpConfigOption {
 }
 
 /** 一份外部 ACP Agent 的注册配置（主机与独立插件共用这一结构）。 */
-export interface AcpBackendProfile {
-	/** 后端稳定标识（如 "antigravity" 或自定义 slug） */
+export interface AcpAgentProfile {
+	/** 代理稳定标识（如 "antigravity" 或自定义 slug） */
 	id: string;
 	/** 展示名称 */
 	name: string;
@@ -168,15 +166,15 @@ export interface AcpBackendProfile {
 	loginHint?: string;
 }
 
-/** 主机上报的单个后端可用性摘要，用于侧栏切换器与设置页展示。 */
-export interface BackendAvailability {
-	/** 后端标识（Pi 为 "pi"，ACP 为配置里的 id） */
+/** 主机上报的单个代理可用性摘要，用于侧栏切换器与设置页展示。 */
+export interface AgentAvailability {
+	/** 代理标识（Pi 为 "pi"，ACP 为配置里的 id） */
 	id: string;
-	/** 后端种类 */
+	/** 代理种类 */
 	kind: AgentKind;
 	/** 展示名称 */
 	name: string;
-	/** 命令是否已探测到且后端启用 */
+	/** 命令是否已探测到且启用 */
 	available: boolean;
 	/** 是否处于启用状态 */
 	enabled: boolean;

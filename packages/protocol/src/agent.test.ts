@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isAcpLocator, makeAcpLocator, parseAcpLocator } from "./backend.ts";
+import { isAcpLocator, makeAcpLocator, parseAcpLocator } from "./agent.ts";
 
 describe("ACP 会话定位符工具", () => {
 	it("编码与解码保持后端标识和外部会话标识无损", () => {
@@ -7,7 +7,7 @@ describe("ACP 会话定位符工具", () => {
 		expect(locator.startsWith("acp://")).toBe(true);
 		expect(isAcpLocator(locator)).toBe(true);
 		expect(parseAcpLocator(locator)).toEqual({
-			backendId: "antigravity",
+			agentId: "antigravity",
 			externalSessionId: "sess/123:abc",
 		});
 	});

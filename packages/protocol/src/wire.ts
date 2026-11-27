@@ -8,7 +8,7 @@
 
 import type { Static, TSchema } from "typebox";
 import type { Action, ActionOrigin } from "./action.ts";
-import type { AcpBackendProfile, BackendAvailability } from "./backend.ts";
+import type { AcpAgentProfile, AgentAvailability } from "./agent.ts";
 import type { Channel } from "./channel.ts";
 import type { SlashCommand } from "./command.ts";
 import type { FileContent, FileEntry, FileWriteResult } from "./file.ts";
@@ -278,10 +278,10 @@ export interface RequestResults {
 	fetchProviderModels: { models: UpstreamModel[]; baseUrl: string };
 	saveCustomProvider: { providers: CustomProviderInfo[] };
 	removeCustomProvider: { providers: CustomProviderInfo[] };
-	listBackends: { backends: BackendAvailability[]; profiles: AcpBackendProfile[] };
-	probeBackend: { backend: BackendAvailability };
+	listAgents: { agents: AgentAvailability[]; profiles: AcpAgentProfile[] };
+	probeAgent: { agent: AgentAvailability };
 	acpLoginStart: { loginId: string; authUrl?: string };
-	acpLoginSubmit: { backend: BackendAvailability };
+	acpLoginSubmit: { agent: AgentAvailability };
 	acpLoginCancel: Record<string, never>;
 	listTerminals: { terminals: TerminalInfo[] };
 	/** 主机上可用的终端，顺序即「更可能是用户想要的」顺序 */

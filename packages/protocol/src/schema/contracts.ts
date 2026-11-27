@@ -109,7 +109,7 @@ export const REQUEST_SCHEMAS = {
 	},
 	listSessions: {
 		auth: "public",
-		params: Type.Object({ cwd: Type.Optional(Cwd), backendId: Type.Optional(Id) }),
+		params: Type.Object({ cwd: Type.Optional(Cwd), agentId: Type.Optional(Id) }),
 	},
 	listCommands: {
 		auth: "public",
@@ -121,7 +121,7 @@ export const REQUEST_SCHEMAS = {
 		auth: "write",
 		params: Type.Object({
 			cwd: Type.Optional(Cwd),
-			backendId: Type.Optional(Id),
+			agentId: Type.Optional(Id),
 			model: Type.Optional(ModelRef),
 			thinkingLevel: Type.Optional(ThinkingLevel),
 			tools: Type.Optional(Type.Array(Type.String())),
@@ -372,16 +372,16 @@ export const REQUEST_SCHEMAS = {
 		params: Type.Object({ providerId: Id }),
 		nonEmpty: ["providerId"],
 	},
-	listBackends: { auth: "public", params: NoParams },
-	probeBackend: {
+	listAgents: { auth: "public", params: NoParams },
+	probeAgent: {
 		auth: "admin",
-		params: Type.Object({ backendId: Id }),
-		nonEmpty: ["backendId"],
+		params: Type.Object({ agentId: Id }),
+		nonEmpty: ["agentId"],
 	},
 	acpLoginStart: {
 		auth: "admin",
-		params: Type.Object({ backendId: Id }),
-		nonEmpty: ["backendId"],
+		params: Type.Object({ agentId: Id }),
+		nonEmpty: ["agentId"],
 	},
 	acpLoginSubmit: {
 		auth: "admin",

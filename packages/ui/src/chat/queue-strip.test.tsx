@@ -34,7 +34,6 @@ describe("QueueStrip 后续消息卡片", () => {
 				<I18nProvider language="zh-CN">
 					<QueueStrip
 						queued={{ steering: [], followUp: ["后续任务 A", "后续任务 B"] }}
-						onClear={() => {}}
 						onPromoteFollowUp={onPromoteFollowUp}
 						onEditFollowUp={onEditFollowUp}
 						onRemoveFollowUp={onRemoveFollowUp}

@@ -55,6 +55,8 @@ export type {
 export { SettingsPage } from "./chat/SettingsPage.tsx";
 export type { SshPasswordDialogProps } from "./chat/SshPasswordDialog.tsx";
 export { SshPasswordDialog } from "./chat/SshPasswordDialog.tsx";
+export type { SteeringMessagesProps } from "./chat/SteeringMessages.tsx";
+export { SteeringMessages } from "./chat/SteeringMessages.tsx";
 export type {
 	AlignedContextBreakdown,
 	AlignedContextCategory,

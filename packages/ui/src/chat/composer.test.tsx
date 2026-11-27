@@ -12,6 +12,7 @@ import {
 	type ComposerHandle,
 	type ComposerKeyRoutes,
 } from "./rich-editor/ComposerEditor.tsx";
+import { SteeringMessages } from "./SteeringMessages.tsx";
 
 // React 19 的 act 只在测试环境里开关作批处理，这个开关是 React 的约定
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -569,26 +570,32 @@ describe("受控同步", () => {
 	});
 });
 
-describe("排队条", () => {
-	it("没有排队内容时不渲染", async () => {
+describe("双层排队展示", () => {
+	it("仅有 steering 或空排队时不渲染 QueueStrip", async () => {
 		const { container, unmount } = await render(
-			createElement(QueueStrip, { queued: { steering: [], followUp: [] }, onClear: () => {} }),
+			createElement(QueueStrip, { queued: { steering: ["插话"], followUp: [] } }),
 		);
 		expect(container.innerHTML).toBe("");
 		unmount();
 	});
 
-	it("列出排队内容与条数,带收回入口", async () => {
+	it("SteeringMessages 将插话渲染为用户气泡并在点击退回按钮时回调", async () => {
+		let demoted = 0;
 		const { container, unmount } = await render(
-			createElement(QueueStrip, {
-				queued: { steering: ["先看日志", "再看配置"], followUp: [] },
-				onClear: () => {},
+			createElement(SteeringMessages, {
+				steering: ["先看日志", "再看配置"],
+				onDemoteSteering: () => {
+					demoted += 1;
+				},
 			}),
 		);
-		expect(container.textContent).toContain("排队 2 条");
+		expect(container.querySelectorAll(".row.is-user.is-steering")).toHaveLength(2);
 		expect(container.textContent).toContain("先看日志");
 		expect(container.textContent).toContain("再看配置");
-		expect(container.textContent).toContain("收回");
+		const buttons = container.querySelectorAll<HTMLButtonElement>('button[data-action="demote"]');
+		expect(buttons).toHaveLength(2);
+		buttons[1]?.click();
+		expect(demoted).toBe(1);
 		unmount();
 	});
 });

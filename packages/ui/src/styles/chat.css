@@ -306,6 +306,7 @@
 
 .row[data-outline-key],
 .row.is-streaming,
+.row.is-steering,
 .row:nth-last-child(-n + 2) {
 	content-visibility: visible;
 }
@@ -330,6 +331,11 @@
 	width: 100%;
 }
 
+/* 待发送插话气泡：左侧悬停退回按钮与气泡垂直居中对齐 */
+.row.is-steering .user-line {
+	align-items: center;
+}
+
 .session-error {
 	display: flex;
 	align-items: center;
@@ -348,55 +354,6 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-}
-
-.queue-strip {
-	display: flex;
-	align-items: center;
-	gap: var(--space-3);
-	flex-wrap: wrap;
-	margin-bottom: 8px;
-	font-size: var(--text-xs);
-	color: var(--fg-subtle);
-}
-
-.queue-label {
-	flex: none;
-}
-
-/* 多条排队时补一句说明：收回会把它们拼成一条草稿 */
-.queue-merge-hint {
-	color: inherit;
-	opacity: 0.75;
-}
-
-.queue-item {
-	max-width: 220px;
-	padding: var(--space-1) var(--space-4);
-	border: 1px solid var(--border-subtle);
-	border-radius: var(--radius-md);
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	color: var(--fg-muted);
-}
-
-.queue-clear {
-	display: inline-flex;
-	align-items: center;
-	gap: var(--space-2);
-	flex: none;
-	padding: var(--space-1) var(--space-3);
-	border: 1px solid var(--border-subtle);
-	border-radius: var(--radius-md);
-	background: transparent;
-	color: var(--fg-subtle);
-	font-size: var(--text-xs);
-}
-
-.queue-clear:hover {
-	color: var(--accent-fg);
-	border-color: var(--accent-fg);
 }
 
 /* 后续消息卡片：位于输入区上方，默认收在圆角描边卡片内，支持单条转插话、编辑与删除 */

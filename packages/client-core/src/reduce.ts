@@ -5,6 +5,7 @@
  * 测试不需要窗口也不需要网络。
  */
 import type { Action, Message } from "@facet/protocol";
+import { historyMessageId } from "./message-id.ts";
 import type { ChatView, EntryView, SessionView } from "./state.ts";
 import { appendNotice } from "./state.ts";
 
@@ -129,6 +130,7 @@ export function reduceSession(view: SessionView, action: Action): SessionView {
 		case "chat/inputHandled":
 		case "chat/messageAppended":
 		case "chat/messageUpdated":
+		case "chat/entryCommitted":
 		case "chat/delta":
 		case "chat/toolCallStarted":
 		case "chat/toolCallUpdated":
@@ -188,6 +190,55 @@ export function reduceChat(view: ChatView, action: Action): ChatView {
 				isStreaming: isStreamingMessage(action.message),
 			};
 			return { ...view, items: upsertMessage(view.items, next) };
+		}
+		case "chat/entryCommitted": {
+			const entry = action.entry;
+			if (action.messageId !== undefined) {
+				const existing = view.items.find((item) => item.id === action.messageId);
+				if (existing !== undefined) {
+					if (
+						existing.entry?.id === entry.id &&
+						same(existing.message, entry.message ?? existing.message) &&
+						!existing.isStreaming
+					) {
+						return view;
+					}
+					return {
+						...view,
+						items: patchMessage(view.items, action.messageId, (current) => ({
+							...current,
+							entry,
+							message: entry.message ?? current.message,
+							streaming: {},
+							isStreaming: false,
+						})),
+					};
+				}
+				return {
+					...view,
+					items: upsertMessage(view.items, {
+						id: action.messageId,
+						entry,
+						message: entry.message,
+						streaming: {},
+						isStreaming: false,
+					}),
+				};
+			}
+			const existingByEntry = view.items.find((item) => item.entry?.id === entry.id);
+			if (existingByEntry !== undefined) {
+				return view;
+			}
+			return {
+				...view,
+				items: upsertMessage(view.items, {
+					id: historyMessageId(entry.id),
+					entry,
+					message: entry.message,
+					streaming: {},
+					isStreaming: false,
+				}),
+			};
 		}
 		case "chat/delta": {
 			const items = patchMessage(view.items, action.messageId, (current) => {
@@ -259,7 +310,13 @@ export function reduceChat(view: ChatView, action: Action): ChatView {
 				notices: appendNotice(view.notices, { level: action.level, message: action.message }),
 			};
 		case "chat/settled":
-			return view;
+			if (!view.items.some((item) => item.isStreaming)) {
+				return view;
+			}
+			return {
+				...view,
+				items: view.items.map((item) => (item.isStreaming ? { ...item, isStreaming: false } : item)),
+			};
 		case "chat/revertTo":
 		case "chat/branchMoved":
 			return view;

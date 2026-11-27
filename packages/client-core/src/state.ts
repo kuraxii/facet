@@ -124,8 +124,6 @@ export interface ChatView {
 	readonly items: readonly EntryView[];
 	readonly toolCalls: Readonly<Record<string, ToolCallView>>;
 	readonly notices: readonly NoticeView[];
-	/** 提升为历史消息时的标识迁移:旧视图标识到新标识,界面据此搬动按行保存的状态 */
-	readonly renames: Readonly<Record<string, string>>;
 }
 
 /** 提示条保留的条数 */
@@ -195,7 +193,6 @@ export function createChatView(channel: Channel): ChatView {
 		items: [],
 		toolCalls: {},
 		notices: [],
-		renames: {},
 	};
 }
 

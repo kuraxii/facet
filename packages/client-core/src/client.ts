@@ -52,52 +52,10 @@ import {
 	workspaceChannelFor,
 } from "@facet/protocol";
 import { type HistoryTrimCut, RETAIN_MAX_PAGES } from "./history-trim.ts";
-import { debugLog, errorLog } from "./log.ts";
-import { isHistoryMessageId } from "./message-id.ts";
+import { debugLog } from "./log.ts";
 import type { ChatView, SessionView } from "./state.ts";
 import type { ChannelGap } from "./store.ts";
 import { SessionStore } from "./store.ts";
-
-/** 日志里条目 id 列表的折行宽度，够宽到一行放得下十来个短 id。 */
-const COMMIT_LOG_WIDTH = 120;
-
-/**
- * 把一次提交的结果排版成多行日志。
- *
- * 条目数量随会话增长，默认的 JSON 输出会变成一长串读不出结构的字符串，所以这里先给一行摘要，
- * 再把「实时消息 id → 条目 id」按行宽折开：条目多时也能一眼扫到前几个、确认提升从哪开始。
- */
-export function formatCommitLog(
-	title: string,
-	promotedCount: number,
-	leafId: string | null | undefined,
-	boundary: string | null | undefined,
-	items: readonly ChatView["items"][number][],
-): string {
-	const ids = items.map((item) => `${item.id}${item.entry === undefined ? "" : `→${item.entry.id}`}`);
-	const lines: string[] = [];
-	let line = "";
-	for (const id of ids) {
-		if (line.length > 0 && line.length + id.length + 1 > COMMIT_LOG_WIDTH) {
-			lines.push(`  ${line}`);
-			line = id;
-			continue;
-		}
-		line = line.length === 0 ? id : `${line} ${id}`;
-	}
-	if (line.length > 0) {
-		lines.push(`  ${line}`);
-	}
-	const raised = items.filter((item) => item.entry !== undefined).length;
-	const head = [
-		title,
-		`turn ${promotedCount} items`,
-		`leaf ${leafId ?? "none"}`,
-		`boundary ${boundary ?? "none"}`,
-		`view ${items.length} items, ${raised} promoted`,
-	].join(" · ");
-	return lines.length === 0 ? head : `${head}\n${lines.join("\n")}`;
-}
 
 /** 发一条消息时的选项。 */
 export interface SendOptions {
@@ -168,10 +126,6 @@ interface SessionRuntime {
 	readonly opened: OpenedSession;
 	/** 下一页更早历史的游标，为空表示已经到最早 */
 	olderCursor: string | undefined;
-	/** 已提交到视图的末条目 id，提升实时消息时作为边界传给主机 */
-	lastEntryId: string | undefined;
-	/** 串行执行提升，避免连续 settled 时请求交错 */
-	commitChain: Promise<void>;
 	/** 串行执行历史重载，避免同一会话并发请求 */
 	reloadChain: Promise<void>;
 	/** 历史视图的代次，重载或释放后旧响应不再写入 */
@@ -253,8 +207,6 @@ export class SessionClient {
 		return {
 			opened,
 			olderCursor: undefined,
-			lastEntryId: undefined,
-			commitChain: Promise.resolve(),
 			reloadChain: Promise.resolve(),
 			historyEpoch: 0,
 			olderTask: undefined,
@@ -433,13 +385,9 @@ export class SessionClient {
 			}
 			const isNewFrame = frame.serverSeq > this.state.lastSeq(frame.channel);
 			const runtime = this.runtimeForChannel(frame.channel);
-			const wasCompacting =
-				runtime === undefined
-					? false
-					: this.state.sessionView(runtime.opened.sessionChannel)?.state.maintenance?.kind === "compaction";
 			this.state.apply(frame);
 			if (isNewFrame && runtime !== undefined) {
-				this.observe(frame, wasCompacting, runtime);
+				this.observe(frame, runtime);
 			}
 			this.confirmSend(frame);
 		});
@@ -1145,8 +1093,6 @@ export class SessionClient {
 	/** 按最后收到的序号续订两个通道,缓冲补不上时整体重新对齐。 */
 	private async resumeChannels(runtime: SessionRuntime): Promise<void> {
 		const opened = runtime.opened;
-		const wasCompacting =
-			this.state.sessionView(opened.sessionChannel)?.state.maintenance?.kind === "compaction";
 		const sessionSub = await this.transport.request("subscribe", {
 			channel: opened.sessionChannel,
 			since: this.state.lastSeq(opened.sessionChannel),
@@ -1164,12 +1110,6 @@ export class SessionClient {
 		}
 		if (sessionSub.session) {
 			this.state.ensureSession(opened.sessionChannel, sessionSub.session);
-			if (wasCompacting && sessionSub.session.maintenance?.kind !== "compaction") {
-				runtime.commitChain = runtime.commitChain
-					.then(() => this.runCommit(runtime, "checkpoint"))
-					.catch(() => undefined);
-				await runtime.commitChain;
-			}
 		}
 	}
 
@@ -1628,142 +1568,23 @@ export class SessionClient {
 	): void {
 		this.state.replaceChat(runtime.opened.chatChannel, page.entries);
 		runtime.olderCursor = page.nextCursor;
-		runtime.lastEntryId = page.entries[page.entries.length - 1]?.id;
 	}
 
 	/**
 	 * 观察已应用的动作。
 	 *
-	 * 本轮 settle 之后向主机要一次「边界之后的条目」，把实时消息提升为历史消息：
-	 * 之后界面上的消息都带条目 id，分叉、定位这类操作不再区分历史与实时。
+	 * 扩展重新初始化时失效命令缓存；分支指针移动后整段重载活动分支历史。
 	 */
-	private observe(frame: ActionFrame, wasCompacting: boolean, runtime: SessionRuntime): void {
+	private observe(frame: ActionFrame, runtime: SessionRuntime): void {
 		const opened = runtime.opened;
 		// 扩展重新初始化会改变可用命令，下次取命令列表时重新请求
 		if (frame.channel === opened.sessionChannel && frame.action.type === "session/initialized") {
 			runtime.commands = undefined;
 			return;
 		}
-		if (frame.channel === opened.sessionChannel && frame.action.type === "session/phase") {
-			if (wasCompacting && frame.action.maintenance?.kind !== "compaction") {
-				runtime.commitChain = runtime.commitChain
-					.then(() => this.runCommit(runtime, "checkpoint"))
-					.catch(() => undefined);
-			}
-			return;
-		}
-		if (frame.channel !== opened.chatChannel) {
-			return;
-		}
 		// 分支指针挪过之后，活动分支换成另一条，已装载的历史整段作废
-		if (frame.action.type === "chat/branchMoved") {
-			runtime.commitChain = runtime.commitChain
-				.then(async () => {
-					if (this.runtimes.get(opened.sessionId) === runtime) {
-						await this.reloadRecent(runtime, true);
-					}
-				})
-				.catch(() => undefined);
-			return;
-		}
-		if (frame.action.type !== "chat/settled") {
-			return;
-		}
-		if (frame.action.aborted) {
-			// 中止时实时消息常与已写入条目对不上，直接取最近页，避免提升失败后重载全部
-			debugLog("commit", "Turn aborted; reloading the recent window", { sessionId: opened.sessionId });
-			runtime.commitChain = runtime.commitChain
-				.then(async () => {
-					if (this.runtimes.get(opened.sessionId) === runtime) {
-						await this.reloadRecent(runtime);
-					}
-				})
-				.catch(() => undefined);
-			return;
-		}
-		debugLog("commit", "Turn ended; preparing to promote live messages", { sessionId: opened.sessionId });
-		runtime.commitChain = runtime.commitChain.then(() => this.runCommit(runtime)).catch(() => undefined);
-	}
-
-	/**
-	 * 拉取边界之后的条目并提升视图。
-	 *
-	 * 边界是上一次提交到的末条目；主机从叶子沿 parentId 回溯到它为止。条目数量与实时
-	 * 消息对不上（漏了事件）或主机拒绝时，整体重新装载历史。
-	 */
-	private async runCommit(
-		runtime: SessionRuntime,
-		mode: "settled" | "checkpoint" = "settled",
-	): Promise<void> {
-		const opened = runtime.opened;
-		if (this.runtimes.get(opened.sessionId) !== runtime) {
-			return;
-		}
-		try {
-			debugLog("commit", "Requesting entries after the boundary", {
-				sessionId: opened.sessionId,
-				afterEntryId: runtime.lastEntryId,
-			});
-			const result = await this.transport.request("entriesAfter", {
-				sessionId: opened.sessionId,
-				...(runtime.lastEntryId === undefined ? {} : { afterEntryId: runtime.lastEntryId }),
-			});
-			if (this.runtimes.get(opened.sessionId) !== runtime) {
-				return;
-			}
-			const checkpoint =
-				mode === "checkpoint" ? result.entries.findLastIndex((entry) => entry.kind === "compaction") : -1;
-			if (mode === "checkpoint" && checkpoint < 0) {
-				return;
-			}
-			const entries = mode === "checkpoint" ? result.entries.slice(0, checkpoint + 1) : result.entries;
-			const promoted = this.state.promote(opened.chatChannel, entries, mode);
-			if (!promoted && mode === "checkpoint") {
-				return;
-			}
-			const leafId = mode === "checkpoint" ? entries.at(-1)?.id : result.leafId;
-			if (leafId != null) {
-				runtime.lastEntryId = leafId;
-			}
-			debugLog(
-				"commit",
-				formatCommitLog(
-					promoted ? "Promotion succeeded" : "Promotion rejected: entry count does not match live messages",
-					entries.length,
-					leafId,
-					runtime.lastEntryId,
-					this.state.chatView(opened.chatChannel)?.items ?? [],
-				),
-			);
-			if (!promoted) {
-				const view = this.state.chatView(opened.chatChannel);
-				errorLog("commit", "Promotion rejected: entry count does not match live messages", {
-					sessionId: opened.sessionId,
-					afterEntryId: runtime.lastEntryId,
-					entryCount: entries.length,
-					messageEntries: entries.filter((entry) => entry.kind === "message" && entry.message !== undefined)
-						.length,
-					liveItems: view?.items.filter((item) => !isHistoryMessageId(item.id)).length ?? 0,
-					leafId,
-				});
-				debugLog("commit", "Entry count does not match live messages; reloading the recent window");
-				await this.reloadRecent(runtime);
-			}
-		} catch (error) {
-			errorLog(
-				"commit",
-				mode === "settled"
-					? "Entries after the boundary failed; reloading the recent window"
-					: "Checkpoint sync failed",
-				{
-					sessionId: opened.sessionId,
-					afterEntryId: runtime.lastEntryId,
-					error: String(error),
-				},
-			);
-			if (this.runtimes.get(opened.sessionId) === runtime && mode === "settled") {
-				await this.reloadRecent(runtime);
-			}
+		if (frame.channel === opened.chatChannel && frame.action.type === "chat/branchMoved") {
+			void this.reloadRecent(runtime, true).catch(() => undefined);
 		}
 	}
 

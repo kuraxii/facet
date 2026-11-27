@@ -17,7 +17,7 @@ import type {
 } from "@facet/protocol";
 import { makeChannel, parseChannel } from "@facet/protocol";
 import { applyHistoryTrim, type HistoryTrimCut, planHistoryTrim } from "./history-trim.ts";
-import { historyMessageId, isHistoryMessageId } from "./message-id.ts";
+import { historyMessageId } from "./message-id.ts";
 import { reduceChat, reduceSession } from "./reduce.ts";
 import {
 	appendNotice,
@@ -551,7 +551,13 @@ export class SessionStore {
 	/** 往更早的方向补一页历史,已存在的标识跳过。 */
 	prependHistory(channel: Channel, entries: readonly Entry[]): ChatView {
 		const slot = this.chats.get(channel) ?? this.createChatSlot(channel);
-		const known = new Set(slot.view.items.map((item) => item.id));
+		const known = new Set<string>();
+		for (const item of slot.view.items) {
+			known.add(item.id);
+			if (item.entry !== undefined) {
+				known.add(historyMessageId(item.entry.id));
+			}
+		}
 		const older: EntryView[] = [];
 		for (const entry of entries) {
 			const view = toEntryView(entry);
@@ -566,54 +572,6 @@ export class SessionStore {
 		slot.view = { ...slot.view, items: [...older, ...slot.view.items] };
 		this.markChanged();
 		return slot.view;
-	}
-
-	/**
-	 * 把实时消息提升为历史消息。
-	 *
-	 * entries 是主机返回的、本轮新写入的条目，按从早到晚排列。实时消息都是带 message 的
-	 * 条目，与其中的消息条目一一对应、顺序相同，因此按位置配对；非消息条目没有实时对应物，
-	 * 只留在视图里供以后扩展展示。整段实时视图换成这一段条目，消息内容用写盘后的版本。
-	 * 消息条目数与实时消息数对不上说明漏了事件，返回 false，调用方重新装载历史。
-	 */
-	promote(channel: Channel, entries: readonly Entry[], mode: "settled" | "checkpoint" = "settled"): boolean {
-		const slot = this.chats.get(channel);
-		if (!slot) {
-			return false;
-		}
-		const live = slot.view.items.filter((item) => !isHistoryMessageId(item.id));
-		const committed = entries.filter((entry) => entry.kind === "message" && entry.message !== undefined);
-		if (committed.length > live.length || (mode === "settled" && live.length !== committed.length)) {
-			return false;
-		}
-		if (mode === "checkpoint" && live.slice(0, committed.length).some((item) => item.isStreaming)) {
-			return false;
-		}
-		const renames: Record<string, string> = { ...slot.view.renames };
-		const promoted = entries.map(toEntryView);
-		let liveIndex = 0;
-		for (const view of promoted) {
-			if (view.entry?.kind !== "message" || view.message === undefined) {
-				continue;
-			}
-			const source = live[liveIndex];
-			liveIndex += 1;
-			if (source === undefined) {
-				return false;
-			}
-			renames[source.id] = view.id;
-		}
-		slot.view = {
-			...slot.view,
-			items: [
-				...slot.view.items.slice(0, slot.view.items.length - live.length),
-				...promoted,
-				...live.slice(committed.length),
-			],
-			renames,
-		};
-		this.markChanged();
-		return true;
 	}
 
 	/** 通道已应用到的序号,从未收到动作时为 0。 */

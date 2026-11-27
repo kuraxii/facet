@@ -108,7 +108,6 @@ export function applyHistoryTrim(view: ChatView, cut: HistoryTrimCut): ChatView 
 		return view;
 	}
 	const kept = view.items.slice(end);
-	const keptIds = new Set(kept.map((item) => item.id));
 	const droppedCalls = callIdsOf(view.items.slice(0, end));
 	let toolCalls = view.toolCalls;
 	if (droppedCalls.size > 0) {
@@ -126,10 +125,5 @@ export function applyHistoryTrim(view: ChatView, cut: HistoryTrimCut): ChatView 
 			toolCalls = next;
 		}
 	}
-	let renames = view.renames;
-	const keptRenames = Object.entries(view.renames).filter(([, to]) => keptIds.has(to));
-	if (keptRenames.length !== Object.keys(view.renames).length) {
-		renames = Object.fromEntries(keptRenames);
-	}
-	return { ...view, items: kept, toolCalls, renames };
+	return { ...view, items: kept, toolCalls };
 }

@@ -91,7 +91,7 @@ function turns(count: number): EntryView[] {
 
 /** 一份对话视图。 */
 function chat(items: readonly EntryView[], toolCalls: Record<string, ToolCallView> = {}): ChatView {
-	return { channel: "chat:/s1", items, toolCalls, notices: [], renames: {} };
+	return { channel: "chat:/s1", items, toolCalls, notices: [] };
 }
 
 /** 取一个必定存在的裁剪点；规则用例里用它省掉判空。 */
@@ -190,20 +190,18 @@ describe("planHistoryTrim", () => {
 });
 
 describe("applyHistoryTrim", () => {
-	it("只留保留区，游标之外的工具调用与标识迁移一起被清掉", () => {
+	it("只留保留区，游标之外的工具调用一起被清掉", () => {
 		const items = turns(40);
 		const cut = mustCut(items);
 		const before = chat(items, {
 			c0: call("c0"),
 			c39: call("c39"),
 		});
-		const renames = { live1: items[0]?.id ?? "", live2: items[items.length - 1]?.id ?? "" };
-		const after = applyHistoryTrim({ ...before, renames }, cut);
+		const after = applyHistoryTrim(before, cut);
 		expect(after.items).toEqual(items.slice(cut.cutIndex));
 		expect(after.items.length).toBeLessThan(items.length);
 		// 被裁掉那一轮的工具调用不再留着，否则会以孤立卡片出现在对话末尾
 		expect(Object.keys(after.toolCalls)).toEqual(["c39"]);
-		expect(after.renames).toEqual({ live2: items[items.length - 1]?.id });
 	});
 
 	it("保留区仍然引用到的工具调用不动", () => {

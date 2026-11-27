@@ -89,6 +89,37 @@ export interface TerminalSettings {
 	profile: string;
 }
 
+/** 本机终端交互偏好，不随主机切换而改变。 */
+export interface TerminalLocalSettings {
+	/** 光标是否闪烁 */
+	cursorBlink: boolean;
+	/** 终端回滚缓冲行数，取值 500 到 50000 */
+	scrollback: number;
+}
+
+/** 缺省的本机终端交互偏好。 */
+export const DEFAULT_TERMINAL_LOCAL_SETTINGS: TerminalLocalSettings = {
+	cursorBlink: true,
+	scrollback: 5000,
+};
+
+/** 桌面通知偏好，只在桌面端生效。 */
+export interface NotificationSettings {
+	/** 窗口未聚焦时是否发送系统通知 */
+	enabled: boolean;
+	/** 任务完成或出错时通知 */
+	onSettled: boolean;
+	/** 需要用户审批或输入时通知 */
+	onNeedsInput: boolean;
+}
+
+/** 缺省的桌面通知偏好。 */
+export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
+	enabled: true,
+	onSettled: true,
+	onNeedsInput: true,
+};
+
 /** 一整份设置。 */
 export interface FacetSettings {
 	/** 文件格式版本 */

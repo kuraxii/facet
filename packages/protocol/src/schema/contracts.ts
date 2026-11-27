@@ -62,6 +62,9 @@ const InputModality = Type.Union([Type.Literal("text"), Type.Literal("image")]);
 /** 运行中投递方式，与 `StreamingBehavior` 同一组取值。 */
 const StreamingBehaviorSchema = Type.Union([Type.Literal("steer"), Type.Literal("followUp")]);
 
+/** 运行中排队消息的批量投递模式，与 `QueueDeliveryMode` 同一组取值。 */
+const QueueDeliveryModeSchema = Type.Union([Type.Literal("one-at-a-time"), Type.Literal("all")]);
+
 /** 模型定位键。 */
 const ModelRef = Type.Object({ provider: Id, id: Id });
 
@@ -286,6 +289,9 @@ export const REQUEST_SCHEMAS = {
 		params: Type.Object({
 			model: Type.Optional(ModelRef),
 			thinkingLevel: Type.Optional(Type.Union([ThinkingLevel, Type.Null()])),
+			autoCompaction: Type.Optional(Type.Boolean()),
+			steeringMode: Type.Optional(QueueDeliveryModeSchema),
+			followUpMode: Type.Optional(QueueDeliveryModeSchema),
 		}),
 	},
 	saveCredential: {

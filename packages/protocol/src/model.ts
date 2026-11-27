@@ -75,16 +75,25 @@ export interface UpstreamModel {
 	input?: InputModality[];
 }
 
+/** 运行中排队消息的投递方式：逐条发送，或一次合并发送全部。 */
+export type QueueDeliveryMode = "one-at-a-time" | "all";
+
 /**
  * pi 的默认设置。
  *
- * 存在 pi 自己的 `settings.json` 里，新建会话时由它开局；两个字段都空表示由 pi 自己决定。
+ * 存在 pi 自己的 `settings.json` 里，新建会话时由它开局。
  */
 export interface AgentDefaults {
 	/** 默认模型 */
 	model?: ModelRef;
 	/** 默认思考档位 */
 	thinkingLevel?: ThinkingLevel;
+	/** 新建会话是否默认开启上下文自动压缩 */
+	autoCompaction?: boolean;
+	/** 运行中插话消息的投递方式 */
+	steeringMode?: QueueDeliveryMode;
+	/** 运行中追问消息的投递方式 */
+	followUpMode?: QueueDeliveryMode;
 }
 
 /** 提供方及其凭证状态。 */

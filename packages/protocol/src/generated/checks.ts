@@ -866,38 +866,6 @@ function buildRequestListBackends(): (value: unknown) => boolean {
 const checkRequestListBackends = buildRequestListBackends();
 
 /**
- * saveAcpBackend 的参数判断。
- *
- * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
- */
-function buildRequestSaveAcpBackend(): (value: unknown) => boolean {
-	// @ts-ignore
-	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && ("profile" in value && ((typeof value.profile === "object" && value.profile !== null && !(Array.isArray(value.profile))) && ((((("id" in value.profile && "name" in value.profile) && "command" in value.profile) && "args" in value.profile) && "enabled" in value.profile) && (((((((typeof value.profile.id === "string" && typeof value.profile.name === "string") && typeof value.profile.command === "string") && (Array.isArray(value.profile.args) && value.profile.args.every((element, index) => (typeof element === "string")))) && (value.profile.env === undefined || (!("env" in value.profile) || ((typeof value.profile.env === "object" && value.profile.env !== null && !(Array.isArray(value.profile.env))) && true)))) && typeof value.profile.enabled === "boolean") && (value.profile.builtIn === undefined || (!("builtIn" in value.profile) || typeof value.profile.builtIn === "boolean"))) && (value.profile.loginHint === undefined || (!("loginHint" in value.profile) || typeof value.profile.loginHint === "string"))))))));
-	return check_0;
-}
-
-const checkRequestSaveAcpBackend = buildRequestSaveAcpBackend();
-
-/**
- * removeAcpBackend 的参数判断。
- *
- * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
- */
-function buildRequestRemoveAcpBackend(): (value: unknown) => boolean {
-	// @ts-ignore
-	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && ("backendId" in value && typeof value.backendId === "string")));
-	return (value: unknown): boolean => {
-		if (!check_0(value)) return false;
-		const source = value as Record<string, unknown>;
-		return (
-			typeof source.backendId === "string" && source.backendId.length > 0
-		);
-	};
-}
-
-const checkRequestRemoveAcpBackend = buildRequestRemoveAcpBackend();
-
-/**
  * probeBackend 的参数判断。
  *
  * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
@@ -915,6 +883,64 @@ function buildRequestProbeBackend(): (value: unknown) => boolean {
 }
 
 const checkRequestProbeBackend = buildRequestProbeBackend();
+
+/**
+ * acpLoginStart 的参数判断。
+ *
+ * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
+ */
+function buildRequestAcpLoginStart(): (value: unknown) => boolean {
+	// @ts-ignore
+	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && ("backendId" in value && typeof value.backendId === "string")));
+	return (value: unknown): boolean => {
+		if (!check_0(value)) return false;
+		const source = value as Record<string, unknown>;
+		return (
+			typeof source.backendId === "string" && source.backendId.length > 0
+		);
+	};
+}
+
+const checkRequestAcpLoginStart = buildRequestAcpLoginStart();
+
+/**
+ * acpLoginSubmit 的参数判断。
+ *
+ * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
+ */
+function buildRequestAcpLoginSubmit(): (value: unknown) => boolean {
+	// @ts-ignore
+	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && (("loginId" in value && "code" in value) && (typeof value.loginId === "string" && typeof value.code === "string"))));
+	return (value: unknown): boolean => {
+		if (!check_0(value)) return false;
+		const source = value as Record<string, unknown>;
+		return (
+			typeof source.loginId === "string" && source.loginId.length > 0 &&
+			typeof source.code === "string" && source.code.length > 0
+		);
+	};
+}
+
+const checkRequestAcpLoginSubmit = buildRequestAcpLoginSubmit();
+
+/**
+ * acpLoginCancel 的参数判断。
+ *
+ * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
+ */
+function buildRequestAcpLoginCancel(): (value: unknown) => boolean {
+	// @ts-ignore
+	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && ("loginId" in value && typeof value.loginId === "string")));
+	return (value: unknown): boolean => {
+		if (!check_0(value)) return false;
+		const source = value as Record<string, unknown>;
+		return (
+			typeof source.loginId === "string" && source.loginId.length > 0
+		);
+	};
+}
+
+const checkRequestAcpLoginCancel = buildRequestAcpLoginCancel();
 
 /**
  * listTerminals 的参数判断。
@@ -1273,9 +1299,10 @@ export const REQUEST_CONTRACTS: Readonly<Record<string, RequestContract | undefi
 	"saveCustomProvider": { auth: "admin", check: checkRequestSaveCustomProvider },
 	"removeCustomProvider": { auth: "admin", check: checkRequestRemoveCustomProvider },
 	"listBackends": { auth: "public", check: checkRequestListBackends },
-	"saveAcpBackend": { auth: "admin", check: checkRequestSaveAcpBackend },
-	"removeAcpBackend": { auth: "admin", check: checkRequestRemoveAcpBackend },
 	"probeBackend": { auth: "admin", check: checkRequestProbeBackend },
+	"acpLoginStart": { auth: "admin", check: checkRequestAcpLoginStart },
+	"acpLoginSubmit": { auth: "admin", check: checkRequestAcpLoginSubmit },
+	"acpLoginCancel": { auth: "admin", check: checkRequestAcpLoginCancel },
 	"listTerminals": { auth: "public", check: checkRequestListTerminals },
 	"listTerminalProfiles": { auth: "public", check: checkRequestListTerminalProfiles },
 	"createTerminal": { auth: "write", check: checkRequestCreateTerminal },

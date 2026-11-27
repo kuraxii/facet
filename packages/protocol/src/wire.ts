@@ -279,9 +279,10 @@ export interface RequestResults {
 	saveCustomProvider: { providers: CustomProviderInfo[] };
 	removeCustomProvider: { providers: CustomProviderInfo[] };
 	listBackends: { backends: BackendAvailability[]; profiles: AcpBackendProfile[] };
-	saveAcpBackend: { backends: BackendAvailability[]; profiles: AcpBackendProfile[] };
-	removeAcpBackend: { backends: BackendAvailability[]; profiles: AcpBackendProfile[] };
 	probeBackend: { backend: BackendAvailability };
+	acpLoginStart: { loginId: string; authUrl?: string };
+	acpLoginSubmit: { backend: BackendAvailability };
+	acpLoginCancel: Record<string, never>;
 	listTerminals: { terminals: TerminalInfo[] };
 	/** 主机上可用的终端，顺序即「更可能是用户想要的」顺序 */
 	listTerminalProfiles: { profiles: TerminalProfileInfo[] };

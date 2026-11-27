@@ -373,30 +373,25 @@ export const REQUEST_SCHEMAS = {
 		nonEmpty: ["providerId"],
 	},
 	listBackends: { auth: "public", params: NoParams },
-	saveAcpBackend: {
-		auth: "admin",
-		params: Type.Object({
-			profile: Type.Object({
-				id: Id,
-				name: Id,
-				command: Id,
-				args: Type.Array(Type.String()),
-				env: Type.Optional(Unsafe<Record<string, string>>(Type.Object({}))),
-				enabled: Type.Boolean(),
-				builtIn: Type.Optional(Type.Boolean()),
-				loginHint: Type.Optional(Type.String()),
-			}),
-		}),
-	},
-	removeAcpBackend: {
-		auth: "admin",
-		params: Type.Object({ backendId: Id }),
-		nonEmpty: ["backendId"],
-	},
 	probeBackend: {
 		auth: "admin",
 		params: Type.Object({ backendId: Id }),
 		nonEmpty: ["backendId"],
+	},
+	acpLoginStart: {
+		auth: "admin",
+		params: Type.Object({ backendId: Id }),
+		nonEmpty: ["backendId"],
+	},
+	acpLoginSubmit: {
+		auth: "admin",
+		params: Type.Object({ loginId: Id, code: Type.String() }),
+		nonEmpty: ["loginId", "code"],
+	},
+	acpLoginCancel: {
+		auth: "admin",
+		params: Type.Object({ loginId: Id }),
+		nonEmpty: ["loginId"],
 	},
 	listTerminals: { auth: "public", params: NoParams },
 	listTerminalProfiles: { auth: "public", params: NoParams },

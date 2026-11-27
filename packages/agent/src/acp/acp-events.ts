@@ -40,20 +40,159 @@ const EMPTY_USAGE = {
 	cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 };
 
+/** Facet 统一的 ACP 会话模式标识。 */
+export type CanonicalAcpModeId = "read-only" | "supervised" | "auto-accept-edits" | "auto" | "full-access";
+
+/** 统一模式展示名（通用层真值，不依赖具体后端）。 */
+const CANONICAL_MODE_LABELS: Readonly<Record<CanonicalAcpModeId, string>> = {
+	"read-only": "Read only",
+	supervised: "Supervised",
+	"auto-accept-edits": "Auto-accept edits",
+	auto: "Auto",
+	"full-access": "Full access",
+};
+
+/** 统一模式展示顺序。 */
+const CANONICAL_MODE_ORDER: Readonly<Record<string, number>> = {
+	"read-only": 0,
+	supervised: 1,
+	"auto-accept-edits": 2,
+	auto: 3,
+	"full-access": 4,
+};
+
+/** 权限请求的自动处置策略。 */
+export type AcpPermissionDecision = "ask" | "allow" | "deny";
+
+/** 具体 ACP 后端的认证配置（由适配器声明，通用层按需触发 `authenticate` 与链接捕获）。 */
+export interface AcpAuthConfig {
+	/** `authenticate` 请求使用的 `methodId`（如 Antigravity 的 `"oauth-personal"`） */
+	readonly methodId: string;
+	/** 准备子进程环境变量（例如注入受控 `BROWSER` 拦截 OAuth 链接） */
+	readonly prepareEnv?: (baseEnv: NodeJS.ProcessEnv) => NodeJS.ProcessEnv;
+	/** 从子进程输出行中提取 OAuth 授权链接 */
+	readonly extractAuthUrl?: (line: string) => string | undefined;
+}
+
+/** 具体 ACP 后端适配器契约：引用通用层的 5 个标准模式语义并给出各自实现。 */
+export interface AcpBackendAdapter {
+	/** 将后端下发的原始模式 id 映射为 Facet 统一模式 id（未识别时返回原始值） */
+	readonly toCanonicalModeId: (wireModeId: string) => CanonicalAcpModeId | string;
+	/** 将 Facet 统一模式 id 映射为发往后端线协议的模式 id */
+	readonly toWireModeId: (canonicalModeId: CanonicalAcpModeId) => string;
+	/** 根据当前统一模式语义决定如何处置 `session/request_permission` */
+	readonly decidePermission: (
+		request: AcpRequestPermissionRequest,
+		canonicalModeId: CanonicalAcpModeId | undefined,
+	) => AcpPermissionDecision;
+	/** 可选的认证配置 */
+	readonly auth?: AcpAuthConfig;
+}
+
+/** 校验一个模式 id 是否属于 Facet 定义的 5 个标准模式语义之一。 */
+export function isCanonicalAcpModeId(modeId: string | undefined): modeId is CanonicalAcpModeId {
+	return modeId !== undefined && Object.hasOwn(CANONICAL_MODE_LABELS, modeId);
+}
+
+function canonicalizeModeState(
+	modeState: AcpModeState,
+	toCanonicalModeId?: (wireModeId: string) => string,
+): AcpModeState {
+	if (toCanonicalModeId === undefined) {
+		return modeState;
+	}
+	const byId = new Map<string, { id: string; name: string; description?: string }>();
+	for (const mode of modeState.availableModes) {
+		const canonicalId = toCanonicalModeId(mode.id);
+		const label = CANONICAL_MODE_LABELS[canonicalId as CanonicalAcpModeId] ?? mode.name;
+		if (!byId.has(canonicalId)) {
+			byId.set(canonicalId, {
+				id: canonicalId,
+				name: label,
+				...(mode.description === undefined ? {} : { description: mode.description }),
+			});
+		}
+	}
+	if (!byId.has("full-access")) {
+		byId.set("full-access", { id: "full-access", name: CANONICAL_MODE_LABELS["full-access"] });
+	}
+	const availableModes = [...byId.values()].sort((left, right) => {
+		const leftRank = CANONICAL_MODE_ORDER[left.id] ?? Number.MAX_SAFE_INTEGER;
+		const rightRank = CANONICAL_MODE_ORDER[right.id] ?? Number.MAX_SAFE_INTEGER;
+		return leftRank - rightRank;
+	});
+	return {
+		currentModeId: toCanonicalModeId(modeState.currentModeId),
+		availableModes,
+	};
+}
+
 /** 将 ACP 的 SessionModeState 转换为 Facet 协议类型。 */
-export function toAcpModeState(raw: AcpSessionModeState | null | undefined): AcpModeState | undefined {
+export function toAcpModeState(
+	raw: AcpSessionModeState | null | undefined,
+	toCanonicalModeId?: (wireModeId: string) => string,
+): AcpModeState | undefined {
 	if (raw === null || raw === undefined) {
 		return undefined;
 	}
+	return canonicalizeModeState(
+		{
+			currentModeId: raw.currentModeId,
+			availableModes: raw.availableModes.map((mode) => ({
+				id: mode.id,
+				name: mode.name,
+				...(mode.description === null || mode.description === undefined
+					? {}
+					: { description: mode.description }),
+			})),
+		},
+		toCanonicalModeId,
+	);
+}
+
+/** 归一化结果：将 `modes` 与 `configOptions` 中的 `category === "mode"` 合并，并过滤重复项。 */
+export interface NormalizedAcpSessionState {
+	/** 归一化后的模式状态 */
+	readonly mode: AcpModeState | undefined;
+	/** 去掉 `category === "mode"` 后的通用动态配置项 */
+	readonly configOptions: AcpConfigOption[];
+	/** 若模式来自 `configOptions`，记录其 `configId` 以优先走 `session/set_config_option` */
+	readonly modeConfigId: string | undefined;
+}
+
+/**
+ * 归一化 ACP 会话的 `modes` 与 `configOptions`。
+ *
+ * 上层只消费单一的 `mode` 与不含 `mode` 的 `configOptions`，不直接暴露 ACP 协议的双字段冗余。
+ */
+export function normalizeAcpSessionState(
+	rawModes: AcpSessionModeState | null | undefined,
+	rawConfigOptions: readonly AcpSessionConfigOption[] | null | undefined,
+	toCanonicalModeId?: (wireModeId: string) => string,
+): NormalizedAcpSessionState {
+	const allOptions = toAcpConfigOptions(rawConfigOptions);
+	const modeOption = allOptions.find((opt) => opt.category === "mode");
+	const configOptions = allOptions.filter((opt) => opt.category !== "mode");
+
+	let mode = toAcpModeState(rawModes, toCanonicalModeId);
+	if (mode === undefined && modeOption !== undefined) {
+		mode = canonicalizeModeState(
+			{
+				currentModeId: modeOption.currentValue,
+				availableModes: modeOption.options.map((opt) => ({
+					id: opt.value,
+					name: opt.name,
+					...(opt.description === undefined ? {} : { description: opt.description }),
+				})),
+			},
+			toCanonicalModeId,
+		);
+	}
+
 	return {
-		currentModeId: raw.currentModeId,
-		availableModes: raw.availableModes.map((mode) => ({
-			id: mode.id,
-			name: mode.name,
-			...(mode.description === null || mode.description === undefined
-				? {}
-				: { description: mode.description }),
-		})),
+		mode,
+		configOptions,
+		modeConfigId: modeOption?.id,
 	};
 }
 
@@ -252,9 +391,11 @@ export class AcpStreamBuilder {
 	private activeTools = new Map<string, ActiveToolRecord>();
 	private currentCommands: SlashCommand[] = [];
 	private currentTitle: string | undefined;
+	private readonly toCanonicalModeId?: (wireModeId: string) => string;
 
-	constructor(backendId: string) {
+	constructor(backendId: string, toCanonicalModeId?: (wireModeId: string) => string) {
 		this.backendId = backendId;
+		this.toCanonicalModeId = toCanonicalModeId;
 	}
 
 	/** 返回当前只读历史条目列表。 */
@@ -477,16 +618,19 @@ export class AcpStreamBuilder {
 				break;
 			}
 			case "config_option_update": {
+				const normalized = normalizeAcpSessionState(undefined, update.configOptions, this.toCanonicalModeId);
 				events.push({
 					type: "acp_state",
-					configOptions: toAcpConfigOptions(update.configOptions),
+					...(normalized.mode === undefined ? {} : { mode: normalized.mode }),
+					configOptions: normalized.configOptions,
 				});
 				break;
 			}
 			case "current_mode_update": {
+				const currentModeId = this.toCanonicalModeId?.(update.currentModeId) ?? update.currentModeId;
 				events.push({
 					type: "acp_state",
-					mode: { currentModeId: update.currentModeId, availableModes: [] },
+					mode: { currentModeId, availableModes: [] },
 				});
 				break;
 			}

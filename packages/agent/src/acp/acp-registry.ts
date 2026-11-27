@@ -4,8 +4,8 @@
  * 配置文件采用标准 JSON 存放在宿主数据目录（`<agentDir>/acp-agents.json`），既供
  * Facet 主机拉起会话使用，也供未来的独立跨 Agent 调度插件直接读取而无需引用 @facet/*。
  */
-import { accessSync, constants, existsSync, readFileSync } from "node:fs";
-import { delimiter, isAbsolute, join, resolve } from "node:path";
+import { accessSync, constants, existsSync, readFileSync, statSync } from "node:fs";
+import { join, posix, resolve, win32 } from "node:path";
 import { type AcpBackendProfile, type BackendAvailability, PI_BACKEND_ID } from "@facet/protocol";
 import { writeFileAtomic } from "../atomic-write.ts";
 
@@ -50,16 +50,58 @@ interface StoredRegistry {
 	profiles: AcpBackendProfile[];
 }
 
+function readEnvPath(env: CommandProbeEnv): string {
+	if (env.pathEnv !== undefined) {
+		return env.pathEnv;
+	}
+	const entry = Object.entries(process.env).findLast(([key]) => key.toUpperCase() === "PATH");
+	return entry?.[1] ?? "";
+}
+
 function defaultIsExecutable(candidate: string): boolean {
 	if (!existsSync(candidate)) {
 		return false;
 	}
 	try {
+		if (!statSync(candidate).isFile()) {
+			return false;
+		}
 		accessSync(candidate, constants.X_OK);
 		return true;
 	} catch {
 		return false;
 	}
+}
+
+/** Windows 上 Antigravity CLI（`agy.exe`）未加入 PATH 时的常见托管安装位置。 */
+function findWindowsAgyFallback(check: (candidate: string) => boolean): string | undefined {
+	const localAppData = process.env.LOCALAPPDATA?.trim();
+	if (localAppData) {
+		const standalone = join(localAppData, "agy", "bin", "agy.exe");
+		if (check(standalone)) {
+			return standalone;
+		}
+	}
+	const userProfile = process.env.USERPROFILE?.trim();
+	if (userProfile) {
+		const archDir = process.arch === "arm64" ? "win32-arm64" : "win32-x64";
+		const t3Root = join(userProfile, ".t3", "tools", "antigravity-acp", archDir);
+		const activeFile = join(t3Root, "active.json");
+		if (existsSync(activeFile)) {
+			try {
+				const parsed = JSON.parse(readFileSync(activeFile, "utf8")) as { releaseId?: unknown };
+				if (typeof parsed.releaseId === "string" && /^[a-f0-9]{64}$/u.test(parsed.releaseId)) {
+					const managed = join(t3Root, "versions", parsed.releaseId, "agy.exe");
+					if (check(managed)) {
+						return managed;
+					}
+				}
+			} catch {
+				// 忽略损坏的外部索引
+			}
+		}
+	}
+	return undefined;
 }
 
 /** 在 PATH 或指定绝对/相对路径中解析可执行文件位置。 */
@@ -70,23 +112,32 @@ export function resolveCommandPath(command: string, env: CommandProbeEnv = {}): 
 	}
 	const check = env.isExecutable ?? defaultIsExecutable;
 	const platform = env.platform ?? process.platform;
-	if (isAbsolute(trimmed) || trimmed.includes("/") || trimmed.includes("\\")) {
-		const resolved = resolve(trimmed);
+	const pathOps = platform === "win32" ? win32 : posix;
+	if (pathOps.isAbsolute(trimmed) || trimmed.includes("/") || trimmed.includes("\\")) {
+		const resolved = pathOps.resolve(trimmed);
 		return check(resolved) ? resolved : undefined;
 	}
-	const pathValue = env.pathEnv ?? process.env.PATH ?? "";
-	const dirs = pathValue.split(delimiter).filter((item) => item.length > 0);
+	const pathValue = readEnvPath(env);
+	const dirs = pathValue.split(pathOps.delimiter).filter((item) => item.length > 0);
 	const extensions =
 		platform === "win32"
 			? ["", ...(env.pathExt ?? process.env.PATHEXT ?? ".EXE;.CMD;.BAT").split(";").filter(Boolean)]
 			: [""];
 	for (const dir of dirs) {
 		for (const ext of extensions) {
-			const candidate = join(dir, `${trimmed}${ext}`);
+			const candidate = pathOps.join(dir, `${trimmed}${ext}`);
 			if (check(candidate)) {
 				return candidate;
 			}
 		}
+	}
+	if (
+		platform === "win32" &&
+		trimmed === "agy" &&
+		env.pathEnv === undefined &&
+		env.isExecutable === undefined
+	) {
+		return findWindowsAgyFallback(check);
 	}
 	return undefined;
 }

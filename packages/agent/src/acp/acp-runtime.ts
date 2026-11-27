@@ -5,14 +5,16 @@
  * 不混入 Pi 的 `ModelRuntime` 与 `.jsonl` 目录扫描逻辑。
  */
 
-import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { Readable, Writable } from "node:stream";
 import { client, ndJsonStream, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
 import type { AcpBackendProfile, BackendAvailability } from "@facet/protocol";
 import { AcpAgent, formatAcpInitFailure } from "./acp-agent.ts";
-import { AcpRegistryStore, type CommandProbeEnv } from "./acp-registry.ts";
+import { AcpLoginManager } from "./acp-login.ts";
+import { AcpRegistryStore, type CommandProbeEnv, resolveCommandPath } from "./acp-registry.ts";
 import { AcpSessionIndex } from "./acp-session-index.ts";
+import { spawnAcpProcess, terminateAcpProcess } from "./acp-spawn.ts";
+import { getAcpBackendAdapter } from "./antigravity-adapter.ts";
 
 /** 构造 `AcpAgentRuntime` 的参数。 */
 export interface AcpAgentRuntimeOptions {
@@ -27,6 +29,7 @@ export interface AcpAgentRuntimeOptions {
 export class AcpAgentRuntime {
 	readonly registry: AcpRegistryStore;
 	readonly index: AcpSessionIndex;
+	private readonly loginManager = new AcpLoginManager();
 	private readonly onError?: (error: unknown) => void;
 
 	constructor(options: AcpAgentRuntimeOptions) {
@@ -47,6 +50,7 @@ export class AcpAgentRuntime {
 			profile,
 			cwd,
 			name: options.name,
+			adapter: getAcpBackendAdapter(profile.id),
 			onIndexSync: (info) => {
 				void this.index.upsert(info).catch((error) => this.onError?.(error));
 			},
@@ -67,6 +71,7 @@ export class AcpAgentRuntime {
 			cwd: cwdOverride ?? record.cwd,
 			externalSessionId: record.externalSessionId,
 			name: record.name,
+			adapter: getAcpBackendAdapter(profile.id),
 			onIndexSync: (info) => {
 				void this.index.upsert(info).catch((error) => this.onError?.(error));
 			},
@@ -74,11 +79,28 @@ export class AcpAgentRuntime {
 		});
 	}
 
-	/** 启动一次短生命探测子进程，验证目标 ACP CLI 能否完成 initialize 握手。 */
+	/** 启动一次短生命探测子进程，验证目标 ACP CLI 能否完成 initialize 与认证握手。 */
 	async probeBackend(backendId: string): Promise<BackendAvailability> {
 		return await this.registry.probe(backendId, async (profile) => {
 			return await runAcpHandshakeProbe(profile);
 		});
+	}
+
+	/** 启动指定 ACP 后端的交互式登录流程（如 `agy acp --login`）。 */
+	async loginStart(backendId: string): Promise<{ loginId: string; authUrl?: string }> {
+		const profile = this.requireEnabledProfile(backendId);
+		return await this.loginManager.start(profile);
+	}
+
+	/** 提交授权码完成 ACP 登录并刷新后端可用状态。 */
+	async loginSubmit(loginId: string, code: string): Promise<BackendAvailability> {
+		const backendId = await this.loginManager.submit(loginId, code);
+		return await this.probeBackend(backendId);
+	}
+
+	/** 取消正在进行的 ACP 登录流程。 */
+	loginCancel(loginId: string): void {
+		this.loginManager.cancel(loginId);
 	}
 
 	private requireEnabledProfile(backendId: string): AcpBackendProfile {
@@ -94,17 +116,23 @@ export class AcpAgentRuntime {
 }
 
 async function runAcpHandshakeProbe(profile: AcpBackendProfile): Promise<{ ok: boolean; issue?: string }> {
-	const child = spawn(profile.command, profile.args, {
-		env: profile.env ? { ...process.env, ...profile.env } : process.env,
-		stdio: ["pipe", "pipe", "pipe"],
-	});
-	child.stdin.on("error", () => undefined);
 	const stderr: string[] = [];
-	child.stderr.on("data", (chunk: Buffer | string) => {
-		for (const line of String(chunk).split(/\r?\n/)) {
-			const trimmed = line.trim();
-			if (trimmed.length > 0) stderr.push(trimmed);
-		}
+	let failFast: ((error: Error) => void) | undefined;
+	const earlyFailure = new Promise<never>((_resolve, reject) => {
+		failFast = reject;
+	});
+	const child = spawnAcpProcess({
+		command: profile.command,
+		args: profile.args,
+		profileEnv: profile.env,
+		resolveCommand: (cmd) => resolveCommandPath(cmd),
+		onStderrLine: (line) => stderr.push(line),
+		onSpawnError: (error) => failFast?.(error),
+	});
+	child.on("exit", (code, signal) => {
+		failFast?.(
+			new Error(`ACP process exited before initialize (code=${code ?? "null"}, signal=${signal ?? "none"})`),
+		);
 	});
 	const app = client({ name: "facet-probe" });
 	const conn = app.connect(
@@ -121,6 +149,7 @@ async function runAcpHandshakeProbe(profile: AcpBackendProfile): Promise<{ ok: b
 				clientInfo: { name: "facet-probe", version: "0.1.0" },
 				clientCapabilities: {},
 			}),
+			earlyFailure,
 			new Promise<never>((_resolve, reject) => {
 				timer = setTimeout(() => reject(new Error("Timed out waiting for ACP initialize")), 5000);
 			}),
@@ -135,8 +164,6 @@ async function runAcpHandshakeProbe(profile: AcpBackendProfile): Promise<{ ok: b
 		} catch {
 			// ignore
 		}
-		if (child.exitCode === null && !child.killed) {
-			child.kill("SIGTERM");
-		}
+		terminateAcpProcess(child, 1500);
 	}
 }

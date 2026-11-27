@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { AcpStreamBuilder, permissionPromptFromAcp, toAcpConfigOptions } from "./acp-events.ts";
+import {
+	AcpStreamBuilder,
+	normalizeAcpSessionState,
+	permissionPromptFromAcp,
+	toAcpConfigOptions,
+} from "./acp-events.ts";
+import { ANTIGRAVITY_ACP_ADAPTER } from "./antigravity-adapter.ts";
 
 describe("ACP 纯函数事件与配置转换", () => {
 	it("session/load 重放时累积 Entry 而不输出实时事件", () => {
@@ -128,5 +134,98 @@ describe("ACP 纯函数事件与配置转换", () => {
 			options: ["Allow once", "Deny"],
 		});
 		expect(perm.labelToOptionId.get("Allow once")).toBe("allow");
+	});
+
+	it("归一化 mode 与 configOptions，并在 Antigravity 下映射 t3code 权限语义", () => {
+		const normalized = normalizeAcpSessionState(
+			{
+				currentModeId: "default",
+				availableModes: [
+					{ id: "default", name: "Default" },
+					{ id: "accept-edits", name: "Accept edits" },
+					{ id: "auto", name: "Auto" },
+					{ id: "plan", name: "Plan" },
+				],
+			},
+			[
+				{
+					type: "select",
+					id: "model",
+					name: "Model",
+					category: "model",
+					currentValue: "gemini-2.5",
+					options: [{ value: "gemini-2.5", name: "Gemini 2.5" }],
+				},
+				{
+					type: "select",
+					id: "mode-opt",
+					name: "Mode",
+					category: "mode",
+					currentValue: "default",
+					options: [{ value: "default", name: "Default" }],
+				},
+			],
+			ANTIGRAVITY_ACP_ADAPTER.toCanonicalModeId,
+		);
+		expect(normalized.modeConfigId).toBe("mode-opt");
+		expect(normalized.configOptions.map((item) => item.id)).toEqual(["model"]);
+		expect(normalized.mode).toEqual({
+			currentModeId: "supervised",
+			availableModes: [
+				{ id: "read-only", name: "Read only" },
+				{ id: "supervised", name: "Supervised" },
+				{ id: "auto-accept-edits", name: "Auto-accept edits" },
+				{ id: "auto", name: "Auto" },
+				{ id: "full-access", name: "Full access" },
+			],
+		});
+
+		// 当仅通过 configOptions 下发 mode 时，也能归一化出 mode
+		const fromConfigOnly = normalizeAcpSessionState(
+			undefined,
+			[
+				{
+					type: "select",
+					id: "mode",
+					name: "Mode",
+					category: "mode",
+					currentValue: "accept-edits",
+					options: [{ value: "accept-edits", name: "Accept edits" }],
+				},
+			],
+			ANTIGRAVITY_ACP_ADAPTER.toCanonicalModeId,
+		);
+		expect(fromConfigOnly.mode).toEqual({
+			currentModeId: "auto-accept-edits",
+			availableModes: [
+				{ id: "auto-accept-edits", name: "Auto-accept edits" },
+				{ id: "full-access", name: "Full access" },
+			],
+		});
+		expect(fromConfigOnly.configOptions).toEqual([]);
+	});
+
+	it("Antigravity 适配器实现通用 5 档语义与权限策略", () => {
+		expect(ANTIGRAVITY_ACP_ADAPTER.toWireModeId("full-access")).toBe("default");
+		expect(ANTIGRAVITY_ACP_ADAPTER.toWireModeId("auto-accept-edits")).toBe("accept-edits");
+		expect(ANTIGRAVITY_ACP_ADAPTER.toWireModeId("read-only")).toBe("plan");
+
+		const editReq = {
+			sessionId: "s1",
+			toolCall: { toolCallId: "t1", kind: "edit" as const },
+			options: [{ optionId: "allow_once", name: "Allow", kind: "allow_once" as const }],
+		};
+		const execReq = {
+			sessionId: "s1",
+			toolCall: { toolCallId: "t2", kind: "execute" as const },
+			options: [{ optionId: "allow_once", name: "Allow", kind: "allow_once" as const }],
+		};
+
+		expect(ANTIGRAVITY_ACP_ADAPTER.decidePermission(editReq, "supervised")).toBe("ask");
+		expect(ANTIGRAVITY_ACP_ADAPTER.decidePermission(editReq, "auto-accept-edits")).toBe("allow");
+		expect(ANTIGRAVITY_ACP_ADAPTER.decidePermission(execReq, "auto-accept-edits")).toBe("ask");
+		expect(ANTIGRAVITY_ACP_ADAPTER.decidePermission(execReq, "auto")).toBe("ask");
+		expect(ANTIGRAVITY_ACP_ADAPTER.decidePermission(execReq, "full-access")).toBe("allow");
+		expect(ANTIGRAVITY_ACP_ADAPTER.decidePermission(editReq, "read-only")).toBe("deny");
 	});
 });

@@ -5,7 +5,7 @@
  * `@agentclientprotocol/sdk` JSON-RPC 2.0、权限审批桥接（`session/request_permission`）
  * 与回合状态机。
  */
-import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { Readable, Writable } from "node:stream";
 import {
@@ -52,12 +52,15 @@ import type { ManagedAgent } from "../agent-contract.ts";
 import type { QueuedMessageItem } from "../queue-state.ts";
 import type { ModelMutationOptions, PromptOptions } from "../types.ts";
 import {
+	type AcpBackendAdapter,
 	AcpStreamBuilder,
+	isCanonicalAcpModeId,
+	normalizeAcpSessionState,
 	permissionPromptFromAcp,
-	toAcpConfigOptions,
-	toAcpModeState,
 	toAcpPromptBlocks,
 } from "./acp-events.ts";
+import { resolveCommandPath } from "./acp-registry.ts";
+import { spawnAcpProcess, terminateAcpProcess } from "./acp-spawn.ts";
 
 /** stderr 环形诊断缓冲保留上限。 */
 const MAX_STDERR_LINES = 25;
@@ -93,6 +96,8 @@ export interface AcpAgentOptions {
 	name?: string;
 	/** 测试可覆写传输连接目标 */
 	transport?: AcpTransportTarget;
+	/** 后端专属行为适配器（可选） */
+	adapter?: AcpBackendAdapter;
 	/** 会话建好或每轮收尾后通知上层刷新轻量索引 */
 	onIndexSync?: (info: {
 		backendId: string;
@@ -126,6 +131,7 @@ export class AcpAgent implements ManagedAgent {
 	readonly cwd: string;
 	private readonly profile: AcpBackendProfile;
 	private readonly transportTarget: AcpTransportTarget;
+	private readonly adapter?: AcpBackendAdapter;
 	private readonly onIndexSync?: AcpAgentOptions["onIndexSync"];
 	private readonly onError?: (error: unknown) => void;
 
@@ -133,6 +139,7 @@ export class AcpAgent implements ManagedAgent {
 	private customName: string | undefined;
 	private caps: AgentCapabilities = { ...DEFAULT_ACP_CAPABILITIES };
 	private modeState: AcpModeState | undefined;
+	private modeConfigId: string | undefined;
 	private configOptions: AcpConfigOption[] = [];
 	private initialization: SessionInitialization = { kind: "starting" };
 	private phase: TurnPhase = "idle";
@@ -165,9 +172,10 @@ export class AcpAgent implements ManagedAgent {
 			profile: options.profile,
 			cwd: options.cwd,
 		};
+		this.adapter = options.adapter;
 		this.onIndexSync = options.onIndexSync;
 		this.onError = options.onError;
-		this.builder = new AcpStreamBuilder(this.backendId);
+		this.builder = new AcpStreamBuilder(this.backendId, this.adapter?.toCanonicalModeId);
 	}
 
 	get file(): string | undefined {
@@ -232,6 +240,12 @@ export class AcpAgent implements ManagedAgent {
 				supportsImages,
 			};
 
+			if (this.adapter?.auth !== undefined) {
+				await connection.agent.request("authenticate", {
+					methodId: this.adapter.auth.methodId,
+				});
+			}
+
 			if (this.externalSessionId !== undefined) {
 				await this.attachExistingSession(
 					connection,
@@ -245,8 +259,14 @@ export class AcpAgent implements ManagedAgent {
 					mcpServers: [],
 				});
 				this.externalSessionId = created.sessionId;
-				this.modeState = toAcpModeState(created.modes);
-				this.configOptions = toAcpConfigOptions(created.configOptions);
+				const normalized = normalizeAcpSessionState(
+					created.modes,
+					created.configOptions,
+					this.adapter?.toCanonicalModeId,
+				);
+				this.modeState = normalized.mode;
+				this.modeConfigId = normalized.modeConfigId;
+				this.configOptions = normalized.configOptions;
 			}
 
 			this.initialization = { kind: "ready" };
@@ -284,8 +304,14 @@ export class AcpAgent implements ManagedAgent {
 				});
 				await this.updateChain;
 				this.builder.finishTurn({ replay: true });
-				this.modeState = toAcpModeState(loaded?.modes);
-				this.configOptions = toAcpConfigOptions(loaded?.configOptions);
+				const normalized = normalizeAcpSessionState(
+					loaded?.modes,
+					loaded?.configOptions,
+					this.adapter?.toCanonicalModeId,
+				);
+				this.modeState = normalized.mode;
+				this.modeConfigId = normalized.modeConfigId;
+				this.configOptions = normalized.configOptions;
 				return;
 			} finally {
 				this.replayingHistory = false;
@@ -296,8 +322,14 @@ export class AcpAgent implements ManagedAgent {
 				sessionId: externalSessionId,
 				cwd: this.cwd,
 			});
-			this.modeState = toAcpModeState(resumed.modes);
-			this.configOptions = toAcpConfigOptions(resumed.configOptions);
+			const normalized = normalizeAcpSessionState(
+				resumed.modes,
+				resumed.configOptions,
+				this.adapter?.toCanonicalModeId,
+			);
+			this.modeState = normalized.mode;
+			this.modeConfigId = normalized.modeConfigId;
+			this.configOptions = normalized.configOptions;
 			return;
 		}
 		// 后端既不支持 loadSession 也不支持 resume 时退回新建外部会话并继承定位记录
@@ -306,8 +338,14 @@ export class AcpAgent implements ManagedAgent {
 			mcpServers: [],
 		});
 		this.externalSessionId = created.sessionId;
-		this.modeState = toAcpModeState(created.modes);
-		this.configOptions = toAcpConfigOptions(created.configOptions);
+		const normalized = normalizeAcpSessionState(
+			created.modes,
+			created.configOptions,
+			this.adapter?.toCanonicalModeId,
+		);
+		this.modeState = normalized.mode;
+		this.modeConfigId = normalized.modeConfigId;
+		this.configOptions = normalized.configOptions;
 	}
 
 	private openConnection(): ClientConnection {
@@ -333,25 +371,34 @@ export class AcpAgent implements ManagedAgent {
 			connection = app.connect(this.transportTarget.stream);
 		} else {
 			const { profile, cwd } = this.transportTarget;
-			const child = spawn(profile.command, profile.args, {
+			const child = spawnAcpProcess({
+				command: profile.command,
+				args: profile.args,
 				cwd,
-				env: profile.env ? { ...process.env, ...profile.env } : process.env,
-				stdio: ["pipe", "pipe", "pipe"],
-			});
-			this.child = child;
-			child.stdin.on("error", () => undefined);
-			child.stderr.on("data", (chunk: Buffer | string) => {
-				const lines = String(chunk)
-					.split(/\r?\n/)
-					.map((line) => line.trim())
-					.filter((line) => line.length > 0);
-				for (const line of lines) {
+				profileEnv: profile.env,
+				prepareEnv: this.adapter?.auth?.prepareEnv,
+				resolveCommand: (cmd) => resolveCommandPath(cmd),
+				onStderrLine: (line) => {
 					this.stderrLines.push(line);
 					if (this.stderrLines.length > MAX_STDERR_LINES) {
 						this.stderrLines.shift();
 					}
-				}
+				},
+				onSpawnError: (error) => {
+					this.stderrLines.push(error.message);
+					if (this.stderrLines.length > MAX_STDERR_LINES) {
+						this.stderrLines.shift();
+					}
+					if (!this.disposed && this.phase !== "idle") {
+						this.emit({
+							type: "notice",
+							level: "error",
+							message: `ACP process failed to start: ${error.message}`,
+						});
+					}
+				},
 			});
+			this.child = child;
 			child.on("exit", (code, signal) => {
 				if (this.disposed) {
 					return;
@@ -441,6 +488,25 @@ export class AcpAgent implements ManagedAgent {
 	private async handlePermissionRequest(
 		request: RequestPermissionRequest,
 	): Promise<RequestPermissionResponse> {
+		const currentModeId = this.modeState?.currentModeId;
+		const canonicalModeId = isCanonicalAcpModeId(currentModeId) ? currentModeId : undefined;
+		const decision = this.adapter?.decidePermission(request, canonicalModeId) ?? "ask";
+		if (decision === "allow") {
+			const allowOption = request.options.find(
+				(opt) => opt.kind === "allow_once" || opt.kind === "allow_always",
+			);
+			if (allowOption !== undefined) {
+				return { outcome: { outcome: "selected", optionId: allowOption.optionId } };
+			}
+		} else if (decision === "deny") {
+			const denyOption = request.options.find(
+				(opt) => opt.kind === "reject_once" || opt.kind === "reject_always",
+			);
+			return denyOption !== undefined
+				? { outcome: { outcome: "selected", optionId: denyOption.optionId } }
+				: { outcome: { outcome: "cancelled" } };
+		}
+
 		const requestId = `perm-${randomUUID()}`;
 		const mapped = permissionPromptFromAcp(requestId, request);
 		const defaultDenyOptionId = mapped.options.find(
@@ -638,9 +704,35 @@ export class AcpAgent implements ManagedAgent {
 		if (this.connection === undefined || this.externalSessionId === undefined) {
 			throw new Error("ACP session is not ready");
 		}
+		const targetModeId =
+			this.adapter !== undefined && isCanonicalAcpModeId(modeId) ? this.adapter.toWireModeId(modeId) : modeId;
+		if (this.modeConfigId !== undefined) {
+			// 优先走 ACP 新版 session/set_config_option（v2 已移除 session/set_mode）
+			const response = await this.connection.agent.request("session/set_config_option", {
+				sessionId: this.externalSessionId,
+				configId: this.modeConfigId,
+				value: targetModeId,
+			});
+			const normalized = normalizeAcpSessionState(
+				undefined,
+				response.configOptions,
+				this.adapter?.toCanonicalModeId,
+			);
+			const nextBase = normalized.mode ?? this.modeState;
+			this.modeState =
+				nextBase !== undefined
+					? { ...nextBase, currentModeId: modeId }
+					: { currentModeId: modeId, availableModes: [] };
+			if (normalized.modeConfigId !== undefined) {
+				this.modeConfigId = normalized.modeConfigId;
+			}
+			this.configOptions = normalized.configOptions;
+			this.emit({ type: "acp_state", mode: this.modeState, configOptions: this.configOptions });
+			return;
+		}
 		await this.connection.agent.request("session/set_mode", {
 			sessionId: this.externalSessionId,
-			modeId,
+			modeId: targetModeId,
 		});
 		if (this.modeState !== undefined) {
 			this.modeState = { ...this.modeState, currentModeId: modeId };
@@ -660,7 +752,18 @@ export class AcpAgent implements ManagedAgent {
 			configId,
 			value,
 		});
-		this.configOptions = toAcpConfigOptions(response.configOptions);
+		const normalized = normalizeAcpSessionState(
+			undefined,
+			response.configOptions,
+			this.adapter?.toCanonicalModeId,
+		);
+		if (normalized.mode !== undefined) {
+			this.modeState = normalized.mode;
+		}
+		if (normalized.modeConfigId !== undefined) {
+			this.modeConfigId = normalized.modeConfigId;
+		}
+		this.configOptions = normalized.configOptions;
 		this.emit({ type: "acp_state", mode: this.modeState, configOptions: this.configOptions });
 	}
 
@@ -810,15 +913,7 @@ export class AcpAgent implements ManagedAgent {
 		this.connection = undefined;
 		const child = this.child;
 		this.child = undefined;
-		if (child !== undefined && child.exitCode === null && !child.killed) {
-			child.kill("SIGTERM");
-			const timer = setTimeout(() => {
-				if (child.exitCode === null && !child.killed) {
-					child.kill("SIGKILL");
-				}
-			}, KILL_GRACE_MS);
-			timer.unref?.();
-		}
+		terminateAcpProcess(child, KILL_GRACE_MS);
 	}
 
 	private setPhase(phase: TurnPhase): void {

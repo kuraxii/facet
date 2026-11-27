@@ -133,8 +133,8 @@ export interface Composer {
 	updateDraft: (change: string | ((current: string) => string)) => void;
 	/** 发一条消息 */
 	send: () => void;
-	/** 收回排队内容，把文字拼回输入框 */
-	takeBackQueue: () => void;
+	/** 将全部待插话消息退回到后续消息队列顶部 */
+	demoteSteering: () => void;
 	/** 将指定索引的后续消息转为插话立即发送 */
 	promoteFollowUp: (index: number) => void;
 	/** 将指定索引的后续消息放回输入框编辑 */
@@ -493,22 +493,10 @@ export function useComposer(options: ComposerOptions): Composer {
 		})();
 	}, [activity, client, commands, draft, draftKey, pendingImages, runFacetCommand, sendGate, updateDraft]);
 
-	/**
-	 * 收回排队内容：清空主机侧队列，把文字拼回输入框。
-	 *
-	 * 排队条来自 session/queueChanged，清空后主机会再推一次空队列，这里只改草稿。
-	 */
-	const takeBackQueue = useCallback(() => {
-		const entries = [...queued.steering, ...queued.followUp];
-		client.clearQueue();
-		if (entries.length === 0) {
-			return;
-		}
-		updateDraft((current) => {
-			const restored = entries.join("\n\n");
-			return current.trim().length === 0 ? restored : `${restored}\n\n${current}`;
-		});
-	}, [client, queued, updateDraft]);
+	/** 将全部待插话消息退回到后续消息队列顶部，队列变更由主机重新推送。 */
+	const demoteSteering = useCallback(() => {
+		client.demoteSteering();
+	}, [client]);
 
 	/** 将指定索引的后续消息转为插话立即发送。 */
 	const promoteFollowUp = useCallback(
@@ -596,6 +584,24 @@ export function useComposer(options: ComposerOptions): Composer {
 		[client, restoreImages, updateDraft],
 	);
 
+	// 中止运行后，主机把未消费的排队消息退回触发端：按原顺序拼回草稿与附图
+	useEffect(() => {
+		return client.onQueueReclaimed?.((items, sessionId) => {
+			if (openedSessionId !== undefined && sessionId !== openedSessionId) {
+				return;
+			}
+			const texts = items.map((item) => item.text).filter((text) => text.length > 0);
+			if (texts.length > 0) {
+				updateDraft((current) => {
+					const restored = texts.join("\n\n");
+					return current.trim().length === 0 ? restored : `${restored}\n\n${current}`;
+				});
+			}
+			const images = items.flatMap((item) => item.images ?? []);
+			restoreImages(images);
+		});
+	}, [client, openedSessionId, restoreImages, updateDraft]);
+
 	/**
 	 * 重试失败的一轮。
 	 *
@@ -633,7 +639,7 @@ export function useComposer(options: ComposerOptions): Composer {
 		commands,
 		updateDraft,
 		send,
-		takeBackQueue,
+		demoteSteering,
 		promoteFollowUp,
 		editFollowUp,
 		removeFollowUp,

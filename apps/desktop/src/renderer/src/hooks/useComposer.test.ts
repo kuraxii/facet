@@ -7,7 +7,7 @@
  * 事——同一段时间里点多少下都只发一条，并且主机的三种收场（回执、被拒、断线重连）之后还能
  * 接着发。图片编码用假的顶掉，好数它被调了几次。
  */
-import type { SessionClient, SessionView } from "@facet/client-core";
+import type { ReclaimedQueueItem, SessionClient, SessionView } from "@facet/client-core";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -55,17 +55,40 @@ function sessionView(file: string, hasPendingSend: boolean): SessionView {
 
 /** 一台只记账不发包的客户端。 */
 function fakeClient() {
-	const state = { pending: false, sent: [] as string[] };
+	const state = {
+		pending: false,
+		sent: [] as string[],
+		demoted: 0,
+		reclaimListeners: new Set<(items: ReclaimedQueueItem[], sessionId: string) => void>(),
+	};
 	const client = {
 		hasPendingSend: () => state.pending,
 		send: (text: string) => {
 			state.sent.push(text);
 			return state.sent.length;
 		},
+		demoteSteering: () => {
+			state.demoted += 1;
+			return state.demoted;
+		},
 		listCommands: async () => [],
 		onSent: () => () => {},
+		onQueueReclaimed: (listener: (items: ReclaimedQueueItem[], sessionId: string) => void) => {
+			state.reclaimListeners.add(listener);
+			return () => {
+				state.reclaimListeners.delete(listener);
+			};
+		},
 	} as unknown as SessionClient;
-	return { client, state };
+	return {
+		client,
+		state,
+		emitReclaimed: (items: ReclaimedQueueItem[], sessionId = "a") => {
+			for (const listener of [...state.reclaimListeners]) {
+				listener(items, sessionId);
+			}
+		},
+	};
 }
 
 /** 一次渲染要用的那几样东西。 */
@@ -289,5 +312,51 @@ describe("输入区的发送闸门", () => {
 		});
 		expect(harness.current.draft).toBe("");
 		harness.unmount();
+	});
+
+	it("demoteSteering 转发到客户端，收到本会话队列回收时按序还原文本与图片", async () => {
+		const fake = fakeClient();
+		let current!: Composer;
+		const host = document.createElement("div");
+		const root = createRoot(host);
+		await act(async () => {
+			root.render(
+				createElement(Probe, {
+					client: fake.client,
+					view: { file: "/w/a.jsonl", hasPendingSend: false, pending: false },
+					sink: (value) => {
+						current = value;
+					},
+				}),
+			);
+		});
+
+		await act(async () => {
+			current.demoteSteering();
+		});
+		expect(fake.state.demoted).toBe(1);
+
+		await act(async () => {
+			current.updateDraft("正在输入的草稿");
+		});
+		// 其他会话的回收通知不会污染当前输入框
+		await act(async () => {
+			fake.emitReclaimed([{ text: "别的会话" }], "other-session");
+		});
+		expect(current.draft).toBe("正在输入的草稿");
+
+		await act(async () => {
+			fake.emitReclaimed([
+				{ text: "插话一" },
+				{ text: "后续二", images: [{ type: "image", data: "AA==", mimeType: "image/png" }] },
+			]);
+		});
+		expect(current.draft).toBe("插话一\n\n后续二\n\n正在输入的草稿");
+		expect(current.pendingImages).toHaveLength(1);
+		expect(current.pendingImages[0]?.mimeType).toBe("image/png");
+
+		await act(async () => {
+			root.unmount();
+		});
 	});
 });

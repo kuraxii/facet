@@ -17,6 +17,7 @@ import {
 	outlineIsActive,
 	outlinePrompts,
 	QueueStrip,
+	SteeringMessages,
 	useI18n,
 } from "@facet/ui";
 import { type ReactNode, type RefObject, useMemo } from "react";
@@ -191,6 +192,7 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 							reclaim={reclaim}
 							emptyHint={t("app.emptyHint")}
 						/>
+						<SteeringMessages steering={queued.steering} onDemoteSteering={composer.demoteSteering} />
 					</div>
 				</section>
 				<div className="chat-fade is-top" aria-hidden="true" />
@@ -215,7 +217,6 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 					) : null}
 					<QueueStrip
 						queued={queued}
-						onClear={composer.takeBackQueue}
 						onPromoteFollowUp={composer.promoteFollowUp}
 						onEditFollowUp={composer.editFollowUp}
 						onRemoveFollowUp={composer.removeFollowUp}

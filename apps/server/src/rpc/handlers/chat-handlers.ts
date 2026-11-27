@@ -15,6 +15,7 @@ export type DispatchableAction =
 	| { type: "session/titleChanged"; title: string }
 	| { type: "session/pendingMessageSet"; kind: "steering" | "queued"; text: string }
 	| { type: "session/queueCleared" }
+	| { type: "session/steeringDemoted" }
 	| { type: "session/followUpPromoted"; index: number }
 	| { type: "session/followUpRemoved"; index: number }
 	| { type: "session/compact" }
@@ -48,13 +49,16 @@ export type DispatchHandlerMap = {
 
 /** 已经过契约校验的动作，处理器按 type 取值。 */
 export const chatHandlers: DispatchHandlerMap = {
-	"chat/turnCancelled": async (_action, { context, sessionId }) => {
+	"chat/turnCancelled": async (_action, { context, connection, sessionId }) => {
 		// 先抬取消水位：此刻还排在队列里的回合出队时会看到它，直接放弃启动
 		context.hub.cancelPendingTurns(sessionId);
 		// UI 等待可能占用串行队列，停止入口必须直接解除等待。
 		const lease = context.hub.hold(sessionId);
 		try {
-			await context.hub.agent(sessionId).abort();
+			const reclaimed = await context.hub.agent(sessionId).abort();
+			if (Array.isArray(reclaimed) && reclaimed.length > 0) {
+				context.hub.reclaimQueue?.(sessionId, connection.clientId, reclaimed);
+			}
 		} finally {
 			lease.release();
 		}
@@ -135,6 +139,12 @@ export const chatHandlers: DispatchHandlerMap = {
 	"session/followUpRemoved": async (action, { context, sessionId }) => {
 		await context.hub.withSession(sessionId, async (agent) => {
 			agent.removeFollowUp(action.index);
+		});
+		return undefined;
+	},
+	"session/steeringDemoted": async (_action, { context, sessionId }) => {
+		await context.hub.withSession(sessionId, async (agent) => {
+			agent.demoteSteering();
 		});
 		return undefined;
 	},

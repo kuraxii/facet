@@ -23,6 +23,7 @@ import type {
 	ActionFrame,
 	Channel,
 	ContextBreakdown,
+	ImageBlock,
 	SessionActivity,
 	SessionSettle,
 	SessionSnapshot,
@@ -605,6 +606,26 @@ export class SessionHub<A extends HubAgent = PiAgent> {
 		});
 		const leafId = this.requireRow(sessionId).agent?.leafEntryId() ?? null;
 		this.publish(row, row.projector.chatChannelFor(), { type: "chat/branchMoved", leafId });
+	}
+
+	/** 中止时将未消费的排队消息广播给触发端，回填到输入框。 */
+	reclaimQueue(
+		sessionId: string,
+		targetClientId: string | undefined,
+		items: Array<{ text: string; images?: ImageBlock[] }>,
+	): void {
+		if (items.length === 0) {
+			return;
+		}
+		const row = this.table.get(sessionId);
+		if (!row) {
+			return;
+		}
+		this.publish(row, row.projector.chatChannelFor(), {
+			type: "chat/queueReclaimed",
+			targetClientId,
+			items,
+		});
 	}
 
 	/**

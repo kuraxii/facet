@@ -355,6 +355,47 @@ describe("派发去重", () => {
 		await handleDispatch(context, connection, frame);
 		await vi.waitFor(() => expect(abort).toHaveBeenCalledTimes(2));
 	});
+
+	it("中止时若返回了未消费的排队消息，向触发端下发回收列表", async () => {
+		const reclaimed = [{ text: "插话 1" }, { text: "后续 2" }];
+		const reclaimQueue = vi.fn();
+		const context = makeContext({
+			hub: {
+				busyFiles: () => [],
+				lastSeq: () => 0,
+				hold: () => ({ release: () => {} }),
+				agent: () => ({ abort: async () => reclaimed }),
+				reclaimQueue,
+			},
+		});
+		const connection = makeConnection({ clientId: "client-abort" });
+		await handleDispatch(context, connection, {
+			channel: "chat:/s1",
+			action: { type: "chat/turnCancelled" },
+			clientSeq: 9,
+		});
+		await vi.waitFor(() => expect(reclaimQueue).toHaveBeenCalledWith("s1", "client-abort", reclaimed));
+	});
+
+	it("session/steeringDemoted 派发到当前会话的 demoteSteering", async () => {
+		const demoteSteering = vi.fn();
+		const context = makeContext({
+			hub: {
+				busyFiles: () => [],
+				lastSeq: () => 0,
+				withSession: async (_id: string, work: (agent: never) => Promise<void>) => {
+					await work({ demoteSteering } as never);
+				},
+			},
+		});
+		const connection = makeConnection();
+		await handleDispatch(context, connection, {
+			channel: "session:/s1",
+			action: { type: "session/steeringDemoted" },
+			clientSeq: 10,
+		});
+		await vi.waitFor(() => expect(demoteSteering).toHaveBeenCalledTimes(1));
+	});
 });
 
 describe("契约表", () => {
@@ -377,7 +418,7 @@ describe("契约表", () => {
 
 	it("派发白名单只含客户端动作", () => {
 		const types = Object.keys(DISPATCH_CONTRACTS);
-		expect(types).toHaveLength(10);
+		expect(types).toHaveLength(11);
 		expect(types.every((type) => type.startsWith("chat/") || type.startsWith("session/"))).toBe(true);
 		expect(types).not.toContain("chat/delta");
 		expect(types).not.toContain("sessions/changed");

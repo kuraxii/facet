@@ -968,4 +968,20 @@ describe("会话回退", () => {
 		hub.agent(snapshot.id).busy = true;
 		await expect(hub.revertTo(snapshot.id, "e1")).rejects.toBeInstanceOf(SessionBusyError);
 	});
+
+	it("reclaimQueue 向对话通道广播带目标客户端的队列回收动作", async () => {
+		const snapshot = await hub.openSession(at("s1.jsonl"));
+		const frames: unknown[] = [];
+		await hub.subscribe(`chat:/${snapshot.id}`, undefined, {
+			id: "a",
+			send: (frame) => frames.push(frame.action),
+		});
+
+		hub.reclaimQueue(snapshot.id, "client-1", [{ text: "一" }, { text: "二" }]);
+		expect(frames.at(-1)).toEqual({
+			type: "chat/queueReclaimed",
+			targetClientId: "client-1",
+			items: [{ text: "一" }, { text: "二" }],
+		});
+	});
 });

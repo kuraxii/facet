@@ -217,21 +217,18 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 			diagnostics: () => client.diagnostics(),
 			saveText: (suggestedName, text) => bridge.saveText(suggestedName, text),
 			loadBackends: () => client.listBackends(),
-			saveAcpBackend: (profile) =>
-				client.saveAcpBackend(profile).then((res) => {
-					void session.refreshBackends();
-					return res;
-				}),
-			removeAcpBackend: (backendId) =>
-				client.removeAcpBackend(backendId).then((res) => {
-					void session.refreshBackends();
-					return res;
-				}),
 			probeBackend: (backendId) =>
 				client.probeBackend(backendId).then((backend) => {
 					void session.refreshBackends();
 					return backend;
 				}),
+			acpLoginStart: (backendId) => client.acpLoginStart(backendId),
+			acpLoginSubmit: (loginId, code) =>
+				client.acpLoginSubmit(loginId, code).then((backend) => {
+					void session.refreshBackends();
+					return backend;
+				}),
+			acpLoginCancel: (loginId) => client.acpLoginCancel(loginId),
 		}),
 		[client, host.refreshCatalog, session.refreshBackends],
 	);

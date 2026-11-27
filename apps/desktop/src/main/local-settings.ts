@@ -166,7 +166,6 @@ export function readAppearanceSettings(value: unknown): AppearanceSettings | und
 		terminalFontSize: readSteppedNumber(value.terminalFontSize, def.terminalFontSize, 11, 20, 0.5),
 		reducedMotion: typeof value.reducedMotion === "boolean" ? value.reducedMotion : def.reducedMotion,
 		liveMotion: readChoice<LiveMotion>(value.liveMotion, LIVE_MOTIONS, def.liveMotion),
-		outlineScale: readSteppedNumber(value.outlineScale, def.outlineScale, 50, 200, 5),
 	};
 }
 

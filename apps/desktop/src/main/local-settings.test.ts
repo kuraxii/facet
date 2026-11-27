@@ -134,21 +134,20 @@ describe("读写本地设置", () => {
 
 	it("解析本机外观、输入偏好与分作用域存储表并过滤脏数据", () => {
 		expect(readAppearanceSettings(undefined)).toBeUndefined();
-		expect(
-			readAppearanceSettings({
-				theme: "claude",
-				codeTheme: "nord",
-				editorFontSize: 99,
-				outlineScale: 123,
-				reducedMotion: true,
-			}),
-		).toMatchObject({
+		const parsed = readAppearanceSettings({
+			theme: "claude",
+			codeTheme: "nord",
+			editorFontSize: 99,
+			outlineScale: 123,
+			reducedMotion: true,
+		});
+		expect(parsed).toMatchObject({
 			theme: "claude",
 			codeTheme: "nord",
 			editorFontSize: 20,
-			outlineScale: 125,
 			reducedMotion: true,
 		});
+		expect(parsed).not.toHaveProperty("outlineScale");
 		expect(readInputSettings({ sendKey: "shiftEnter" })).toEqual({ sendKey: "shiftEnter" });
 		expect(readInputSettings({ sendKey: "other" })).toEqual({ sendKey: "enter" });
 		expect(

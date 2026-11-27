@@ -34,13 +34,13 @@ describe("ACP 后端管理 RPC", () => {
 		await rm(dir, { recursive: true, force: true });
 	});
 
-	it("支持 listBackends、saveAcpBackend 与 removeAcpBackend，并按管理档鉴权", async () => {
+	it("支持 listBackends 并按管理档鉴权 ACP 登录", async () => {
 		const acpRuntime = new AcpAgentRuntime({
 			agentDir: dir,
 			probeEnv: {
 				pathEnv: "/bin",
 				platform: "linux",
-				isExecutable: (candidate) => candidate === "/bin/agy" || candidate === "/bin/claude-acp",
+				isExecutable: (candidate) => candidate === "/bin/agy",
 			},
 		});
 		const context = {
@@ -57,33 +57,11 @@ describe("ACP 后端管理 RPC", () => {
 			["antigravity", true],
 		]);
 
-		// 非管理员（如浏览器端操作档）无法保存自定义后端
+		// 非管理员无法发起 ACP 登录
 		await expect(
-			handleRequest(context, makeConnection("operator", "web"), "saveAcpBackend", {
-				profile: {
-					id: "claude",
-					name: "Claude",
-					command: "claude-acp",
-					args: [],
-					enabled: true,
-				},
+			handleRequest(context, makeConnection("operator", "web"), "acpLoginStart", {
+				backendId: "antigravity",
 			}),
 		).rejects.toMatchObject({ code: "rejected" });
-
-		const saved = (await handleRequest(context, makeConnection("admin"), "saveAcpBackend", {
-			profile: {
-				id: "claude",
-				name: "Claude",
-				command: "claude-acp",
-				args: ["--acp"],
-				enabled: true,
-			},
-		})) as { backends: Array<{ id: string }>; profiles: Array<{ id: string }> };
-		expect(saved.profiles.map((p) => p.id)).toEqual(["antigravity", "claude"]);
-
-		const removed = (await handleRequest(context, makeConnection("admin"), "removeAcpBackend", {
-			backendId: "claude",
-		})) as { profiles: Array<{ id: string }> };
-		expect(removed.profiles.map((p) => p.id)).toEqual(["antigravity"]);
 	});
 });

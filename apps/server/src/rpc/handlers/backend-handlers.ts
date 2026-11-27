@@ -1,15 +1,14 @@
 /**
- * 代理后端与 ACP 注册表请求处理器。
+ * 代理后端与 ACP 认证请求处理器。
  *
- * 参数形状已由生成物校验，这里处理读写注册表与后端可用性探测。
+ * 参数形状已由生成物校验，这里处理后端列表、可用性探测与 ACP 登录流程。
  */
-import { normalizeAcpProfile } from "@facet/agent";
 import { PI_BACKEND_ID, type RequestResults } from "@facet/protocol";
 import { RequestError, type RpcContext } from "../context.ts";
 import type { RequestHandlerMap } from "../gateway.ts";
 
 /** 后端配置域负责的方法。 */
-type BackendMethod = "listBackends" | "saveAcpBackend" | "removeAcpBackend" | "probeBackend";
+type BackendMethod = "listBackends" | "probeBackend" | "acpLoginStart" | "acpLoginSubmit" | "acpLoginCancel";
 
 function requireAcpRuntime(context: RpcContext) {
 	if (context.acpRuntime === undefined) {
@@ -41,42 +40,6 @@ export const backendHandlers: Pick<RequestHandlerMap, BackendMethod> = {
 		};
 	},
 
-	saveAcpBackend: async (params, context: RpcContext): Promise<RequestResults["saveAcpBackend"]> => {
-		const acpRuntime = requireAcpRuntime(context);
-		const builtInIds = new Set(
-			acpRuntime.registry
-				.listProfiles()
-				.filter((p) => p.builtIn)
-				.map((p) => p.id),
-		);
-		const normalized = normalizeAcpProfile(params.profile, builtInIds);
-		if (normalized === undefined) {
-			throw new RequestError("bad_params", `Invalid ACP backend profile: ${params.profile.id}`);
-		}
-		try {
-			const profiles = await acpRuntime.registry.saveProfile(normalized);
-			return {
-				backends: acpRuntime.registry.listAvailability(),
-				profiles,
-			};
-		} catch (error) {
-			throw new RequestError("bad_params", error instanceof Error ? error.message : String(error));
-		}
-	},
-
-	removeAcpBackend: async (params, context: RpcContext): Promise<RequestResults["removeAcpBackend"]> => {
-		const acpRuntime = requireAcpRuntime(context);
-		try {
-			const profiles = await acpRuntime.registry.removeProfile(params.backendId);
-			return {
-				backends: acpRuntime.registry.listAvailability(),
-				profiles,
-			};
-		} catch (error) {
-			throw new RequestError("rejected", error instanceof Error ? error.message : String(error));
-		}
-	},
-
 	probeBackend: async (params, context: RpcContext): Promise<RequestResults["probeBackend"]> => {
 		const acpRuntime = requireAcpRuntime(context);
 		try {
@@ -85,5 +48,30 @@ export const backendHandlers: Pick<RequestHandlerMap, BackendMethod> = {
 		} catch (error) {
 			throw new RequestError("bad_params", error instanceof Error ? error.message : String(error));
 		}
+	},
+
+	acpLoginStart: async (params, context: RpcContext): Promise<RequestResults["acpLoginStart"]> => {
+		const acpRuntime = requireAcpRuntime(context);
+		try {
+			return await acpRuntime.loginStart(params.backendId);
+		} catch (error) {
+			throw new RequestError("bad_params", error instanceof Error ? error.message : String(error));
+		}
+	},
+
+	acpLoginSubmit: async (params, context: RpcContext): Promise<RequestResults["acpLoginSubmit"]> => {
+		const acpRuntime = requireAcpRuntime(context);
+		try {
+			const backend = await acpRuntime.loginSubmit(params.loginId, params.code);
+			return { backend };
+		} catch (error) {
+			throw new RequestError("bad_params", error instanceof Error ? error.message : String(error));
+		}
+	},
+
+	acpLoginCancel: (params, context: RpcContext): RequestResults["acpLoginCancel"] => {
+		const acpRuntime = requireAcpRuntime(context);
+		acpRuntime.loginCancel(params.loginId);
+		return {};
 	},
 };

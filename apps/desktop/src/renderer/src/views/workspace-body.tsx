@@ -13,6 +13,7 @@ import { WorkspaceLauncher, type WorkspaceTabId, type WorkspaceTabItem } from "@
 import type { ReactNode } from "react";
 import type { TerminalPanel } from "../hooks/useTerminalPanel.ts";
 import type { WorkspaceDocs } from "../hooks/useWorkspaceDocs.ts";
+import type { ScopedStorage } from "../local-storage.ts";
 import { ChangesTab } from "./workspace/changes-tab.tsx";
 import { FilesTab } from "./workspace/files-tab.tsx";
 import { GitGraphTab } from "./workspace/git-graph-tab.tsx";
@@ -36,6 +37,8 @@ export interface WorkspaceBodyProps {
 	sessionCwd: string | undefined;
 	/** 终端标签要显示的那个终端；主机上没有终端时为空 */
 	terminalId: string | undefined;
+	/** 按主机隔离的持久化存储 */
+	storage?: ScopedStorage;
 }
 
 /** 一个标签的外壳：显隐只靠类名，内容一直留在 DOM 里。 */
@@ -45,7 +48,7 @@ function TabView({ isActive, children }: { isActive: boolean; children: ReactNod
 
 /** 工作区正文。 */
 export function WorkspaceBody(props: WorkspaceBodyProps): ReactNode {
-	const { openTabs, activeTab, items, onOpenTab, docs, terminal, sessionCwd, terminalId } = props;
+	const { openTabs, activeTab, items, onOpenTab, docs, terminal, sessionCwd, terminalId, storage } = props;
 	if (activeTab === null) {
 		return <WorkspaceLauncher items={items} onPick={onOpenTab} />;
 	}
@@ -53,7 +56,7 @@ export function WorkspaceBody(props: WorkspaceBodyProps): ReactNode {
 		<div className="workspace-body">
 			{openTabs.includes("files") ? (
 				<TabView isActive={activeTab === "files"}>
-					<FilesTab docs={docs} sessionCwd={sessionCwd} />
+					<FilesTab docs={docs} sessionCwd={sessionCwd} storage={storage} />
 				</TabView>
 			) : null}
 			{openTabs.includes("changes") ? (

@@ -21,6 +21,45 @@ const TOKEN_KEY = "facet.web.token";
 /** Web 本机语言设置；Web 没有主进程，直接存在 localStorage。 */
 const LANGUAGE_KEY = "facet.web.language";
 
+/** Web 端本机外观与输入配置键（不依赖主机，只读与远端用户都能改本地主题）。 */
+const WEB_PREFS_KEY = "facet.web.prefs";
+/** Web 端分作用域键值前缀。 */
+const WEB_SCOPE_PREFIX = "facet.web.scope.";
+
+function readWebPrefs(): { appearance?: unknown; input?: unknown } {
+	try {
+		const raw = localStorage.getItem(WEB_PREFS_KEY);
+		if (raw === null) return {};
+		const parsed: unknown = JSON.parse(raw);
+		return typeof parsed === "object" && parsed !== null
+			? (parsed as { appearance?: unknown; input?: unknown })
+			: {};
+	} catch {
+		return {};
+	}
+}
+
+function writeWebPrefs(patch: Record<string, unknown>): void {
+	const current = readWebPrefs();
+	localStorage.setItem(WEB_PREFS_KEY, JSON.stringify({ ...current, ...patch }));
+}
+
+function readWebScopeTable(scope: string): Record<string, string> {
+	try {
+		const raw = localStorage.getItem(`${WEB_SCOPE_PREFIX}${scope}`);
+		if (raw === null) return {};
+		const parsed: unknown = JSON.parse(raw);
+		if (typeof parsed !== "object" || parsed === null) return {};
+		return Object.fromEntries(
+			Object.entries(parsed as Record<string, unknown>).filter(
+				(entry): entry is [string, string] => typeof entry[1] === "string",
+			),
+		);
+	} catch {
+		return {};
+	}
+}
+
 /** 浏览器语言作为 auto 的系统语言。 */
 function systemLanguage(): string {
 	return navigator.languages[0] ?? navigator.language;
@@ -76,6 +115,28 @@ export function installWebBridge(): void {
 		setLanguage: (setting: LanguageSetting): Promise<SupportedLanguage> => {
 			localStorage.setItem(LANGUAGE_KEY, setting);
 			return Promise.resolve(resolveLanguage(setting, systemLanguage()));
+		},
+		localState: {
+			...(readWebPrefs() as { appearance?: never; input?: never }),
+			storage: {
+				app: readWebScopeTable("app"),
+				workspaces: { local: readWebScopeTable("local") },
+			},
+		},
+		setScopedStorage: (scope, key, value) => {
+			const table = readWebScopeTable(scope);
+			if (value === null) {
+				delete table[key];
+			} else {
+				table[key] = value;
+			}
+			localStorage.setItem(`${WEB_SCOPE_PREFIX}${scope}`, JSON.stringify(table));
+		},
+		setLocalAppearance: (appearance) => {
+			writeWebPrefs({ appearance });
+		},
+		setLocalInput: (input) => {
+			writeWebPrefs({ input });
 		},
 		// Web 端连的就是当前这台主机，没有「本机/远程」之分
 		hostMode: "external",

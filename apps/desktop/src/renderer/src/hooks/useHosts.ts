@@ -19,6 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bridge } from "../bridge.ts";
 import { LOCAL_TARGET } from "../host-connection.ts";
 import { type HostRuntime, HostRuntimeRegistry } from "../host-runtime.ts";
+import { appStorage } from "../local-storage.ts";
 
 /** 主机的连接域，挂在一次渲染进程上。 */
 export interface Hosts {
@@ -52,7 +53,7 @@ export function useHosts(): Hosts {
 
 	/** 主机清单：本机之外用户添加的远程主机，以及当前连着的端点 */
 	const [hostList, setHostList] = useState<HostListState>(() => {
-		const saved = readHostList(localStorage, LOCAL_TARGET);
+		const saved = readHostList(appStorage, LOCAL_TARGET);
 		// 外部给了 FACET_ENDPOINT 就以它为准：上一次连的远程主机不该盖过这次显式指定的地址
 		return bridge.hostMode === "external" ? { ...saved, activeEndpoint: LOCAL_TARGET } : saved;
 	});
@@ -64,14 +65,14 @@ export function useHosts(): Hosts {
 
 	// 外部指定了端点时，把记着的那台改回来，别让下次启动被旧地址带着走
 	useEffect(() => {
-		if (bridge.hostMode === "external" && localStorage.getItem("facet.hosts.active") !== LOCAL_TARGET) {
-			writeHostList(localStorage, { ...hostList, activeEndpoint: LOCAL_TARGET });
+		if (bridge.hostMode === "external" && appStorage.getItem("facet.hosts.active") !== LOCAL_TARGET) {
+			writeHostList(appStorage, { ...hostList, activeEndpoint: LOCAL_TARGET });
 		}
 	}, [hostList]);
 
 	const updateHostList = useCallback((next: HostListState) => {
 		setHostList(next);
-		writeHostList(localStorage, next);
+		writeHostList(appStorage, next);
 	}, []);
 
 	/** 前台主机的运行时。同一台主机建过一次就一直用那一个。 */

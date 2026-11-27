@@ -1,6 +1,18 @@
 import type { LanguageSetting, SupportedLanguage } from "@facet/i18n";
-import type { ClientEntry } from "@facet/protocol";
+import type { AppearanceSettings, ClientEntry, InputSettings } from "@facet/protocol";
 import { contextBridge, ipcRenderer } from "electron";
+
+/** 渲染层在预加载阶段拿到的本机持久化快照。 */
+export interface InitialLocalState {
+	readonly appearance?: AppearanceSettings;
+	readonly input?: InputSettings;
+	readonly storage?: {
+		readonly app?: Record<string, string>;
+		readonly workspaces?: Record<string, Record<string, string>>;
+	};
+}
+
+const initialLocalState = ipcRenderer.sendSync("facet:local-state-init") as InitialLocalState | undefined;
 
 /** 一张选中的图片，字节以 base64 交回界面。 */
 export interface PickedImageFile {
@@ -135,6 +147,20 @@ const api = {
 	/** 修改语言；主进程按本机设置解析并返回实际语言 */
 	setLanguage: async (setting: LanguageSetting): Promise<SupportedLanguage> => {
 		return (await ipcRenderer.invoke("facet:language", setting)) as SupportedLanguage;
+	},
+	/** 启动时主进程注入的本机状态与分作用域存储快照 */
+	localState: initialLocalState ?? {},
+	/** 写入或删除本机持久化作用域键值 */
+	setScopedStorage: (scope: string, key: string, value: string | null): void => {
+		ipcRenderer.send("facet:storage-set", scope, key, value);
+	},
+	/** 保存本机优先的外观配置并同步窗口背景色 */
+	setLocalAppearance: (appearance: AppearanceSettings): void => {
+		ipcRenderer.send("facet:local-appearance", appearance);
+	},
+	/** 保存本机优先的输入偏好 */
+	setLocalInput: (input: InputSettings): void => {
+		ipcRenderer.send("facet:local-input", input);
 	},
 	/** 打开系统的目录选择窗口,取消时返回空 */
 	pickDirectory: (): Promise<string | undefined> => ipcRenderer.invoke("facet:pick-directory"),

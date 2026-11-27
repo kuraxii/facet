@@ -4,7 +4,7 @@
  * 三个子 Hook 各管一块，串起来的形状写在这里：面板状态 → 布局（档位与宽度）→ 抽屉（开合与
  * 焦点）→ 门面。放在一处是因为它们互相引用，散在各自文件里会绕成环。
  */
-import type { FacetSettings } from "@facet/protocol";
+import type { AppearanceSettings } from "@facet/protocol";
 import type { CodeThemeValue, RightPanelState, RightPanelTab, SettingsSection } from "@facet/ui";
 import type { PanelPatch } from "./useWorkspacePanels.ts";
 
@@ -99,8 +99,10 @@ export interface DrawerHandle {
 }
 
 export interface WorkspaceShellOptions {
-	/** 主机上的偏好设置，外观从这里取 */
-	settings: FacetSettings;
+	/** 本机优先的外观偏好 */
+	appearance: AppearanceSettings;
+	/** 当前主机端点，用于隔离右栏面板状态 */
+	endpoint: string;
 }
 
 export interface WorkspaceShell {

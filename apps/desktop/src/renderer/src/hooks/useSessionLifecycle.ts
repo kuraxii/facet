@@ -8,7 +8,17 @@ import type { SessionClient } from "@facet/client-core";
 import type { ProjectInfo, SessionStatus, SessionSummary } from "@facet/protocol";
 import { samePath } from "@facet/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { ScopedStorage } from "../local-storage.ts";
 import type { HostWorkspaceSnapshot } from "../workspace-state.ts";
+
+/** 工作区存储里上次选中会话与新建目录的键。 */
+const ACTIVE_SESSION_KEY = "facet.session.activeFile";
+const CREATE_CWD_KEY = "facet.session.createCwd";
+
+function readStoredSessionPath(storage: ScopedStorage | undefined, key: string): string | undefined {
+	const raw = storage?.getItem(key);
+	return raw !== null && raw !== undefined && raw.length > 0 ? raw : undefined;
+}
 
 /** 打开类操作失败时的提示，带重试入口。 */
 export interface SessionErrorNotice {
@@ -148,6 +158,8 @@ export interface SessionLifecycleOptions {
 	projectDir: string | undefined;
 	/** 这台主机上一次离开时的选中会话与落地目录；切回来时从这里接着显示 */
 	snapshot?: HostWorkspaceSnapshot;
+	/** 按主机端点隔离的持久化存储，用于跨重启恢复选中会话与新建目录 */
+	storage?: ScopedStorage;
 	/** 打开会话之后的收尾，例如把标签摆到主区域 */
 	onSessionOpened?: (file: string) => void;
 	/** 删掉会话之后的收尾，例如清掉相关标签与滚动位置 */
@@ -224,31 +236,51 @@ export interface SessionLifecycle {
 }
 
 export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLifecycle {
-	const { client, connectEpoch, projectDir, snapshot, onSessionOpened, onSessionRemoved } = options;
+	const { client, connectEpoch, projectDir, snapshot, storage, onSessionOpened, onSessionRemoved } = options;
 	/** 会话清单与状态在客户端的 store 里已经是主机的那一份，挂上来先照它显示 */
 	const [sessions, setSessions] = useState<readonly SessionSummary[]>(() =>
 		client.store.sessionList().map((entry) => entry.summary),
 	);
 	const [statuses, setStatuses] = useState<ReadonlyMap<string, SessionStatus>>(() => statusesOf(client));
 	const [activeFile, setActiveFile] = useState<string | undefined>(
-		() => snapshot?.activeSessionFile ?? client.current?.snapshot.file,
+		() =>
+			snapshot?.activeSessionFile ??
+			client.current?.snapshot.file ??
+			readStoredSessionPath(storage, ACTIVE_SESSION_KEY),
 	);
 	const [projects, setProjects] = useState<readonly ProjectInfo[]>([]);
 	const [isProjectsStale, setIsProjectsStale] = useState(false);
 	const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
 	/** 新建会话落在哪个目录：没有项目时为空，界面据此不给「新建会话」的入口 */
-	const [createCwd, setCreateCwd] = useState<string>(() => snapshot?.createCwd ?? projectDir ?? "");
+	const [createCwd, setCreateCwd] = useState<string>(
+		() => snapshot?.createCwd ?? readStoredSessionPath(storage, CREATE_CWD_KEY) ?? projectDir ?? "",
+	);
 	/** 新建目录是否已经由用户或项目清单定下来，定下来之后不再自动改 */
 	const createCwdChosen = useRef(createCwd.length > 0);
+	/** 启动恢复时优先找回上次选中的会话路径 */
+	const preferredStartupFile = useRef<string | undefined>(
+		snapshot?.activeSessionFile ?? readStoredSessionPath(storage, ACTIVE_SESSION_KEY),
+	);
 
-	// 选中会话与落地目录都只与这台主机有关：变化时写回快照，切回来接着用
+	// 选中会话与落地目录既写回内存快照也落到该主机的工作区存储，切主机与重启都能恢复
 	useEffect(() => {
-		if (snapshot === undefined) {
-			return;
+		if (snapshot !== undefined) {
+			snapshot.activeSessionFile = activeFile;
+			snapshot.createCwd = createCwd.length > 0 ? createCwd : undefined;
 		}
-		snapshot.activeSessionFile = activeFile;
-		snapshot.createCwd = createCwd.length > 0 ? createCwd : undefined;
-	}, [snapshot, activeFile, createCwd]);
+		if (storage !== undefined) {
+			if (activeFile !== undefined && activeFile.length > 0) {
+				storage.setItem(ACTIVE_SESSION_KEY, activeFile);
+			} else {
+				storage.removeItem(ACTIVE_SESSION_KEY);
+			}
+			if (createCwd.length > 0) {
+				storage.setItem(CREATE_CWD_KEY, createCwd);
+			} else {
+				storage.removeItem(CREATE_CWD_KEY);
+			}
+		}
+	}, [snapshot, storage, activeFile, createCwd]);
 	const [sessionError, setSessionError] = useState<SessionErrorNotice | undefined>(undefined);
 	const [trustPrompt, setTrustPrompt] = useState<TrustPrompt | undefined>(undefined);
 	const listSeq = useRef(0);
@@ -344,9 +376,12 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 				setActiveFile(client.current.snapshot.file);
 				return;
 			}
-			const newest = pickStartupSession(pool, projectDir);
-			if (newest !== undefined) {
-				openSessionRef.current(newest.path, newest.cwd);
+			// 优先恢复上次在该主机打开的会话；文件已被删掉再退回 pickStartupSession
+			const savedPath = preferredStartupFile.current;
+			const restored = savedPath === undefined ? undefined : pool.find((item) => item.path === savedPath);
+			const target = restored ?? pickStartupSession(pool, projectDir);
+			if (target !== undefined) {
+				openSessionRef.current(target.path, target.cwd);
 			}
 		})();
 		return () => {

@@ -10,6 +10,7 @@ import { parseCommand, useI18n } from "@facet/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bridge } from "../bridge.ts";
 import { blobFromBase64, encodeImage, IMAGE_MAX_BYTES, IMAGE_MIME_TYPES } from "../image-encode.ts";
+import type { ScopedStorage } from "../local-storage.ts";
 import { createSendGate } from "./send-gate.ts";
 import type { SessionErrorNotice } from "./useSessionLifecycle.ts";
 
@@ -17,6 +18,8 @@ import type { SessionErrorNotice } from "./useSessionLifecycle.ts";
 const DRAFTS_KEY = "facet.drafts";
 /** 还没打开会话时草稿用的键 */
 const NEW_DRAFT_KEY = "__new__";
+/** 草稿写入持久化存储的防抖间隔，避免每次击键整表同步序列化 */
+const DRAFT_SAVE_DEBOUNCE_MS = 250;
 
 /** 一张已经放进输入框、还没发出去的图片。 */
 export interface DraftImage {
@@ -45,10 +48,19 @@ function draftImageId(): string {
 	return `img_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-/** 读出保存的各会话草稿；读不懂时当作没有草稿。 */
-function readDrafts(): Record<string, string> {
+function defaultDraftStorage(): Storage | undefined {
 	try {
-		const parsed: unknown = JSON.parse(localStorage.getItem(DRAFTS_KEY) ?? "{}");
+		return typeof globalThis.localStorage === "object" ? globalThis.localStorage : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/** 读出保存的各会话草稿；读不懂时当作没有草稿。 */
+function readDrafts(storage: ScopedStorage | undefined): Record<string, string> {
+	const reader = storage ?? defaultDraftStorage();
+	try {
+		const parsed: unknown = JSON.parse(reader?.getItem(DRAFTS_KEY) ?? "{}");
 		if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
 			return {};
 		}
@@ -58,6 +70,18 @@ function readDrafts(): Record<string, string> {
 	} catch {
 		return {};
 	}
+}
+
+function writeDrafts(storage: ScopedStorage | undefined, drafts: Record<string, string>): void {
+	const writer = storage ?? defaultDraftStorage();
+	if (writer === undefined) {
+		return;
+	}
+	if (Object.keys(drafts).length === 0) {
+		writer.removeItem(DRAFTS_KEY);
+		return;
+	}
+	writer.setItem(DRAFTS_KEY, JSON.stringify(drafts));
 }
 
 export interface ComposerOptions {
@@ -73,6 +97,8 @@ export interface ComposerOptions {
 	activity: "idle" | "running" | "compacting" | "stopping";
 	/** 握手结果，扩展编辑器的草稿按主机分开存 */
 	host: HostHandshake | undefined;
+	/** 按主机隔离的持久化存储，避免各主机草稿混在一起 */
+	storage?: ScopedStorage;
 	/** 会话操作的结果摆在这里 */
 	setSessionError: (notice: SessionErrorNotice | undefined) => void;
 	/** 先确认目录信任再执行，来自会话域 */
@@ -121,6 +147,8 @@ export interface Composer {
 	revertTo: (entryId: string, text: string, images: readonly MessageImage[]) => void;
 	/** 重试失败的一轮，图片跟着一起重发 */
 	retryTurn: (entryId: string, text: string, images: readonly MessageImage[]) => void;
+	/** 清理已删除会话的草稿，避免长期堆积 */
+	forgetDraft: (file: string) => void;
 }
 
 export function useComposer(options: ComposerOptions): Composer {
@@ -131,6 +159,7 @@ export function useComposer(options: ComposerOptions): Composer {
 		activeFile,
 		activity,
 		host,
+		storage,
 		setSessionError,
 		withTrust,
 		runSessionAction,
@@ -138,7 +167,7 @@ export function useComposer(options: ComposerOptions): Composer {
 	} = options;
 	const { t } = useI18n();
 	/** 各会话的草稿，键为会话文件路径，新会话页面用 NEW_DRAFT_KEY */
-	const [drafts, setDrafts] = useState<Record<string, string>>(readDrafts);
+	const [drafts, setDrafts] = useState<Record<string, string>>(() => readDrafts(storage));
 	/** 各草稿待发的图片，与文本草稿分开存：字节不进 localStorage */
 	const [draftImages, setDraftImages] = useState<ReadonlyMap<string, readonly DraftImage[]>>(() => new Map());
 	/** 被拒的图片给出的事实，例如超出大小上限 */
@@ -192,10 +221,34 @@ export function useComposer(options: ComposerOptions): Composer {
 		[draftKey],
 	);
 
-	// 草稿写进本地保存，重启之后还在
+	// 草稿防抖写盘，并在卸载时立即冲刷最后一次改动
+	const latestDraftsRef = useRef(drafts);
+	latestDraftsRef.current = drafts;
 	useEffect(() => {
-		localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts));
-	}, [drafts]);
+		const timer = window.setTimeout(() => {
+			writeDrafts(storage, drafts);
+		}, DRAFT_SAVE_DEBOUNCE_MS);
+		return () => {
+			window.clearTimeout(timer);
+		};
+	}, [drafts, storage]);
+
+	useEffect(() => {
+		return () => {
+			writeDrafts(storage, latestDraftsRef.current);
+		};
+	}, [storage]);
+
+	const forgetDraft = useCallback((file: string) => {
+		setDrafts((current) => {
+			if (!Object.hasOwn(current, file)) {
+				return current;
+			}
+			const next = { ...current };
+			delete next[file];
+			return next;
+		});
+	}, []);
 
 	// 换会话时重取命令清单：扩展、模板与技能都跟着会话走
 	useEffect(() => {
@@ -236,10 +289,11 @@ export function useComposer(options: ComposerOptions): Composer {
 			host?.role === "viewer"
 		)
 			return;
-		if (localStorage.getItem(editorSource) === editorUpdate.id) return;
+		const extStorage = storage ?? defaultDraftStorage();
+		if (extStorage?.getItem(editorSource) === editorUpdate.id) return;
 		setDrafts((current) => ({ ...current, [editorDraftKey]: editorUpdate.text }));
-		localStorage.setItem(editorSource, editorUpdate.id);
-	}, [editorUpdate, editorSource, editorDraftKey, host?.role]);
+		extStorage?.setItem(editorSource, editorUpdate.id);
+	}, [editorUpdate, editorSource, editorDraftKey, host?.role, storage]);
 
 	/**
 	 * 跑一条界面自己处理的命令。
@@ -551,5 +605,6 @@ export function useComposer(options: ComposerOptions): Composer {
 		runFacetCommand,
 		revertTo,
 		retryTurn,
+		forgetDraft,
 	};
 }

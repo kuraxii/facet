@@ -8,12 +8,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+	boundsVisibleOnScreen,
 	DEFAULT_WINDOW_HEIGHT,
 	DEFAULT_WINDOW_WIDTH,
 	parseLocalSettings,
+	readAppearanceSettings,
+	readInputSettings,
 	readLocalSettings,
+	readScopedStorage,
 	readUiScale,
 	readWindowBounds,
+	resolveWindowBackgroundColor,
 	writeLocalSettings,
 } from "./local-settings.ts";
 
@@ -125,5 +130,52 @@ describe("读写本地设置", () => {
 		const file = join(root, "desktop.json");
 		await writeFile(file, "不是 JSON", "utf8");
 		expect(await readLocalSettings(file)).toEqual({ version: 1 });
+	});
+
+	it("解析本机外观、输入偏好与分作用域存储表并过滤脏数据", () => {
+		expect(readAppearanceSettings(undefined)).toBeUndefined();
+		expect(
+			readAppearanceSettings({
+				theme: "claude",
+				codeTheme: "nord",
+				editorFontSize: 99,
+				outlineScale: 123,
+				reducedMotion: true,
+			}),
+		).toMatchObject({
+			theme: "claude",
+			codeTheme: "nord",
+			editorFontSize: 20,
+			outlineScale: 125,
+			reducedMotion: true,
+		});
+		expect(readInputSettings({ sendKey: "shiftEnter" })).toEqual({ sendKey: "shiftEnter" });
+		expect(readInputSettings({ sendKey: "other" })).toEqual({ sendKey: "enter" });
+		expect(
+			readScopedStorage({
+				app: { ok: "1", bad: 2 },
+				workspaces: { local: { a: "x" }, empty: { bad: true } },
+			}),
+		).toEqual({
+			app: { ok: "1" },
+			workspaces: { local: { a: "x" } },
+		});
+	});
+
+	it("按主题解析窗口底色并用矩形交集判断是否落入屏幕内", () => {
+		expect(resolveWindowBackgroundColor("light", true)).toBe("#ffffff");
+		expect(resolveWindowBackgroundColor("claude", false)).toBe("#1f1f1e");
+		expect(resolveWindowBackgroundColor("system", false)).toBe("#ffffff");
+		expect(resolveWindowBackgroundColor("system", true)).toBe("#0d1117");
+
+		const areas = [{ x: 0, y: 0, width: 1920, height: 1080 }];
+		// 左上角有阴影负偏移的贴边窗口仍算可见
+		expect(boundsVisibleOnScreen({ width: 1200, height: 800, x: -8, y: -4, maximized: false }, areas)).toBe(
+			true,
+		);
+		// 完全拖到已拔掉的显示器坐标外算不可见
+		expect(
+			boundsVisibleOnScreen({ width: 1200, height: 800, x: 2500, y: 100, maximized: false }, areas),
+		).toBe(false);
 	});
 });

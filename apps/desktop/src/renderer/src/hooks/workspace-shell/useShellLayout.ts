@@ -12,14 +12,17 @@ import {
 	clampSidebarWidth,
 	PANEL_MIN_WIDTH,
 	type RightPanelTab,
+	readSidebarCollapsed,
 	readSidebarWidth,
 	SIDEBAR_MAX_WIDTH,
 	SIDEBAR_MIN_WIDTH,
+	writeSidebarCollapsed,
 	writeSidebarWidth,
 } from "@facet/ui";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { shellClassName } from "../../drawer-state.ts";
 import { readLayoutIsNarrow, subscribeLayout } from "../../layout-mode.ts";
+import { appStorage } from "../../local-storage.ts";
 import {
 	clampDragMax,
 	fitPanelWidth,
@@ -32,9 +35,9 @@ import type { PanelPatch } from "./useWorkspacePanels.ts";
 
 export function useShellLayout(options: ShellLayoutOptions): ShellLayout {
 	const { panel, panelExpanded, panelActions, drawers } = options;
-	/** 侧栏的收起意图；窄档下这一栏进抽屉，意图位照旧记着 */
-	const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-	const [sidebarWidth, setSidebarWidth] = useState(() => readSidebarWidth(window.localStorage));
+	/** 侧栏的收起意图（落盘到本机应用存储）；窄档下这一栏进抽屉，意图位照旧记着 */
+	const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => readSidebarCollapsed(appStorage));
+	const [sidebarWidth, setSidebarWidth] = useState(() => readSidebarWidth(appStorage));
 	/** 分隔条是否正在拖：拖动期间锁住折叠结果 */
 	const [isResizing, setIsResizing] = useState(false);
 	const isNarrow = useSyncExternalStore(subscribeLayout, readLayoutIsNarrow);
@@ -88,7 +91,12 @@ export function useShellLayout(options: ShellLayoutOptions): ShellLayout {
 	const updateSidebarWidth = useCallback((next: number) => {
 		const width = clampSidebarWidth(next);
 		setSidebarWidth(width);
-		writeSidebarWidth(window.localStorage, width);
+		writeSidebarWidth(appStorage, width);
+	}, []);
+
+	const updateSidebarCollapsed = useCallback((collapsed: boolean) => {
+		setIsSidebarCollapsed(collapsed);
+		writeSidebarCollapsed(appStorage, collapsed);
 	}, []);
 
 	const setPaneResizing = useCallback((dragging: boolean) => setIsResizing(dragging), []);
@@ -102,11 +110,11 @@ export function useShellLayout(options: ShellLayoutOptions): ShellLayout {
 		}
 		// 看的是「此刻看不看得见」，不是意图位：被中档预算折起时，点一下是要把它调出来
 		if (!layout.sidebarVisible) {
-			setIsSidebarCollapsed(false);
+			updateSidebarCollapsed(false);
 			return;
 		}
-		setIsSidebarCollapsed(true);
-	}, [drawers, isNarrow, layout.sidebarVisible]);
+		updateSidebarCollapsed(true);
+	}, [drawers, isNarrow, layout.sidebarVisible, updateSidebarCollapsed]);
 
 	/**
 	 * 右栏实占宽：窗口变小时先让它窄下去，窄到下限之后正文才开始缩（口径见

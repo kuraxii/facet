@@ -4,7 +4,7 @@
  * 这一块与档位、抽屉、右栏都没有关系，只跟着设置与窗口走；放成一个叶子 Hook，门面就只剩
  * 接线。
  */
-import type { FacetSettings } from "@facet/protocol";
+import type { AppearanceSettings } from "@facet/protocol";
 import {
 	type CodeThemeValue,
 	isDarkTheme,
@@ -15,7 +15,7 @@ import {
 } from "@facet/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bridge } from "../../bridge.ts";
-import { applyAppearance, prefersLight } from "./appearance.ts";
+import { prefersLight } from "./appearance.ts";
 
 /** 缩放浮层的停留时间，毫秒。 */
 const ZOOM_BADGE_MS = 1200;
@@ -46,7 +46,7 @@ export interface ShellChrome {
 	changeUiScale: (next: number) => void;
 }
 
-export function useShellChrome(settings: FacetSettings): ShellChrome {
+export function useShellChrome(appearance: AppearanceSettings): ShellChrome {
 	const [isSearchOpen, setIsSearchOpen] = useState(false);
 	const [view, setView] = useState<"chat" | "settings">("chat");
 	const [settingsSection, setSettingsSection] = useState<SettingsSection>("models");
@@ -54,11 +54,6 @@ export function useShellChrome(settings: FacetSettings): ShellChrome {
 	const [zoomBadge, setZoomBadge] = useState<number | undefined>(undefined);
 	/** 缩放浮层的定时器 */
 	const zoomBadgeTimer = useRef<number | undefined>(undefined);
-
-	// 设置变化时应用外观
-	useEffect(() => {
-		applyAppearance(settings.appearance);
-	}, [settings.appearance]);
 
 	// ⌘K 打开会话搜索，与页脚提示的快捷键一致
 	useEffect(() => {
@@ -131,13 +126,13 @@ export function useShellChrome(settings: FacetSettings): ShellChrome {
 	const openSettings = useCallback(() => setView("settings"), []);
 	const closeSettings = useCallback(() => setView("chat"), []);
 
-	/** 代码块主题跟着设置走，浅色与深色分别取一份。 */
+	/** 代码块主题跟着本机外观走，浅色与深色分别取一份。 */
 	const codeTheme = useMemo(
 		() => ({
-			theme: settings.appearance.codeTheme,
-			isDark: isDarkTheme(resolveUiTheme(settings.appearance.theme, prefersLight())),
+			theme: appearance.codeTheme,
+			isDark: isDarkTheme(resolveUiTheme(appearance.theme, prefersLight())),
 		}),
-		[settings.appearance.codeTheme, settings.appearance.theme],
+		[appearance.codeTheme, appearance.theme],
 	);
 
 	return {

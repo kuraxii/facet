@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import { createI18n, readLanguageSetting, resolveLanguage, translate } from "@facet/i18n";
-import { app, BrowserWindow, dialog, ipcMain, Notification, screen, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Notification, nativeTheme, screen, shell } from "electron";
 import { HostChannels, LOCAL_TARGET } from "./host-channel.ts";
 import {
 	findRunningHost,
@@ -15,17 +15,16 @@ import {
 } from "./host-daemon.ts";
 import { countBusySessions } from "./host-query.ts";
 import {
+	boundsVisibleOnScreen,
 	DEFAULT_UI_SCALE,
 	DEFAULT_WINDOW_HEIGHT,
 	DEFAULT_WINDOW_WIDTH,
-	type LocalSettings,
-	readLocalSettings,
 	readUiScale,
 	type WindowBounds,
-	writeLocalSettings,
 } from "./local-settings.ts";
 import { createNotifier } from "./notify.ts";
 import { SshHostError } from "./ssh-host.ts";
+import { LocalStateStore } from "./state-store.ts";
 
 // 用户配置目录按应用名落到 facet 下；桌面包名带作用域，不改名会建出 @facet 这样的目录
 app.setName("facet");
@@ -72,7 +71,7 @@ let localHost: LocalHost | undefined;
 let hostChannels: HostChannels | undefined;
 let host: HostDaemon | undefined;
 let localSettingsFile = "";
-let localSettings: LocalSettings = { version: 1 };
+let stateStore: LocalStateStore | undefined;
 /** 主进程侧的语言实例，原生弹窗与渲染进程共用同一份资源 */
 let mainI18n = createI18n("en");
 /** 主进程侧的轻量翻译函数，语言实例更换时一起重建 */
@@ -100,36 +99,23 @@ function windowOptions(bounds: WindowBounds | undefined): {
 		return { width: DEFAULT_WINDOW_WIDTH, height: DEFAULT_WINDOW_HEIGHT };
 	}
 	const size = { width: bounds.width, height: bounds.height };
-	if (bounds.x === undefined || bounds.y === undefined || !isOnScreen(bounds.x, bounds.y)) {
+	const workAreas = screen.getAllDisplays().map((display) => display.workArea);
+	if (!boundsVisibleOnScreen(bounds, workAreas)) {
 		return size;
 	}
 	return { ...size, x: bounds.x, y: bounds.y };
 }
 
-/** 这个位置是否落在某块屏幕的可见区域内。 */
-function isOnScreen(x: number, y: number): boolean {
-	return screen.getAllDisplays().some(({ workArea }) => {
-		return (
-			x >= workArea.x &&
-			y >= workArea.y &&
-			x < workArea.x + workArea.width &&
-			y < workArea.y + workArea.height
-		);
-	});
-}
-
-/** 记下窗口位置与尺寸，关闭与退出时各存一次。窗口已经销毁时直接跳过。 */
+/** 记下窗口位置与尺寸（经防抖队列写入，关闭退出时统一冲刷落盘）。 */
 function saveWindowBounds(window: BrowserWindow): void {
-	if (window.isDestroyed()) {
+	if (window.isDestroyed() || stateStore === undefined) {
 		return;
 	}
 	const isMaximized = window.isMaximized();
 	// 最大化时记的是还原后的尺寸，否则再打开会一直停在最大化
 	const bounds = isMaximized ? window.getNormalBounds() : window.getBounds();
-	const next: LocalSettings = {
-		version: 1,
-		...(localSettings.uiScale === undefined ? {} : { uiScale: localSettings.uiScale }),
-		...(localSettings.language === undefined ? {} : { language: localSettings.language }),
+	stateStore.update((current) => ({
+		...current,
 		window: {
 			width: bounds.width,
 			height: bounds.height,
@@ -137,23 +123,22 @@ function saveWindowBounds(window: BrowserWindow): void {
 			y: bounds.y,
 			maximized: isMaximized,
 		},
-	};
-	localSettings = next;
-	void writeLocalSettings(localSettingsFile, next).catch((error: unknown) => {
-		console.log(`[main] Failed to save window bounds: ${String(error)}`);
-	});
+	}));
 }
 
 /**
  * 真正退出。
  *
  * 主机一直留在后台：桌面退出只是断开自己那条通道，会话与运行中的任务都不受影响，下次
- * 启动按发现文件接上。
+ * 启动按发现文件接上。退出前必须等待本机状态冲刷完成，避免 `app.exit(0)` 抢跑丢失状态。
  */
 async function finishQuit(window: BrowserWindow | undefined): Promise<void> {
 	if (window !== undefined && !window.isDestroyed()) {
 		saveWindowBounds(window);
 	}
+	await stateStore?.close().catch((error: unknown) => {
+		console.log(`[main] Failed to flush desktop state: ${String(error)}`);
+	});
 	hostChannels?.dispose();
 	quitConfirmed = true;
 	app.exit(0);
@@ -185,14 +170,15 @@ async function confirmQuit(window: BrowserWindow | undefined): Promise<boolean> 
 }
 
 function createWindow(): BrowserWindow {
-	const uiScale = localSettings.uiScale ?? DEFAULT_UI_SCALE;
+	const currentSettings = stateStore?.snapshot() ?? { version: 1 };
+	const uiScale = currentSettings.uiScale ?? DEFAULT_UI_SCALE;
 	const window = new BrowserWindow({
-		...windowOptions(localSettings.window),
+		...windowOptions(currentSettings.window),
 		minWidth: 640,
 		minHeight: 480,
 		show: false,
 		autoHideMenuBar: true,
-		backgroundColor: "#0d1117",
+		backgroundColor: stateStore?.backgroundColor(nativeTheme.shouldUseDarkColors) ?? "#0d1117",
 		title: "facet",
 		// 标题栏由界面自己画：最小化、最大化、关闭三个按钮走 IPC，拖动区由 CSS 指定
 		frame: false,
@@ -208,17 +194,19 @@ function createWindow(): BrowserWindow {
 				`--facet-platform=${process.platform}`,
 				`--facet-version=${app.getVersion()}`,
 				`--facet-ui-scale=${uiScale}`,
-				`--facet-language-setting=${localSettings.language ?? "auto"}`,
+				`--facet-language-setting=${currentSettings.language ?? "auto"}`,
 				`--facet-language=${mainI18n.language}`,
 			],
 		},
 	});
 
+	let boundsReady = false;
 	window.once("ready-to-show", () => {
-		if (localSettings.window?.maximized === true) {
+		if (stateStore?.snapshot().window?.maximized === true) {
 			window.maximize();
 		}
 		window.show();
+		boundsReady = true;
 	});
 
 	// 退出时 app.exit 会同步销毁窗口，`closed` 里再读 webContents 已经拿不到，先把 id 取出来
@@ -233,8 +221,33 @@ function createWindow(): BrowserWindow {
 			window.webContents.send("facet:window-state", window.isMaximized());
 		}
 	};
-	window.on("maximize", pushWindowState);
-	window.on("unmaximize", pushWindowState);
+	window.on("maximize", () => {
+		pushWindowState();
+		if (boundsReady) {
+			saveWindowBounds(window);
+		}
+	});
+	window.on("unmaximize", () => {
+		pushWindowState();
+		if (boundsReady) {
+			saveWindowBounds(window);
+		}
+	});
+	window.on("resize", () => {
+		if (boundsReady) {
+			saveWindowBounds(window);
+		}
+	});
+	window.on("move", () => {
+		if (boundsReady) {
+			saveWindowBounds(window);
+		}
+	});
+	window.on("blur", () => {
+		if (boundsReady) {
+			saveWindowBounds(window);
+		}
+	});
 	window.webContents.on("did-finish-load", pushWindowState);
 
 	window.on("close", (event) => {
@@ -466,20 +479,47 @@ ipcMain.on("facet:ui-scale", (event, value: unknown) => {
 	}
 	const uiScale = readUiScale(value) ?? DEFAULT_UI_SCALE;
 	window.webContents.setZoomFactor(uiScale / 100);
-	localSettings = { ...localSettings, uiScale };
-	void writeLocalSettings(localSettingsFile, localSettings).catch((error: unknown) => {
-		console.log(`[main] Failed to save interface scale: ${String(error)}`);
-	});
+	stateStore?.update((current) => ({ ...current, uiScale }));
 });
 
 /** 切换界面语言；用户选择写进本机设置，系统语言与自动识别的结果由主进程返回。 */
 ipcMain.handle("facet:language", async (_event, value: unknown) => {
 	const setting = readLanguageSetting(value) ?? "auto";
-	localSettings = { ...localSettings, language: setting };
-	await writeLocalSettings(localSettingsFile, localSettings);
+	stateStore?.update((current) => ({ ...current, language: setting }));
+	await stateStore?.flushNow();
 	const language = resolveLanguage(setting, app.getLocale());
 	await mainI18n.changeLanguage(language);
 	return language;
+});
+
+/** 预加载同步读取本机初始快照，避免渲染首帧异步等状态闪烁。 */
+ipcMain.on("facet:local-state-init", (event) => {
+	event.returnValue = stateStore?.snapshot() ?? { version: 1 };
+});
+
+/** 写入或移除指定作用域下的本机持久化键值。 */
+ipcMain.on("facet:storage-set", (_event, scope: unknown, key: unknown, value: unknown) => {
+	if (typeof scope === "string" && typeof key === "string" && (typeof value === "string" || value === null)) {
+		stateStore?.setScopedItem(scope, key, value);
+	}
+});
+
+/** 更新本机优先的外观配置，并同步更新窗口背景色防止拖边或启动闪色。 */
+ipcMain.on("facet:local-appearance", (event, raw: unknown) => {
+	if (stateStore === undefined) {
+		return;
+	}
+	stateStore.setAppearance(raw);
+	const bg = stateStore.backgroundColor(nativeTheme.shouldUseDarkColors);
+	const window = BrowserWindow.fromWebContents(event.sender);
+	if (window !== null && !window.isDestroyed()) {
+		window.setBackgroundColor(bg);
+	}
+});
+
+/** 更新本机优先的输入偏好（如发送键位）。 */
+ipcMain.on("facet:local-input", (_event, raw: unknown) => {
+	stateStore?.setInput(raw);
 });
 
 /** 本机主机的连接信息：界面只知道「本机」这个目标与展示地址，具体端口与令牌在主进程。 */
@@ -562,9 +602,26 @@ function parseTcpTarget(text: string): { host: string; port: number } | undefine
 app.whenReady().then(async () => {
 	// 本地设置放在桌面自己的配置目录（Linux 上是 ~/.config/facet），与主机侧的应用设置分开
 	localSettingsFile = join(app.getPath("userData"), "desktop.json");
-	localSettings = await readLocalSettings(localSettingsFile);
-	mainI18n = createI18n(resolveLanguage(localSettings.language, app.getLocale()));
+	stateStore = new LocalStateStore({ file: localSettingsFile });
+	const initialSettings = await stateStore.init();
+	mainI18n = createI18n(resolveLanguage(initialSettings.language, app.getLocale()));
 	mainT = translate(mainI18n);
+
+	nativeTheme.on("updated", () => {
+		if (stateStore === undefined) {
+			return;
+		}
+		const theme = stateStore.snapshot().appearance?.theme;
+		if (theme !== undefined && theme !== "system") {
+			return;
+		}
+		const bg = stateStore.backgroundColor(nativeTheme.shouldUseDarkColors);
+		for (const win of BrowserWindow.getAllWindows()) {
+			if (!win.isDestroyed()) {
+				win.setBackgroundColor(bg);
+			}
+		}
+	});
 
 	if (externalEndpoint === undefined) {
 		await mkdir(dataDir, { recursive: true }).catch(() => undefined);

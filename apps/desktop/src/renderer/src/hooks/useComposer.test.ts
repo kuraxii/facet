@@ -279,4 +279,15 @@ describe("输入区的发送闸门", () => {
 		expect(harness.sent).toEqual(["发给 B 的"]);
 		harness.unmount();
 	});
+
+	it("删除会话调用 forgetDraft 后清掉对应草稿", async () => {
+		const harness = await mount();
+		await harness.type("待清理的草稿");
+		expect(harness.current.draft).toBe("待清理的草稿");
+		await act(async () => {
+			harness.current.forgetDraft("/w/a.jsonl");
+		});
+		expect(harness.current.draft).toBe("");
+		harness.unmount();
+	});
 });

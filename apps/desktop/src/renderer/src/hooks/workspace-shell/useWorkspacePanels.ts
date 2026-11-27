@@ -15,6 +15,7 @@ import {
 	writePanelState,
 } from "@facet/ui";
 import { useCallback, useState } from "react";
+import type { ScopedStorage } from "../../local-storage.ts";
 
 /** 一次右栏改动：补丁，或者按当前状态算出下一份状态。 */
 export type PanelPatch = Partial<RightPanelState> | ((state: RightPanelState) => RightPanelState);
@@ -39,24 +40,27 @@ export interface WorkspacePanels {
 	collapseExpanded: () => void;
 }
 
-export function useWorkspacePanels(): WorkspacePanels {
-	const [panel, setPanel] = useState<RightPanelState>(() => readPanelState(localStorage));
+export function useWorkspacePanels(storage: ScopedStorage): WorkspacePanels {
+	const [panel, setPanel] = useState<RightPanelState>(() => readPanelState(storage));
 	const [isPanelExpanded, setIsPanelExpanded] = useState(false);
-	const update = useCallback((patch: PanelPatch) => {
-		setPanel((current) => {
-			const next = normalizePanelState(
-				typeof patch === "function" ? patch(current) : { ...current, ...patch },
-			);
-			/*
-			 * 宽度变了就记下当时的窗口宽：此后窗口每少一像素，右栏先还回一像素（`fitPanelWidth`
-			 * 的「拖动优先」）。别的补丁不动这条基准，否则切个标签就把用户挑宽的基准冲掉了。
-			 */
-			const stamped =
-				next.width === current.width ? next : { ...next, widthViewport: Math.round(window.innerWidth) };
-			writePanelState(localStorage, stamped);
-			return stamped;
-		});
-	}, []);
+	const update = useCallback(
+		(patch: PanelPatch) => {
+			setPanel((current) => {
+				const next = normalizePanelState(
+					typeof patch === "function" ? patch(current) : { ...current, ...patch },
+				);
+				/*
+				 * 宽度变了就记下当时的窗口宽：此后窗口每少一像素，右栏先还回一像素（`fitPanelWidth`
+				 * 的「拖动优先」）。别的补丁不动这条基准，否则切个标签就把用户挑宽的基准冲掉了。
+				 */
+				const stamped =
+					next.width === current.width ? next : { ...next, widthViewport: Math.round(window.innerWidth) };
+				writePanelState(storage, stamped);
+				return stamped;
+			});
+		},
+		[storage],
+	);
 
 	const openTab = useCallback(
 		(tab: RightPanelTab) => {

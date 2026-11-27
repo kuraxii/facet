@@ -5,7 +5,7 @@
  * 状态那一层。
  */
 import type { ChatView, SessionView, TextPart, TranscriptItem } from "@facet/client-core";
-import type { Message, QueuedInput } from "@facet/protocol";
+import type { InputSettings, Message, QueuedInput } from "@facet/protocol";
 import {
 	ArrowDownIcon,
 	ChatOutline,
@@ -61,6 +61,8 @@ export interface ChatAreaProps {
 	composerInput: RefObject<ComposerHandle | null>;
 	/** 点输入区里的 `@文件` 胶囊：打开右栏的文件页并把它打开 */
 	onOpenMentionFile: (filePath: string) => void;
+	/** 本机优先的输入偏好（决定发送键位） */
+	localInput: InputSettings;
 }
 
 /** 当前会话里用户发过的文字，从旧到新：输入区的 `↑`/`↓` 按它回溯。 */
@@ -101,6 +103,7 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 		composerInput,
 		mentionFiles,
 		onOpenMentionFile,
+		localInput,
 	} = props;
 	const { t } = useI18n();
 	const client = useHostClient();
@@ -251,7 +254,7 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 						providerAuth={providerAuth}
 						onModelChange={(next) => client.setModel({ provider: next.provider, id: next.id })}
 						onThinkingLevelChange={(level) => client.setThinkingLevel(level)}
-						shiftEnterToSend={host.settings.input.sendKey === "shiftEnter"}
+						shiftEnterToSend={localInput.sendKey === "shiftEnter"}
 						isBlocked={isBlocked}
 						canStop={host.isOnline && host.host?.role !== "viewer"}
 						contextUsage={sessionView.state.contextUsage}

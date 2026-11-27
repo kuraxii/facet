@@ -12,6 +12,7 @@
 import type { ChatView } from "@facet/client-core";
 import { chatActivity } from "@facet/client-core";
 import type { LanguageSetting } from "@facet/i18n";
+import type { AppearanceSettings, InputSettings } from "@facet/protocol";
 import {
 	Button,
 	CodeThemeProvider,
@@ -51,6 +52,7 @@ import { applyAppearance } from "../hooks/useWorkspaceShell.ts";
 import { usePanelPresence } from "../hooks/workspace-shell/usePanelPresence.ts";
 import { LOCAL_TARGET } from "../host-connection.ts";
 import { useHostClient } from "../host-context.tsx";
+import type { ScopedStorage } from "../local-storage.ts";
 import { workspaceTabItems } from "../workspace-tabs.ts";
 import { ChatArea } from "./chat-area.tsx";
 import { WorkspacePanelControls } from "./workspace-band.tsx";
@@ -74,6 +76,14 @@ export interface WorkbenchProps {
 	/** 语言设置与切换 */
 	languageSetting: LanguageSetting;
 	onLanguageChange: (setting: LanguageSetting) => void;
+	/** 本机优先的外观偏好 */
+	localAppearance: AppearanceSettings;
+	onLocalAppearanceChange: (appearance: AppearanceSettings) => void;
+	/** 本机优先的输入偏好 */
+	localInput: InputSettings;
+	onLocalInputChange: (input: InputSettings) => void;
+	/** 按主机端点隔离的持久化存储 */
+	workspaceStorage?: ScopedStorage;
 	/** 当前会话标识 */
 	openedSessionId: string | undefined;
 	/** 终端标签要显示的那个终端 */
@@ -100,6 +110,11 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 		transcript,
 		languageSetting,
 		onLanguageChange,
+		localAppearance,
+		onLocalAppearanceChange,
+		localInput,
+		onLocalInputChange,
+		workspaceStorage,
 		openedSessionId,
 		terminalId,
 		copyText,
@@ -311,6 +326,7 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 				composerInput={composerInput}
 				mentionFiles={mentionFiles}
 				onOpenMentionFile={openMentionFile}
+				localInput={localInput}
 			/>
 		);
 
@@ -477,6 +493,7 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 								terminal={terminal}
 								sessionCwd={sessionCwd}
 								terminalId={terminalId}
+								storage={workspaceStorage}
 							/>
 						</RightPanel>
 					) : null}
@@ -510,6 +527,10 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 							onUiScaleChange={bridge.platform === "web" ? undefined : shell.changeUiScale}
 							languageSetting={languageSetting}
 							onLanguageChange={onLanguageChange}
+							localAppearance={localAppearance}
+							onLocalAppearanceChange={onLocalAppearanceChange}
+							localInput={localInput}
+							onLocalInputChange={onLocalInputChange}
 							// 浏览器入口改不了主机配置，桌面与 SSH 通道可以
 							canEdit={host.host?.canManage === true}
 						/>

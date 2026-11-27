@@ -17,6 +17,8 @@
  * `⤢` 宽展开是临时视图状态，不落盘：展开期间左栏让位、右栏整行，退出时按原偏好宽与
  * 意图位完整恢复（口径见 `docs/layout.md` §2）。
  */
+import { useMemo } from "react";
+import { workspaceStorage } from "../local-storage.ts";
 import type { WorkspaceShell, WorkspaceShellOptions } from "./workspace-shell/shell-types.ts";
 import { useDrawerFocus } from "./workspace-shell/useDrawerFocus.ts";
 import { useShellChrome } from "./workspace-shell/useShellChrome.ts";
@@ -27,9 +29,10 @@ export { applyAppearance } from "./workspace-shell/appearance.ts";
 export type { WorkspaceShell, WorkspaceShellOptions } from "./workspace-shell/shell-types.ts";
 export type { PanelPatch } from "./workspace-shell/useWorkspacePanels.ts";
 export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShell {
-	const { settings } = options;
-	const chrome = useShellChrome(settings);
-	const panels = useWorkspacePanels();
+	const { appearance, endpoint } = options;
+	const panelStorage = useMemo(() => workspaceStorage(endpoint), [endpoint]);
+	const chrome = useShellChrome(appearance);
+	const panels = useWorkspacePanels(panelStorage);
 	const drawers = useDrawerFocus();
 	const layout = useShellLayout({
 		panel: panels.panel,

@@ -9,8 +9,9 @@
  */
 import { chatActivity } from "@facet/client-core";
 import type { LanguageSetting } from "@facet/i18n";
+import type { AppearanceSettings, InputSettings } from "@facet/protocol";
 import { appendQuote, type ComposerHandle, TextMenu } from "@facet/ui";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { bridge } from "../bridge.ts";
 import { useComposer } from "../hooks/useComposer.ts";
 import type { HostConnection } from "../hooks/useHostConnection.ts";
@@ -23,6 +24,7 @@ import { useReadMarker, useTranscript } from "../hooks/useTranscript.ts";
 import { useWorkspaceDocs } from "../hooks/useWorkspaceDocs.ts";
 import { useWorkspaceShell } from "../hooks/useWorkspaceShell.ts";
 import { useHostRuntime } from "../host-context.tsx";
+import { hasLocalAppearance, hasLocalInput, workspaceStorage } from "../local-storage.ts";
 import { QUOTE_SOURCE_SELECTOR } from "../selection-quote.ts";
 import { useToast } from "../toast-provider.tsx";
 import { workspaceShortcutOf } from "../workspace-shortcuts.ts";
@@ -34,24 +36,55 @@ export interface HostWorkspaceProps {
 	/** 语言设置与切换 */
 	languageSetting: LanguageSetting;
 	onLanguageChange: (setting: LanguageSetting) => void;
+	/** 本机优先的外观配置 */
+	localAppearance: AppearanceSettings;
+	onLocalAppearanceChange: (appearance: AppearanceSettings) => void;
+	/** 本机优先的输入偏好 */
+	localInput: InputSettings;
+	onLocalInputChange: (input: InputSettings) => void;
 }
 
 export function HostWorkspace({
 	host,
 	languageSetting,
 	onLanguageChange,
+	localAppearance,
+	onLocalAppearanceChange,
+	localInput,
+	onLocalInputChange,
 }: HostWorkspaceProps): React.JSX.Element {
 	const toast = useToast();
 	const runtime = useHostRuntime();
 	const client = runtime.client;
 	const terminalClient = runtime.terminalClient;
+	const wsStorage = useMemo(() => workspaceStorage(host.endpoint), [host.endpoint]);
 	const version = useSyncExternalStore(
 		(onChange) => client.store.subscribe(onChange),
 		() => client.store.getVersion(),
 	);
 	void version;
 
-	/** 删掉会话之后的收尾：滚动位置在那之后才建好，这里经 ref 转一层。 */
+	// 首次升级迁移：如果本机尚未落盘过外观或输入偏好，则从本机服务端继承一次作为初始值，此后始终本机优先
+	useEffect(() => {
+		if (!runtime.isLocal || host.phase !== "ready") {
+			return;
+		}
+		if (!hasLocalAppearance()) {
+			onLocalAppearanceChange(host.settings.appearance);
+		}
+		if (!hasLocalInput()) {
+			onLocalInputChange(host.settings.input);
+		}
+	}, [
+		host.phase,
+		host.settings.appearance,
+		host.settings.input,
+		onLocalAppearanceChange,
+		onLocalInputChange,
+		runtime.isLocal,
+	]);
+
+	/** 删掉会话之后的收尾：滚动位置与草稿在之后建好，这里经 ref 转一层。 */
 	const forgetSession = useRef<(path: string) => void>(() => undefined);
 	const onSessionRemoved = useCallback((path: string) => forgetSession.current(path), []);
 
@@ -61,6 +94,7 @@ export function HostWorkspace({
 		// 启动目录是本机的概念：远端主机上没有这个目录，打包态也可能压根没配
 		projectDir: runtime.isLocal && bridge.projectDir.length > 0 ? bridge.projectDir : undefined,
 		snapshot: runtime.workspace,
+		storage: wsStorage,
 		onSessionRemoved,
 	});
 
@@ -89,7 +123,7 @@ export function HostWorkspace({
 	/** 新建终端的启动目录：跟着当前会话，没有会话时用第一个项目 */
 	const terminalCwd = sessionCwd ?? session.projects[0]?.cwd;
 
-	const shell = useWorkspaceShell({ settings: host.settings });
+	const shell = useWorkspaceShell({ appearance: localAppearance, endpoint: host.endpoint });
 
 	const terminal = useTerminalPanel({
 		client: terminalClient,
@@ -115,6 +149,7 @@ export function HostWorkspace({
 		client,
 		session: sessionView,
 		snapshot: runtime.workspace,
+		storage: wsStorage,
 		isChangesVisible,
 		isHistoryVisible,
 	});
@@ -129,9 +164,24 @@ export function HostWorkspace({
 		openedSessionId,
 	});
 
-	// 删掉会话时把它的滚动位置一起收掉
+	const composer = useComposer({
+		client,
+		session: sessionView,
+		openedSessionId,
+		activeFile: session.activeFile,
+		activity,
+		host: host.host,
+		storage: wsStorage,
+		setSessionError: session.setSessionError,
+		withTrust: session.withTrust,
+		runSessionAction: session.runSessionAction,
+		refreshSessions: session.refreshSessions,
+	});
+
+	// 删掉会话时把它的滚动位置与未发草稿一起收掉
 	forgetSession.current = (path: string) => {
 		transcript.forgetScroll(path);
+		composer.forgetDraft(path);
 	};
 
 	useReadMarker({
@@ -140,19 +190,6 @@ export function HostWorkspace({
 		activity,
 		refreshChanges: docs.refreshChanges,
 		isChangesVisible,
-	});
-
-	const composer = useComposer({
-		client,
-		session: sessionView,
-		openedSessionId,
-		activeFile: session.activeFile,
-		activity,
-		host: host.host,
-		setSessionError: session.setSessionError,
-		withTrust: session.withTrust,
-		runSessionAction: session.runSessionAction,
-		refreshSessions: session.refreshSessions,
 	});
 
 	/** 开一个终端，把它摆到终端分页上。 */
@@ -227,6 +264,11 @@ export function HostWorkspace({
 				transcript={transcript}
 				languageSetting={languageSetting}
 				onLanguageChange={onLanguageChange}
+				localAppearance={localAppearance}
+				onLocalAppearanceChange={onLocalAppearanceChange}
+				localInput={localInput}
+				onLocalInputChange={onLocalInputChange}
+				workspaceStorage={wsStorage}
 				openedSessionId={openedSessionId}
 				terminalId={terminalId}
 				copyText={copyText}

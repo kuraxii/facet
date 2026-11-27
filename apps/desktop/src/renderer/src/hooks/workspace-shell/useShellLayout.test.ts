@@ -154,6 +154,7 @@ async function setNarrow(isNarrow: boolean): Promise<void> {
 }
 
 beforeEach(async () => {
+	window.localStorage.clear();
 	Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: 1400 });
 	await setNarrow(false);
 });
@@ -227,6 +228,11 @@ describe("两栏开关", () => {
 		expect(layout().isSidebarCollapsed).toBe(true);
 		act(() => layout().togglePanel());
 		expect(actions.calls).toEqual(["setOpen:false"]);
+
+		// 重新挂载后仍保留收起意图
+		act(() => root?.unmount());
+		mount(panelOf(420), actions);
+		expect(layout().isSidebarCollapsed).toBe(true);
 	});
 
 	it("窄档下宽度补丁照样提交：右栏在那里也是可拖的一列", async () => {

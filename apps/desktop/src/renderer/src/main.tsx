@@ -3,13 +3,16 @@ import "@facet/ui/styles";
 // 先装浏览器里的桥，再加载界面：界面模块一加载就会读 window.facet
 import "./web-bootstrap.ts";
 import { App } from "./App";
+import { applyAppearance } from "./hooks/useWorkspaceShell.ts";
 import { applyLayoutBootstrap } from "./layout-mode.ts";
+import { readLocalAppearance } from "./local-storage.ts";
 
 const container = document.getElementById("root");
 if (!container) throw new Error("root container missing");
 
-// 首帧之前把布局档位写到根节点：BootScreen 与工作区开始渲染之前档位就是对的
+// 首帧之前把布局档位与本机外观写到根节点：BootScreen 与工作区渲染前即已是用户主题
 applyLayoutBootstrap();
+applyAppearance(readLocalAppearance());
 
 /*
  * 根节点不套 StrictMode。

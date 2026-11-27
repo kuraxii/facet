@@ -15,9 +15,11 @@ import {
 	ICON_SIZE,
 	IconButton,
 	PaneResizer,
+	readFileTreeOpen,
 	readFileTreeWidth,
 	useHoverTip,
 	useI18n,
+	writeFileTreeOpen,
 	writeFileTreeWidth,
 } from "@facet/ui";
 import { FileView } from "@facet/ui-editor";
@@ -25,6 +27,7 @@ import { FolderTree } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { type WorkspaceDocs, workspaceFileKey } from "../../hooks/useWorkspaceDocs.ts";
 import { useHostClient } from "../../host-context.tsx";
+import type { ScopedStorage } from "../../local-storage.ts";
 
 /** 文件标签的参数。 */
 export interface FilesTabProps {
@@ -32,16 +35,19 @@ export interface FilesTabProps {
 	docs: WorkspaceDocs;
 	/** 当前会话所在的目录；没有会话时为空 */
 	sessionCwd: string | undefined;
+	/** 按主机隔离的持久化存储，用于保存文件树宽度与开关 */
+	storage?: ScopedStorage;
 }
 
 /** 文件标签。 */
-export function FilesTab({ docs, sessionCwd }: FilesTabProps): ReactNode {
+export function FilesTab({ docs, sessionCwd, storage }: FilesTabProps): ReactNode {
 	const { t } = useI18n();
 	const client = useHostClient();
+	const backingStorage = storage ?? window.localStorage;
 	/** 文件树开着没有；关掉只藏起来，树的展开状态与滚动位置都留着 */
-	const [isFileTreeOpen, setIsFileTreeOpen] = useState(true);
+	const [isFileTreeOpen, setIsFileTreeOpen] = useState(() => readFileTreeOpen(backingStorage));
 	/** 文件树的偏好宽，落盘里长期留着 */
-	const [treeWidth, setTreeWidth] = useState(() => readFileTreeWidth(window.localStorage));
+	const [treeWidth, setTreeWidth] = useState(() => readFileTreeWidth(backingStorage));
 	/** 文件视图的容器宽：拖拽上限按它现算 */
 	const [filesWidth, setFilesWidth] = useState(0);
 	const filesRef = useRef<HTMLDivElement | null>(null);
@@ -70,11 +76,22 @@ export function FilesTab({ docs, sessionCwd }: FilesTabProps): ReactNode {
 	}, []);
 
 	/** 松手时提交文件树宽度并落盘。 */
-	const commitTreeWidth = useCallback((next: number) => {
-		const width = clampFileTreeWidth(next);
-		setTreeWidth(width);
-		writeFileTreeWidth(window.localStorage, width);
-	}, []);
+	const commitTreeWidth = useCallback(
+		(next: number) => {
+			const width = clampFileTreeWidth(next);
+			setTreeWidth(width);
+			writeFileTreeWidth(backingStorage, width);
+		},
+		[backingStorage],
+	);
+
+	const toggleFileTree = useCallback(() => {
+		setIsFileTreeOpen((open) => {
+			const next = !open;
+			writeFileTreeOpen(backingStorage, next);
+			return next;
+		});
+	}, [backingStorage]);
 
 	/** 正在预览的文件：没有它时预览区是空的，等用户从树里点一个 */
 	const fileRef = docs.file;
@@ -82,9 +99,7 @@ export function FilesTab({ docs, sessionCwd }: FilesTabProps): ReactNode {
 		fileRef === undefined ? undefined : docs.fileContents[workspaceFileKey(fileRef.cwd, fileRef.path)];
 
 	/** 编辑器顶栏上那枚「文件树开关」；没有二级顶栏的空态里也用同一个按钮 */
-	const treeToggle = (
-		<FileTreeToggle isOpen={isFileTreeOpen} onToggle={() => setIsFileTreeOpen((open) => !open)} />
-	);
+	const treeToggle = <FileTreeToggle isOpen={isFileTreeOpen} onToggle={toggleFileTree} />;
 
 	/*
 	 * 文件预览。

@@ -5,7 +5,18 @@
  * 按主机各一套，见 `host-runtime.ts`。
  */
 import type { LanguageSetting, SupportedLanguage } from "@facet/i18n";
+import type { AppearanceSettings, InputSettings } from "@facet/protocol";
 import type { HostChannelBridge } from "./host-connection.ts";
+
+/** 本机持久化初始快照，由预加载脚本或 Web 桥提供。 */
+export interface BridgeLocalState {
+	appearance?: AppearanceSettings;
+	input?: InputSettings;
+	storage?: {
+		app?: Record<string, string>;
+		workspaces?: Record<string, Record<string, string>>;
+	};
+}
 
 /** 一张选中的图片，字节以 base64 交回界面 */
 export interface PickedImageFile {
@@ -31,6 +42,14 @@ export interface FacetBridge extends HostChannelBridge {
 	language: SupportedLanguage;
 	/** 修改语言，返回实际使用的语言 */
 	setLanguage: (setting: LanguageSetting) => Promise<SupportedLanguage>;
+	/** 本机持久化的初始快照 */
+	localState?: BridgeLocalState;
+	/** 写入或删除指定作用域下的持久化键值 */
+	setScopedStorage?: (scope: string, key: string, value: string | null) => void;
+	/** 更新本机优先的外观偏好 */
+	setLocalAppearance?: (appearance: AppearanceSettings) => void;
+	/** 更新本机优先的输入偏好 */
+	setLocalInput?: (input: InputSettings) => void;
 	/** 主机是本机管的（local），还是外面给的（external） */
 	hostMode: string;
 	/** 打开系统的目录选择窗口,取消时返回空 */

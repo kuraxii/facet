@@ -107,7 +107,7 @@ export interface SessionSidebarProps {
 	/** 页脚的主机切换入口，由宿主给出 */
 	hostSwitcher?: ReactNode;
 	/** 页脚的代理后端切换入口，由宿主给出 */
-	backendSwitcher?: ReactNode;
+	agentSwitcher?: ReactNode;
 	/** 连接状态提示，例如「重连中」或「只读」 */
 	hostStatus?: string;
 	/** 窄屏时侧栏是抽屉，展开状态由这个开关控制 */
@@ -146,7 +146,7 @@ export const SessionSidebar = memo(function SessionSidebar({
 	onOpenSettings,
 	isSettingsOpen = false,
 	hostSwitcher,
-	backendSwitcher,
+	agentSwitcher,
 	hostStatus,
 	isOpen = true,
 	onNavigate,
@@ -421,7 +421,7 @@ export const SessionSidebar = memo(function SessionSidebar({
 
 			<footer className="sb-foot">
 				{hostSwitcher}
-				{backendSwitcher}
+				{agentSwitcher}
 				{hostStatus === undefined ? null : <span className="sb-foot-status">{hostStatus}</span>}
 				<button
 					type="button"

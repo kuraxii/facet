@@ -5,35 +5,35 @@
  */
 import {
 	type AcpConfigOptionChoice,
+	type AgentAvailability,
 	type AgentCapabilities,
-	type BackendAvailability,
 	PI_AGENT_CAPABILITIES,
-	PI_BACKEND_ID,
+	PI_AGENT_ID,
 	type SessionSummary,
 } from "@facet/protocol";
 
 /** 读取一条会话所属后端标识；未声明时按 Pi 处理。 */
-export function backendIdOf(summary: Pick<SessionSummary, "backendId">): string {
-	return summary.backendId ?? PI_BACKEND_ID;
+export function agentIdOf(summary: Pick<SessionSummary, "agentId">): string {
+	return summary.agentId ?? PI_AGENT_ID;
 }
 
 /** 按当前选中的代理后端过滤侧栏会话列表，保证各后端列表互相隔离。 */
-export function filterSessionsByBackend(
+export function filterSessionsByAgent(
 	sessions: readonly SessionSummary[],
-	selectedBackendId: string,
+	selectedAgentId: string,
 ): SessionSummary[] {
-	return sessions.filter((summary) => backendIdOf(summary) === selectedBackendId);
+	return sessions.filter((summary) => agentIdOf(summary) === selectedAgentId);
 }
 
 /** 当持久化选中的后端已不存在或不可见时，安全回退到 Pi。 */
-export function resolveBackendSelection(
-	backends: readonly BackendAvailability[],
+export function resolveAgentSelection(
+	agents: readonly AgentAvailability[],
 	preferredId: string | undefined,
 ): string {
-	if (preferredId !== undefined && backends.some((backend) => backend.id === preferredId)) {
+	if (preferredId !== undefined && agents.some((agent) => agent.id === preferredId)) {
 		return preferredId;
 	}
-	return PI_BACKEND_ID;
+	return PI_AGENT_ID;
 }
 
 /** 补全会话能力标记，缺省按原生 Pi 完整能力处理。 */

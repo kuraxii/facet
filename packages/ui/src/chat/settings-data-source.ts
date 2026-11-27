@@ -4,9 +4,9 @@
  * 由宿主接到主机上；界面不关心这些调用背后是本地还是远端。
  */
 import type {
-	AcpBackendProfile,
+	AcpAgentProfile,
+	AgentAvailability,
 	AgentDefaults,
-	BackendAvailability,
 	CustomProviderInfo,
 	FacetSettings,
 	ModelInfo,
@@ -71,14 +71,14 @@ export interface SettingsDataSource {
 	diagnostics: () => Promise<string>;
 	/** 保存一段文本到用户选定的文件，取消时返回 false */
 	saveText: (suggestedName: string, text: string) => Promise<boolean>;
-	/** 读取代理后端可用性与内置配置 */
-	loadBackends?: () => Promise<{ backends: BackendAvailability[]; profiles: AcpBackendProfile[] }>;
-	/** 探测指定代理后端 */
-	probeBackend?: (backendId: string) => Promise<BackendAvailability>;
+	/** 读取 Agent 可用性与内置配置 */
+	loadAgents?: () => Promise<{ agents: AgentAvailability[]; profiles: AcpAgentProfile[] }>;
+	/** 探测指定 Agent */
+	probeAgent?: (agentId: string) => Promise<AgentAvailability>;
 	/** 启动 ACP 交互式登录流程 */
-	acpLoginStart?: (backendId: string) => Promise<{ loginId: string; authUrl?: string }>;
+	acpLoginStart?: (agentId: string) => Promise<{ loginId: string; authUrl?: string }>;
 	/** 提交授权码完成 ACP 登录 */
-	acpLoginSubmit?: (loginId: string, code: string) => Promise<BackendAvailability>;
+	acpLoginSubmit?: (loginId: string, code: string) => Promise<AgentAvailability>;
 	/** 取消 ACP 登录流程 */
 	acpLoginCancel?: (loginId: string) => Promise<void>;
 }

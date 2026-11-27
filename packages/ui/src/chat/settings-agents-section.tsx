@@ -1,10 +1,10 @@
 /**
- * 代理后端与 ACP 账号认证设置页（极简风格）。
+ * Agent 与 ACP 账号认证设置页（极简风格）。
  *
- * 展示内置支持的代理后端（Pi 与 Antigravity 等），支持探测可用性与页面内发起 OAuth 登录，
- * 不提供自定义添加 ACP 的表单（ACP 后端均由代码内置维护）。
+ * 展示内置支持的 Agent（Pi 与 Antigravity 等），支持探测可用性与页面内发起 OAuth 登录，
+ * 不提供自定义添加 ACP 的表单（ACP 均由代码内置维护）。
  */
-import type { BackendAvailability } from "@facet/protocol";
+import type { AgentAvailability } from "@facet/protocol";
 import { Copy } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Badge } from "../common/Badge.tsx";
@@ -13,11 +13,12 @@ import { IconButton } from "../common/IconButton.tsx";
 import { Input } from "../common/Input.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { ICON_SIZE } from "../styles/visual-contract.ts";
+import { BackendIcon } from "./AgentsIcon.tsx";
 import type { SettingsDataSource } from "./settings-data-source.ts";
 import { SettingsGroup, SettingsRow, StatusNote } from "./settings-layout.tsx";
 
 interface ActiveLoginState {
-	readonly backendId: string;
+	readonly agentId: string;
 	readonly loginId: string;
 	readonly authUrl?: string;
 	code: string;
@@ -30,20 +31,20 @@ export interface SettingsAgentsSectionProps {
 
 export function SettingsAgentsSection({ data }: SettingsAgentsSectionProps): React.JSX.Element {
 	const { t } = useI18n();
-	const [backends, setBackends] = useState<readonly BackendAvailability[] | undefined>(undefined);
+	const [agents, setBackends] = useState<readonly AgentAvailability[] | undefined>(undefined);
 	const [error, setError] = useState<string | undefined>(undefined);
 	const [probingId, setProbingId] = useState<string | undefined>(undefined);
 	const [startingLoginId, setStartingLoginId] = useState<string | undefined>(undefined);
 	const [login, setLogin] = useState<ActiveLoginState | undefined>(undefined);
 
 	const load = useCallback(async () => {
-		if (data.loadBackends === undefined) {
+		if (data.loadAgents === undefined) {
 			return;
 		}
 		setError(undefined);
 		try {
-			const res = await data.loadBackends();
-			setBackends(res.backends);
+			const res = await data.loadAgents();
+			setBackends(res.agents);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
 		}
@@ -53,15 +54,15 @@ export function SettingsAgentsSection({ data }: SettingsAgentsSectionProps): Rea
 		void load();
 	}, [load]);
 
-	const handleProbe = async (backendId: string): Promise<void> => {
-		if (data.probeBackend === undefined) {
+	const handleProbe = async (agentId: string): Promise<void> => {
+		if (data.probeAgent === undefined) {
 			return;
 		}
-		setProbingId(backendId);
+		setProbingId(agentId);
 		setError(undefined);
 		try {
-			const result = await data.probeBackend(backendId);
-			setBackends((prev) => prev?.map((item) => (item.id === backendId ? result : item)));
+			const result = await data.probeAgent(agentId);
+			setBackends((prev) => prev?.map((item) => (item.id === agentId ? result : item)));
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
 		} finally {
@@ -69,16 +70,16 @@ export function SettingsAgentsSection({ data }: SettingsAgentsSectionProps): Rea
 		}
 	};
 
-	const handleStartLogin = async (backendId: string): Promise<void> => {
+	const handleStartLogin = async (agentId: string): Promise<void> => {
 		if (data.acpLoginStart === undefined) {
 			return;
 		}
-		setStartingLoginId(backendId);
+		setStartingLoginId(agentId);
 		setError(undefined);
 		try {
-			const res = await data.acpLoginStart(backendId);
+			const res = await data.acpLoginStart(agentId);
 			setLogin({
-				backendId,
+				agentId,
 				loginId: res.loginId,
 				...(res.authUrl === undefined ? {} : { authUrl: res.authUrl }),
 				code: "",
@@ -104,7 +105,7 @@ export function SettingsAgentsSection({ data }: SettingsAgentsSectionProps): Rea
 		setError(undefined);
 		try {
 			const updated = await data.acpLoginSubmit(current.loginId, current.code);
-			setBackends((prev) => prev?.map((item) => (item.id === current.backendId ? updated : item)));
+			setBackends((prev) => prev?.map((item) => (item.id === current.agentId ? updated : item)));
 			setLogin(undefined);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
@@ -130,38 +131,39 @@ export function SettingsAgentsSection({ data }: SettingsAgentsSectionProps): Rea
 			) : null}
 
 			<SettingsGroup label={t("settings.agentsPage.available")}>
-				{backends === undefined ? (
+				{agents === undefined ? (
 					<p className="set-hint">{t("settings.agentsPage.loading")}</p>
 				) : (
-					backends.map((backend) => {
-						const isLoggingIn = login?.backendId === backend.id;
-						const badgeLabel = !backend.enabled
+					agents.map((agent) => {
+						const isLoggingIn = login?.agentId === agent.id;
+						const badgeLabel = !agent.enabled
 							? t("settings.agentsPage.disabled")
-							: backend.available
+							: agent.available
 								? t("settings.agentsPage.ready")
 								: t("settings.agentsPage.unavailable");
 						return (
-							<SettingsRow key={backend.id} title={backend.name} isStacked>
+							<SettingsRow key={agent.id} title={agent.name} isStacked>
 								<div className="set-item-control">
+									<BackendIcon agentId={agent.id} size={ICON_SIZE.md} />
 									<Badge>{badgeLabel}</Badge>
-									{backend.kind === "acp" && data.acpLoginStart !== undefined && !isLoggingIn ? (
+									{agent.kind === "acp" && data.acpLoginStart !== undefined && !isLoggingIn ? (
 										<Button
 											size="sm"
-											disabled={startingLoginId === backend.id}
-											onClick={() => void handleStartLogin(backend.id)}
+											disabled={startingLoginId === agent.id}
+											onClick={() => void handleStartLogin(agent.id)}
 										>
-											{backend.available
+											{agent.available
 												? t("settings.agentsPage.changeAccount")
 												: t("settings.agentsPage.signIn")}
 										</Button>
 									) : null}
-									{backend.kind === "acp" && data.probeBackend !== undefined && !isLoggingIn ? (
+									{agent.kind === "acp" && data.probeAgent !== undefined && !isLoggingIn ? (
 										<Button
 											size="sm"
-											disabled={probingId === backend.id}
-											onClick={() => void handleProbe(backend.id)}
+											disabled={probingId === agent.id}
+											onClick={() => void handleProbe(agent.id)}
 										>
-											{probingId === backend.id
+											{probingId === agent.id
 												? t("settings.agentsPage.probing")
 												: t("settings.agentsPage.probe")}
 										</Button>
@@ -207,7 +209,7 @@ export function SettingsAgentsSection({ data }: SettingsAgentsSectionProps): Rea
 										</div>
 									</form>
 								) : null}
-								{!isLoggingIn && backend.issue ? <p className="set-hint">{backend.issue}</p> : null}
+								{!isLoggingIn && agent.issue ? <p className="set-hint">{agent.issue}</p> : null}
 							</SettingsRow>
 						);
 					})

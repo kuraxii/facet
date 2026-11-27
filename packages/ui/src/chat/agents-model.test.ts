@@ -1,16 +1,16 @@
 import { DEFAULT_ACP_CAPABILITIES, PI_AGENT_CAPABILITIES, type SessionSummary } from "@facet/protocol";
 import { describe, expect, it } from "vitest";
 import {
-	backendIdOf,
+	agentIdOf,
 	capabilitiesOf,
-	filterSessionsByBackend,
+	filterSessionsByAgent,
 	groupConfigChoices,
 	parseCommandArgs,
-	resolveBackendSelection,
-} from "./backend-model.ts";
+	resolveAgentSelection,
+} from "./agents-model.ts";
 
 describe("多后端纯逻辑辅助函数", () => {
-	it("按 backendId 隔离侧栏会话，未标记默认归入 pi", () => {
+	it("按 agentId 隔离侧栏会话，未标记默认归入 pi", () => {
 		const sessions: SessionSummary[] = [
 			{
 				id: "1",
@@ -24,7 +24,7 @@ describe("多后端纯逻辑辅助函数", () => {
 			},
 			{
 				id: "2",
-				backendId: "antigravity",
+				agentId: "antigravity",
 				path: "acp://antigravity/2",
 				cwd: "/w",
 				name: undefined,
@@ -34,18 +34,18 @@ describe("多后端纯逻辑辅助函数", () => {
 				firstMessage: "a",
 			},
 		];
-		expect(backendIdOf(sessions[0] ?? { backendId: undefined })).toBe("pi");
-		expect(filterSessionsByBackend(sessions, "pi").map((s) => s.id)).toEqual(["1"]);
-		expect(filterSessionsByBackend(sessions, "antigravity").map((s) => s.id)).toEqual(["2"]);
+		expect(agentIdOf(sessions[0] ?? { agentId: undefined })).toBe("pi");
+		expect(filterSessionsByAgent(sessions, "pi").map((s) => s.id)).toEqual(["1"]);
+		expect(filterSessionsByAgent(sessions, "antigravity").map((s) => s.id)).toEqual(["2"]);
 	});
 
 	it("后端选择不存在时回退到 pi，能力缺省返回 Pi 完整能力", () => {
-		const backends = [
+		const agents = [
 			{ id: "pi", kind: "pi" as const, name: "Pi", available: true, enabled: true },
 			{ id: "antigravity", kind: "acp" as const, name: "Antigravity", available: false, enabled: true },
 		];
-		expect(resolveBackendSelection(backends, "antigravity")).toBe("antigravity");
-		expect(resolveBackendSelection(backends, "removed")).toBe("pi");
+		expect(resolveAgentSelection(agents, "antigravity")).toBe("antigravity");
+		expect(resolveAgentSelection(agents, "removed")).toBe("pi");
 		expect(capabilitiesOf(undefined)).toEqual(PI_AGENT_CAPABILITIES);
 		expect(capabilitiesOf(DEFAULT_ACP_CAPABILITIES).configStyle).toBe("acp");
 	});

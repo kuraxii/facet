@@ -8,7 +8,7 @@ import type { AcpConfigOption, AcpModeState } from "@facet/protocol";
 import { type ReactNode, useEffect } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { ChevronIcon } from "../transcript/chevron.tsx";
-import { groupConfigChoices } from "./backend-model.ts";
+import { groupConfigChoices } from "./agents-model.ts";
 
 /** ACP 配置芯片参数。 */
 export interface AcpConfigChipsProps {

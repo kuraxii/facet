@@ -6,16 +6,16 @@
 
 export type { AcpConfigChipsProps } from "./chat/AcpConfigChips.tsx";
 export { AcpConfigChips } from "./chat/AcpConfigChips.tsx";
-export type { BackendSwitcherProps } from "./chat/BackendSwitcher.tsx";
-export { BackendSwitcher } from "./chat/BackendSwitcher.tsx";
+export type { AgentsSwitcherProps } from "./chat/AgentsSwitcher.tsx";
+export { AgentsSwitcher } from "./chat/AgentsSwitcher.tsx";
 export {
-	backendIdOf,
+	agentIdOf,
 	capabilitiesOf,
-	filterSessionsByBackend,
+	filterSessionsByAgent,
 	groupConfigChoices,
 	parseCommandArgs,
-	resolveBackendSelection,
-} from "./chat/backend-model.ts";
+	resolveAgentSelection,
+} from "./chat/agents-model.ts";
 export type { ChatOutlineProps } from "./chat/ChatOutline.tsx";
 export { ChatOutline } from "./chat/ChatOutline.tsx";
 export type { ComposerAttachment, ComposerProps } from "./chat/Composer.tsx";

@@ -35,6 +35,7 @@ import {
 } from "./events.ts";
 import type { ExtensionUi } from "./extension-ui.ts";
 import { type BranchSnapshot, branchSnapshot, pageOf } from "./paging.ts";
+import { mergeClearedSteering, type QueuedMessageItem, syncSteeringMirror } from "./queue-state.ts";
 import type { ModelMutationOptions, PromptOptions } from "./types.ts";
 
 /** entriesAfter 一次允许回溯的最大条目数。 */
@@ -122,7 +123,11 @@ export class PiAgent {
 	/** 活动分支快照，叶子变化时重建 */
 	private branch: BranchSnapshot | undefined;
 	/** 由 Facet 持有的待发后续消息（本轮结束后统一合并发出，支持单条转插话、编辑与删除） */
-	private followUpQueue: Array<{ text: string; images?: ImageBlock[] }> = [];
+	private followUpQueue: QueuedMessageItem[] = [];
+	/** 已交给 pi SDK 的待插话消息镜像（保留图片附件，供退回与 abort 回收） */
+	private steeringQueue: QueuedMessageItem[] = [];
+	/** `prompt(..., { streamingBehavior: "steer" })` 在同步入队瞬间附带的图片 */
+	private pendingPromptSteerImages: ImageBlock[] | undefined;
 	/** 已对外同步过的最新持久化叶子 id，用来增量取出刚写盘的条目 */
 	private lastCommittedLeafId: string | null;
 	/** 本会话内 `message_start` 的递增序号，与投影层的 `m*` 标识一一对应 */
@@ -290,6 +295,10 @@ export class PiAgent {
 		const started = new Promise<PromptDisposition>((resolve) => {
 			acceptRun = resolve;
 		});
+		const hadPendingSteerImages = this.session.isStreaming && options.streamingBehavior === "steer";
+		if (hadPendingSteerImages && options.images !== undefined && options.images.length > 0) {
+			this.pendingPromptSteerImages = options.images;
+		}
 		const run = this.session.prompt(text, {
 			images: options.images,
 			streamingBehavior: options.streamingBehavior,
@@ -311,6 +320,9 @@ export class PiAgent {
 			started.then((value) => ({ kind: "accepted" as const, value })),
 			failure.then((error) => ({ kind: "failed" as const, error })),
 		]);
+		if (hadPendingSteerImages) {
+			this.pendingPromptSteerImages = undefined;
+		}
 		if (first.kind === "failed") {
 			// 没能进入运行,阶段退回空闲
 			this.dispatchTurn({ kind: "command_finally", streaming: this.session.isStreaming });
@@ -334,7 +346,18 @@ export class PiAgent {
 	/** 排队一条消息，在当前助手回合的工具调用执行完后插入。 */
 	async steer(text: string, images?: ImageBlock[]): Promise<QueueDisposition> {
 		this.ui?.resume();
-		return await this.session.steer(text, images);
+		const entry: QueuedMessageItem =
+			images === undefined || images.length === 0 ? { text } : { text, images };
+		this.steeringQueue.push(entry);
+		try {
+			return await this.session.steer(text, images);
+		} catch (error) {
+			const idx = this.steeringQueue.lastIndexOf(entry);
+			if (idx >= 0) {
+				this.steeringQueue.splice(idx, 1);
+			}
+			throw error;
+		}
 	}
 
 	/** 排队一条消息，在本轮全部工作完成后插入。 */
@@ -354,9 +377,11 @@ export class PiAgent {
 	/**
 	 * 中止当前操作并等待会话空闲。
 	 *
-	 * 请求发出后先进入 stopping,等 pi 的 settled 把阶段收回 idle;没有可中止的运行时不改动阶段。
+	 * 中止前先排空所有尚未被模型消费的插话与后续排队内容并返回给发起方，避免继续在
+	 * 后台被消费或静默丢失。
 	 */
-	async abort(): Promise<void> {
+	async abort(): Promise<QueuedMessageItem[]> {
+		const reclaimed = this.drainAllQueued();
 		this.cancelUi();
 		this.dispatchTurn({ kind: "abort_requested" });
 		try {
@@ -365,6 +390,7 @@ export class PiAgent {
 			// settled 先到的话这里已经是 idle，转移函数原样返回，不会把阶段推回去
 			this.dispatchTurn({ kind: "command_finally", streaming: this.session.isStreaming });
 		}
+		return reclaimed;
 	}
 
 	/** 等待会话空闲，不中止正在执行的操作。 */
@@ -372,10 +398,38 @@ export class PiAgent {
 		await this.session.waitForIdle();
 	}
 
+	/** 排空全部待插话与待后续消息（含图片附件），供 abort 时退回输入框。 */
+	private drainAllQueued(): QueuedMessageItem[] {
+		const cleared = this.session.clearQueue();
+		const steering = mergeClearedSteering(this.steeringQueue, cleared.steering);
+		const sdkFollowUp = cleared.followUp.map((text): QueuedMessageItem => ({ text }));
+		const followUp = [...sdkFollowUp, ...this.followUpQueue];
+		this.steeringQueue = [];
+		this.followUpQueue = [];
+		if (steering.length > 0 || followUp.length > 0) {
+			this.emitQueue();
+		}
+		return [...steering, ...followUp];
+	}
+
+	/** 将全部待插话消息撤回并放回后续排队列表头部，保留图片与顺序。 */
+	demoteSteering(): void {
+		const cleared = this.session.clearQueue();
+		const demoted = mergeClearedSteering(this.steeringQueue, cleared.steering);
+		const sdkFollowUp = cleared.followUp.map((text): QueuedMessageItem => ({ text }));
+		this.steeringQueue = [];
+		if (demoted.length === 0 && sdkFollowUp.length === 0) {
+			return;
+		}
+		this.followUpQueue = [...demoted, ...sdkFollowUp, ...this.followUpQueue];
+		this.emitQueue();
+	}
+
 	/** 清空排队并返回其中内容，供界面还原到输入框。 */
 	clearQueue(): QueuedInput {
 		const cleared = this.session.clearQueue();
 		const followUp = this.followUpQueue.map((item) => item.text);
+		this.steeringQueue = [];
 		this.followUpQueue = [];
 		this.emitQueue();
 		return {
@@ -747,6 +801,22 @@ export class PiAgent {
 			if ((event.message as { role?: unknown }).role === "custom") {
 				this.pendingCustomMessageSeqs.push(this.messageSeq);
 			}
+			if (event.message.role === "user" && this.steeringQueue.length > 0) {
+				this.steeringQueue = syncSteeringMirror(this.steeringQueue, this.session.getSteeringMessages());
+			}
+		}
+		if (event.type === "queue_update") {
+			const pendingImages = this.pendingPromptSteerImages;
+			this.pendingPromptSteerImages = undefined;
+			const nextMirror = syncSteeringMirror(this.steeringQueue, event.steering);
+			if (pendingImages !== undefined && nextMirror.length > 0) {
+				const lastIndex = nextMirror.length - 1;
+				const last = nextMirror[lastIndex];
+				if (last !== undefined && last.images === undefined) {
+					nextMirror[lastIndex] = { text: last.text, images: pendingImages };
+				}
+			}
+			this.steeringQueue = nextMirror;
 		}
 		const failure = this.trackFailure(event);
 		this.dispatchTurn({ kind: "event", event });

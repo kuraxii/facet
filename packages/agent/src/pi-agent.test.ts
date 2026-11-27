@@ -26,6 +26,8 @@ interface FakeAgentOptions {
 function createAgent(options: FakeAgentOptions = {}) {
 	let listener: ((event: unknown) => void) | undefined;
 	const branchCalls: number[] = [];
+	const steeringMessages: string[] = [];
+	const followUpMessages: string[] = [];
 	const session = {
 		sessionId: "s1",
 		sessionFile: "/tmp/s1.jsonl",
@@ -49,6 +51,21 @@ function createAgent(options: FakeAgentOptions = {}) {
 		prompt: async (_text: string, run: FakeRun) => {
 			await (options.run?.(run) ?? Promise.resolve());
 		},
+		steer: async (text: string) => {
+			steeringMessages.push(text);
+			listener?.({ type: "queue_update", steering: [...steeringMessages], followUp: [...followUpMessages] });
+		},
+		followUp: async (text: string) => {
+			followUpMessages.push(text);
+			listener?.({ type: "queue_update", steering: [...steeringMessages], followUp: [...followUpMessages] });
+		},
+		clearQueue: () => {
+			const steering = steeringMessages.splice(0);
+			const followUp = followUpMessages.splice(0);
+			return { steering, followUp };
+		},
+		getSteeringMessages: () => steeringMessages,
+		getFollowUpMessages: () => followUpMessages,
 		dispose: () => {},
 		abort: options.abort ?? (async () => {}),
 		navigateTree: options.navigateTree ?? (async () => ({ cancelled: false })),
@@ -67,7 +84,7 @@ function createAgent(options: FakeAgentOptions = {}) {
 	const emitToAgent = (event: Record<string, unknown>): void => {
 		listener?.(event);
 	};
-	return { agent, events, emitToAgent, branchCalls };
+	return { agent, events, emitToAgent, branchCalls, steeringMessages };
 }
 
 describe("PiAgent.prompt", () => {
@@ -361,6 +378,24 @@ describe("阶段与维护动作", () => {
 		const { agent } = createAgent();
 		await agent.abort();
 		expect(agent.currentPhase).toBe("idle");
+	});
+
+	it("demoteSteering 将全部待插话消息（含图片）退回 followUp 队列头部", async () => {
+		const { agent } = createAgent({ streaming: true });
+		const img = { type: "image" as const, data: "abc", mimeType: "image/png" };
+		await agent.followUp("第一条后续", [img]);
+		await agent.followUp("第二条后续");
+		await agent.promoteFollowUp(0);
+		expect(agent.queued()).toEqual({ steering: ["第一条后续"], followUp: ["第二条后续"] });
+
+		agent.demoteSteering();
+		expect(agent.queued()).toEqual({ steering: [], followUp: ["第一条后续", "第二条后续"] });
+		// 再次中止应能连同原图一起回收
+		await expect(agent.abort()).resolves.toEqual([
+			{ text: "第一条后续", images: [img] },
+			{ text: "第二条后续" },
+		]);
+		expect(agent.queued()).toEqual({ steering: [], followUp: [] });
 	});
 });
 

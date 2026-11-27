@@ -177,8 +177,6 @@ export const systemHandlers: Pick<RequestHandlerMap, SystemMethod> = {
 			...(params.model === undefined ? {} : { model: params.model }),
 			...(params.thinkingLevel === undefined ? {} : { thinkingLevel: params.thinkingLevel }),
 			...(params.autoCompaction === undefined ? {} : { autoCompaction: params.autoCompaction }),
-			...(params.steeringMode === undefined ? {} : { steeringMode: params.steeringMode }),
-			...(params.followUpMode === undefined ? {} : { followUpMode: params.followUpMode }),
 		});
 		return context.factory.agentDefaults();
 	},

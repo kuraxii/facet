@@ -5,7 +5,7 @@
  * 状态那一层。
  */
 import type { ChatView, SessionView, TextPart, TranscriptItem } from "@facet/client-core";
-import type { QueuedInput } from "@facet/protocol";
+import type { Message, QueuedInput } from "@facet/protocol";
 import {
 	ArrowDownIcon,
 	ChatOutline,
@@ -107,6 +107,21 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 	const providerAuth = host.catalog.auth;
 	/** 已发消息按条记忆：流式期间每帧只有末尾那条换新，回溯用的列表不必重算 */
 	const sentHistory = useMemo(() => sentTexts(transcript.items), [transcript.items]);
+	const { sessionMessages, streamingChars } = useMemo(() => {
+		const messages: Message[] = [];
+		let chars = 0;
+		for (const item of chat?.items ?? []) {
+			if (item.message !== undefined) {
+				messages.push(item.message);
+			}
+			if (item.isStreaming) {
+				for (const part of Object.values(item.streaming)) {
+					chars += part.text.length;
+				}
+			}
+		}
+		return { sessionMessages: messages, streamingChars: chars };
+	}, [chat?.items]);
 	/*
 	 * 导航轨是不是要在：只看有没有可跳的条目，与窗口宽度无关。宽窄由三列网格的右轨兜着，
 	 * 消息列与输入区共用同一个标记，两者的左右边缘因此始终对齐。
@@ -240,6 +255,10 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 						isBlocked={isBlocked}
 						canStop={host.isOnline && host.host?.role !== "viewer"}
 						contextUsage={sessionView.state.contextUsage}
+						onLoadContextDetails={() => client.contextDetails()}
+						sessionStats={sessionView.state.stats}
+						sessionMessages={sessionMessages}
+						streamingChars={streamingChars}
 						isCompacting={activity === "compacting"}
 						canCompact={activity === "idle"}
 						onCompact={() => client.compact()}

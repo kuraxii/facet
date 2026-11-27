@@ -34,7 +34,7 @@ const checkRequestRespondUi = buildRequestRespondUi();
  */
 function buildRequestListSessions(): (value: unknown) => boolean {
 	// @ts-ignore
-	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && (value.cwd === undefined || (!("cwd" in value) || typeof value.cwd === "string"))));
+	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && ((value.cwd === undefined || (!("cwd" in value) || typeof value.cwd === "string")) && (value.backendId === undefined || (!("backendId" in value) || typeof value.backendId === "string")))));
 	return check_0;
 }
 
@@ -79,7 +79,7 @@ const checkRequestBusySessions = buildRequestBusySessions();
  */
 function buildRequestCreateSession(): (value: unknown) => boolean {
 	// @ts-ignore
-	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && ((((((value.cwd === undefined || (!("cwd" in value) || typeof value.cwd === "string")) && (value.model === undefined || (!("model" in value) || ((typeof value.model === "object" && value.model !== null && !(Array.isArray(value.model))) && (("provider" in value.model && "id" in value.model) && (typeof value.model.provider === "string" && typeof value.model.id === "string")))))) && (value.thinkingLevel === undefined || (!("thinkingLevel" in value) || (((((((typeof value.thinkingLevel === "string" && value.thinkingLevel === "off") || (typeof value.thinkingLevel === "string" && value.thinkingLevel === "minimal")) || (typeof value.thinkingLevel === "string" && value.thinkingLevel === "low")) || (typeof value.thinkingLevel === "string" && value.thinkingLevel === "medium")) || (typeof value.thinkingLevel === "string" && value.thinkingLevel === "high")) || (typeof value.thinkingLevel === "string" && value.thinkingLevel === "xhigh")) || (typeof value.thinkingLevel === "string" && value.thinkingLevel === "max"))))) && (value.tools === undefined || (!("tools" in value) || (Array.isArray(value.tools) && value.tools.every((element, index) => (typeof element === "string")))))) && (value.excludeTools === undefined || (!("excludeTools" in value) || (Array.isArray(value.excludeTools) && value.excludeTools.every((element, index) => (typeof element === "string")))))) && (value.name === undefined || (!("name" in value) || typeof value.name === "string")))));
+	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && (((((((value.cwd === undefined || (!("cwd" in value) || typeof value.cwd === "string")) && (value.backendId === undefined || (!("backendId" in value) || typeof value.backendId === "string"))) && (value.model === undefined || (!("model" in value) || ((typeof value.model === "object" && value.model !== null && !(Array.isArray(value.model))) && (("provider" in value.model && "id" in value.model) && (typeof value.model.provider === "string" && typeof value.model.id === "string")))))) && (value.thinkingLevel === undefined || (!("thinkingLevel" in value) || (((((((typeof value.thinkingLevel === "string" && value.thinkingLevel === "off") || (typeof value.thinkingLevel === "string" && value.thinkingLevel === "minimal")) || (typeof value.thinkingLevel === "string" && value.thinkingLevel === "low")) || (typeof value.thinkingLevel === "string" && value.thinkingLevel === "medium")) || (typeof value.thinkingLevel === "string" && value.thinkingLevel === "high")) || (typeof value.thinkingLevel === "string" && value.thinkingLevel === "xhigh")) || (typeof value.thinkingLevel === "string" && value.thinkingLevel === "max"))))) && (value.tools === undefined || (!("tools" in value) || (Array.isArray(value.tools) && value.tools.every((element, index) => (typeof element === "string")))))) && (value.excludeTools === undefined || (!("excludeTools" in value) || (Array.isArray(value.excludeTools) && value.excludeTools.every((element, index) => (typeof element === "string")))))) && (value.name === undefined || (!("name" in value) || typeof value.name === "string")))));
 	return check_0;
 }
 
@@ -853,6 +853,70 @@ function buildRequestRemoveCustomProvider(): (value: unknown) => boolean {
 const checkRequestRemoveCustomProvider = buildRequestRemoveCustomProvider();
 
 /**
+ * listBackends 的参数判断。
+ *
+ * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
+ */
+function buildRequestListBackends(): (value: unknown) => boolean {
+	// @ts-ignore
+	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && true));
+	return check_0;
+}
+
+const checkRequestListBackends = buildRequestListBackends();
+
+/**
+ * saveAcpBackend 的参数判断。
+ *
+ * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
+ */
+function buildRequestSaveAcpBackend(): (value: unknown) => boolean {
+	// @ts-ignore
+	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && ("profile" in value && ((typeof value.profile === "object" && value.profile !== null && !(Array.isArray(value.profile))) && ((((("id" in value.profile && "name" in value.profile) && "command" in value.profile) && "args" in value.profile) && "enabled" in value.profile) && (((((((typeof value.profile.id === "string" && typeof value.profile.name === "string") && typeof value.profile.command === "string") && (Array.isArray(value.profile.args) && value.profile.args.every((element, index) => (typeof element === "string")))) && (value.profile.env === undefined || (!("env" in value.profile) || ((typeof value.profile.env === "object" && value.profile.env !== null && !(Array.isArray(value.profile.env))) && true)))) && typeof value.profile.enabled === "boolean") && (value.profile.builtIn === undefined || (!("builtIn" in value.profile) || typeof value.profile.builtIn === "boolean"))) && (value.profile.loginHint === undefined || (!("loginHint" in value.profile) || typeof value.profile.loginHint === "string"))))))));
+	return check_0;
+}
+
+const checkRequestSaveAcpBackend = buildRequestSaveAcpBackend();
+
+/**
+ * removeAcpBackend 的参数判断。
+ *
+ * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
+ */
+function buildRequestRemoveAcpBackend(): (value: unknown) => boolean {
+	// @ts-ignore
+	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && ("backendId" in value && typeof value.backendId === "string")));
+	return (value: unknown): boolean => {
+		if (!check_0(value)) return false;
+		const source = value as Record<string, unknown>;
+		return (
+			typeof source.backendId === "string" && source.backendId.length > 0
+		);
+	};
+}
+
+const checkRequestRemoveAcpBackend = buildRequestRemoveAcpBackend();
+
+/**
+ * probeBackend 的参数判断。
+ *
+ * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
+ */
+function buildRequestProbeBackend(): (value: unknown) => boolean {
+	// @ts-ignore
+	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && ("backendId" in value && typeof value.backendId === "string")));
+	return (value: unknown): boolean => {
+		if (!check_0(value)) return false;
+		const source = value as Record<string, unknown>;
+		return (
+			typeof source.backendId === "string" && source.backendId.length > 0
+		);
+	};
+}
+
+const checkRequestProbeBackend = buildRequestProbeBackend();
+
+/**
  * listTerminals 的参数判断。
  *
  * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
@@ -1118,6 +1182,32 @@ function buildDispatchSessionConfigChanged(): (value: unknown) => boolean {
 const checkDispatchSessionConfigChanged = buildDispatchSessionConfigChanged();
 
 /**
+ * session/acpModeSet 的动作判断。
+ *
+ * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
+ */
+function buildDispatchSessionAcpModeSet(): (value: unknown) => boolean {
+	// @ts-ignore
+	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && (("type" in value && "modeId" in value) && ((typeof value.type === "string" && value.type === "session/acpModeSet") && typeof value.modeId === "string"))));
+	return check_0;
+}
+
+const checkDispatchSessionAcpModeSet = buildDispatchSessionAcpModeSet();
+
+/**
+ * session/acpConfigOptionSet 的动作判断。
+ *
+ * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
+ */
+function buildDispatchSessionAcpConfigOptionSet(): (value: unknown) => boolean {
+	// @ts-ignore
+	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && ((("type" in value && "configId" in value) && "value" in value) && (((typeof value.type === "string" && value.type === "session/acpConfigOptionSet") && typeof value.configId === "string") && typeof value.value === "string"))));
+	return check_0;
+}
+
+const checkDispatchSessionAcpConfigOptionSet = buildDispatchSessionAcpConfigOptionSet();
+
+/**
  * actionFrame 的信封判断。
  *
  * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
@@ -1182,6 +1272,10 @@ export const REQUEST_CONTRACTS: Readonly<Record<string, RequestContract | undefi
 	"fetchProviderModels": { auth: "admin", check: checkRequestFetchProviderModels },
 	"saveCustomProvider": { auth: "admin", check: checkRequestSaveCustomProvider },
 	"removeCustomProvider": { auth: "admin", check: checkRequestRemoveCustomProvider },
+	"listBackends": { auth: "public", check: checkRequestListBackends },
+	"saveAcpBackend": { auth: "admin", check: checkRequestSaveAcpBackend },
+	"removeAcpBackend": { auth: "admin", check: checkRequestRemoveAcpBackend },
+	"probeBackend": { auth: "admin", check: checkRequestProbeBackend },
 	"listTerminals": { auth: "public", check: checkRequestListTerminals },
 	"listTerminalProfiles": { auth: "public", check: checkRequestListTerminalProfiles },
 	"createTerminal": { auth: "write", check: checkRequestCreateTerminal },
@@ -1210,4 +1304,6 @@ export const DISPATCH_CONTRACTS: Readonly<Record<string, DispatchContract | unde
 	"session/steeringDemoted": { auth: "write", check: checkDispatchSessionSteeringDemoted },
 	"session/compact": { auth: "write", check: checkDispatchSessionCompact },
 	"session/configChanged": { auth: "write", check: checkDispatchSessionConfigChanged },
+	"session/acpModeSet": { auth: "write", check: checkDispatchSessionAcpModeSet },
+	"session/acpConfigOptionSet": { auth: "write", check: checkDispatchSessionAcpConfigOptionSet },
 };

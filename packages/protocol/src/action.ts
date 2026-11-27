@@ -1,3 +1,4 @@
+import type { AcpConfigOption, AcpModeState } from "./backend.ts";
 import type { ImageBlock, ToolOutput } from "./content.ts";
 import type { DeltaKind, NoticeLevel } from "./event.ts";
 import type { ExtensionUiState, SessionInitialization } from "./extension-ui.ts";
@@ -84,7 +85,13 @@ export type SessionAction =
 			activeToolNames?: string[];
 			/** 是否同时写入主机的全局默认值 */
 			persist?: boolean;
-	  };
+	  }
+	/** 主机侧:ACP 会话模式或动态配置项变化 */
+	| { type: "session/acpStateChanged"; mode?: AcpModeState; configOptions?: AcpConfigOption[] }
+	/** 客户端可派发:切换 ACP 会话模式 */
+	| { type: "session/acpModeSet"; modeId: string }
+	/** 客户端可派发:修改 ACP 动态配置项 */
+	| { type: "session/acpConfigOptionSet"; configId: string; value: string };
 
 /** 对话动作。 */
 export type ChatAction =

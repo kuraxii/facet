@@ -5,6 +5,7 @@
  * 不引入任何运行时依赖。任何一端都不得在本包之外另立同名结构。
  */
 export type * from "./action.ts";
+export * from "./backend.ts";
 export * from "./channel.ts";
 export type * from "./command.ts";
 export type * from "./content.ts";

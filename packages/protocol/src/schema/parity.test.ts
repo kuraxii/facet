@@ -23,7 +23,7 @@ function assertEqual<A, B>(_proof: Equals<A, B> extends true ? true : never): tr
 interface FrozenRequestParams {
 	respondUi: { sessionId: string; requestId: string; response: UiResponse };
 	/** 列出会话。指定 cwd 时只列该目录。 */
-	listSessions: { cwd?: string };
+	listSessions: { cwd?: string; backendId?: string };
 	/** 列出某个会话里能用的命令：界面自带的几条，加上扩展命令、提示词模板与技能。 */
 	listCommands: { sessionId: string };
 	/** 列出正在运行的会话文件。退出前确认有没有任务会被带走。 */
@@ -32,6 +32,7 @@ interface FrozenRequestParams {
 	/** 新建会话并返回初始快照。 */
 	createSession: {
 		cwd?: string;
+		backendId?: string;
 		model?: ModelRef;
 		thinkingLevel?: ThinkingLevel;
 		tools?: string[];

@@ -8,6 +8,7 @@
 
 import type { Static, TSchema } from "typebox";
 import type { Action, ActionOrigin } from "./action.ts";
+import type { AcpBackendProfile, BackendAvailability } from "./backend.ts";
 import type { Channel } from "./channel.ts";
 import type { SlashCommand } from "./command.ts";
 import type { FileContent, FileEntry, FileWriteResult } from "./file.ts";
@@ -277,6 +278,10 @@ export interface RequestResults {
 	fetchProviderModels: { models: UpstreamModel[]; baseUrl: string };
 	saveCustomProvider: { providers: CustomProviderInfo[] };
 	removeCustomProvider: { providers: CustomProviderInfo[] };
+	listBackends: { backends: BackendAvailability[]; profiles: AcpBackendProfile[] };
+	saveAcpBackend: { backends: BackendAvailability[]; profiles: AcpBackendProfile[] };
+	removeAcpBackend: { backends: BackendAvailability[]; profiles: AcpBackendProfile[] };
+	probeBackend: { backend: BackendAvailability };
 	listTerminals: { terminals: TerminalInfo[] };
 	/** 主机上可用的终端，顺序即「更可能是用户想要的」顺序 */
 	listTerminalProfiles: { profiles: TerminalProfileInfo[] };

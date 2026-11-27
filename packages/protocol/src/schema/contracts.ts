@@ -109,7 +109,7 @@ export const REQUEST_SCHEMAS = {
 	},
 	listSessions: {
 		auth: "public",
-		params: Type.Object({ cwd: Type.Optional(Cwd) }),
+		params: Type.Object({ cwd: Type.Optional(Cwd), backendId: Type.Optional(Id) }),
 	},
 	listCommands: {
 		auth: "public",
@@ -121,6 +121,7 @@ export const REQUEST_SCHEMAS = {
 		auth: "write",
 		params: Type.Object({
 			cwd: Type.Optional(Cwd),
+			backendId: Type.Optional(Id),
 			model: Type.Optional(ModelRef),
 			thinkingLevel: Type.Optional(ThinkingLevel),
 			tools: Type.Optional(Type.Array(Type.String())),
@@ -371,6 +372,32 @@ export const REQUEST_SCHEMAS = {
 		params: Type.Object({ providerId: Id }),
 		nonEmpty: ["providerId"],
 	},
+	listBackends: { auth: "public", params: NoParams },
+	saveAcpBackend: {
+		auth: "admin",
+		params: Type.Object({
+			profile: Type.Object({
+				id: Id,
+				name: Id,
+				command: Id,
+				args: Type.Array(Type.String()),
+				env: Type.Optional(Unsafe<Record<string, string>>(Type.Object({}))),
+				enabled: Type.Boolean(),
+				builtIn: Type.Optional(Type.Boolean()),
+				loginHint: Type.Optional(Type.String()),
+			}),
+		}),
+	},
+	removeAcpBackend: {
+		auth: "admin",
+		params: Type.Object({ backendId: Id }),
+		nonEmpty: ["backendId"],
+	},
+	probeBackend: {
+		auth: "admin",
+		params: Type.Object({ backendId: Id }),
+		nonEmpty: ["backendId"],
+	},
 	listTerminals: { auth: "public", params: NoParams },
 	listTerminalProfiles: { auth: "public", params: NoParams },
 	createTerminal: {
@@ -487,6 +514,18 @@ export const DISPATCH_SCHEMAS = {
 			thinkingLevel: Type.Optional(ThinkingLevel),
 			activeToolNames: Type.Optional(Type.Array(Type.String())),
 			persist: Type.Optional(Type.Boolean()),
+		}),
+	},
+	"session/acpModeSet": {
+		auth: "write",
+		action: Type.Object({ type: Type.Literal("session/acpModeSet"), modeId: Id }),
+	},
+	"session/acpConfigOptionSet": {
+		auth: "write",
+		action: Type.Object({
+			type: Type.Literal("session/acpConfigOptionSet"),
+			configId: Id,
+			value: Type.String(),
 		}),
 	},
 } satisfies Readonly<Record<string, DispatchSchemaEntry | undefined>>;

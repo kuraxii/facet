@@ -12,7 +12,6 @@ import type {
 	ProviderInfo,
 	ProviderLoginState,
 	ProviderLoginType,
-	QueueDeliveryMode,
 	TerminalProfileInfo,
 	ThinkingLevel,
 	UpstreamModel,
@@ -23,15 +22,13 @@ export interface SettingsDataSource {
 	loadSettings: () => Promise<FacetSettings>;
 	/** 保存设置，失败时抛错 */
 	saveSettings: (settings: FacetSettings) => Promise<FacetSettings>;
-	/** 读 pi 的默认设置（默认模型、思考档位、自动压缩与排队投递方式） */
+	/** 读 pi 的默认设置（默认模型、思考档位与自动压缩） */
 	loadAgentDefaults: () => Promise<AgentDefaults>;
 	/** 改 pi 的默认设置，只传要改的字段；思考档位传 null 表示清掉 */
 	saveAgentDefaults: (patch: {
 		model?: ModelRef;
 		thinkingLevel?: ThinkingLevel | null;
 		autoCompaction?: boolean;
-		steeringMode?: QueueDeliveryMode;
-		followUpMode?: QueueDeliveryMode;
 	}) => Promise<AgentDefaults>;
 	/** 读提供方清单，含授权状态与模型数量 */
 	loadProviders: () => Promise<ProviderInfo[]>;

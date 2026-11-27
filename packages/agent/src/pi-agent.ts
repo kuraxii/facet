@@ -147,6 +147,8 @@ export class PiAgent {
 	private readonly contextObserver: Readonly<ContextObserverState> | undefined;
 	/** 活动分支快照，叶子变化时重建 */
 	private branch: BranchSnapshot | undefined;
+	/** 由 Facet 持有的待发后续消息（本轮结束后统一合并发出，支持单条转插话、编辑与删除） */
+	private followUpQueue: Array<{ text: string; images?: ImageBlock[] }> = [];
 
 	/** 构造后立即订阅，保证首次 prompt 之前的运行不会漏事件。 */
 	constructor(context: PiAgentContext) {
@@ -288,6 +290,14 @@ export class PiAgent {
 		if (this.session.isStreaming && !options.streamingBehavior) {
 			throw new Error("prompt rejected: the session is streaming and no streamingBehavior was given");
 		}
+		if (this.session.isStreaming && options.streamingBehavior === "followUp") {
+			this.followUpQueue.push({
+				text,
+				...(options.images === undefined || options.images.length === 0 ? {} : { images: options.images }),
+			});
+			this.emitQueue();
+			return "queued";
+		}
 		// 运行开始之前就置成 starting:界面立刻看到忙碌,空闲回收也会等到这一段落定
 		this.dispatchTurn({ kind: "prompt_requested", streaming: this.session.isStreaming });
 		let disposition: PromptDisposition | undefined;
@@ -345,6 +355,14 @@ export class PiAgent {
 	/** 排队一条消息，在本轮全部工作完成后插入。 */
 	async followUp(text: string, images?: ImageBlock[]): Promise<QueueDisposition> {
 		this.ui?.resume();
+		if (this.session.isStreaming) {
+			this.followUpQueue.push({
+				text,
+				...(images === undefined || images.length === 0 ? {} : { images }),
+			});
+			this.emitQueue();
+			return "queued";
+		}
 		return await this.session.followUp(text, images);
 	}
 
@@ -371,14 +389,52 @@ export class PiAgent {
 
 	/** 清空排队并返回其中内容，供界面还原到输入框。 */
 	clearQueue(): QueuedInput {
-		return this.session.clearQueue();
+		const cleared = this.session.clearQueue();
+		const followUp = this.followUpQueue.map((item) => item.text);
+		this.followUpQueue = [];
+		this.emitQueue();
+		return {
+			steering: [...cleared.steering],
+			followUp: [...cleared.followUp, ...followUp],
+		};
+	}
+
+	/** 将指定索引的后续排队消息转为插话立即发送（空闲时直接开启新回合）。 */
+	async promoteFollowUp(index: number): Promise<void> {
+		if (index < 0 || index >= this.followUpQueue.length) {
+			return;
+		}
+		const [item] = this.followUpQueue.splice(index, 1);
+		if (item === undefined) {
+			return;
+		}
+		this.emitQueue();
+		if (this.session.isStreaming) {
+			await this.steer(item.text, item.images);
+			return;
+		}
+		await this.prompt(item.text, item.images === undefined ? {} : { images: item.images });
+	}
+
+	/** 从后续排队消息中移除指定索引的条目。 */
+	removeFollowUp(index: number): void {
+		if (index < 0 || index >= this.followUpQueue.length) {
+			return;
+		}
+		this.followUpQueue.splice(index, 1);
+		this.emitQueue();
 	}
 
 	queued(): QueuedInput {
 		return {
 			steering: [...this.session.getSteeringMessages()],
-			followUp: [...this.session.getFollowUpMessages()],
+			followUp: [...this.session.getFollowUpMessages(), ...this.followUpQueue.map((item) => item.text)],
 		};
+	}
+
+	private emitQueue(): void {
+		const snapshot = this.queued();
+		this.emit({ type: "queue", steering: snapshot.steering, followUp: snapshot.followUp });
 	}
 
 	/** 切换模型。pi 不发模型变更事件，这里主动补发，保证订阅方只有一个状态来源。 */
@@ -653,6 +709,7 @@ export class PiAgent {
 			return;
 		}
 		this.disposed = true;
+		this.followUpQueue = [];
 		this.ui?.dispose();
 		this.stopUi?.();
 		this.unsubscribeSession();
@@ -692,7 +749,40 @@ export class PiAgent {
 		const failure = this.trackFailure(event);
 		this.dispatchTurn({ kind: "event", event });
 		for (const mapped of toSessionEvents(event)) {
+			if (mapped.type === "queue") {
+				this.emit({
+					type: "queue",
+					steering: mapped.steering,
+					followUp: [...mapped.followUp, ...this.followUpQueue.map((item) => item.text)],
+				});
+				continue;
+			}
 			this.emit(mapped.type === "settled" ? { ...mapped, failure } : mapped);
+		}
+		// 正常收尾后，把 Facet 缓存的后续消息一次性合并发出（支持图片附件一并携带）
+		if (
+			event.type === "agent_settled" &&
+			event.aborted !== true &&
+			this.followUpQueue.length > 0 &&
+			!this.disposed
+		) {
+			const pending = this.followUpQueue;
+			this.followUpQueue = [];
+			this.emitQueue();
+			const mergedText = pending
+				.map((item) => item.text)
+				.filter((text) => text.length > 0)
+				.join("\n\n");
+			const mergedImages = pending.flatMap((item) => item.images ?? []);
+			void this.prompt(mergedText, mergedImages.length > 0 ? { images: mergedImages } : {}).catch(
+				(error: unknown) => {
+					this.emit({
+						type: "notice",
+						level: "error",
+						message: error instanceof Error ? error.message : String(error),
+					});
+				},
+			);
 		}
 	}
 

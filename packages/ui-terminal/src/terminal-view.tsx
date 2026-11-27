@@ -10,9 +10,25 @@
 
 import type { TerminalClient } from "@facet/client-core";
 import { FitAddon } from "@xterm/addon-fit";
-import { Terminal } from "@xterm/xterm";
+import { type ITheme, Terminal } from "@xterm/xterm";
 import { useEffect, useImperativeHandle, useRef } from "react";
 import "@xterm/xterm/css/xterm.css";
+
+/** 构造 xterm 6 主题配置：透出底层面板背景，并将 overviewRuler 描边设为透明避免右缘出现常驻白线。 */
+export function buildXtermTheme(appearance: TerminalAppearance): ITheme {
+	return {
+		background: "rgba(0,0,0,0)",
+		foreground: appearance.foreground,
+		cursor: appearance.cursor,
+		selectionBackground: appearance.selection,
+		// overviewRuler 启用宽度后默认用 #ffffff 画 1px 左边线，显式置透明避免右缘出现常驻白线
+		overviewRulerBorder: "rgba(0,0,0,0)",
+		// xterm 把滑块色写进自己注入的样式表，因此这里只接受解析得出的具体颜色
+		scrollbarSliderBackground: appearance.scrollbarThumb,
+		scrollbarSliderHoverBackground: appearance.scrollbarThumbHover,
+		scrollbarSliderActiveBackground: appearance.scrollbarThumbHover,
+	};
+}
 
 /** 终端外观。跟着界面配色与设置走。 */
 export interface TerminalAppearance {
@@ -106,16 +122,7 @@ export function TerminalView({
 			 * 颜色也换成界面用的两个变量，两处观感才一致。原生 `::-webkit-scrollbar` 对它无效。
 			 */
 			overviewRuler: { width: appearance.scrollbarWidth },
-			theme: {
-				background: "rgba(0,0,0,0)",
-				foreground: appearance.foreground,
-				cursor: appearance.cursor,
-				selectionBackground: appearance.selection,
-				// xterm 把它写进自己注入的样式表，因此这里只接受解析得出的具体颜色
-				scrollbarSliderBackground: appearance.scrollbarThumb,
-				scrollbarSliderHoverBackground: appearance.scrollbarThumbHover,
-				scrollbarSliderActiveBackground: appearance.scrollbarThumbHover,
-			},
+			theme: buildXtermTheme(appearance),
 			allowProposedApi: true,
 			convertEol: false,
 		});
@@ -200,15 +207,7 @@ export function TerminalView({
 		terminal.options.lineHeight = appearance.lineHeight;
 		terminal.options.cursorBlink = appearance.cursorBlink;
 		terminal.options.overviewRuler = { width: appearance.scrollbarWidth };
-		terminal.options.theme = {
-			background: "rgba(0,0,0,0)",
-			foreground: appearance.foreground,
-			cursor: appearance.cursor,
-			selectionBackground: appearance.selection,
-			scrollbarSliderBackground: appearance.scrollbarThumb,
-			scrollbarSliderHoverBackground: appearance.scrollbarThumbHover,
-			scrollbarSliderActiveBackground: appearance.scrollbarThumbHover,
-		};
+		terminal.options.theme = buildXtermTheme(appearance);
 		try {
 			fitRef.current?.fit();
 		} catch {

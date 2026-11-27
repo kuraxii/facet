@@ -171,21 +171,21 @@
 	height: 100%;
 }
 
+/* xterm 6 不再由 .xterm-viewport 承担滚动，关掉其 overflow-y 以免空占原生滚动槽 */
 .term-surface .xterm .xterm-viewport {
 	background-color: transparent;
+	overflow-y: hidden;
 }
 
 /*
- * 藏掉 xterm 自己画的那条滚动条。
- *
- * 可见的那条是视口的原生滚动条（`.xterm-viewport` 是 `overflow-y: scroll`），已经按界面
- * 统一了宽度与配色。xterm 另外还会在同位置放一条自己的（`.xterm-scrollable-element >
- * .scrollbar`，缺省 14px，滚动时淡入），两条叠在一起看就像多出一条线，所以这条不显示。
- * 它的宽度仍由 `overviewRuler.width` 参与 xterm 的列宽计算（见 `terminal-view.tsx`），
- * 与原生那条对齐，正文因此不会压在滚动条下面。
+ * xterm 6 的真实滚动条是 `.xterm-scrollable-element > .scrollbar > .slider`（宽度来自
+ * `overviewRuler.width`）。用透明左右边框把 8px 轨道里的滑块收窄到 `--scrollbar-thumb`
+ * 并切成胶囊圆角，观感与全仓其他滚动容器一致。
  */
-.term-surface .xterm .xterm-scrollable-element > .scrollbar {
-	display: none;
+.term-surface .xterm .xterm-scrollable-element > .scrollbar.vertical > .slider {
+	border-inline: calc((var(--scrollbar-width) - var(--scrollbar-thumb)) / 2) solid transparent;
+	border-radius: var(--radius-pill);
+	background-clip: content-box;
 }
 
 /* 开终端失败时贴在面板上方的提示 */

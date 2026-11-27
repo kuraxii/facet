@@ -835,6 +835,22 @@ function createConnection(socket: Socket): void {
 			case "listCommands":
 				ok(id, { commands: [] });
 				return;
+			case "contextDetails":
+				ok(id, {
+					contextWindow: 200000,
+					reportedTokens: 21000,
+					reportedPercent: 10.5,
+					estimatedTokens: 21000,
+					categories: [
+						{ id: "system-prompt", tokens: 3000 },
+						{ id: "built-in-tools", tokens: 4000 },
+						{ id: "user-messages", tokens: 2000 },
+						{ id: "assistant-messages", tokens: 12000 },
+					],
+					hiddenTools: [],
+					compactions: 0,
+				});
+				return;
 			case "getSettings":
 				ok(id, { settings });
 				return;

@@ -42,8 +42,6 @@ export interface ChatTranscriptProps {
 	onCopyText?: ((text: string) => void) | undefined;
 	/** 没有任何内容时显示的提示 */
 	emptyHint?: string;
-	/** 实时消息提升为历史消息时的标识迁移，用来搬动按行标识保存的收起状态 */
-	renames?: Readonly<Record<string, string>> | undefined;
 	/** 会话是否仍在推进；为真时最后一轮的时长持续计时 */
 	isRunning?: boolean;
 	/** 正文的滚动容器：增量测高与翻页锚定都在它上面做 */
@@ -73,7 +71,6 @@ export function ChatTranscript({
 	onCopyDetails,
 	onCopyText,
 	emptyHint,
-	renames,
 	isRunning = false,
 	scrollElement = null,
 	reclaim,
@@ -220,28 +217,6 @@ export function ChatTranscript({
 	useEffect(() => {
 		setRetryStartedAt(retryKey === undefined ? undefined : Date.now());
 	}, [retryKey]);
-
-	// 一轮结束、消息提升为历史消息后行标识会变，把按旧标识保存的收起状态搬到新标识上
-	useEffect(() => {
-		if (renames === undefined) {
-			return;
-		}
-		setOverrides((previous) => {
-			let next: Map<string, boolean> | undefined;
-			for (const [from, to] of Object.entries(renames)) {
-				const value = previous.get(from);
-				if (value === undefined) {
-					continue;
-				}
-				next ??= new Map(previous);
-				next.delete(from);
-				if (!next.has(to)) {
-					next.set(to, value);
-				}
-			}
-			return next ?? previous;
-		});
-	}, [renames]);
 
 	const toggle = useCallback((row: DisplayRow) => {
 		setOverrides((previous) => {

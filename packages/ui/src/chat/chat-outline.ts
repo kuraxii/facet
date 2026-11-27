@@ -43,8 +43,8 @@ function textOfItem(item: TranscriptItem): string {
 /**
  * 从渲染单元里取出导航条目。
  *
- * 只收用户消息：导航是按轮跳的，助手答复与工具调用都在某一轮里面。没有条目 id 的实时
- * 消息用视图标识顶上，提升成历史消息后键会跟着变，界面按新键重新对齐。
+ * 只收用户消息：导航是按轮跳的，助手答复与工具调用都在某一轮里面。没有条目 id 的流式
+ * 消息先用视图标识顶上，写盘补齐 `entryId` 后沿用新键定位。
  */
 export function outlinePrompts(
 	items: readonly TranscriptItem[],

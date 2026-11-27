@@ -181,7 +181,7 @@ export const RowView = memo(function RowView({
 		const text = textOf(row.items.flatMap((item) => item.parts));
 		// 回退要把图片一起带回输入区：只还文本的话，用户截图就悄悄丢了
 		const images = imagesOf(row.items);
-		// 回退要有落地过的条目:实时消息在提升之前没有条目 id
+		// 回退要有落地过的条目:流式消息写入持久化前还没有条目 id
 		const entryId = row.items[0]?.entryId;
 		// 第一条用户消息之前没有可回退的轮次
 		const canRevertThis = canRevert && entryId !== undefined && row.id !== firstUserRowId;

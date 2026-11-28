@@ -8,9 +8,10 @@
 import { randomUUID } from "node:crypto";
 import { Readable, Writable } from "node:stream";
 import { client, ndJsonStream, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
-import type { AcpAgentProfile, AgentAvailability } from "@facet/protocol";
+import type { AcpAgentProfile, AcpConfigOption, AcpModeState, AgentAvailability } from "@facet/protocol";
 import { AcpAgent, formatAcpInitFailure } from "./acp-agent.ts";
 import { AcpLoginManager } from "./acp-login.ts";
+import { AcpProbeSessionStore, probeAcpDraftConfig } from "./acp-probe-session.ts";
 import { AcpRegistryStore, type CommandProbeEnv, resolveCommandPath } from "./acp-registry.ts";
 import { AcpSessionIndex } from "./acp-session-index.ts";
 import { spawnAcpProcess, terminateAcpProcess } from "./acp-spawn.ts";
@@ -18,8 +19,12 @@ import { getAcpAgentAdapter } from "./antigravity-adapter.ts";
 
 /** 构造 `AcpAgentRuntime` 的参数。 */
 export interface AcpAgentRuntimeOptions {
-	/** 宿主数据目录，注册表与轻量索引都落在此目录下 */
+	/** 后端默认数据目录（测试单目录传参时兜底） */
 	agentDir: string;
+	/** ACP 注册表目录（`acp-agents.json`），缺省回退 `agentDir` */
+	configDir?: string;
+	/** ACP 会话索引与占位空会话目录（`acp-sessions.json` / `acp-draft-session.json`），缺省回退 `agentDir` */
+	acpDir?: string;
 	/** 测试可注入自定义命令探测环境 */
 	probeEnv?: CommandProbeEnv;
 	onError?: (error: unknown) => void;
@@ -29,15 +34,19 @@ export interface AcpAgentRuntimeOptions {
 export class AcpAgentRuntime {
 	readonly registry: AcpRegistryStore;
 	readonly index: AcpSessionIndex;
+	private readonly probeStore: AcpProbeSessionStore;
 	private readonly loginManager = new AcpLoginManager();
 	private readonly onError?: (error: unknown) => void;
 
 	constructor(options: AcpAgentRuntimeOptions) {
+		const configDir = options.configDir ?? options.agentDir;
+		const acpDir = options.acpDir ?? options.agentDir;
 		this.registry = new AcpRegistryStore({
-			agentDir: options.agentDir,
+			agentDir: configDir,
 			probeEnv: options.probeEnv,
 		});
-		this.index = new AcpSessionIndex(options.agentDir);
+		this.index = new AcpSessionIndex(acpDir);
+		this.probeStore = new AcpProbeSessionStore(acpDir);
 		this.onError = options.onError;
 	}
 
@@ -83,6 +92,24 @@ export class AcpAgentRuntime {
 	async probeAgent(agentId: string): Promise<AgentAvailability> {
 		return await this.registry.probe(agentId, async (profile) => {
 			return await runAcpHandshakeProbe(profile);
+		});
+	}
+
+	/** 通过复用的占位空会话实时拉取新建草稿页所需的模式与模型/思考强度配置。 */
+	async getDraftConfig(options: {
+		agentId: string;
+		cwd?: string;
+		configId?: string;
+		configValue?: string;
+	}): Promise<{ mode?: AcpModeState; configOptions: AcpConfigOption[] }> {
+		const profile = this.requireEnabledProfile(options.agentId);
+		return await probeAcpDraftConfig({
+			profile,
+			cwd: options.cwd ?? process.cwd(),
+			adapter: getAcpAgentAdapter(profile.id),
+			probeStore: this.probeStore,
+			configId: options.configId,
+			configValue: options.configValue,
 		});
 	}
 

@@ -1,28 +1,34 @@
 /**
- * facet 的数据目录。
+ * facet 的统一数据目录布局（`~/.facet` 与开发态 `~/.facet-dev`）。
  *
- * 发布版与 pi 命令行共用 ~/.pi/agent，凭证、模型、会话与提示词同源；开发脚本与开发
- * 态桌面改用 ~/.pi/agent-dev，避免开发期的写入混进真实目录。pi 的全部缺省路径都由
- * 同一个环境变量推出，设置一次即整体搬迁。
+ * 所有宿主机运行态（`host/`）、配置（`config/`）、Pi 后端（`pi/`）、ACP 索引与探针（`acp/`）
+ * 以及无项目会话的临时工作区（`scratch/`）都收拢在同一个根目录下，可通过 `FACET_HOME`
+ * 覆盖；各子目录也保留独立环境变量覆盖，便于测试与多实例隔离。
  *
- * 这里写入的环境变量会被子进程继承（facet 自带的终端、终端里的 pi），所以开发态的调用方
- * 必须把两个变量一起钉到 dev 目录，否则继承来的旧值会让开发实例读写真数据。
+ * pi 的缺省路径由 `PI_CODING_AGENT_DIR` 推出，设置一次即整体搬迁到 `<FACET_HOME>/pi`；
+ * 该变量会被子进程继承，因此开发态必须固定钉到 `~/.facet-dev/pi`，避免误读写正式目录。
  */
 import { homedir } from "node:os";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 
 /** pi 读取 agent 目录的环境变量名 */
 const AGENT_DIR_ENV = "PI_CODING_AGENT_DIR";
 
-/** 发布版与 pi 共用的数据目录 */
-export const DEFAULT_AGENT_DIR = resolve(homedir(), ".pi", "agent");
+/** 发布版根目录 */
+export const DEFAULT_FACET_HOME = resolve(homedir(), ".facet");
 
-/** 开发期的数据目录，与发布版分开 */
-export const DEV_AGENT_DIR = resolve(homedir(), ".pi", "agent-dev");
+/** 开发期根目录，与发布版隔离 */
+export const DEV_FACET_HOME = resolve(homedir(), ".facet-dev");
 
-/** 展开路径开头的波浪号,相对路径按进程工作目录解析成绝对路径。 */
-function expandPath(path: string): string {
+/** 发布版 Pi 数据目录 */
+export const DEFAULT_AGENT_DIR = join(DEFAULT_FACET_HOME, "pi");
+
+/** 开发期 Pi 数据目录，与发布版分开 */
+export const DEV_AGENT_DIR = join(DEV_FACET_HOME, "pi");
+
+/** 展开路径开头的波浪号，相对路径按进程工作目录解析成绝对路径。 */
+export function expandPath(path: string): string {
 	if (path === "~") {
 		return homedir();
 	}
@@ -32,14 +38,24 @@ function expandPath(path: string): string {
 	return resolve(path);
 }
 
+/** 解析 Facet 根目录：开发态只认 `FACET_DEV_HOME`，避免从正式壳继承 `FACET_HOME`。 */
+export function resolveFacetHome(
+	env: Record<string, string | undefined> = process.env,
+	isDev = false,
+): string {
+	if (isDev) {
+		const devHome = env.FACET_DEV_HOME?.trim();
+		return devHome !== undefined && devHome.length > 0 ? expandPath(devHome) : DEV_FACET_HOME;
+	}
+	const explicit = env.FACET_HOME?.trim();
+	return explicit !== undefined && explicit.length > 0 ? expandPath(explicit) : DEFAULT_FACET_HOME;
+}
+
 /**
- * 把 pi 的缺省数据目录指向 facet 的目录。
+ * 把 pi 的缺省数据目录指向 facet 的 `pi/` 目录。
  *
- * 优先级:已设置的环境变量、调用方给出的目录、facet 开发目录。环境变量优先是为了
- * 让测试与并行的多个实例能各自隔离。写入后立即回读校验,pi 若改了变量名会直接报错,
- * 而不是安静地用回 ~/.pi/agent。
- *
- * 返回实际生效的目录,调用方用它拼凭证与模型配置的路径。
+ * 优先级：已设置的环境变量、调用方给出的目录、`<DEFAULT_FACET_HOME>/pi`。写入后立即
+ * 回读校验，pi 若改了变量名会直接报错，而不是安静地用回 `~/.pi/agent`。
  */
 export function applyAgentDir(agentDir?: string): string {
 	const preset = process.env[AGENT_DIR_ENV];

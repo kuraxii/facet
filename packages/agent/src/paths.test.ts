@@ -20,8 +20,8 @@ afterEach(() => {
 });
 
 describe("applyAgentDir", () => {
-	it("缺省指向 pi 的用户目录", () => {
-		expect(DEFAULT_AGENT_DIR).toBe(resolve(homedir(), ".pi", "agent"));
+	it("缺省指向 ~/.facet/pi", () => {
+		expect(DEFAULT_AGENT_DIR).toBe(resolve(homedir(), ".facet", "pi"));
 		expect(applyAgentDir()).toBe(DEFAULT_AGENT_DIR);
 		expect(process.env[ENV]).toBe(DEFAULT_AGENT_DIR);
 	});

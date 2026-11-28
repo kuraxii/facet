@@ -14,8 +14,6 @@ import { workspaceShortcutLabel } from "./workspace-shortcuts.ts";
 export interface WorkspaceTabFacts {
 	/** 工作树里改动的文件数；0 时不挂计数 */
 	changes: number;
-	/** 主机上开着的终端数；多于一个才挂计数 */
-	terminals: number;
 	/** 主机有没有终端能力；没有时终端那一条不可用 */
 	canUseTerminal: boolean;
 	/** 宿主是否提供内嵌浏览器视图能力（Web 端缺省不可用） */
@@ -77,7 +75,6 @@ export function workspaceTabItems(
 			id: "terminal",
 			label: text.terminal,
 			icon: createElement(SquareTerminal, { size: ICON_SIZE, strokeWidth: ICON_STROKE }),
-			badge: facts.terminals > 1 ? facts.terminals : undefined,
 			shortcut: workspaceShortcutLabel("terminal", isMac),
 			disabled: !facts.canUseTerminal,
 		},

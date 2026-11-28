@@ -3,7 +3,7 @@
  */
 import type { TerminalInfo } from "@facet/protocol";
 import { describe, expect, it } from "vitest";
-import { liveTerminalsOf, shouldAutoOpenTerminal } from "./useTerminalPanel.ts";
+import { findRunningTerminal, liveTerminalsOf, shouldAutoOpenTerminal } from "./useTerminalPanel.ts";
 
 function fakeTerminal(overrides: Partial<TerminalInfo> = {}): TerminalInfo {
 	return {
@@ -29,6 +29,18 @@ describe("liveTerminalsOf", () => {
 		const stale = fakeTerminal({ id: "stale-1", pid: 0, restored: true, exit: null });
 
 		expect(liveTerminalsOf([stale, alive, exited]).map((item) => item.id)).toEqual(["live-1", "exited-1"]);
+	});
+});
+
+describe("findRunningTerminal", () => {
+	it("优先返回最新一个仍在运行的终端，忽略已退出与恢复空壳", () => {
+		const stale = fakeTerminal({ id: "stale", restored: true, exit: null });
+		const exited = fakeTerminal({ id: "exited", restored: false, exit: { exitCode: 0 } });
+		const first = fakeTerminal({ id: "live-1", restored: false, exit: null });
+		const second = fakeTerminal({ id: "live-2", restored: false, exit: null });
+
+		expect(findRunningTerminal([stale, exited, first, second])?.id).toBe("live-2");
+		expect(findRunningTerminal([stale, exited])).toBeUndefined();
 	});
 });
 

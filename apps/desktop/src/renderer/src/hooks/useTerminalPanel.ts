@@ -12,8 +12,7 @@ import {
 } from "@facet/protocol";
 import type { ToastInput } from "@facet/ui";
 import type { TerminalAppearance } from "@facet/ui-terminal";
-import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
-import type { HostWorkspaceSnapshot } from "../workspace-state.ts";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
  * 读一份终端外观。
@@ -65,8 +64,6 @@ export interface TerminalPanelOptions {
 	cwd: string | undefined;
 	/** 第几次连接就绪；变化时重取清单 */
 	connectEpoch: number;
-	/** 这台主机上一次离开时的终端状态；切回来时接着用 */
-	snapshot?: HostWorkspaceSnapshot;
 	/** 弹一条轻提示：开终端失败时给事实与重试入口 */
 	showToast: (input: Omit<ToastInput, "now">) => void;
 	/** 本机终端交互偏好（光标闪烁、回滚行数） */
@@ -102,6 +99,22 @@ export function liveTerminalsOf(terminals: readonly TerminalInfo[]): TerminalInf
 }
 
 /**
+ * 在主机终端列表里挑出一个正在运行的单终端实例。
+ *
+ * 单终端模式下优先复用尚未退出的 shell（有多个时取最后一个，即最近创建的那个）；
+ * 都已退出则返回 `undefined`。
+ */
+export function findRunningTerminal(terminals: readonly TerminalInfo[]): TerminalInfo | undefined {
+	for (let index = terminals.length - 1; index >= 0; index -= 1) {
+		const item = terminals[index];
+		if (item !== undefined && !item.restored && item.exit === null) {
+			return item;
+		}
+	}
+	return undefined;
+}
+
+/**
  * 判断此刻是否应为恢复过来的终端标签自动拉起一个新 shell。
  *
  * 必须等本次连接代次的 `listTerminals` 同步完再判断（避免在重连瞬间重复新建），
@@ -121,14 +134,12 @@ export function shouldAutoOpenTerminal(input: AutoOpenTerminalInput): boolean {
 export interface TerminalPanel {
 	/** 主机上的终端清单，含已结束的 */
 	terminals: readonly TerminalInfo[];
-	/** 本端关掉的终端，避免清单还没刷新时又补回标签 */
-	closedTerminalIds: RefObject<Set<string>>;
 	/** 终端外观，跟着界面配色与等宽字体走 */
 	appearance: TerminalAppearance;
-	/** 在当前目录开一个终端，成功时返回它的信息 */
+	/** 在当前目录复用或开一个终端，成功时返回它的信息 */
 	openTerminal: () => Promise<TerminalInfo | undefined>;
-	/** 关掉一个终端，进程与清单一起收尾 */
-	closeTerminal: (terminalId: string) => Promise<void>;
+	/** 关掉终端标签并清理主机上的终端进程 */
+	closeTerminal: (terminalId?: string) => Promise<void>;
 	/** 重新取终端清单 */
 	refreshTerminals: () => Promise<readonly TerminalInfo[]>;
 }
@@ -139,7 +150,6 @@ export function useTerminalPanel(options: TerminalPanelOptions): TerminalPanel {
 		canUseTerminal,
 		cwd,
 		connectEpoch,
-		snapshot,
 		showToast,
 		localTerminal = DEFAULT_TERMINAL_LOCAL_SETTINGS,
 		autoOpen = false,
@@ -149,10 +159,10 @@ export function useTerminalPanel(options: TerminalPanelOptions): TerminalPanel {
 	const [appearance, setAppearance] = useState<TerminalAppearance>(() =>
 		readTerminalAppearance(localTerminal),
 	);
-	// 本端关掉的终端跟着主机走：切回来时同一批终端不该又冒出来
-	const closedTerminalIds = useRef(snapshot?.closedTerminalIds ?? new Set<string>());
 	/** 已自动拉起过默认 shell 的连接代次，避免同一代次重复创建或失败死循环 */
 	const autoOpenedEpoch = useRef(0);
+	/** 正在创建/复用终端的在途 Promise，避免连按快捷键或并发触发建出多个 PTY */
+	const openingRef = useRef<Promise<TerminalInfo | undefined> | undefined>(undefined);
 
 	/** 重新取终端清单（过滤重启前遗留空壳）。连不上或主机没有终端能力时按空处理。 */
 	const refreshTerminals = useCallback(async (): Promise<readonly TerminalInfo[]> => {
@@ -173,7 +183,6 @@ export function useTerminalPanel(options: TerminalPanelOptions): TerminalPanel {
 			return;
 		}
 		let cancelled = false;
-		closedTerminalIds.current.clear();
 		void refreshTerminals().then(() => {
 			if (!cancelled) {
 				setSyncedEpoch(connectEpoch);
@@ -196,35 +205,57 @@ export function useTerminalPanel(options: TerminalPanelOptions): TerminalPanel {
 		return () => window.removeEventListener("facet:appearance-changed", onAppearance);
 	}, [localTerminal]);
 
-	/** 在当前目录开一个终端；成功时把它的信息交回去，由上层摆标签。 */
-	const openTerminal = useCallback(async (): Promise<TerminalInfo | undefined> => {
+	/** 单终端入口：复用仍在运行的终端，若无则清理残留已退出终端并新建一个。 */
+	const openTerminal = useCallback((): Promise<TerminalInfo | undefined> => {
 		if (!canUseTerminal) {
-			return undefined;
+			return Promise.resolve(undefined);
 		}
-		try {
-			// 尺寸先给一个常用值，视图挂上之后 fit 出来的真实尺寸会再报一次
-			const info = await client.create(cwd, 100, 24);
-			await refreshTerminals();
-			return info;
-		} catch (error) {
-			// 失败用轻提示说事实：要再试一次就回到加号菜单，提示本身不带按钮
-			showToast({ level: "error", message: error instanceof Error ? error.message : String(error) });
-			return undefined;
+		if (openingRef.current !== undefined) {
+			return openingRef.current;
 		}
+		const task = (async (): Promise<TerminalInfo | undefined> => {
+			try {
+				const existing = liveTerminalsOf(await client.list().catch(() => []));
+				const running = findRunningTerminal(existing);
+				if (running !== undefined) {
+					const extras = existing.filter((item) => item.id !== running.id);
+					if (extras.length > 0) {
+						await Promise.allSettled(extras.map((item) => client.kill(item.id)));
+					}
+					await refreshTerminals();
+					return running;
+				}
+				if (existing.length > 0) {
+					await Promise.allSettled(existing.map((item) => client.kill(item.id)));
+				}
+				// 尺寸先给一个常用值，视图挂上之后 fit 出来的真实尺寸会再报一次
+				const info = await client.create(cwd, 100, 24);
+				await refreshTerminals();
+				return info;
+			} catch (error) {
+				// 失败用轻提示说事实：要再试一次就回到加号菜单，提示本身不带按钮
+				showToast({ level: "error", message: error instanceof Error ? error.message : String(error) });
+				return undefined;
+			} finally {
+				openingRef.current = undefined;
+			}
+		})();
+		openingRef.current = task;
+		return task;
 	}, [canUseTerminal, client, cwd, refreshTerminals, showToast]);
 
-	/** 关掉一个终端，进程与清单一起收尾。 */
+	/** 关掉终端标签时把主机上所有未清理的运行期终端一并收尾，防止残留多余实例。 */
 	const closeTerminal = useCallback(
-		async (terminalId: string): Promise<void> => {
-			closedTerminalIds.current.add(terminalId);
-			try {
-				await client.kill(terminalId);
-			} catch {
-				// 已经结束的终端再关一次没有影响
+		async (terminalId?: string): Promise<void> => {
+			const existing = liveTerminalsOf(await client.list().catch(() => terminals));
+			const ids = new Set(existing.map((item) => item.id));
+			if (terminalId !== undefined) {
+				ids.add(terminalId);
 			}
+			await Promise.allSettled([...ids].map((id) => client.kill(id)));
 			await refreshTerminals();
 		},
-		[client, refreshTerminals],
+		[client, refreshTerminals, terminals],
 	);
 
 	// 界面恢复了上次打开着的终端标签且同步完清单后仍没有存活 shell 时，自动拉起一个新的 shell
@@ -247,7 +278,6 @@ export function useTerminalPanel(options: TerminalPanelOptions): TerminalPanel {
 
 	return {
 		terminals,
-		closedTerminalIds,
 		appearance,
 		openTerminal,
 		closeTerminal,

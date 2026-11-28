@@ -189,7 +189,6 @@ export function HostWorkspace({
 		canUseTerminal,
 		cwd: terminalCwd,
 		connectEpoch: host.connectEpoch,
-		snapshot: runtime.workspace,
 		showToast: toast.show,
 		localTerminal,
 		autoOpen: shell.isPanelOpen && shell.panel.activeTab === "terminal",

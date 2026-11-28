@@ -323,7 +323,6 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 			workspaceTabItems(
 				{
 					changes: docs.changes.status?.files.length ?? 0,
-					terminals: terminal.terminals.length,
 					canUseTerminal,
 					canUseBrowser,
 				},
@@ -336,7 +335,7 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 				},
 				isMac,
 			),
-		[canUseBrowser, canUseTerminal, docs.changes.status, isMac, t, terminal.terminals.length],
+		[canUseBrowser, canUseTerminal, docs.changes.status, isMac, t],
 	);
 	/** 主区顶带里的会话标题：跟着侧栏里那一条走，没名字时用首条消息 */
 	const activeSession = session.sessions.find((item) => item.path === session.activeFile);

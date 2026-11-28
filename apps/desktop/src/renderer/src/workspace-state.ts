@@ -67,8 +67,6 @@ export interface HostWorkspaceSnapshot {
 	fileContents: Readonly<Record<string, FileContent>>;
 	/** 提交改动详情，按「项目目录 + 哈希」存 */
 	commitDetails: Readonly<Record<string, CommitDetailState>>;
-	/** 本端关掉的终端，避免清单刷新时又补回标签 */
-	closedTerminalIds: Set<string>;
 	/** 上次打开的会话文件 */
 	activeSessionFile: string | undefined;
 	/** 上次新建会话落在哪个目录 */
@@ -138,7 +136,6 @@ export function createWorkspaceSnapshot(): HostWorkspaceSnapshot {
 		sessions: new Map(),
 		fileContents: {},
 		commitDetails: {},
-		closedTerminalIds: new Set(),
 		activeSessionFile: undefined,
 		createCwd: undefined,
 	};

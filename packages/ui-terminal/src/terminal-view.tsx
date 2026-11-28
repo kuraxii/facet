@@ -20,6 +20,7 @@ export function buildXtermTheme(appearance: TerminalAppearance): ITheme {
 		background: "rgba(0,0,0,0)",
 		foreground: appearance.foreground,
 		cursor: appearance.cursor,
+		cursorAccent: appearance.cursorAccent,
 		selectionBackground: appearance.selection,
 		// overviewRuler 启用宽度后默认用 #ffffff 画 1px 左边线，显式置透明避免右缘出现常驻白线
 		overviewRulerBorder: "rgba(0,0,0,0)",
@@ -46,6 +47,8 @@ export interface TerminalAppearance {
 	foreground: string;
 	/** 光标色 */
 	cursor: string;
+	/** 光标内部字符的前景色 */
+	cursorAccent?: string;
 	/** 选区底色 */
 	selection: string;
 	/** 滚动条占的宽度，像素 */

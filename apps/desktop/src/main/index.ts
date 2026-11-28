@@ -5,6 +5,7 @@ import { resolveFacetHome } from "@facet/agent";
 import { createI18n, readLanguageSetting, resolveLanguage, translate } from "@facet/i18n";
 import { app, BrowserWindow, dialog, ipcMain, Notification, nativeTheme, screen, shell } from "electron";
 import { BrowserViewRegistry } from "./browser-views.ts";
+import { registerExternalOpenIpc } from "./external-open.ts";
 import { HostChannels, LOCAL_TARGET } from "./host-channel.ts";
 import {
 	findRunningHost,
@@ -75,6 +76,7 @@ let hostChannels: HostChannels | undefined;
 let host: HostDaemon | undefined;
 const browserViews = new BrowserViewRegistry();
 browserViews.registerIpc();
+registerExternalOpenIpc();
 let localSettingsFile = "";
 let stateStore: LocalStateStore | undefined;
 /** 主进程侧的语言实例，原生弹窗与渲染进程共用同一份资源 */

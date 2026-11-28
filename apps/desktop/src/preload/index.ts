@@ -210,6 +210,13 @@ const api = {
 			};
 		},
 	},
+	/** 外部打开本地文件或目录（VS Code / 系统文件管理器） */
+	externalOpen: {
+		vscode: (targetPath: string): Promise<void> =>
+			ipcRenderer.invoke("facet:external-open-vscode", targetPath),
+		reveal: (targetPath: string): Promise<void> =>
+			ipcRenderer.invoke("facet:external-open-reveal", targetPath),
+	},
 };
 
 contextBridge.exposeInMainWorld("facet", api);

@@ -90,6 +90,11 @@ export interface FacetBridge extends HostChannelBridge {
 			}) => void,
 		) => () => void;
 	};
+	/** 桌面端外部编辑器与文件管理器打开通道；Web 端没有 */
+	externalOpen?: {
+		vscode: (targetPath: string) => Promise<void>;
+		reveal: (targetPath: string) => Promise<void>;
+	};
 }
 
 declare global {

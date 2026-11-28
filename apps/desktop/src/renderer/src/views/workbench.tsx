@@ -34,6 +34,8 @@ import {
 	type DraftContextStore,
 	type DraftHostOption,
 	EmptyState,
+	ExternalOpenButton,
+	type ExternalOpenTarget,
 	type HostNodeState,
 	HostSwitcher,
 	ICON_SIZE,
@@ -45,6 +47,7 @@ import {
 	type RecentDraftContext,
 	RightPanel,
 	readDraftContextStore,
+	readExternalOpenTarget,
 	SessionSearch,
 	SessionSidebar,
 	SettingsPage,
@@ -59,6 +62,7 @@ import {
 	useModalPresence,
 	type WorkspaceTabId,
 	writeDraftContextStore,
+	writeExternalOpenTarget,
 } from "@facet/ui";
 import { RotateCw, X } from "lucide-react";
 import {
@@ -86,7 +90,7 @@ import type { WorkspaceShell } from "../hooks/useWorkspaceShell.ts";
 import { applyAppearance } from "../hooks/useWorkspaceShell.ts";
 import { usePanelPresence } from "../hooks/workspace-shell/usePanelPresence.ts";
 import { LOCAL_TARGET } from "../host-connection.ts";
-import { useHostClient } from "../host-context.tsx";
+import { useHostRuntime } from "../host-context.tsx";
 import { appStorage, type ScopedStorage } from "../local-storage.ts";
 import { type ActiveTarget, toSessionKey } from "../session-target.ts";
 import { useToast } from "../toast-provider.tsx";
@@ -210,7 +214,8 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 	void onDraftEndpointChange;
 	const { t } = useI18n();
 	const toast = useToast();
-	const client = useHostClient();
+	const runtime = useHostRuntime();
+	const client = runtime.client;
 	const activeKey =
 		activeTarget === undefined ? undefined : toSessionKey(activeTarget.endpoint, activeTarget.file);
 	const activeSettled = activeKey !== undefined && inbox.isSettled(activeKey);
@@ -665,6 +670,35 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 		sessionCwd !== undefined && sessionCwd.length > 0 && !isScratchCwd(sessionCwd)
 			? baseName(sessionCwd) || sessionCwd
 			: undefined;
+	const [externalOpenTarget, setExternalOpenTarget] = useState<ExternalOpenTarget>(() =>
+		readExternalOpenTarget(appStorage),
+	);
+	const externalOpenCwd = sessionCwd ?? draftCwd;
+	const canOpenVsCode =
+		runtime.isLocal &&
+		bridge.externalOpen !== undefined &&
+		externalOpenCwd !== undefined &&
+		externalOpenCwd.length > 0;
+	const canRevealWorkspace = externalOpenCwd !== undefined && externalOpenCwd.length > 0;
+	const handleOpenWorkspaceExternal = useCallback(
+		(target: ExternalOpenTarget) => {
+			setExternalOpenTarget(target);
+			writeExternalOpenTarget(appStorage, target);
+			if (externalOpenCwd === undefined || externalOpenCwd.length === 0) {
+				return;
+			}
+			if (target === "vscode") {
+				void bridge.externalOpen?.vscode(externalOpenCwd).catch(() => undefined);
+				return;
+			}
+			if (runtime.isLocal && bridge.externalOpen !== undefined) {
+				void bridge.externalOpen.reveal(externalOpenCwd).catch(() => undefined);
+				return;
+			}
+			void client.revealPath(externalOpenCwd).catch(() => undefined);
+		},
+		[client, externalOpenCwd, runtime.isLocal],
+	);
 
 	const offlineTargetBanner =
 		isRemoteActive && !host.isOnline && session.sessionError === undefined ? (
@@ -862,6 +896,12 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 								</>
 							)}
 							<span className="chrome-spacer" />
+							<ExternalOpenButton
+								target={externalOpenTarget}
+								canOpenVsCode={canOpenVsCode}
+								canReveal={canRevealWorkspace}
+								onOpen={handleOpenWorkspaceExternal}
+							/>
 						</div>
 						{panelPresence.mounted ? (
 							<div className={panelChromeClass} style={panelChromeStyle}>

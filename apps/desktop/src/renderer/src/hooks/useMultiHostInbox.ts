@@ -9,6 +9,7 @@ import {
 	buildInbox,
 	type CachedOfflineTask,
 	type HostSessionFeed,
+	isScratchCwd,
 	type SidebarSettledItem,
 	type SidebarTaskCard,
 	useI18n,
@@ -45,10 +46,6 @@ export interface MultiHostInbox {
 	isSettled: (key: SessionKey) => boolean;
 	/** 显式断开或移除远程主机时清除其离线缓存 */
 	clearEndpointOffline: (endpoint: string) => void;
-}
-
-function isScratchCwd(cwd: string): boolean {
-	return /[\\/]\.facet(?:-dev)?[\\/]scratch(?:[\\/]|$)/i.test(cwd);
 }
 
 function statusesOf(runtime: HostRuntime): ReadonlyMap<string, SessionStatus> {

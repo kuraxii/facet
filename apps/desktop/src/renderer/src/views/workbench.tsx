@@ -38,6 +38,7 @@ import {
 	HostSwitcher,
 	ICON_SIZE,
 	IconButton,
+	isScratchCwd,
 	PanelToggle,
 	parseCommand,
 	pushRecentDraftContext,
@@ -661,7 +662,9 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 		);
 	}, [activeTarget, host.hostList.hosts, t]);
 	const activeProjectLabel =
-		sessionCwd !== undefined && sessionCwd.length > 0 ? baseName(sessionCwd) || sessionCwd : undefined;
+		sessionCwd !== undefined && sessionCwd.length > 0 && !isScratchCwd(sessionCwd)
+			? baseName(sessionCwd) || sessionCwd
+			: undefined;
 
 	const offlineTargetBanner =
 		isRemoteActive && !host.isOnline && session.sessionError === undefined ? (

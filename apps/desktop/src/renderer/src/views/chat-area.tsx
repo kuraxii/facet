@@ -17,6 +17,7 @@ import {
 	capabilitiesOf,
 	ExtensionPromptCard,
 	ICON_SIZE,
+	isScratchCwd,
 	outlineIsActive,
 	outlinePrompts,
 	QueueStrip,
@@ -235,7 +236,9 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 		sessionView.state.extensionUi.prompts.length === 0
 	) {
 		const projectName =
-			sessionCwd !== undefined && sessionCwd.length > 0 ? baseName(sessionCwd) || sessionCwd : undefined;
+			sessionCwd !== undefined && sessionCwd.length > 0 && !isScratchCwd(sessionCwd)
+				? baseName(sessionCwd) || sessionCwd
+				: undefined;
 		return (
 			<div className="empty-wrap">
 				{errorBar}

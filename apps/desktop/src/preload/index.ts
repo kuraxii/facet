@@ -180,6 +180,36 @@ const api = {
 			ipcRenderer.off("facet:notify-click", handler);
 		};
 	},
+	/** 右侧栏内嵌 `WebContentsView` 控制通道 */
+	browser: {
+		syncBounds: (bounds: { x: number; y: number; width: number; height: number; visible: boolean }): void =>
+			ipcRenderer.send("facet:browser-bounds", bounds),
+		navigate: (url: string): void => ipcRenderer.send("facet:browser-navigate", url),
+		back: (): void => ipcRenderer.send("facet:browser-back"),
+		forward: (): void => ipcRenderer.send("facet:browser-forward"),
+		reload: (): void => ipcRenderer.send("facet:browser-reload"),
+		stop: (): void => ipcRenderer.send("facet:browser-stop"),
+		dispose: (): void => ipcRenderer.send("facet:browser-dispose"),
+		openExternal: (url: string): void => ipcRenderer.send("facet:browser-open-external", url),
+		onState: (
+			listener: (state: {
+				url: string;
+				title: string;
+				canGoBack: boolean;
+				canGoForward: boolean;
+				isLoading: boolean;
+			}) => void,
+		): (() => void) => {
+			const handler = (
+				_event: unknown,
+				state: { url: string; title: string; canGoBack: boolean; canGoForward: boolean; isLoading: boolean },
+			): void => listener(state);
+			ipcRenderer.on("facet:browser-state", handler);
+			return () => {
+				ipcRenderer.off("facet:browser-state", handler);
+			};
+		},
+	},
 };
 
 contextBridge.exposeInMainWorld("facet", api);

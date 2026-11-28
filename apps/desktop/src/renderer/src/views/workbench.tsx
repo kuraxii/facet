@@ -309,6 +309,7 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 	const activity = chatActivity(sessionView);
 	const sessionCwd: string | undefined = sessionView?.state.cwd;
 	const canUseTerminal = host.host?.capabilities.includes("terminal") ?? false;
+	const canUseBrowser = bridge.browser !== undefined;
 	/** mac 的主修饰键写成 ⌘，其它平台是 Ctrl；启动清单与 `+` 菜单的提示共用这一份 */
 	const isMac = bridge.platform === "darwin";
 	const tabItems = useMemo(
@@ -318,16 +319,18 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 					changes: docs.changes.status?.files.length ?? 0,
 					terminals: terminal.terminals.length,
 					canUseTerminal,
+					canUseBrowser,
 				},
 				{
 					files: t("panel.files"),
 					changes: t("panel.changes"),
 					gitGraph: t("panel.gitGraph"),
 					terminal: t("panel.terminal"),
+					browser: t("panel.browser"),
 				},
 				isMac,
 			),
-		[canUseTerminal, docs.changes.status, isMac, t, terminal.terminals.length],
+		[canUseBrowser, canUseTerminal, docs.changes.status, isMac, t, terminal.terminals.length],
 	);
 	/** 主区顶带里的会话标题：跟着侧栏里那一条走，没名字时用首条消息 */
 	const activeSession = session.sessions.find((item) => item.path === session.activeFile);
@@ -596,6 +599,9 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 			if (id === "terminal" && terminalId !== undefined) {
 				void terminal.closeTerminal(terminalId);
 			}
+			if (id === "browser") {
+				bridge.browser?.dispose();
+			}
 			shell.closePanelTab(id);
 		},
 		[shell, terminal, terminalId],
@@ -801,9 +807,11 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 			/>
 		);
 
-	/* 右栏占着列时，它的控件在顶带右格里；否则顶带中格右端只留一个入口。无项目时不可用 */
+	/* 右栏占着列时，它的控件在顶带右格里；否则顶带中格右端只留一个入口。浏览器标签无项目时也可用 */
 	const hasWorkspaceCwd = sessionCwd !== undefined || draftCwd !== undefined;
-	const hasPanelColumn = shell.panelVisible && hasWorkspaceCwd;
+	const hasBrowserTab = canUseBrowser && shell.panel.openTabs.includes("browser");
+	const hasPanelColumn = shell.panelVisible && (hasWorkspaceCwd || hasBrowserTab);
+	const [isPaneResizing, setIsPaneResizing] = useState(false);
 	const settingsOpen = shell.view === "settings";
 	const settingsMounted = useModalPresence(settingsOpen);
 	const shellRef = useRef<HTMLDivElement | null>(null);
@@ -874,7 +882,7 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 								onToggle={shell.toggleSidebar}
 							/>
 						</div>
-						{hasWorkspaceCwd ? (
+						{hasWorkspaceCwd || hasBrowserTab ? (
 							<PanelToggle
 								isOpen={shell.panelVisible}
 								onToggle={shell.togglePanel}
@@ -968,7 +976,10 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 							width={shell.panelEffectiveWidth}
 							onWidthChange={shell.isPanelExpanded ? undefined : (width) => shell.updatePanel({ width })}
 							maxWidth={shell.panelMaxWidth}
-							onDraggingChange={shell.setPaneResizing}
+							onDraggingChange={(dragging) => {
+								setIsPaneResizing(dragging);
+								shell.setPaneResizing(dragging);
+							}}
 							// 缩到最小宽一半以内松手就收起右栏，已打开的标签不动
 							onDragCollapse={shell.togglePanel}
 							bodyClassName="is-workspace"
@@ -983,6 +994,16 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 								sessionCwd={sessionCwd}
 								terminalId={terminalId}
 								storage={workspaceStorage}
+								browserOccluded={
+									!shell.panelVisible ||
+									isPaneResizing ||
+									settingsOpen ||
+									shell.isSearchOpen ||
+									session.isProjectDialogOpen ||
+									session.trustPrompt !== undefined ||
+									shell.isDrawerOpen
+								}
+								uiScale={shell.uiScale}
 							/>
 						</RightPanel>
 					) : null}

@@ -70,6 +70,26 @@ export interface FacetBridge extends HostChannelBridge {
 	notify?: (request: { file: string; body: string }) => Promise<boolean>;
 	/** 订阅「点了某条系统通知」；浏览器端没有 */
 	onNotifyClick?: (listener: (file: string) => void) => () => void;
+	/** 桌面端右侧栏内嵌浏览器通道；Web 端没有 */
+	browser?: {
+		syncBounds: (bounds: { x: number; y: number; width: number; height: number; visible: boolean }) => void;
+		navigate: (url: string) => void;
+		back: () => void;
+		forward: () => void;
+		reload: () => void;
+		stop: () => void;
+		dispose: () => void;
+		openExternal: (url: string) => void;
+		onState: (
+			listener: (state: {
+				url: string;
+				title: string;
+				canGoBack: boolean;
+				canGoForward: boolean;
+				isLoading: boolean;
+			}) => void,
+		) => () => void;
+	};
 }
 
 declare global {

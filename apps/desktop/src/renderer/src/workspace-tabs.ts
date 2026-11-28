@@ -6,7 +6,7 @@
  * 图标用 `createElement` 拼，这个模块因此不需要 JSX 运行时的配置。
  */
 import type { WorkspaceTabItem } from "@facet/ui";
-import { FileDiff, FolderTree, GitGraph, SquareTerminal } from "lucide-react";
+import { FileDiff, FolderTree, GitGraph, Globe, SquareTerminal } from "lucide-react";
 import { createElement } from "react";
 import { workspaceShortcutLabel } from "./workspace-shortcuts.ts";
 
@@ -18,9 +18,11 @@ export interface WorkspaceTabFacts {
 	terminals: number;
 	/** 主机有没有终端能力；没有时终端那一条不可用 */
 	canUseTerminal: boolean;
+	/** 宿主是否提供内嵌浏览器视图能力（Web 端缺省不可用） */
+	canUseBrowser?: boolean;
 }
 
-/** 四者的名字，来自界面语言。 */
+/** 工具标签名字，来自界面语言。 */
 export interface WorkspaceTabText {
 	/** 文件 */
 	files: string;
@@ -30,6 +32,8 @@ export interface WorkspaceTabText {
 	gitGraph: string;
 	/** 终端 */
 	terminal: string;
+	/** 浏览器 */
+	browser: string;
 }
 
 /** 图标的边长与笔画宽度：与界面里其它小图标一致。 */
@@ -76,6 +80,13 @@ export function workspaceTabItems(
 			badge: facts.terminals > 1 ? facts.terminals : undefined,
 			shortcut: workspaceShortcutLabel("terminal", isMac),
 			disabled: !facts.canUseTerminal,
+		},
+		{
+			id: "browser",
+			label: text.browser,
+			icon: createElement(Globe, { size: ICON_SIZE, strokeWidth: ICON_STROKE }),
+			shortcut: workspaceShortcutLabel("browser", isMac),
+			...(facts.canUseBrowser === false ? { disabled: true } : {}),
 		},
 	];
 }

@@ -19,6 +19,8 @@ export const WORKSPACE_SHORTCUTS: Readonly<Record<WorkspaceTabId, ShortcutChord>
 	"git-graph": { mod: true, shift: true, key: "H" },
 	/** 终端：沿用三栏时期就有的 `Ctrl + 反引号` */
 	terminal: { mod: true, key: "`" },
+	/** 浏览器：右栏内嵌网页与本地预览 */
+	browser: { mod: true, shift: true, key: "B" },
 };
 
 /**

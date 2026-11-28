@@ -14,6 +14,7 @@ import type { ReactNode } from "react";
 import type { TerminalPanel } from "../hooks/useTerminalPanel.ts";
 import type { WorkspaceDocs } from "../hooks/useWorkspaceDocs.ts";
 import type { ScopedStorage } from "../local-storage.ts";
+import { BrowserTab } from "./workspace/browser-tab.tsx";
 import { ChangesTab } from "./workspace/changes-tab.tsx";
 import { FilesTab } from "./workspace/files-tab.tsx";
 import { GitGraphTab } from "./workspace/git-graph-tab.tsx";
@@ -39,6 +40,10 @@ export interface WorkspaceBodyProps {
 	terminalId: string | undefined;
 	/** 按主机隔离的持久化存储 */
 	storage?: ScopedStorage;
+	/** 右栏原生浏览视图是否被弹窗/拖动遮挡 */
+	browserOccluded?: boolean;
+	/** 当前界面缩放百分比 */
+	uiScale?: number;
 }
 
 /** 一个标签的外壳：显隐只靠类名，内容一直留在 DOM 里。 */
@@ -48,7 +53,19 @@ function TabView({ isActive, children }: { isActive: boolean; children: ReactNod
 
 /** 工作区正文。 */
 export function WorkspaceBody(props: WorkspaceBodyProps): ReactNode {
-	const { openTabs, activeTab, items, onOpenTab, docs, terminal, sessionCwd, terminalId, storage } = props;
+	const {
+		openTabs,
+		activeTab,
+		items,
+		onOpenTab,
+		docs,
+		terminal,
+		sessionCwd,
+		terminalId,
+		storage,
+		browserOccluded = false,
+		uiScale = 100,
+	} = props;
 	if (activeTab === null) {
 		return <WorkspaceLauncher items={items} onPick={onOpenTab} />;
 	}
@@ -73,6 +90,12 @@ export function WorkspaceBody(props: WorkspaceBodyProps): ReactNode {
 			{openTabs.includes("terminal") ? (
 				<TabView isActive={activeTab === "terminal"}>
 					<TerminalTab terminal={terminal} terminalId={terminalId} isActive={activeTab === "terminal"} />
+				</TabView>
+			) : null}
+			{/* 浏览器同样保活：切到别处仅隐藏 WebContentsView，关标签时再销毁进程 */}
+			{openTabs.includes("browser") ? (
+				<TabView isActive={activeTab === "browser"}>
+					<BrowserTab isActive={activeTab === "browser"} isOccluded={browserOccluded} uiScale={uiScale} />
 				</TabView>
 			) : null}
 		</div>

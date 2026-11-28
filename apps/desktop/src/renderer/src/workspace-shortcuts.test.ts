@@ -24,6 +24,7 @@ describe("工作区快捷键", () => {
 		expect(workspaceShortcutOf(key("G", { mod: true, shift: true }))).toBe("changes");
 		expect(workspaceShortcutOf(key("`", { mod: true }))).toBe("terminal");
 		expect(workspaceShortcutOf(key("H", { mod: true, shift: true }))).toBe("git-graph");
+		expect(workspaceShortcutOf(key("B", { mod: true, shift: true }))).toBe("browser");
 	});
 
 	it("主键不区分大小写（按住 Shift 时浏览器给大写）", () => {
@@ -45,6 +46,13 @@ describe("工作区快捷键", () => {
 	it("提示按平台写，与键位表同源", () => {
 		expect(workspaceShortcutLabel("files", false)).toBe("Ctrl+Shift+E");
 		expect(workspaceShortcutLabel("terminal", true)).toBe("⌘`");
-		expect(Object.keys(WORKSPACE_SHORTCUTS)).toEqual(["files", "changes", "git-graph", "terminal"]);
+		expect(workspaceShortcutLabel("browser", true)).toBe("⌘⇧B");
+		expect(Object.keys(WORKSPACE_SHORTCUTS)).toEqual([
+			"files",
+			"changes",
+			"git-graph",
+			"terminal",
+			"browser",
+		]);
 	});
 });

@@ -6,13 +6,13 @@
 import { describe, expect, it } from "vitest";
 import { workspaceTabItems } from "./workspace-tabs.ts";
 
-const TEXT = { files: "文件", changes: "变更", gitGraph: "提交图谱", terminal: "终端" };
+const TEXT = { files: "文件", changes: "变更", gitGraph: "提交图谱", terminal: "终端", browser: "浏览器" };
 
 describe("工作区工具", () => {
-	it("四类按固定顺序，名字来自界面语言", () => {
+	it("五类按固定顺序，名字来自界面语言", () => {
 		const items = workspaceTabItems({ changes: 0, terminals: 0, canUseTerminal: true }, TEXT, false);
-		expect(items.map((item) => item.id)).toEqual(["files", "changes", "git-graph", "terminal"]);
-		expect(items.map((item) => item.label)).toEqual(["文件", "变更", "提交图谱", "终端"]);
+		expect(items.map((item) => item.id)).toEqual(["files", "changes", "git-graph", "terminal", "browser"]);
+		expect(items.map((item) => item.label)).toEqual(["文件", "变更", "提交图谱", "终端", "浏览器"]);
 	});
 
 	it("每条都带图标", () => {
@@ -55,8 +55,9 @@ describe("工作区工具", () => {
 			"Ctrl+Shift+G",
 			"Ctrl+Shift+H",
 			"Ctrl+`",
+			"Ctrl+Shift+B",
 		]);
 		const mac = workspaceTabItems({ changes: 0, terminals: 0, canUseTerminal: true }, TEXT, true);
-		expect(mac.map((item) => item.shortcut)).toEqual(["⌘⇧E", "⌘⇧G", "⌘⇧H", "⌘`"]);
+		expect(mac.map((item) => item.shortcut)).toEqual(["⌘⇧E", "⌘⇧G", "⌘⇧H", "⌘`", "⌘⇧B"]);
 	});
 });

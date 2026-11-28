@@ -4,6 +4,7 @@ import { basename, extname, join } from "node:path";
 import { resolveFacetHome } from "@facet/agent";
 import { createI18n, readLanguageSetting, resolveLanguage, translate } from "@facet/i18n";
 import { app, BrowserWindow, dialog, ipcMain, Notification, nativeTheme, screen, shell } from "electron";
+import { BrowserViewRegistry } from "./browser-views.ts";
 import { HostChannels, LOCAL_TARGET } from "./host-channel.ts";
 import {
 	findRunningHost,
@@ -72,6 +73,8 @@ const hostLaunch = resolveHostLaunch();
 let localHost: LocalHost | undefined;
 let hostChannels: HostChannels | undefined;
 let host: HostDaemon | undefined;
+const browserViews = new BrowserViewRegistry();
+browserViews.registerIpc();
 let localSettingsFile = "";
 let stateStore: LocalStateStore | undefined;
 /** 主进程侧的语言实例，原生弹窗与渲染进程共用同一份资源 */
@@ -214,6 +217,7 @@ function createWindow(): BrowserWindow {
 	// 退出时 app.exit 会同步销毁窗口，`closed` 里再读 webContents 已经拿不到，先把 id 取出来
 	const contentsId = window.webContents.id;
 	window.on("closed", () => {
+		browserViews.destroyFor(contentsId);
 		hostChannels?.closeFor(contentsId);
 	});
 

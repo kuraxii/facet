@@ -282,6 +282,9 @@ export function HostWorkspace({
 			if (tab === undefined) {
 				return;
 			}
+			if (tab === "browser" && bridge.browser === undefined) {
+				return;
+			}
 			event.preventDefault();
 			if (tab === "terminal" && terminalId === undefined) {
 				void openTerminal();

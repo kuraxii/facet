@@ -565,12 +565,20 @@
 }
 
 /*
- * 文件视图：编辑器与文件树在同一层并排，编辑器占剩下的宽度，文件树收起时不占地方。
+ * 文件视图：顶栏占满全宽，下方并排摆正文区与文件树，文件树收起时不占地方。
  *
  * 每一层都写 `min-width: 0`：长代码行会把 flex 子项的自动最小宽度顶成内容宽，一路撑破
  * 容器；给了 0 之后宽度只由分栏决定，长行改为在编辑器里横向滚动（见 `.code-surface`）。
  */
 .workspace-files {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+}
+
+.workspace-files-body {
 	display: flex;
 	flex: 1;
 	min-width: 0;
@@ -742,18 +750,13 @@
 	right: 0;
 }
 
-/*
- * 文件页的树顶：[收起按钮] [标题] …… [刷新]。
- *
- * 收起按钮贴在这一栏的左缘，也就是紧挨着内部那条分隔线；最右端只留刷新。上面第一行的
- * 右端是图钉、关闭与窗口按钮，两排图标因此错开，不会扎成一列。
- */
+/* 文件页的树顶：[标题] …… [刷新]；左侧与目录行内容齐平。 */
 .tree-head {
 	display: flex;
 	gap: var(--workspace-head-gap);
 	align-items: center;
 	margin-bottom: 2px;
-	padding: 0 var(--space-1) var(--space-1);
+	padding: var(--space-1) var(--space-2) var(--space-1) var(--files-row-padding-x);
 }
 
 .tree-root {
@@ -820,33 +823,71 @@
 	color: var(--status-err-fg);
 }
 
-/* 文件页的查看与编辑：标题行贴着预览区上缘，代码正文贴工作区边界 */
+/* 文件页顶栏：左放面包屑路径，右放保存/预览/换行/复制/文件树开关 */
 .file-head {
 	display: flex;
+	flex: none;
+	gap: var(--space-3);
+	align-items: center;
+	justify-content: space-between;
+	min-width: 0;
+	height: var(--control-md);
+	margin: 0;
+	padding: 0 var(--space-4);
+	border-bottom: 1px solid var(--border-subtle);
+}
+
+.file-head-leading {
+	display: flex;
+	flex: 1;
 	gap: var(--space-3);
 	align-items: center;
 	min-width: 0;
-	height: var(--editor-head-height);
-	margin: 0;
-	padding: 0 var(--editor-gutter-x);
 }
 
-.file-head .ib {
-	width: auto;
-	min-width: var(--editor-head-height);
-	height: var(--editor-head-height);
-	padding: 0 var(--space-1);
-}
-
-.file-path {
+.file-breadcrumbs {
+	display: flex;
 	flex: 1;
+	gap: var(--space-1);
+	align-items: center;
 	min-width: 0;
 	overflow: hidden;
 	color: var(--fg-muted);
-	font-family: var(--font-mono);
 	font-size: var(--text-xs);
+	line-height: var(--leading-tight);
+}
+
+.file-crumb {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+.file-crumb.is-last {
+	flex: 0 0 auto;
+	max-width: 60%;
+	color: var(--fg-default);
+	font-weight: 500;
+}
+
+.file-crumb-sep {
+	flex: none;
+	color: var(--fg-subtle);
+	opacity: 0.7;
+}
+
+.file-head-actions {
+	display: inline-flex;
+	flex: none;
+	gap: var(--space-1);
+	align-items: center;
+}
+
+.file-head .ib[aria-pressed="true"] {
+	background: var(--bg-active);
+	color: var(--fg-default);
 }
 
 .file-view {

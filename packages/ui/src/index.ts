@@ -221,7 +221,9 @@ export { BrowserPane } from "./panel/BrowserPane.tsx";
 export { isAllowedBrowserUrl, normalizeBrowserUrl } from "./panel/browser-url.ts";
 export type { ChangesDocumentProps } from "./panel/changes-document.tsx";
 export { ChangesDocument } from "./panel/changes-document.tsx";
-export type { FileTreeStorage } from "./panel/file-tree-state.ts";
+export type { ExternalOpenButtonProps } from "./panel/external-open-button.tsx";
+export { ExternalOpenButton } from "./panel/external-open-button.tsx";
+export type { ExternalOpenTarget, FileTreeStorage } from "./panel/file-tree-state.ts";
 export {
 	clampFileTreeWidth,
 	EDITOR_KEEP_WIDTH,
@@ -230,10 +232,14 @@ export {
 	FILE_TREE_MIN_WIDTH,
 	FILE_TREE_WIDTH_BOUNDS,
 	fileTreeMaxWidth,
+	readExternalOpenTarget,
 	readFileTreeOpen,
 	readFileTreeWidth,
+	readFileWordWrap,
+	writeExternalOpenTarget,
 	writeFileTreeOpen,
 	writeFileTreeWidth,
+	writeFileWordWrap,
 } from "./panel/file-tree-state.ts";
 export type { FilesPaneProps } from "./panel/files-pane.tsx";
 export { FilesPane } from "./panel/files-pane.tsx";
@@ -241,20 +247,27 @@ export type { PaneResizerProps } from "./panel/pane-resizer.tsx";
 export { PaneResizer } from "./panel/pane-resizer.tsx";
 export type { PaneWidthBounds } from "./panel/pane-width.ts";
 export { clampPaneWidth } from "./panel/pane-width.ts";
-export type { PanelStorage, RightPanelState, RightPanelTab } from "./panel/panel-state.ts";
+export type {
+	PanelStorage,
+	PanelTabState,
+	PanelWidthState,
+	RightPanelState,
+	RightPanelTab,
+} from "./panel/panel-state.ts";
 export {
 	clampPanelWidth,
 	closePanelTab,
 	DEFAULT_PANEL_STATE,
+	DEFAULT_PANEL_TAB_STATE,
 	normalizePanelState,
 	openPanelTab,
 	PANEL_DEFAULT_WIDTH,
 	PANEL_MIN_WIDTH,
 	PANEL_TABS,
 	PANEL_WIDTH_BOUNDS,
-	readPanelState,
+	readStoredPanelWidth,
 	reorderPanelTabs,
-	writePanelState,
+	writeStoredPanelWidth,
 } from "./panel/panel-state.ts";
 export type { RightPanelProps } from "./panel/right-panel.tsx";
 export { RightPanel } from "./panel/right-panel.tsx";

@@ -160,7 +160,7 @@
 	 * 写入）：偏好宽是不继承的变量，传不到这里。副本缺省 0，与右栏收起时一致。
 	 */
 	--panel-track: 0px;
-	padding-inline-end: max(0px, calc(var(--chrome-panel-toggle-clearance) - var(--panel-track)));
+	padding-inline-end: max(var(--space-4), calc(var(--chrome-panel-toggle-clearance) - var(--panel-track)));
 	transition:
 		padding-left var(--dur-structural) var(--ease-panel),
 		padding-inline-end var(--dur-structural) var(--ease-panel),
@@ -292,6 +292,82 @@
 /* 双态开关按住时只换颜色：宽展开是否生效由它自己看得出来 */
 .chrome-toggle[aria-pressed="true"] {
 	color: var(--accent-fg);
+}
+
+/* 主区顶栏右端的外部打开拆分按钮：标 no-drag，允许直接点击或拉出选单 */
+.chrome-open-split {
+	position: relative;
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	height: var(--control-xs);
+	border: 1px solid var(--border-default);
+	border-radius: var(--radius-md);
+	background: var(--bg-surface);
+	overflow: hidden;
+	-webkit-app-region: no-drag;
+}
+
+.chrome-open-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	height: 100%;
+	border: 0;
+	background: transparent;
+	color: var(--fg-muted);
+	cursor: pointer;
+	transition:
+		background-color var(--dur-fast) var(--ease-standard),
+		color var(--dur-fast) var(--ease-standard);
+}
+
+.chrome-open-btn.is-main {
+	padding: 0 var(--space-3);
+}
+
+.chrome-open-btn.is-caret {
+	padding: 0 var(--space-2);
+	border-inline-start: 1px solid var(--border-subtle);
+}
+
+.chrome-open-btn:hover:not(:disabled) {
+	background: var(--bg-hover);
+	color: var(--fg-default);
+}
+
+.chrome-open-btn:disabled {
+	cursor: default;
+	opacity: 0.45;
+}
+
+.chrome-open-vscode-icon {
+	color: var(--accent-fg);
+}
+
+.chrome-open-menu {
+	position: fixed;
+	z-index: var(--z-popup);
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+	min-width: var(--workspace-menu-min-width);
+	padding: var(--space-2);
+	border-radius: var(--radius-lg);
+	background: var(--bg-surface);
+	box-shadow: var(--shadow-popover);
+}
+
+.chrome-open-menu-item {
+	padding-inline: var(--space-4);
+}
+
+.chrome-open-menu-label {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 /* 左上角常驻「Facet + 左栏开关」组合：字样本身透传指针给 `.app-drag` 拖窗，开关自己拦截点击 */

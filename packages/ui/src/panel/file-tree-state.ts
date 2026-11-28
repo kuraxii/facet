@@ -36,6 +36,11 @@ export const FILE_TREE_WIDTH_BOUNDS: PaneWidthBounds = {
 /** 本地存储用的键。 */
 const WIDTH_KEY = "facet.files.treeWidth";
 const OPEN_KEY = "facet.files.treeOpen";
+const WRAP_KEY = "facet.files.wordWrap";
+const EXTERNAL_TARGET_KEY = "facet.files.externalTarget";
+
+/** 外部打开文件的默认目标。 */
+export type ExternalOpenTarget = "vscode" | "reveal";
 
 /** 读写本地存储的最小接口，测试里换成假的实现。 */
 export interface FileTreeStorage {
@@ -80,4 +85,24 @@ export function readFileTreeOpen(storage: FileTreeStorage): boolean {
 /** 写入文件树开关状态。 */
 export function writeFileTreeOpen(storage: FileTreeStorage, open: boolean): void {
 	storage.setItem(OPEN_KEY, open ? "1" : "0");
+}
+
+/** 读出代码区自动换行状态，未记录时默认关闭（false）。 */
+export function readFileWordWrap(storage: FileTreeStorage): boolean {
+	return storage.getItem(WRAP_KEY) === "1";
+}
+
+/** 写入代码区自动换行状态。 */
+export function writeFileWordWrap(storage: FileTreeStorage, wrapped: boolean): void {
+	storage.setItem(WRAP_KEY, wrapped ? "1" : "0");
+}
+
+/** 读出默认外部打开方式，缺省为 `vscode`。 */
+export function readExternalOpenTarget(storage: FileTreeStorage): ExternalOpenTarget {
+	return storage.getItem(EXTERNAL_TARGET_KEY) === "reveal" ? "reveal" : "vscode";
+}
+
+/** 写入默认外部打开方式。 */
+export function writeExternalOpenTarget(storage: FileTreeStorage, target: ExternalOpenTarget): void {
+	storage.setItem(EXTERNAL_TARGET_KEY, target);
 }

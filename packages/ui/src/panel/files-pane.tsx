@@ -10,7 +10,7 @@
 
 import type { FileEntry } from "@facet/protocol";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { PanelRightClose, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import {
 	type CSSProperties,
 	type KeyboardEvent as ReactKeyboardEvent,
@@ -36,8 +36,6 @@ export interface FilesPaneProps {
 	onOpenFile: (path: string) => void;
 	/** 当前打开的文件，用来高亮 */
 	selectedPath?: string;
-	/** 收起这一栏；不给时不显示收起按钮（整列独占时没地方可收） */
-	onCollapse?: (() => void) | undefined;
 }
 
 /** 一层目录的加载状态。 */
@@ -60,7 +58,7 @@ interface Row {
 	depth: number;
 }
 
-export function FilesPane({ loadDirectory, onOpenFile, selectedPath, onCollapse }: FilesPaneProps) {
+export function FilesPane({ loadDirectory, onOpenFile, selectedPath }: FilesPaneProps) {
 	// 文件行的完整路径与读取失败的原文都走这份提示
 	const tip = useHoverTip();
 	const { t } = useI18n();
@@ -200,23 +198,9 @@ export function FilesPane({ loadDirectory, onOpenFile, selectedPath, onCollapse 
 
 	const root = directories[""];
 
-	/*
-	 * 树顶：收起按钮贴左缘（也就是紧挨着内部那条分隔线），标题随后，刷新在最右端。
-	 * 上面第一行的右端是图钉、关闭与窗口按钮，这样两排图标不会挤成一列。
-	 */
+	/* 树顶：左放标题，最右端只留刷新（文件树开合由上方文件顶栏按钮控制）。 */
 	const header = (
 		<div className="tree-head">
-			{onCollapse === undefined ? null : (
-				<IconButton
-					variant="ghost"
-					size="sm"
-					className="ib workspace-collapse-list"
-					aria-label={t("panel.collapseTree")}
-					onClick={onCollapse}
-				>
-					<PanelRightClose size={ICON_SIZE.md} />
-				</IconButton>
-			)}
 			<span className="tree-root">{t("panel.projectFiles")}</span>
 			<div className="tree-head-actions">
 				<IconButton

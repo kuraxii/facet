@@ -1,23 +1,23 @@
 /**
  * 右栏状态的测试。
  *
- * 只测读写、收敛与两个纯变换：读不懂的取值回落到缺省，宽度收在上下限之间，激活项永远落在
- * 已打开的标签里，旧版单标签存储能迁移过来。
+ * 覆盖宽度读写与收敛、标签开合与重排纯变换：右栏标签与开合仅存于内存，宽度才落盘。
  */
 import { describe, expect, it } from "vitest";
 import {
 	clampPanelWidth,
 	closePanelTab,
 	DEFAULT_PANEL_STATE,
+	DEFAULT_PANEL_TAB_STATE,
 	normalizePanelState,
 	openPanelTab,
 	PANEL_DEFAULT_WIDTH,
 	PANEL_MIN_WIDTH,
 	type PanelStorage,
 	type RightPanelState,
-	readPanelState,
+	readStoredPanelWidth,
 	reorderPanelTabs,
-	writePanelState,
+	writeStoredPanelWidth,
 } from "./panel-state.ts";
 
 /** 内存里的本地存储。 */
@@ -39,128 +39,43 @@ function state(patch: Partial<RightPanelState> = {}): RightPanelState {
 	return { ...DEFAULT_PANEL_STATE, open: true, ...patch };
 }
 
-describe("readPanelState", () => {
-	it("没有记录时用缺省值", () => {
-		expect(readPanelState(createStorage())).toEqual(DEFAULT_PANEL_STATE);
-	});
-
-	it("缺省是收起、没有标签、420 宽", () => {
-		expect(DEFAULT_PANEL_STATE).toEqual({ open: false, openTabs: [], activeTab: null, width: 420 });
-		expect(PANEL_DEFAULT_WIDTH).toBe(420);
-	});
-
-	it("读回展开、已打开的标签、激活项与宽度", () => {
-		const storage = createStorage({
-			"facet.panel.open": "1",
-			"facet.panel.tabs": '["files","terminal"]',
-			"facet.panel.active": "terminal",
-			"facet.panel.width": "640",
+describe("readStoredPanelWidth / writeStoredPanelWidth", () => {
+	it("没有记录时用缺省宽度", () => {
+		expect(readStoredPanelWidth(createStorage())).toEqual({
+			width: PANEL_DEFAULT_WIDTH,
+			widthViewport: undefined,
 		});
-		expect(readPanelState(storage)).toEqual(
-			state({ openTabs: ["files", "terminal"], activeTab: "terminal", width: 640 }),
-		);
-	});
-
-	it("四类工具都认，顺序与去重都按标签串来", () => {
-		const storage = createStorage({
-			"facet.panel.tabs": '["terminal","files","terminal","git-graph","changes"]',
-		});
-		const panel = readPanelState(storage);
-		expect(panel.openTabs).toEqual(["terminal", "files", "git-graph", "changes"]);
-		// 没有激活项记录时落到第一条
-		expect(panel.activeTab).toBe("terminal");
-	});
-
-	it("旧版存下来的三标签串照原样读回，不因为新增工具而丢项", () => {
-		const storage = createStorage({ "facet.panel.tabs": '["files","changes","terminal"]' });
-		expect(readPanelState(storage).openTabs).toEqual(["files", "changes", "terminal"]);
-	});
-
-	it("图谱与浏览器标签能读能写", () => {
-		const storage = createStorage();
-		writePanelState(storage, state({ openTabs: ["git-graph", "browser"], activeTab: "browser" }));
-		expect(storage.data["facet.panel.tabs"]).toBe('["git-graph","browser"]');
-		expect(readPanelState(storage).activeTab).toBe("browser");
-	});
-
-	it("标签串写坏了回到空列表", () => {
-		expect(readPanelState(createStorage({ "facet.panel.tabs": "设置" })).openTabs).toEqual([]);
-		expect(readPanelState(createStorage({ "facet.panel.tabs": '{"files":true}' })).openTabs).toEqual([]);
-		expect(readPanelState(createStorage({ "facet.panel.tabs": '["设置","diff"]' })).openTabs).toEqual([]);
-	});
-
-	it("激活项不在已打开的标签里时落到第一条", () => {
-		const storage = createStorage({
-			"facet.panel.tabs": '["changes"]',
-			"facet.panel.active": "terminal",
-		});
-		expect(readPanelState(storage).activeTab).toBe("changes");
-	});
-
-	it("旧版单标签键迁移成一个已打开的标签", () => {
-		const legacy = createStorage({ "facet.panel.open": "1", "facet.panel.tab": "files" });
-		expect(readPanelState(legacy)).toEqual(state({ openTabs: ["files"], activeTab: "files" }));
-	});
-
-	it("有新版标签串时不再看旧键", () => {
-		const storage = createStorage({
-			"facet.panel.tabs": "[]",
-			"facet.panel.tab": "files",
-		});
-		expect(readPanelState(storage).openTabs).toEqual([]);
-		expect(readPanelState(storage).activeTab).toBeNull();
-	});
-
-	it("旧键读不懂时当作没有标签", () => {
-		expect(readPanelState(createStorage({ "facet.panel.tab": "图钉" })).openTabs).toEqual([]);
+		expect(DEFAULT_PANEL_TAB_STATE).toEqual({ open: false, openTabs: [], activeTab: null });
 	});
 
 	it("读回定宽时的视口基准；读不懂就不算手动定过宽", () => {
-		expect(readPanelState(createStorage({ "facet.panel.widthViewport": "1400" })).widthViewport).toBe(1400);
+		expect(readStoredPanelWidth(createStorage({ "facet.panel.widthViewport": "1400" })).widthViewport).toBe(
+			1400,
+		);
 		for (const bad of ["", "宽", "0", "-10"]) {
 			expect(
-				readPanelState(createStorage({ "facet.panel.widthViewport": bad })).widthViewport,
+				readStoredPanelWidth(createStorage({ "facet.panel.widthViewport": bad })).widthViewport,
 				bad,
 			).toBeUndefined();
 		}
 	});
 
 	it("宽度没有上限，只收下限", () => {
-		// 上限由正文的最小宽现算，落盘里留用户拖出来的宽度
-		expect(readPanelState(createStorage({ "facet.panel.width": "9999" })).width).toBe(9999);
-		expect(readPanelState(createStorage({ "facet.panel.width": "10" })).width).toBe(PANEL_MIN_WIDTH);
-		expect(readPanelState(createStorage({ "facet.panel.width": "宽" })).width).toBe(
+		expect(readStoredPanelWidth(createStorage({ "facet.panel.width": "9999" })).width).toBe(9999);
+		expect(readStoredPanelWidth(createStorage({ "facet.panel.width": "10" })).width).toBe(PANEL_MIN_WIDTH);
+		expect(readStoredPanelWidth(createStorage({ "facet.panel.width": "宽" })).width).toBe(
 			DEFAULT_PANEL_STATE.width,
 		);
 	});
-});
 
-describe("writePanelState", () => {
-	it("定宽时的视口基准一起落盘", () => {
+	it("写宽度与视口基准时不写入标签页状态键", () => {
 		const storage = createStorage();
-		writePanelState(storage, state({ width: 600, widthViewport: 1400 }));
-		expect(storage.data["facet.panel.widthViewport"]).toBe("1400");
-		expect(readPanelState(storage).widthViewport).toBe(1400);
-	});
-
-	it("写进去能读回来", () => {
-		const storage = createStorage();
-		const written = state({ openTabs: ["files", "changes"], activeTab: "changes", width: 600 });
-		writePanelState(storage, written);
-		expect(readPanelState(storage)).toEqual(written);
-	});
-
-	it("标签列表按 JSON 落盘，空列表也是一个明确的值", () => {
-		const storage = createStorage();
-		writePanelState(storage, state({ openTabs: [], activeTab: null }));
-		expect(storage.data["facet.panel.tabs"]).toBe("[]");
-		expect(storage.data["facet.panel.active"]).toBe("");
-	});
-
-	it("旧键留着也不会被复活：新版标签串已经写下来了", () => {
-		const storage = createStorage({ "facet.panel.tab": "files" });
-		writePanelState(storage, state({ openTabs: [], activeTab: null }));
-		expect(readPanelState(storage).openTabs).toEqual([]);
+		writeStoredPanelWidth(storage, { width: 600, widthViewport: 1400 });
+		expect(storage.data).toEqual({
+			"facet.panel.width": "600",
+			"facet.panel.widthViewport": "1400",
+		});
+		expect(readStoredPanelWidth(storage)).toEqual({ width: 600, widthViewport: 1400 });
 	});
 });
 

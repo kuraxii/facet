@@ -56,6 +56,11 @@
 	overflow: hidden;
 }
 
+/* 纵向内边距留在外层静态卡片上，代码区在中间滚动时上下留白才不会滚走 */
+.code-card:not(.mermaid-card) {
+	padding: var(--space-8) 0;
+}
+
 .code-card-head {
 	position: absolute;
 	top: 0;
@@ -106,11 +111,11 @@
 }
 
 .code-card-body {
-	max-height: 360px;
+	max-height: 328px;
 	overflow-y: auto;
 	overflow-x: hidden;
 	margin: 0;
-	padding: var(--space-8);
+	padding: 0 var(--space-8);
 	font-family: var(--font-mono);
 	font-size: var(--text-xs);
 	line-height: var(--leading-code-block);
@@ -175,10 +180,10 @@
 
 /* 源码态与流式未完成时显示原始定义，与代码块正文同一套排版 */
 .mermaid-source {
-	max-height: 360px;
-	margin: 0;
+	max-height: 328px;
+	margin: var(--space-8) 0;
 	overflow: auto;
-	padding: var(--space-8);
+	padding: 0 var(--space-8);
 	color: var(--fg-muted);
 	font-family: var(--font-mono);
 	font-size: var(--text-xs);

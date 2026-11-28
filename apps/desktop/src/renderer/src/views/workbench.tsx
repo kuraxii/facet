@@ -59,7 +59,7 @@ import {
 	type WorkspaceTabId,
 	writeDraftContextStore,
 } from "@facet/ui";
-import { Check, Monitor, RotateCw, Server, X } from "lucide-react";
+import { RotateCw, X } from "lucide-react";
 import {
 	type CSSProperties,
 	type ReactNode,
@@ -838,13 +838,9 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 								/>
 							)}
 						</div>
-						<div className="chrome-slot is-main" data-remote-host={isRemoteActive ? "true" : "false"}>
+						<div className="chrome-slot is-main">
 							{chromeTitle === undefined ? null : (
 								<>
-									<span className={isRemoteActive ? "chrome-host-pill is-remote" : "chrome-host-pill"}>
-										{isRemoteActive ? <Server size={ICON_SIZE.sm} /> : <Monitor size={ICON_SIZE.sm} />}
-										<span>{activeHostLabel}</span>
-									</span>
 									{activeProjectLabel === undefined ? null : (
 										<>
 											<span className="chrome-project">{activeProjectLabel}</span>
@@ -855,12 +851,6 @@ export function Workbench(props: WorkbenchProps): ReactNode {
 								</>
 							)}
 							<span className="chrome-spacer" />
-							{activeCard === undefined ? null : (
-								<Button variant="ghost" size="sm" onClick={() => handleSettleCard(activeCard)}>
-									<Check size={ICON_SIZE.sm} />
-									{t("inbox.settle")}
-								</Button>
-							)}
 						</div>
 						{panelPresence.mounted ? (
 							<div className={panelChromeClass} style={panelChromeStyle}>

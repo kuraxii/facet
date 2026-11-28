@@ -114,6 +114,7 @@ export function syncOfflineEndpoint(
 		sessions: readonly SessionSummary[];
 		settled: Readonly<Record<string, number>>;
 		untitled: string;
+		isScratchCwd?: (cwd: string) => boolean;
 	},
 ): Record<string, CachedOfflineTask> {
 	const next = purgeOfflineEndpoint(cache, input.endpoint);
@@ -125,12 +126,13 @@ export function syncOfflineEndpoint(
 		if (input.settled[key] !== undefined) {
 			continue;
 		}
+		const isScratch = input.isScratchCwd?.(summary.cwd) === true;
 		next[key] = {
 			key,
 			endpoint: input.endpoint,
 			file: summary.path,
 			hostLabel: input.hostLabel,
-			projectName: summary.cwd.length > 0 ? baseName(summary.cwd) || summary.cwd : "",
+			projectName: !isScratch && summary.cwd.length > 0 ? baseName(summary.cwd) || summary.cwd : "",
 			cwd: summary.cwd,
 			title: sessionTitle(summary.name, summary.firstMessage, input.untitled),
 			agentId: summary.agentId ?? "pi",

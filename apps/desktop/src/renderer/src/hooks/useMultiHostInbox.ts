@@ -47,8 +47,61 @@ export interface MultiHostInbox {
 	clearEndpointOffline: (endpoint: string) => void;
 }
 
+function isScratchCwd(cwd: string): boolean {
+	return /[\\/]\.facet(?:-dev)?[\\/]scratch(?:[\\/]|$)/i.test(cwd);
+}
+
 function statusesOf(runtime: HostRuntime): ReadonlyMap<string, SessionStatus> {
 	return new Map(runtime.client.store.sessionList().map((entry) => [entry.summary.path, entry.status]));
+}
+
+/** 仅提取侧栏关心的字段摘要，过滤流式文本增量导致的无效重绘。 */
+function feedSignatureOf(runtime: HostRuntime): string {
+	return runtime.client.store
+		.sessionList()
+		.map(({ summary, status }) =>
+			[
+				summary.path,
+				summary.modified,
+				summary.name ?? "",
+				summary.firstMessage,
+				summary.cwd,
+				summary.agentId ?? "",
+				status.activity,
+				status.pendingInput,
+				status.seenAt,
+				status.settle?.at ?? 0,
+				status.settle?.outcome ?? "",
+			].join("\0"),
+		)
+		.join("\n");
+}
+
+function sameOfflineCache(
+	left: Readonly<Record<string, CachedOfflineTask>>,
+	right: Readonly<Record<string, CachedOfflineTask>>,
+): boolean {
+	const leftKeys = Object.keys(left);
+	const rightKeys = Object.keys(right);
+	if (leftKeys.length !== rightKeys.length) {
+		return false;
+	}
+	for (const key of leftKeys) {
+		const a = left[key];
+		const b = right[key];
+		if (
+			a === undefined ||
+			b === undefined ||
+			a.updatedAt !== b.updatedAt ||
+			a.title !== b.title ||
+			a.projectName !== b.projectName ||
+			a.hostLabel !== b.hostLabel ||
+			a.agentId !== b.agentId
+		) {
+			return false;
+		}
+	}
+	return true;
 }
 
 export function useMultiHostInbox(hosts: Hosts): MultiHostInbox {
@@ -60,12 +113,14 @@ export function useMultiHostInbox(hosts: Hosts): MultiHostInbox {
 	const [tick, setTick] = useState(0);
 	const projectsRef = useRef(new Map<string, readonly ProjectInfo[]>());
 	const fetchedEpochRef = useRef(new Map<string, number>());
+	const signatureRef = useRef(new Map<string, string>());
 
-	// 订阅全部存活的 HostRuntime 的会话 Store，并在主机每次连上就绪时拉取一次完整列表
+	// 订阅全部存活的 HostRuntime 的会话 Store，仅在列表元数据或状态桶变化时刷新 Inbox
 	useEffect(() => {
 		void hosts.registryVersion;
 		const unsubs: Array<() => void> = [];
 		for (const runtime of hosts.registry.all()) {
+			signatureRef.current.set(runtime.endpoint, feedSignatureOf(runtime));
 			const snap = runtime.getSnapshot();
 			if (snap.phase === "ready" && fetchedEpochRef.current.get(runtime.endpoint) !== snap.connectEpoch) {
 				fetchedEpochRef.current.set(runtime.endpoint, snap.connectEpoch);
@@ -77,10 +132,18 @@ export function useMultiHostInbox(hosts: Hosts): MultiHostInbox {
 							projectsRef.current.set(runtime.endpoint, list);
 						})
 						.catch(() => undefined),
-				]).finally(() => setTick((c) => c + 1));
+				]).finally(() => {
+					signatureRef.current.set(runtime.endpoint, feedSignatureOf(runtime));
+					setTick((c) => c + 1);
+				});
 			}
 			unsubs.push(
 				runtime.client.store.subscribe(() => {
+					const nextSig = feedSignatureOf(runtime);
+					if (signatureRef.current.get(runtime.endpoint) === nextSig) {
+						return;
+					}
+					signatureRef.current.set(runtime.endpoint, nextSig);
 					setTick((c) => c + 1);
 				}),
 			);
@@ -125,8 +188,9 @@ export function useMultiHostInbox(hosts: Hosts): MultiHostInbox {
 				sessions,
 				settled,
 				untitled: t("sidebar.untitled"),
+				isScratchCwd,
 			});
-			if (JSON.stringify(updated) !== JSON.stringify(nextCache)) {
+			if (!sameOfflineCache(updated, nextCache)) {
 				nextCache = updated;
 				changed = true;
 			}
@@ -164,6 +228,7 @@ export function useMultiHostInbox(hosts: Hosts): MultiHostInbox {
 				offlineCache: offlineTasks,
 				untitled: t("sidebar.untitled"),
 				locale: i18n.language as "en" | "zh-CN",
+				isScratchCwd,
 			}),
 		[feeds, i18n.language, offlineTasks, settled, t],
 	);

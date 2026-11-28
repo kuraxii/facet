@@ -114,6 +114,19 @@ export interface InboxData {
 	settled: readonly SidebarSettledItem[];
 }
 
+/** 项目徽标可用的配色分档数量。 */
+export const PROJECT_BADGE_TONE_COUNT = 5;
+
+/** 由项目名映射稳定的项目徽标配色分档（`0` 到 `PROJECT_BADGE_TONE_COUNT - 1`）。 */
+export function projectBadgeTone(projectName: string): number {
+	let hash = 2166136261;
+	for (let i = 0; i < projectName.length; i += 1) {
+		hash ^= projectName.charCodeAt(i);
+		hash = Math.imul(hash, 16777619);
+	}
+	return (hash >>> 0) % PROJECT_BADGE_TONE_COUNT;
+}
+
 /** 从目录名或项目名提炼 2 字符缩写徽标（纯大写 ASCII 或首字符）。 */
 export function projectMonogram(projectName: string): string {
 	const cleaned = projectName.trim();

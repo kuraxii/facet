@@ -220,7 +220,11 @@ export const SessionSidebar = memo(function SessionSidebar({
 						return (
 							<div
 								key={card.key}
-								className="sb-item is-inbox scroll-row"
+								className={
+									item.index === activeCards.length - 1
+										? "sb-item is-inbox is-last scroll-row"
+										: "sb-item is-inbox scroll-row"
+								}
 								data-index={item.index}
 								ref={virtualizer.measureElement}
 								style={{ transform: `translateY(${item.start}px)` }}

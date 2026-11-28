@@ -6,12 +6,12 @@
  * 第 2 行：任务标题（最多两行）。
  * 第 3 行：左侧 Host 图标与名称；右侧 Agent 图标与名称。
  */
-import { Check, Monitor, Server } from "lucide-react";
+import { Check, MessageCircle, Monitor, Server } from "lucide-react";
 import { type MouseEvent, memo, type ReactNode } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { ICON_SIZE } from "../styles/visual-contract.ts";
 import { BackendIcon } from "./AgentsIcon.tsx";
-import type { SidebarTaskCard } from "./inbox-model.ts";
+import { projectBadgeTone, type SidebarTaskCard } from "./inbox-model.ts";
 import { SessionStatusMark } from "./session-status-mark.tsx";
 
 export interface InboxCardProps {
@@ -62,7 +62,22 @@ export const InboxCard = memo(function InboxCard({
 		>
 			<div className="inbox-card-top">
 				<span className="inbox-card-proj">
-					<span className="inbox-proj-name ell">
+					{card.projectName.length > 0 ? (
+						<span
+							className="inbox-proj-badge"
+							data-tone={projectBadgeTone(card.projectName)}
+							aria-hidden="true"
+						>
+							{card.projectMonogram}
+						</span>
+					) : (
+						<span className="inbox-proj-badge is-empty" aria-hidden="true">
+							<MessageCircle size={ICON_SIZE.sm} />
+						</span>
+					)}
+					<span
+						className={card.projectName.length > 0 ? "inbox-proj-name ell" : "inbox-proj-name is-empty ell"}
+					>
 						{card.projectName.length > 0 ? card.projectName : t("inbox.noProject")}
 					</span>
 				</span>

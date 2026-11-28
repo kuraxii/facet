@@ -793,19 +793,35 @@
 }
 
 .sb-item.is-inbox {
-	padding-bottom: var(--space-2);
+	padding-bottom: var(--space-1);
 }
 
 .inbox-card {
+	position: relative;
 	display: flex;
 	flex-direction: column;
 	gap: var(--space-2);
-	padding: var(--space-3);
+	padding: var(--space-6);
 	border: 0;
 	border-radius: var(--radius-lg);
 	background: transparent;
 	cursor: pointer;
 	text-align: left;
+}
+
+/* 卡间极淡分割线：相对卡片自身对齐内容两侧，置于 2px 卡间缝隙；选中/悬停及其上方相邻卡片自动隐藏 */
+.sb-item.is-inbox:not(.is-last):not(:has(+ .sb-item.is-inbox > .inbox-card.is-on)):not(
+		:has(+ .sb-item.is-inbox > .inbox-card:hover)
+	)
+	> .inbox-card:not(.is-on):not(:hover)::after {
+	content: "";
+	position: absolute;
+	right: var(--space-6);
+	bottom: calc(var(--space-1) * -0.5);
+	left: var(--space-6);
+	height: 1px;
+	background: color-mix(in srgb, var(--fg-default) 5%, transparent);
+	pointer-events: none;
 }
 
 .inbox-card:hover {
@@ -834,13 +850,58 @@
 .inbox-card-proj {
 	display: inline-flex;
 	align-items: center;
-	gap: var(--space-2);
+	gap: var(--space-3);
 	min-width: 0;
+}
+
+.inbox-proj-badge {
+	--badge-tone: var(--dot-run);
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	width: var(--space-8);
+	height: var(--space-8);
+	border-radius: var(--radius-sm);
+	background: color-mix(in srgb, var(--badge-tone) 15%, transparent);
+	color: color-mix(in srgb, var(--badge-tone) 82%, var(--fg-default));
+	font-size: calc(var(--text-xs) * 0.75);
+	font-weight: 600;
+	line-height: 1;
+}
+
+.inbox-proj-badge[data-tone="0"] {
+	--badge-tone: var(--dot-run);
+}
+
+.inbox-proj-badge[data-tone="1"] {
+	--badge-tone: var(--proj-violet);
+}
+
+.inbox-proj-badge[data-tone="2"] {
+	--badge-tone: var(--dot-warn);
+}
+
+.inbox-proj-badge[data-tone="3"] {
+	--badge-tone: var(--dot-ok);
+}
+
+.inbox-proj-badge[data-tone="4"] {
+	--badge-tone: var(--dot-err);
+}
+
+.inbox-proj-badge.is-empty {
+	background: transparent;
+	color: var(--fg-subtle);
 }
 
 .inbox-proj-name {
 	color: var(--fg-muted);
 	font-size: var(--text-xs);
+}
+
+.inbox-proj-name.is-empty {
+	opacity: 0.65;
 }
 
 .inbox-card-right {
@@ -892,7 +953,7 @@
 .inbox-card-title {
 	margin: 0;
 	color: var(--fg-default);
-	font-size: var(--text-ui);
+	font-size: var(--text-xs);
 	font-weight: 400;
 	line-height: calc(var(--leading-ui) - var(--space-1));
 	text-overflow: clip;
@@ -913,7 +974,7 @@
 .inbox-card-host {
 	display: inline-flex;
 	align-items: center;
-	gap: var(--space-1);
+	gap: var(--space-2);
 	min-width: 0;
 }
 

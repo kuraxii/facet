@@ -4,6 +4,8 @@ import {
 	buildInbox,
 	collectInboxProjects,
 	deriveAttention,
+	PROJECT_BADGE_TONE_COUNT,
+	projectBadgeTone,
 	projectMonogram,
 	searchInboxEntries,
 	sessionKeyOf,
@@ -28,6 +30,10 @@ describe("inbox-model", () => {
 		expect(projectMonogram("facet")).toBe("FA");
 		expect(projectMonogram("linx-icp")).toBe("LI");
 		expect(projectMonogram("")).toBe("--");
+		const tone = projectBadgeTone("facet");
+		expect(tone).toBeGreaterThanOrEqual(0);
+		expect(tone).toBeLessThan(PROJECT_BADGE_TONE_COUNT);
+		expect(projectBadgeTone("facet")).toBe(tone);
 	});
 
 	it("聚合多主机未归档与已归档会话，过滤 0 消息空会话，支持离线缓存", () => {

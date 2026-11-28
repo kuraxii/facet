@@ -55,4 +55,15 @@ describe("InboxCard 状态与 Settle 切换", () => {
 		expect(html).toContain("inbox-time");
 		expect(html).toContain("inbox-settle-btn");
 	});
+
+	it("有项目时渲染双字母徽标，无项目时渲染 message-circle 图标", () => {
+		const withProject = renderCard({ projectName: "facet", projectMonogram: "FA" });
+		expect(withProject).toContain("inbox-proj-badge");
+		expect(withProject).toContain(">FA<");
+		expect(withProject).not.toContain("inbox-proj-badge is-empty");
+
+		const noProject = renderCard({ projectName: "", projectMonogram: "--" });
+		expect(noProject).toContain("inbox-proj-badge is-empty");
+		expect(noProject).toContain("lucide-message-circle");
+	});
 });

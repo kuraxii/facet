@@ -51,6 +51,7 @@
 	--dot-warn: #bf8700;
 	--dot-err: #cf222e;
 	--dot-run: #0969da;
+	--proj-violet: #8250df;
 	--diff-add-fg: #1a7f37;
 	--diff-del-fg: #cf222e;
 	--diff-add-bg: #dafbe1;
@@ -104,6 +105,7 @@
 	--dot-warn: #d29922;
 	--dot-err: #f85149;
 	--dot-run: #4493f8;
+	--proj-violet: #a78bfa;
 	--diff-add-fg: #3fb950;
 	--diff-del-fg: #f85149;
 	--diff-add-bg: #2ea04326;
@@ -156,6 +158,7 @@
 	--dot-warn: #dc9c3f;
 	--dot-err: #ef7a62;
 	--dot-run: #6fa8e8;
+	--proj-violet: #b89ef2;
 	--diff-add-fg: #4ade80;
 	--diff-del-fg: #ef4444;
 	--diff-add-bg: #4ade8029;

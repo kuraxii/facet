@@ -586,10 +586,13 @@ describe("SessionClient", () => {
 			const { client } = createClient(2, { sessionRetentionMs: 1000 });
 			await client.openSession("/tmp/a.jsonl");
 			await client.switchSession("/tmp/b.jsonl");
+			const released: string[] = [];
+			client.onSessionReleased((file) => released.push(file));
 			client.closeSession("/tmp/a.jsonl");
 			expect(client.hasSession("/tmp/a.jsonl")).toBe(true);
 			await vi.advanceTimersByTimeAsync(1000);
 			expect(client.hasSession("/tmp/a.jsonl")).toBe(false);
+			expect(released).toEqual(["/tmp/a.jsonl"]);
 		} finally {
 			vi.useRealTimers();
 		}

@@ -204,6 +204,8 @@ export class SessionClient {
 	 * 换回来的主机还要接着看同一个目录。
 	 */
 	private readonly watchedCwds = new Set<string>();
+	/** 运行时被释放时的订阅者，供外层同步清理关联的会话级界面状态 */
+	private readonly releaseListeners = new Set<(file: string) => void>();
 
 	constructor(options: SessionClientOptions) {
 		this.transport = options.transport;
@@ -341,6 +343,14 @@ export class SessionClient {
 		if (runtime === undefined) return undefined;
 		this.activate(runtime);
 		return runtime.opened;
+	}
+
+	/** 订阅会话运行时从客户端缓存释放（超时回收、删除、主动释放或重连清理）。 */
+	onSessionReleased(listener: (file: string) => void): () => void {
+		this.releaseListeners.add(listener);
+		return () => {
+			this.releaseListeners.delete(listener);
+		};
 	}
 
 	/** 标记标签已关闭；会话保留一段时间，期间重新打开仍然命中缓存。 */
@@ -1543,8 +1553,14 @@ export class SessionClient {
 
 	/** 释放一个会话运行时，先从登记表拿掉，避免重入。 */
 	private async releaseRuntime(runtime: SessionRuntime): Promise<void> {
+		const file = runtime.opened.file;
 		this.removeRuntime(runtime);
 		await this.releaseChannels(runtime.opened);
+		if (file !== undefined) {
+			for (const listener of [...this.releaseListeners]) {
+				listener(file);
+			}
+		}
 	}
 
 	private async releaseAllUnlocked(): Promise<void> {

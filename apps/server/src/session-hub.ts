@@ -842,7 +842,7 @@ export class SessionHub<A extends HubAgent = ManagedAgent> {
 		if (row === undefined) {
 			return;
 		}
-		row.seenAt = Date.now();
+		row.seenAt = Math.max(Date.now(), row.settle?.at ?? 0);
 		this.noteStatus(row);
 	}
 

@@ -4,6 +4,7 @@ import {
 	baseName,
 	buildSidebar,
 	groupSessions,
+	isScratchCwd,
 	type SidebarSession,
 	samePath,
 	sessionTitle,
@@ -59,6 +60,14 @@ describe("路径与标题", () => {
 		expect(samePath("/work/facet/", "/work/facet")).toBe(true);
 		expect(samePath("D:\\User\\Desktop\\facet\\", "D:\\User\\Desktop\\facet")).toBe(true);
 		expect(samePath("/work/facet", "/work/linx-icp")).toBe(false);
+	});
+
+	it("识别无项目 scratch 目录及历史日期子目录", () => {
+		expect(isScratchCwd("C:\\Users\\demo\\.facet\\scratch")).toBe(true);
+		expect(isScratchCwd("/home/demo/.facet-dev/scratch")).toBe(true);
+		expect(isScratchCwd("/home/demo/.facet/scratch/20261129-abcd1234")).toBe(true);
+		expect(isScratchCwd("/work/scratch")).toBe(false);
+		expect(isScratchCwd("/work/facet")).toBe(false);
 	});
 
 	it("标题回退顺序为会话名、首条消息、占位名", () => {

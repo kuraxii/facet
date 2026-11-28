@@ -12,7 +12,7 @@ import { ChevronIcon } from "../transcript/chevron.tsx";
 import { BackendIcon } from "./AgentsIcon.tsx";
 import type { RecentDraftContext } from "./draft-context.ts";
 import type { HostNodePhase } from "./HostSwitcher.tsx";
-import { baseName } from "./sidebar-model.ts";
+import { baseName, isScratchCwd } from "./sidebar-model.ts";
 
 /** 引导页 Host 下拉里的单个主机节点。 */
 export interface DraftHostOption {
@@ -93,7 +93,8 @@ export function DraftSelectors({
 		return () => document.removeEventListener("pointerdown", onPointerDown);
 	}, [openMenu]);
 
-	const projectName = cwd !== undefined && cwd.length > 0 ? baseName(cwd) || cwd : undefined;
+	const projectName =
+		cwd !== undefined && cwd.length > 0 && !isScratchCwd(cwd) ? baseName(cwd) || cwd : undefined;
 	const activeAgent = agents.find((item) => item.id === selectedAgentId) ?? agents[0];
 	const currentHost = hosts?.find((item) => item.endpoint === selectedHostEndpoint);
 	const hostList: readonly DraftHostOption[] =
@@ -337,7 +338,10 @@ export function DraftSelectors({
 			{recentContexts !== undefined && recentContexts.length > 0 && onSelectRecentContext !== undefined ? (
 				<div className="empty-recents">
 					{recentContexts.map((ctx) => {
-						const projLabel = ctx.cwd !== undefined && ctx.cwd.length > 0 ? baseName(ctx.cwd) : undefined;
+						const projLabel =
+							ctx.cwd !== undefined && ctx.cwd.length > 0 && !isScratchCwd(ctx.cwd)
+								? baseName(ctx.cwd)
+								: undefined;
 						const label = projLabel ? `${ctx.hostLabel} · ${projLabel}` : ctx.hostLabel;
 						return (
 							<button

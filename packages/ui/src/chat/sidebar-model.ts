@@ -134,6 +134,11 @@ export function samePath(left: string, right: string): boolean {
 	return pathKey(left) === pathKey(right);
 }
 
+/** 判断工作目录是否属于无项目会话的 scratch 目录（兼容历史按日拆分的子目录）。 */
+export function isScratchCwd(cwd: string): boolean {
+	return /[\\/]\.facet(?:-dev)?[\\/]scratch(?:[\\/]|$)/i.test(cwd);
+}
+
 /** 首条消息生成的标题上限；显示宽度交给 CSS 省略，不在数据层按窄列表硬截断。 */
 const MAX_TITLE_LENGTH = 50;
 

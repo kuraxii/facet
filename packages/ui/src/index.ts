@@ -135,6 +135,7 @@ export {
 	baseName,
 	buildSidebar,
 	groupSessions,
+	isScratchCwd,
 	samePath,
 	sessionTitle,
 	shortTime,

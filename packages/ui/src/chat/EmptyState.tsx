@@ -18,7 +18,7 @@ import { useI18n } from "../i18n/I18nProvider.tsx";
 import { Composer, type ComposerAttachment } from "./Composer.tsx";
 import { type DraftHostOption, DraftSelectors } from "./DraftSelectors.tsx";
 import type { RecentDraftContext } from "./draft-context.ts";
-import { baseName } from "./sidebar-model.ts";
+import { baseName, isScratchCwd } from "./sidebar-model.ts";
 
 /** 引导页参数。 */
 export interface EmptyStateProps {
@@ -142,7 +142,8 @@ export function EmptyState({
 }: EmptyStateProps) {
 	const { t } = useI18n();
 	const [draft, setDraft] = useState("");
-	const projectName = cwd !== undefined && cwd.length > 0 ? baseName(cwd) || cwd : undefined;
+	const projectName =
+		cwd !== undefined && cwd.length > 0 && !isScratchCwd(cwd) ? baseName(cwd) || cwd : undefined;
 
 	const submit = (): void => {
 		const trimmed = draft.trim();

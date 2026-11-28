@@ -76,7 +76,6 @@ export const InboxCard = memo(function InboxCard({
 		>
 			<div className="inbox-card-top">
 				<span className="inbox-card-proj">
-					<span className="inbox-monogram mono">{card.projectMonogram}</span>
 					<span className="inbox-proj-name ell">
 						{card.projectName.length > 0 ? card.projectName : t("inbox.noProject")}
 					</span>
@@ -103,16 +102,15 @@ export const InboxCard = memo(function InboxCard({
 				</span>
 			</div>
 
-			<p className="inbox-card-title">{card.title}</p>
+			<p className="inbox-card-title ell">{card.title}</p>
 
 			<div className="inbox-card-foot">
 				<span className="inbox-card-host ell">
 					{card.isLocal ? <Monitor size={ICON_SIZE.sm} /> : <Server size={ICON_SIZE.sm} />}
 					<span className="ell">{card.hostLabel}</span>
 				</span>
-				<span className="inbox-card-agent">
+				<span className="inbox-card-agent" title={card.agentId}>
 					<BackendIcon agentId={card.agentId} size={ICON_SIZE.sm} />
-					<span>{card.agentId}</span>
 				</span>
 			</div>
 		</div>

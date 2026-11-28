@@ -55,7 +55,6 @@ export const SettledDrawer = memo(function SettledDrawer({
 						return (
 							<li key={item.key} className={isActive ? "settled-item is-on" : "settled-item"}>
 								<button type="button" className="settled-main" onClick={() => onSelect(item)}>
-									<span className="inbox-monogram is-muted mono">{item.projectMonogram}</span>
 									<span className="settled-title ell">{item.title}</span>
 									<span className="settled-time mono">{item.timeText}</span>
 								</button>

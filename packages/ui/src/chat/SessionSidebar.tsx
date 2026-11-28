@@ -4,8 +4,9 @@
  * 顶部为 `+ 新建会话` 入口；主区平铺跨主机的 3 行活跃任务卡（不按时间或项目树拆分）；
  * 底部收起 `Settled` 归档抽屉与页脚（Host 连接管理器 + 设置按钮）。
  */
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { Plus, Settings } from "lucide-react";
-import { type MouseEvent, memo, type ReactNode, useCallback, useEffect, useState } from "react";
+import { type MouseEvent, memo, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "../common/Button.tsx";
 import { ScrollArea } from "../common/scroll-area.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
@@ -20,6 +21,9 @@ import { type MenuPosition, menuPositionOf, SessionMenu } from "./SidebarMenus.t
 import { SidebarHeader } from "./sidebar-header.tsx";
 import type { SidebarSession } from "./sidebar-model.ts";
 import { SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "./sidebar-state.ts";
+
+/** 视口外预渲染的任务卡片数 */
+const SIDEBAR_OVERSCAN = 12;
 
 export interface SessionSidebarProps {
 	/** 活跃任务卡片（来自全部已连主机与离线缓存） */
@@ -95,6 +99,18 @@ export const SessionSidebar = memo(function SessionSidebar({
 	const [sessionMenu, setSessionMenu] = useState<
 		{ card: SidebarTaskCard; position: MenuPosition } | undefined
 	>(undefined);
+	const queueRef = useRef<HTMLDivElement>(null);
+
+	const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
+		count: activeCards.length,
+		getScrollElement: () => queueRef.current,
+		overscan: SIDEBAR_OVERSCAN,
+		initialRect: { width: 0, height: 800 },
+		estimateSize: () => 84,
+		measureElement: (element) => element.getBoundingClientRect().height,
+	});
+	const virtualItems = virtualizer.getVirtualItems();
+	const totalSize = virtualizer.getTotalSize();
 
 	useEffect(() => {
 		const onKeyDown = (event: KeyboardEvent) => {
@@ -144,10 +160,7 @@ export const SessionSidebar = memo(function SessionSidebar({
 				};
 
 	return (
-		<aside
-			className={isOpen ? "sb is-open" : "sb"}
-			style={width === undefined ? undefined : { width: `${width}px` }}
-		>
+		<aside className={isOpen ? "sb is-open" : "sb"}>
 			{onWidthChange === undefined ? null : (
 				<PaneResizer
 					className="sb-resizer"
@@ -180,33 +193,48 @@ export const SessionSidebar = memo(function SessionSidebar({
 				/>
 			) : null}
 
-			<Button
-				variant="secondary"
-				size="md"
-				className="sb-new"
-				onClick={() => {
-					onStartNew();
-					onNavigate?.();
-				}}
-				disabled={!canCreate}
-			>
-				<Plus size={ICON_SIZE.md} />
-				{t("common.newSession")}
-			</Button>
+			<div className="sb-actions">
+				<Button
+					variant="secondary"
+					size="md"
+					className="sb-new"
+					onClick={() => {
+						onStartNew();
+						onNavigate?.();
+					}}
+					disabled={!canCreate}
+				>
+					<Plus size={ICON_SIZE.md} />
+					{t("common.newSession")}
+				</Button>
+			</div>
 
-			<ScrollArea className="sb-list">
+			<ScrollArea className="sb-queue" inset="var(--sidebar-edge)" ref={queueRef}>
 				{activeCards.length === 0 ? <p className="sb-empty">{t("inbox.empty")}</p> : null}
-				<div className="inbox-list">
-					{activeCards.map((card) => (
-						<InboxCard
-							key={card.key}
-							card={card}
-							isActive={card.key === activeKey}
-							onSelect={openCard}
-							onSettle={onSettle}
-							onContextMenu={openContextMenu}
-						/>
-					))}
+				<div className="sb-canvas inbox-canvas" style={{ height: totalSize }}>
+					{virtualItems.map((item) => {
+						const card = activeCards[item.index];
+						if (card === undefined) {
+							return null;
+						}
+						return (
+							<div
+								key={card.key}
+								className="sb-item is-inbox scroll-row"
+								data-index={item.index}
+								ref={virtualizer.measureElement}
+								style={{ transform: `translateY(${item.start}px)` }}
+							>
+								<InboxCard
+									card={card}
+									isActive={card.key === activeKey}
+									onSelect={openCard}
+									onSettle={onSettle}
+									onContextMenu={openContextMenu}
+								/>
+							</div>
+						);
+					})}
 				</div>
 			</ScrollArea>
 

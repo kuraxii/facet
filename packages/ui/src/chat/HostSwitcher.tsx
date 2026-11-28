@@ -70,23 +70,20 @@ function triggerBadgeClass(
 	hosts: readonly SavedHost[],
 	statuses: ReadonlyMap<string, HostNodeState>,
 ): string | undefined {
-	let hasReady = false;
+	let hasWarn = false;
 	for (const host of hosts) {
 		const state = statuses.get(host.endpoint);
 		if (state === undefined) {
 			continue;
 		}
-		if (state.phase === "auth" || state.phase === "connecting" || state.isReconnecting) {
-			return "host-trigger-dot is-warn";
-		}
 		if (state.phase === "failed") {
 			return "host-trigger-dot is-err";
 		}
-		if (state.phase === "ready" && state.isOnline) {
-			hasReady = true;
+		if (state.phase === "auth" || state.isReconnecting) {
+			hasWarn = true;
 		}
 	}
-	return hasReady ? "host-trigger-dot is-run" : undefined;
+	return hasWarn ? "host-trigger-dot is-warn" : undefined;
 }
 
 export interface HostSwitcherProps {

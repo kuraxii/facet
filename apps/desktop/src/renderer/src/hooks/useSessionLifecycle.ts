@@ -181,6 +181,8 @@ export interface SessionLifecycleOptions {
 	onSessionOpened?: (file: string) => void;
 	/** 删掉会话之后的收尾，例如清掉相关标签与滚动位置 */
 	onSessionRemoved?: (path: string) => void;
+	/** 会话被回收或冷打开前通知外层清理其内存工作区状态 */
+	onSessionReleased?: (path: string) => void;
 }
 
 /** 新建会话时的可选初始配置。 */
@@ -285,7 +287,15 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 		onActiveFileChange,
 		onSessionOpened,
 		onSessionRemoved,
+		onSessionReleased,
 	} = options;
+	const onSessionReleasedRef = useRef(onSessionReleased);
+	onSessionReleasedRef.current = onSessionReleased;
+	/** 已切入后台、等待空闲后进入保留倒计时的会话集合 */
+	const backgroundedRef = useRef(new Set<string>());
+	/** 已安排 `closeSession` 保留计时器的会话集合，避免重复重置计时器 */
+	const scheduledCloseRef = useRef(new Set<string>());
+	const prevActiveFileRef = useRef<string | undefined>(undefined);
 	/** 会话清单与状态在客户端的 store 里已经是主机的那一份，挂上来先照它显示 */
 	const [sessions, setSessions] = useState<readonly SessionSummary[]>(() =>
 		client.store.sessionList().map((entry) => entry.summary),
@@ -608,10 +618,49 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 
 	const cancelTrust = useCallback(() => setTrustPrompt(undefined), []);
 
+	useEffect(() => {
+		return client.onSessionReleased((releasedFile) => {
+			backgroundedRef.current.delete(releasedFile);
+			scheduledCloseRef.current.delete(releasedFile);
+			onSessionReleasedRef.current?.(releasedFile);
+		});
+	}, [client]);
+
+	// 切走会话时记入后台集合；重回某个会话则撤销它的待回收安排
+	useEffect(() => {
+		const prev = prevActiveFileRef.current;
+		prevActiveFileRef.current = activeFile;
+		if (prev !== undefined && prev !== activeFile) {
+			backgroundedRef.current.add(prev);
+		}
+		if (activeFile !== undefined) {
+			backgroundedRef.current.delete(activeFile);
+			scheduledCloseRef.current.delete(activeFile);
+		}
+	}, [activeFile]);
+
+	// 后台会话处于空闲态时启用保留计时器：超期后由客户端释放订阅并允许服务端回收
+	useEffect(() => {
+		for (const bgFile of [...backgroundedRef.current]) {
+			if (bgFile === activeFile || !client.hasSession(bgFile)) {
+				backgroundedRef.current.delete(bgFile);
+				scheduledCloseRef.current.delete(bgFile);
+				continue;
+			}
+			const activity = statuses.get(bgFile)?.activity ?? "idle";
+			if (activity === "idle" && !scheduledCloseRef.current.has(bgFile)) {
+				scheduledCloseRef.current.add(bgFile);
+				client.closeSession(bgFile);
+			}
+		}
+	}, [activeFile, client, statuses]);
+
 	const openSession = useCallback(
 		(path: string, knownCwd?: string) => {
 			const cached = client.hasSession(path);
 			const run = (): void => {
+				// 非缓存冷打开（首次打开或此前已被回收）确保没有任何残留的内存工作区状态
+				onSessionReleasedRef.current?.(path);
 				runSessionAction(
 					async () => {
 						await client.switchSession(path);
@@ -802,6 +851,9 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 
 	/** 丢掉当前会话：续订回不来时连订阅一起放掉，界面回到没有会话的状态。 */
 	const resetActive = useCallback(() => {
+		backgroundedRef.current.clear();
+		scheduledCloseRef.current.clear();
+		onSessionReleasedRef.current?.("");
 		void client.release().catch(() => undefined);
 		commitActiveFile(undefined);
 	}, [client, commitActiveFile]);

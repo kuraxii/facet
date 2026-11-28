@@ -35,6 +35,7 @@ import { QUOTE_SOURCE_SELECTOR } from "../selection-quote.ts";
 import type { ActiveTarget } from "../session-target.ts";
 import { useToast } from "../toast-provider.tsx";
 import { workspaceShortcutOf } from "../workspace-shortcuts.ts";
+import { evictSessionWorkspaceState, workspaceSessionKey } from "../workspace-state.ts";
 import { Workbench } from "./workbench.tsx";
 
 export interface HostWorkspaceProps {
@@ -118,6 +119,15 @@ export function HostWorkspace({
 	/** 删掉会话之后的收尾：滚动位置与草稿在之后建好，这里经 ref 转一层。 */
 	const forgetSession = useRef<(path: string) => void>(() => undefined);
 	const onSessionRemoved = useCallback((path: string) => forgetSession.current(path), []);
+	const [workspaceRevision, setWorkspaceRevision] = useState(0);
+	const onSessionReleased = useCallback(
+		(file: string) => {
+			if (evictSessionWorkspaceState(runtime.workspace, file)) {
+				setWorkspaceRevision((n) => n + 1);
+			}
+		},
+		[runtime.workspace],
+	);
 
 	const session = useSessionLifecycle({
 		client,
@@ -131,6 +141,7 @@ export function HostWorkspace({
 			onActiveTargetChange(file === undefined ? undefined : { endpoint: host.endpoint, file });
 		},
 		onSessionRemoved,
+		onSessionReleased,
 	});
 
 	// 系统通知只订阅这台主机的会话：换主机时这棵子树整份卸载，订阅也跟着换；
@@ -162,7 +173,16 @@ export function HostWorkspace({
 	const terminalCwd =
 		sessionCwd ?? session.projects[0]?.cwd ?? (session.createCwd.length > 0 ? session.createCwd : undefined);
 
-	const shell = useWorkspaceShell({ appearance: localAppearance, endpoint: host.endpoint });
+	const sessionKey = workspaceSessionKey(session.activeFile);
+	const sessionKeyRef = useRef(sessionKey);
+	sessionKeyRef.current = sessionKey;
+	const shell = useWorkspaceShell({
+		appearance: localAppearance,
+		endpoint: host.endpoint,
+		sessionKey,
+		workspace: runtime.workspace,
+		workspaceRevision,
+	});
 
 	const terminal = useTerminalPanel({
 		client: terminalClient,
@@ -189,8 +209,9 @@ export function HostWorkspace({
 	const docs = useWorkspaceDocs({
 		client,
 		session: sessionView,
+		sessionKey,
 		snapshot: runtime.workspace,
-		storage: wsStorage,
+		workspaceRevision,
 		isChangesVisible,
 		isHistoryVisible,
 	});
@@ -235,10 +256,13 @@ export function HostWorkspace({
 
 	/** 开一个终端，把它摆到终端分页上。 */
 	const openTerminal = useCallback(async () => {
+		const targetKey = sessionKeyRef.current;
 		const info = await terminal.openTerminal();
 		if (info !== undefined) {
 			setActiveTerminalId(info.id);
-			shell.setPanelTab("terminal");
+			if (sessionKeyRef.current === targetKey) {
+				shell.setPanelTab("terminal");
+			}
 		}
 	}, [shell, terminal]);
 

@@ -6,6 +6,7 @@
  */
 import type { AppearanceSettings } from "@facet/protocol";
 import type { CodeThemeValue, RightPanelState, RightPanelTab, SettingsSection } from "@facet/ui";
+import type { HostWorkspaceSnapshot } from "../../workspace-state.ts";
 import type { PanelPatch } from "./useWorkspacePanels.ts";
 
 /** 右栏那边由本 Hook 组合出的动作：窄档走抽屉，平铺态改意图位。 */
@@ -105,8 +106,14 @@ export interface DrawerHandle {
 export interface WorkspaceShellOptions {
 	/** 本机优先的外观偏好 */
 	appearance: AppearanceSettings;
-	/** 当前主机端点，用于隔离右栏面板状态 */
+	/** 当前主机端点，用于隔离右栏宽度持久化 */
 	endpoint: string;
+	/** 当前激活会话标识（按会话隔离内存中的右栏开合与标签页） */
+	sessionKey: string;
+	/** 当前主机的内存工作区快照 */
+	workspace: HostWorkspaceSnapshot;
+	/** 会话被回收导致工作区映射变更时的递增版本号，用于触发重绘 */
+	workspaceRevision?: number;
 }
 
 export interface WorkspaceShell {

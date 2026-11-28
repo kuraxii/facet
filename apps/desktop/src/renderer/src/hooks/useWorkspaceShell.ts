@@ -29,10 +29,15 @@ export { applyAppearance } from "./workspace-shell/appearance.ts";
 export type { WorkspaceShell, WorkspaceShellOptions } from "./workspace-shell/shell-types.ts";
 export type { PanelPatch } from "./workspace-shell/useWorkspacePanels.ts";
 export function useWorkspaceShell(options: WorkspaceShellOptions): WorkspaceShell {
-	const { appearance, endpoint } = options;
+	const { appearance, endpoint, sessionKey, workspace, workspaceRevision } = options;
 	const panelStorage = useMemo(() => workspaceStorage(endpoint), [endpoint]);
 	const chrome = useShellChrome(appearance);
-	const panels = useWorkspacePanels(panelStorage);
+	const panels = useWorkspacePanels({
+		storage: panelStorage,
+		sessionKey,
+		snapshot: workspace,
+		workspaceRevision,
+	});
 	const drawers = useDrawerFocus();
 	const layout = useShellLayout({
 		panel: panels.panel,

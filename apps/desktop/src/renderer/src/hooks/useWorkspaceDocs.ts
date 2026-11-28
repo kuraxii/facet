@@ -15,37 +15,13 @@ import type { SessionClient, SessionView } from "@facet/client-core";
 import { type FileContent, type GitFileChange, workspaceChannelFor } from "@facet/protocol";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { decideOnSignal, shouldCatchUp } from "../changes-refresh.ts";
-import type { ScopedStorage } from "../local-storage.ts";
-import type {
-	ChangesState,
-	CommitDetailState,
-	CommitsState,
-	HostWorkspaceSnapshot,
-	WorkspaceFileRef,
+import type { ChangesState, CommitDetailState, CommitsState } from "../workspace-state.ts";
+import {
+	getSessionWorkspaceState,
+	type HostWorkspaceSnapshot,
+	setSessionWorkspaceFile,
+	type WorkspaceFileRef,
 } from "../workspace-state.ts";
-
-const WORKSPACE_FILE_KEY = "facet.workspace.file";
-
-function readStoredFileRef(storage: ScopedStorage | undefined): WorkspaceFileRef | undefined {
-	const raw = storage?.getItem(WORKSPACE_FILE_KEY);
-	if (raw === null || raw === undefined) {
-		return undefined;
-	}
-	try {
-		const parsed: unknown = JSON.parse(raw);
-		if (
-			typeof parsed === "object" &&
-			parsed !== null &&
-			typeof (parsed as { cwd?: unknown }).cwd === "string" &&
-			typeof (parsed as { path?: unknown }).path === "string"
-		) {
-			return { cwd: (parsed as { cwd: string }).cwd, path: (parsed as { path: string }).path };
-		}
-	} catch {
-		return undefined;
-	}
-	return undefined;
-}
 
 /**
  * 收到工作树信号之后等多久再取，毫秒。
@@ -86,10 +62,12 @@ export interface WorkspaceDocsOptions {
 	client: SessionClient;
 	/** 当前打开的会话视图 */
 	session: SessionView | undefined;
+	/** 当前激活会话在内存映射中的键 */
+	sessionKey: string;
 	/** 这台主机上一次离开时的文档状态；切回来时从这里接着显示 */
 	snapshot?: HostWorkspaceSnapshot;
-	/** 按主机隔离的持久化存储，用于跨重启恢复正在预览的文件 */
-	storage?: ScopedStorage;
+	/** 外部回收清理快照后递增的版本号，触发重读预览文件引用 */
+	workspaceRevision?: number;
 	/** 变更页是否正在显示：它决定要不要盯住工作树 */
 	isChangesVisible: boolean;
 	/** 提交图谱是否正在显示：历史只在有人看的时候才取 */
@@ -132,9 +110,30 @@ export interface WorkspaceDocs {
 }
 
 export function useWorkspaceDocs(options: WorkspaceDocsOptions): WorkspaceDocs {
-	const { client, session, snapshot, storage, isChangesVisible, isHistoryVisible } = options;
-	const [file, setFile] = useState<WorkspaceFileRef | undefined>(
-		() => snapshot?.file ?? readStoredFileRef(storage),
+	const {
+		client,
+		session,
+		sessionKey,
+		snapshot,
+		workspaceRevision = 0,
+		isChangesVisible,
+		isHistoryVisible,
+	} = options;
+	const [fallbackFile, setFallbackFile] = useState<WorkspaceFileRef | undefined>(undefined);
+	const [, bump] = useState(0);
+	const sessionKeyRef = useRef(sessionKey);
+	sessionKeyRef.current = sessionKey;
+	const file = snapshot === undefined ? fallbackFile : getSessionWorkspaceState(snapshot, sessionKey).file;
+	const setSessionFile = useCallback(
+		(targetKey: string, next: WorkspaceFileRef | undefined) => {
+			if (snapshot === undefined) {
+				setFallbackFile(next);
+				return;
+			}
+			setSessionWorkspaceFile(snapshot, targetKey, next);
+			bump((n) => n + 1);
+		},
+		[snapshot],
 	);
 	const [fileContents, setFileContents] = useState<Readonly<Record<string, FileContent>>>(
 		() => snapshot?.fileContents ?? {},
@@ -154,38 +153,35 @@ export function useWorkspaceDocs(options: WorkspaceDocsOptions): WorkspaceDocs {
 	const worktreeRevision = useRef(0);
 	const [historyRevision, setHistoryRevision] = useState(0);
 
-	// 每次变化都写回快照与主机级存储：切主机与重启后都能恢复预览文件
+	useEffect(() => {
+		void workspaceRevision;
+		bump((n) => n + 1);
+	}, [workspaceRevision]);
+
+	// 文件内容与提交详情缓存写回主机内存快照（不落盘）
 	useEffect(() => {
 		if (snapshot !== undefined) {
-			snapshot.file = file;
 			snapshot.fileContents = fileContents;
 			snapshot.commitDetails = commitDetails;
 		}
-		if (storage !== undefined) {
-			if (file !== undefined) {
-				storage.setItem(WORKSPACE_FILE_KEY, JSON.stringify(file));
-			} else {
-				storage.removeItem(WORKSPACE_FILE_KEY);
-			}
-		}
-	}, [snapshot, storage, file, fileContents, commitDetails]);
+	}, [snapshot, fileContents, commitDetails]);
 
 	/** 会话所在的目录，git 命令都在它下面跑 */
 	const sessionCwd = session?.state.cwd;
 
-	// 提交历史与变更状态跟着当前会话目录；仅当切换到真实新目录时清掉旧项目预览（初始未就绪不清空）
+	// 提交历史与变更状态跟着当前会话目录；仅当同一会话目录变化时清掉不匹配的预览引用
 	useEffect(() => {
 		changesSeq.current += 1;
 		setCommits({ isLoading: false });
 		worktreeRevision.current = 0;
 		setHistoryRevision(0);
 		setChangesFocus(undefined);
-		if (sessionCwd !== undefined) {
-			setFile((current) => (current !== undefined && current.cwd === sessionCwd ? current : undefined));
+		if (sessionCwd !== undefined && file !== undefined && file.cwd !== sessionCwd) {
+			setSessionFile(sessionKey, undefined);
 		}
-	}, [sessionCwd]);
+	}, [file, sessionCwd, sessionKey, setSessionFile]);
 
-	// 重启恢复出预览文件引用但内容尚未加载时，自动拉取一次文件内容
+	// 重启/切回会话恢复出预览文件引用但内容尚未加载时，自动拉取一次文件内容
 	useEffect(() => {
 		if (file === undefined || sessionCwd === undefined || file.cwd !== sessionCwd) {
 			return;
@@ -210,11 +206,12 @@ export function useWorkspaceDocs(options: WorkspaceDocsOptions): WorkspaceDocs {
 		setFileError(undefined);
 	}, [session?.state.file]);
 
-	/** 打开一个文件：取内容之后放进预览。 */
+	/** 打开一个文件：取内容之后放进当前会话的预览区。 */
 	const openFile = useCallback(
 		async (cwd: string, path: string): Promise<void> => {
+			const targetKey = sessionKeyRef.current;
 			setFileError(undefined);
-			setFile({ cwd, path });
+			setSessionFile(targetKey, { cwd, path });
 			try {
 				const content = await client.readFile(cwd, path);
 				setFileContents((current) => ({ ...current, [workspaceFileKey(cwd, path)]: content }));
@@ -222,7 +219,7 @@ export function useWorkspaceDocs(options: WorkspaceDocsOptions): WorkspaceDocs {
 				setFileError(error instanceof Error ? error.message : String(error));
 			}
 		},
-		[client],
+		[client, setSessionFile],
 	);
 
 	const setFileContent = useCallback((key: string, content: FileContent) => {

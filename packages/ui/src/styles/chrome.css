@@ -259,6 +259,42 @@
 	flex: 1;
 }
 
+/* 查看远端主机活跃会话时，在主区顶带贴一条轻强调顶线并标出所属 Host */
+.chrome-slot.is-main[data-remote-host="true"] {
+	box-shadow: inset 0 var(--space-1) 0 0 var(--accent-fg);
+}
+
+.chrome-host-pill {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	gap: var(--space-1);
+	height: var(--control-xs);
+	padding: 0 var(--space-2);
+	border: 1px solid var(--border-subtle);
+	border-radius: var(--radius-pill);
+	background: var(--bg-subtle);
+	color: var(--fg-muted);
+	font-size: var(--text-xs);
+}
+
+.chrome-host-pill.is-remote {
+	border-color: var(--border-focus);
+	color: var(--accent-fg);
+}
+
+.chrome-project {
+	flex: none;
+	color: var(--fg-muted);
+	font-size: var(--text-xs);
+}
+
+.chrome-crumb-sep {
+	flex: none;
+	color: var(--fg-subtle);
+	font-size: var(--text-xs);
+}
+
 /* 中格左端的会话标题：过长时省略，不与右端的开关抢位置 */
 .chrome-title {
 	flex: 0 1 auto;

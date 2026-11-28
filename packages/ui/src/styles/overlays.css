@@ -40,6 +40,48 @@ dialog.search-panel::backdrop {
 	color: var(--fg-subtle);
 }
 
+.search-filters {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-1);
+	padding: var(--space-2) var(--space-5);
+	border-bottom: 1px solid var(--border-subtle);
+}
+
+.search-filter-chip {
+	display: inline-flex;
+	align-items: center;
+	height: var(--control-xs);
+	padding: 0 var(--space-3);
+	border: 1px solid var(--border-subtle);
+	border-radius: var(--radius-pill);
+	background: transparent;
+	color: var(--fg-subtle);
+	font-size: var(--text-xs);
+}
+
+.search-filter-chip:hover {
+	background: var(--bg-hover);
+	color: var(--fg-default);
+}
+
+.search-filter-chip.is-on {
+	border-color: var(--border-focus);
+	background: var(--bg-active);
+	color: var(--fg-default);
+}
+
+.search-settled-icon {
+	flex: none;
+	color: var(--fg-subtle);
+}
+
+.search-row-host {
+	flex: none;
+	color: var(--fg-subtle);
+	font-size: var(--text-xs);
+}
+
 .search-results {
 	display: flex;
 	flex-direction: column;

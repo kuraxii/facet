@@ -8,8 +8,16 @@
  * 提示上不带按钮：它只负责说事实，要动手的事由用户回到原来的地方做。
  */
 
-/** 提示等级：只决定图标与配色，不写进文字。 */
+/** 轻提示等级：只决定图标与配色，不写进文字。 */
 export type ToastLevel = "info" | "success" | "warning" | "error";
+
+/** 轻提示末尾可选的快捷动作（如 Settle 撤销）。 */
+export interface ToastAction {
+	/** 按钮文字 */
+	label: string;
+	/** 点击触发 */
+	onClick: () => void;
+}
 
 /** 一条正在显示的提示。 */
 export interface Toast {
@@ -25,6 +33,8 @@ export interface Toast {
 	createdAt: number;
 	/** 到点出队，Unix 毫秒 */
 	expiresAt: number;
+	/** 可选交互按钮 */
+	action?: ToastAction | undefined;
 }
 
 /** 同时最多显示几条，超出的丢最旧的。 */
@@ -51,6 +61,8 @@ export interface ToastInput {
 	message: string;
 	/** 当前时刻，Unix 毫秒 */
 	now: number;
+	/** 可选交互按钮 */
+	action?: ToastAction | undefined;
 }
 
 /** 同等级同内容的提示算同一条。 */
@@ -76,6 +88,7 @@ export function pushToast(toasts: readonly Toast[], input: ToastInput): readonly
 			count: previous.count + 1,
 			createdAt: input.now,
 			expiresAt,
+			...(input.action === undefined ? {} : { action: input.action }),
 		};
 		return next;
 	}
@@ -86,6 +99,7 @@ export function pushToast(toasts: readonly Toast[], input: ToastInput): readonly
 		count: 1,
 		createdAt: input.now,
 		expiresAt,
+		...(input.action === undefined ? {} : { action: input.action }),
 	};
 	const next = [...toasts, toast];
 	return next.length > TOAST_LIMIT ? next.slice(next.length - TOAST_LIMIT) : next;

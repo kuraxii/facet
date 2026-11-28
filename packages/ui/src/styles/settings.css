@@ -90,6 +90,61 @@ dialog.set-page::backdrop {
 	line-height: var(--leading-ui);
 }
 
+.set-host-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-3);
+	margin-bottom: var(--space-6);
+	padding: var(--space-3) var(--space-4);
+	border: 1px solid var(--border-subtle);
+	border-radius: var(--radius-lg);
+	background: var(--bg-subtle);
+}
+
+.set-host-label {
+	color: var(--fg-muted);
+	font-size: var(--text-xs);
+}
+
+.set-host-pills {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+}
+
+.set-host-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
+	height: var(--control-xs);
+	padding: 0 var(--space-3);
+	border: 1px solid var(--border-subtle);
+	border-radius: var(--radius-pill);
+	background: transparent;
+	color: var(--fg-muted);
+	font-size: var(--text-xs);
+}
+
+.set-host-pill:hover {
+	background: var(--bg-hover);
+	color: var(--fg-default);
+}
+
+.set-host-pill.is-on {
+	border-color: var(--border-focus);
+	background: var(--bg-active);
+	color: var(--fg-default);
+}
+
+.set-host-offline {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: var(--space-12) var(--space-6);
+}
+
 .set-lock {
 	min-width: 0;
 	margin: 0;

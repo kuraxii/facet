@@ -14,6 +14,7 @@ import {
 } from "@facet/protocol";
 import { Bot, Cpu, Info, Keyboard, Palette, SlidersHorizontal, Terminal, X } from "lucide-react";
 import { type ComponentType, Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Button } from "../common/Button.tsx";
 import { IconButton } from "../common/IconButton.tsx";
 import { ListRow } from "../common/ListRow.tsx";
 import { useI18n } from "../i18n/I18nProvider.tsx";
@@ -114,6 +115,14 @@ export interface SettingsPageProps {
 	 * 关掉之后内容照常显示，控件不可用，也不会有自动保存。
 	 */
 	canEdit?: boolean;
+	/** Host 级设置可选的目标主机清单 */
+	targetHosts?: readonly { endpoint: string; label: string; isOnline: boolean }[];
+	/** 当前正在配置的目标主机端点 */
+	selectedHostEndpoint?: string;
+	/** 切换目标主机 */
+	onSelectTargetHost?: (endpoint: string) => void;
+	/** 触发连接指定远程主机 */
+	onConnectTargetHost?: (endpoint: string) => void;
 }
 
 export function SettingsPage({
@@ -138,6 +147,10 @@ export function SettingsPage({
 	onLocalNotificationsChange,
 	localTerminal,
 	onLocalTerminalChange,
+	targetHosts,
+	selectedHostEndpoint,
+	onSelectTargetHost,
+	onConnectTargetHost,
 }: SettingsPageProps) {
 	const { t } = useI18n();
 	/** 已加载的设置；为空表示还没读到 */
@@ -175,11 +188,27 @@ export function SettingsPage({
 
 	const appearanceLocal = localAppearance !== undefined && onLocalAppearanceChange !== undefined;
 	const inputLocal = localInput !== undefined && onLocalInputChange !== undefined;
+	const isHostScopedSection =
+		section === "models" || section === "agents" || (section === "terminal" && !appearanceLocal);
+	const activeTargetHost =
+		targetHosts?.find((item) => item.endpoint === selectedHostEndpoint) ?? targetHosts?.[0];
+	const targetHostOnline = activeTargetHost?.isOnline ?? true;
 	const needsHostSettings =
-		section === "terminal" ||
-		section === "models" ||
-		(section === "appearance" && !appearanceLocal) ||
-		(section === "input" && !inputLocal);
+		targetHostOnline &&
+		(section === "terminal" ||
+			section === "models" ||
+			(section === "appearance" && !appearanceLocal) ||
+			(section === "input" && !inputLocal));
+
+	// 切换目标主机（`data` 引用改变）时清空已缓存的主机配置，重新向对应节点读取
+	useEffect(() => {
+		void data;
+		setSettings(undefined);
+		setDraft(undefined);
+		setProviders(undefined);
+		setLoadError(undefined);
+		setProvidersError(undefined);
+	}, [data]);
 
 	// 只有依赖主机设置的分节才需要从服务端加载
 	useEffect(() => {
@@ -191,11 +220,11 @@ export function SettingsPage({
 
 	// 提供方现在挂在模型页里
 	useEffect(() => {
-		if (section !== "models" || providers !== undefined) {
+		if (!targetHostOnline || section !== "models" || providers !== undefined) {
 			return;
 		}
 		void loadProviders();
-	}, [loadProviders, providers, section]);
+	}, [loadProviders, providers, section, targetHostOnline]);
 
 	/** 改一处草稿。 */
 	const patch = (change: (current: FacetSettings) => FacetSettings): void => {
@@ -304,6 +333,33 @@ export function SettingsPage({
 				</header>
 
 				<div className="set-content">
+					{isHostScopedSection &&
+					targetHosts !== undefined &&
+					targetHosts.length > 0 &&
+					onSelectTargetHost !== undefined ? (
+						<div className="set-host-bar">
+							<span className="set-host-label">{t("settings.targetHost")}</span>
+							<div className="set-host-pills" role="tablist" aria-label={t("settings.targetHost")}>
+								{targetHosts.map((item) => {
+									const isSelected = item.endpoint === (selectedHostEndpoint ?? activeTargetHost?.endpoint);
+									return (
+										<button
+											type="button"
+											role="tab"
+											aria-selected={isSelected}
+											key={item.endpoint}
+											className={isSelected ? "set-host-pill is-on" : "set-host-pill"}
+											onClick={() => onSelectTargetHost(item.endpoint)}
+										>
+											<span className={item.isOnline ? "host-dot is-ready" : "host-dot"} aria-hidden="true" />
+											<span>{item.label}</span>
+										</button>
+									);
+								})}
+							</div>
+						</div>
+					) : null}
+
 					{section === "general" ? (
 						<GeneralSection
 							uiScale={uiScale}
@@ -347,14 +403,33 @@ export function SettingsPage({
 					) : null}
 
 					{section === "agents" ? (
-						<fieldset className="set-lock" disabled={!canEdit}>
-							<section className="set-section">
-								<SettingsAgentsSection data={data} />
-							</section>
-						</fieldset>
+						targetHostOnline ? (
+							<fieldset className="set-lock" disabled={!canEdit}>
+								<section className="set-section">
+									<SettingsAgentsSection data={data} />
+								</section>
+							</fieldset>
+						) : activeTargetHost !== undefined && onConnectTargetHost !== undefined ? (
+							<div className="set-host-offline">
+								<Button variant="primary" onClick={() => onConnectTargetHost(activeTargetHost.endpoint)}>
+									{`${t("host.connect")} · ${activeTargetHost.label}`}
+								</Button>
+							</div>
+						) : null
 					) : null}
 
 					{section === "about" ? <AboutSection about={about} data={data} /> : null}
+
+					{section === "models" &&
+					!targetHostOnline &&
+					activeTargetHost !== undefined &&
+					onConnectTargetHost !== undefined ? (
+						<div className="set-host-offline">
+							<Button variant="primary" onClick={() => onConnectTargetHost(activeTargetHost.endpoint)}>
+								{`${t("host.connect")} · ${activeTargetHost.label}`}
+							</Button>
+						</div>
+					) : null}
 
 					{needsHostSettings ? (
 						<fieldset className="set-lock" disabled={!canEdit}>

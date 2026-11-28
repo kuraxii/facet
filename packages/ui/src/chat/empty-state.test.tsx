@@ -48,8 +48,44 @@ describe("空状态页", () => {
 		expect(winHtml).not.toContain("D:\\User\\Desktop");
 	});
 
-	it("草稿为空时发送按钮置灰", () => {
+	it("草稿为空时发送按钮置灰且不显示状态统计芯片", () => {
 		const html = render("/work/app", true);
 		expect(html).toMatch(/aria-label="发送"[^>]*disabled/);
+		expect(html).not.toContain('data-chip="stats"');
+		expect(html).not.toContain('data-chip="context"');
+	});
+
+	it("多主机与最近上下文芯片按预期渲染", () => {
+		const html = renderToStaticMarkup(
+			createElement(EmptyState, {
+				hostName: "laptop",
+				selectedHostEndpoint: "ssh://laptop",
+				hosts: [
+					{ endpoint: "local", name: "This computer", isLocal: true, phase: "ready" },
+					{ endpoint: "ssh://laptop", name: "laptop", isLocal: false, phase: "ready" },
+				],
+				cwd: "/work/app",
+				projects: PROJECTS,
+				agents: AGENTS,
+				selectedAgentId: "pi",
+				onSelectCwd: () => {},
+				onSelectAgent: () => {},
+				canCreate: true,
+				onSend: () => {},
+				onAddProject: () => {},
+				recentContexts: [
+					{
+						endpoint: "ssh://laptop",
+						hostLabel: "laptop",
+						cwd: "/work/app",
+						agentId: "pi",
+						updatedAt: 1,
+					},
+				],
+				onSelectRecentContext: () => {},
+			}),
+		);
+		expect(html).toContain("laptop");
+		expect(html).toContain("laptop · app");
 	});
 });

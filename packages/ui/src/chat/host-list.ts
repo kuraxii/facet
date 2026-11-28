@@ -11,8 +11,10 @@ export interface SavedHost {
 	id: string;
 	/** 显示名 */
 	name: string;
-	/** 主机地址，形如 host:port */
+	/** 主机地址，形如 host:port 或 ssh://... */
 	endpoint: string;
+	/** 启动桌面时是否自动在后台连接，默认 false */
+	autoConnect?: boolean;
 }
 
 /** 主机清单的状态。 */
@@ -120,7 +122,7 @@ export function readHostList(storage: HostListStorage, fallbackEndpoint: string)
 				if (typeof item !== "object" || item === null) {
 					return [];
 				}
-				const record = item as { id?: unknown; name?: unknown; endpoint?: unknown };
+				const record = item as { id?: unknown; name?: unknown; endpoint?: unknown; autoConnect?: unknown };
 				if (
 					typeof record.id !== "string" ||
 					typeof record.name !== "string" ||
@@ -128,7 +130,14 @@ export function readHostList(storage: HostListStorage, fallbackEndpoint: string)
 				) {
 					return [];
 				}
-				return [{ id: record.id, name: record.name, endpoint: record.endpoint }];
+				return [
+					{
+						id: record.id,
+						name: record.name,
+						endpoint: record.endpoint,
+						...(record.autoConnect === true ? { autoConnect: true } : {}),
+					},
+				];
 			});
 		}
 	} catch {

@@ -15,8 +15,8 @@ export interface SidebarHeaderProps {
 	isSearchOpen: boolean;
 	/** 开合搜索框 */
 	onToggleSearch: () => void;
-	/** 打开添加项目 */
-	onAddProject: () => void;
+	/** 打开添加项目（可选，留空时不显示入口） */
+	onAddProject?: (() => void) | undefined;
 	/** 是否渲染「Facet」字样与左栏关闭按钮（桌面宽/中屏由顶带 `.chrome-brand` 常驻，仅窄屏抽屉自己画） */
 	onCollapse?: (() => void) | undefined;
 }
@@ -56,15 +56,17 @@ export function SidebarHeader({
 				>
 					<Search size={ICON_SIZE.lg} />
 				</IconButton>
-				<IconButton
-					variant="ghost"
-					size="sm"
-					className="chrome-toggle"
-					aria-label={t("common.addProject")}
-					onClick={onAddProject}
-				>
-					<FolderPlus size={ICON_SIZE.lg} />
-				</IconButton>
+				{onAddProject === undefined ? null : (
+					<IconButton
+						variant="ghost"
+						size="sm"
+						className="chrome-toggle"
+						aria-label={t("common.addProject")}
+						onClick={onAddProject}
+					>
+						<FolderPlus size={ICON_SIZE.lg} />
+					</IconButton>
+				)}
 			</span>
 		</div>
 	);

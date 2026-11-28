@@ -388,16 +388,29 @@ function orderRunning(
 	return [...fresh, ...known, ...rest];
 }
 
+/** 会话是否可视为空会话（无任何消息、无自定义命名且未在运行）。 */
+function isEmptySession(
+	summary: SessionSummary,
+	statuses: ReadonlyMap<string, SessionStatus> | undefined,
+): boolean {
+	if (summary.firstMessage.trim().length > 0 || (summary.name?.trim().length ?? 0) > 0) {
+		return false;
+	}
+	const bucket = deriveBucket(statuses?.get(summary.path) ?? IDLE_STATUS);
+	return bucket !== "running" && bucket !== "needs_input";
+}
+
 /**
  * 组装侧栏数据。
  *
- * 先按项目范围与关键词筛出一份会话，再分组；项目选项与主机条始终按全部会话统计，
- * 切换范围时下拉里的数字不会跟着变小。
+ * 先过滤 0 条消息的空会话，再按项目范围与关键词筛出一份会话并分组；项目选项与主机条
+ * 始终按全部非空会话统计，切换范围时下拉里的数字不会跟着变小。
  */
 export function buildSidebar(input: SidebarInput): SidebarData {
 	const now = input.now ?? Date.now();
 	const keyword = (input.keyword ?? "").trim().toLowerCase();
-	const all = input.sessions
+	const nonEmpty = input.sessions.filter((summary) => !isEmptySession(summary, input.statuses));
+	const all = nonEmpty
 		.map((summary) => toSession(summary, input.statuses, input.untitled))
 		.sort((left, right) => right.modified - left.modified);
 
@@ -421,7 +434,7 @@ export function buildSidebar(input: SidebarInput): SidebarData {
 
 	return {
 		groups,
-		projects: listProjects(input.projects, input.sessions),
+		projects: listProjects(input.projects, nonEmpty),
 		total: all.length,
 	};
 }

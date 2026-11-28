@@ -19,7 +19,7 @@ function summary(overrides: Partial<SessionSummary> & Pick<SessionSummary, "id" 
 		parentSessionPath: undefined,
 		created: 0,
 		modified: NOW - 60_000,
-		firstMessage: "",
+		firstMessage: "消息",
 		...overrides,
 	};
 }
@@ -164,6 +164,19 @@ describe("组装侧栏", () => {
 			["linx-icp", 2],
 			["docs-site", 0],
 		]);
+	});
+
+	it("过滤掉 0 条消息且未在运行的空会话", () => {
+		const data = buildSidebar({
+			sessions: [
+				summary({ id: "real", path: "/s/real.jsonl", firstMessage: "开始干活" }),
+				summary({ id: "empty", path: "/s/empty.jsonl", firstMessage: "" }),
+			],
+			projects: [],
+			now: NOW,
+		});
+		expect(data.total).toBe(1);
+		expect(data.groups.flatMap((g) => g.sessions).map((s) => s.path)).toEqual(["/s/real.jsonl"]);
 	});
 
 	it("限定项目时只列该目录的会话，项目选项数字按全部会话统计", () => {

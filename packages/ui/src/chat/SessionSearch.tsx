@@ -1,11 +1,10 @@
 /**
- * 会话搜索浮窗。
+ * 跨主机全局任务搜索浮窗（`Cmd/Ctrl + K`）。
  *
- * 居中偏上的一层，输入即按标题过滤；上下键选、回车打开、Esc 或点遮罩关闭。会话队列本身不
- * 参与过滤，浮窗关掉之后侧栏还是完整的一份列表。
+ * 同时检索全部已连主机的活跃 Inbox 卡片、离线缓存与底部 `Settled` 归档会话，
+ * 支持按项目快速过滤；键盘上下选择、回车直达对应主机与会话。
  */
-import type { SessionStatus, SessionSummary } from "@facet/protocol";
-import { Search } from "lucide-react";
+import { Archive, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Input } from "../common/Input.tsx";
 import { ListRow } from "../common/ListRow.tsx";
@@ -13,77 +12,82 @@ import { useI18n } from "../i18n/I18nProvider.tsx";
 import { isComposingKey } from "../keys.ts";
 import { Modal, useModalPresence } from "../modal.tsx";
 import { ICON_SIZE } from "../styles/visual-contract.ts";
-import { SessionStatusMark } from "./session-status-mark.tsx";
-import { type SidebarSession, searchSessions } from "./sidebar-model.ts";
+import {
+	collectInboxProjects,
+	type InboxSearchEntry,
+	type SidebarSettledItem,
+	type SidebarTaskCard,
+	searchInboxEntries,
+} from "./inbox-model.ts";
 
-/** 结果最多给这么多条，再多靠打字收窄。 */
+/** 结果最多给这么多条，再多靠打字或项目过滤收窄。 */
 const RESULT_LIMIT = 40;
 
 export interface SessionSearchProps {
 	/** 是否展开 */
 	isOpen: boolean;
-	/** 当前主机的会话列表 */
-	sessions: readonly SessionSummary[];
-	/** 当前会话文件路径，用来标出这一条 */
-	activeFile: string | undefined;
-	/** 各会话此刻的活动状态，按会话文件路径索引 */
-	statuses: ReadonlyMap<string, SessionStatus>;
+	/** 全部主机的活跃任务卡片 */
+	activeCards: readonly SidebarTaskCard[];
+	/** 已归档会话条目 */
+	settledItems: readonly SidebarSettledItem[];
+	/** 当前选中的联合键 `endpoint::file` */
+	activeKey: string | undefined;
 	/** 关闭浮窗 */
 	onClose: () => void;
-	/** 选中一条会话 */
-	onSelect: (path: string) => void;
+	/** 选中一条跨主机任务 */
+	onSelectTarget: (endpoint: string, file: string, knownCwd?: string) => void;
 }
 
 export function SessionSearch({
 	isOpen,
-	sessions,
-	activeFile,
-	statuses,
+	activeCards,
+	settledItems,
+	activeKey,
 	onClose,
-	onSelect,
+	onSelectTarget,
 }: SessionSearchProps) {
-	const { t, i18n } = useI18n();
+	const { t } = useI18n();
 	const [keyword, setKeyword] = useState("");
+	const [projectFilter, setProjectFilter] = useState<string | undefined>(undefined);
 	const [selected, setSelected] = useState(0);
+
+	const projectOptions = useMemo(
+		() => (isOpen ? collectInboxProjects(activeCards, settledItems) : []),
+		[activeCards, isOpen, settledItems],
+	);
 
 	const results = useMemo(() => {
 		if (!isOpen) {
 			return [];
 		}
-		return searchSessions({
-			sessions,
-			projects: [],
-			statuses,
-			locale: i18n.language as "en" | "zh-CN",
+		return searchInboxEntries({
+			activeCards,
+			settledItems,
 			keyword,
+			projectFilter,
 			limit: RESULT_LIMIT,
-			untitled: t("sidebar.untitled"),
 		});
-	}, [isOpen, sessions, statuses, keyword, t, i18n.language]);
+	}, [activeCards, isOpen, keyword, projectFilter, settledItems]);
 
-	// 每次打开都从空关键词、第一条结果开始
 	useEffect(() => {
 		if (!isOpen) {
 			return;
 		}
 		setKeyword("");
+		setProjectFilter(undefined);
 		setSelected(0);
 	}, [isOpen]);
 
-	// 结果变了之后选中项可能越界，收回最后一条
 	useEffect(() => {
 		setSelected((current) => (results.length === 0 ? 0 : Math.min(current, results.length - 1)));
 	}, [results]);
 
 	const open = useCallback(
-		(session: SidebarSession) => {
-			if (session.isPlaceholder === true) {
-				return;
-			}
-			onSelect(session.path);
+		(entry: InboxSearchEntry) => {
+			onSelectTarget(entry.endpoint, entry.file, entry.cwd);
 			onClose();
 		},
-		[onSelect, onClose],
+		[onClose, onSelectTarget],
 	);
 
 	const mounted = useModalPresence(isOpen);
@@ -132,34 +136,66 @@ export function SessionSearch({
 					aria-label={t("search.placeholder")}
 				/>
 			</label>
+			{projectOptions.length > 0 ? (
+				// biome-ignore lint/a11y/useSemanticElements: 搜索浮窗按项目过滤芯片条
+				<div className="search-filters" role="group" aria-label={t("search.allProjects")}>
+					<button
+						type="button"
+						className={projectFilter === undefined ? "search-filter-chip is-on" : "search-filter-chip"}
+						onClick={() => setProjectFilter(undefined)}
+					>
+						{t("search.allProjects")}
+					</button>
+					{projectOptions.map((item) => (
+						<button
+							type="button"
+							key={item.projectName}
+							className={
+								projectFilter === item.projectName ? "search-filter-chip is-on" : "search-filter-chip"
+							}
+							onClick={() =>
+								setProjectFilter((current) => (current === item.projectName ? undefined : item.projectName))
+							}
+						>
+							{item.projectName}
+						</button>
+					))}
+				</div>
+			) : null}
 			<div className="search-results" role="listbox" aria-label={t("search.results")}>
 				{results.length === 0 ? (
 					<p className="search-empty">
 						{keyword.trim().length === 0 ? t("search.emptyAll") : t("search.empty")}
 					</p>
 				) : (
-					results.map((session, index) => (
+					results.map((entry, index) => (
 						<ListRow
 							as="button"
-							key={session.path}
+							key={entry.key}
 							size="md"
 							selected={index === selected}
 							role="option"
 							aria-selected={index === selected}
 							className="search-row"
 							onPointerMove={() => setSelected(index)}
-							onClick={() => open(session)}
-							disabled={session.isPlaceholder === true}
+							onClick={() => open(entry)}
 						>
-							<SessionStatusMark bucket={session.bucket} />
-							<span className="search-row-title ell">{session.title}</span>
-							<span className="search-row-proj ell">{session.project}</span>
+							{entry.settled ? (
+								<Archive size={ICON_SIZE.sm} className="search-settled-icon" aria-hidden />
+							) : (
+								<span className={`inbox-dot is-${entry.attention}`} aria-hidden="true" />
+							)}
+							<span className="search-row-title ell">{entry.title}</span>
+							{entry.projectName.length > 0 ? (
+								<span className="search-row-proj ell">{entry.projectName}</span>
+							) : null}
+							<span className="search-row-host ell">{entry.hostLabel}</span>
 							<span
 								className={
-									session.path === activeFile ? "search-row-time mono is-active" : "search-row-time mono"
+									entry.key === activeKey ? "search-row-time mono is-active" : "search-row-time mono"
 								}
 							>
-								{session.timeText}
+								{entry.timeText}
 							</span>
 						</ListRow>
 					))

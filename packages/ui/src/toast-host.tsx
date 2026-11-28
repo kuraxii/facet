@@ -7,6 +7,7 @@
 import { Check, CircleAlert, Info, TriangleAlert, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { Button } from "./common/Button.tsx";
 import { useI18n } from "./i18n/I18nProvider.tsx";
 import { ICON_SIZE } from "./styles/visual-contract.ts";
 import type { Toast, ToastLevel } from "./toast.ts";
@@ -55,6 +56,18 @@ export function ToastHost({ toasts, onDismiss, onPauseChange }: ToastHostProps):
 						<Icon className="toast-icon" size={ICON_SIZE.md} aria-hidden />
 						<span className="toast-text">{toast.message}</span>
 						{toast.count > 1 ? <span className="toast-count mono">{toast.count}</span> : null}
+						{toast.action === undefined ? null : (
+							<Button
+								variant="ghost"
+								size="sm"
+								onClick={() => {
+									toast.action?.onClick();
+									onDismiss(toast.id);
+								}}
+							>
+								{toast.action.label}
+							</Button>
+						)}
 						<button
 							type="button"
 							className="toast-close"

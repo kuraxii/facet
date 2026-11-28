@@ -34,10 +34,24 @@ export {
 	parseCommand,
 	SOURCE_LABEL_KEYS,
 } from "./chat/command-palette.ts";
+export type { DraftHostOption, DraftSelectorsProps } from "./chat/DraftSelectors.tsx";
+export { DraftSelectors } from "./chat/DraftSelectors.tsx";
+export type {
+	DraftContextMemory,
+	DraftContextStorage,
+	DraftContextStore,
+	RecentDraftContext,
+} from "./chat/draft-context.ts";
+export {
+	pushRecentDraftContext,
+	readDraftContextStore,
+	updateEndpointDraftMemory,
+	writeDraftContextStore,
+} from "./chat/draft-context.ts";
 export type { EmptyStateProps } from "./chat/EmptyState.tsx";
 export { EmptyState } from "./chat/EmptyState.tsx";
 export { ExtensionPromptCard } from "./chat/ExtensionPromptCard.tsx";
-export type { HostSwitcherProps } from "./chat/HostSwitcher.tsx";
+export type { HostNodePhase, HostNodeState, HostSwitcherProps } from "./chat/HostSwitcher.tsx";
 export { HostSwitcher } from "./chat/HostSwitcher.tsx";
 export type { HostListState, HostListStorage, SavedHost } from "./chat/host-list.ts";
 export {
@@ -47,6 +61,28 @@ export {
 	readHostList,
 	writeHostList,
 } from "./chat/host-list.ts";
+export type { InboxCardProps } from "./chat/InboxCard.tsx";
+export { InboxCard } from "./chat/InboxCard.tsx";
+export type {
+	CachedOfflineTask,
+	HostSessionFeed,
+	InboxBuildInput,
+	InboxData,
+	InboxSearchEntry,
+	InboxSearchInput,
+	SessionKey,
+	SidebarSettledItem,
+	SidebarTaskCard,
+	TaskAttentionState,
+} from "./chat/inbox-model.ts";
+export {
+	buildInbox,
+	collectInboxProjects,
+	deriveAttention,
+	projectMonogram,
+	searchInboxEntries,
+	sessionKeyOf,
+} from "./chat/inbox-model.ts";
 export type { ProviderDialogProps } from "./chat/ProviderDialog.tsx";
 export { ProviderDialog } from "./chat/ProviderDialog.tsx";
 export type { QueueStripProps } from "./chat/QueueStrip.tsx";
@@ -65,6 +101,8 @@ export type {
 	SettingsSection,
 } from "./chat/SettingsPage.tsx";
 export { SettingsPage } from "./chat/SettingsPage.tsx";
+export type { SettledDrawerProps } from "./chat/SettledDrawer.tsx";
+export { SettledDrawer } from "./chat/SettledDrawer.tsx";
 export type { SshPasswordDialogProps } from "./chat/SshPasswordDialog.tsx";
 export { SshPasswordDialog } from "./chat/SshPasswordDialog.tsx";
 export type { SteeringMessagesProps } from "./chat/SteeringMessages.tsx";

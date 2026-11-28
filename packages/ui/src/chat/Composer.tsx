@@ -149,6 +149,8 @@ export interface ComposerProps {
 	onAcpConfigOptionChange?: (configId: string, value: string) => void;
 	/** 输入框顶部的额外选择栏（例如新建引导页的 Host / Project / Agent 芯片） */
 	header?: ReactNode;
+	/** 是否显示右下角的会话速度与上下文窗口芯片，默认显示；新建草稿页可传 false 隐藏 */
+	showStatusChips?: boolean;
 }
 
 /** 模型芯片的显示文本。 */
@@ -240,6 +242,7 @@ export function Composer({
 	onAcpModeChange,
 	onAcpConfigOptionChange,
 	header,
+	showStatusChips = true,
 }: ComposerProps) {
 	const { t } = useI18n();
 	const openImagePreview = useImagePreview();
@@ -593,51 +596,55 @@ export function Composer({
 				)}
 
 				<span className="composer-send">
-					<span className="chip-wrap" ref={statsRef}>
-						<SessionStatsChip
-							messages={sessionMessages}
-							streamingChars={streamingChars}
-							isStreaming={activity === "running"}
-							sessionStats={sessionStats}
-							isOpen={openMenu === "stats"}
-							onToggle={() => setOpenMenu(openMenu === "stats" ? undefined : "stats")}
-						/>
-					</span>
-					{caps.hasContextBreakdown || caps.canCompact ? (
-						<span className="chip-wrap" ref={contextRef}>
-							<button
-								type="button"
-								className="composer-status-chip"
-								data-chip="context"
-								onClick={() => setOpenMenu(openMenu === "context" ? undefined : "context")}
-								aria-expanded={openMenu === "context"}
-								aria-label={usageLabel(contextUsage, t)}
-								{...tip.handlers(usageLabel(contextUsage, t))}
-							>
-								<ContextRing usage={contextUsage} />
-								{(() => {
-									const shortPercent = usagePercentShort(contextUsage);
-									return shortPercent === null ? null : <span>{shortPercent}</span>;
-								})()}
-							</button>
-							{openMenu === "context" ? (
-								<ContextPopover
-									contextUsage={contextUsage}
-									breakdown={contextBreakdown}
-									loading={loadingContextDetails}
-									isCompacting={isCompacting}
-									canCompact={canCompact}
-									onCompact={
-										onCompact === undefined
-											? undefined
-											: () => {
-													onCompact();
-													setOpenMenu(undefined);
-												}
-									}
+					{showStatusChips ? (
+						<>
+							<span className="chip-wrap" ref={statsRef}>
+								<SessionStatsChip
+									messages={sessionMessages}
+									streamingChars={streamingChars}
+									isStreaming={activity === "running"}
+									sessionStats={sessionStats}
+									isOpen={openMenu === "stats"}
+									onToggle={() => setOpenMenu(openMenu === "stats" ? undefined : "stats")}
 								/>
+							</span>
+							{caps.hasContextBreakdown || caps.canCompact ? (
+								<span className="chip-wrap" ref={contextRef}>
+									<button
+										type="button"
+										className="composer-status-chip"
+										data-chip="context"
+										onClick={() => setOpenMenu(openMenu === "context" ? undefined : "context")}
+										aria-expanded={openMenu === "context"}
+										aria-label={usageLabel(contextUsage, t)}
+										{...tip.handlers(usageLabel(contextUsage, t))}
+									>
+										<ContextRing usage={contextUsage} />
+										{(() => {
+											const shortPercent = usagePercentShort(contextUsage);
+											return shortPercent === null ? null : <span>{shortPercent}</span>;
+										})()}
+									</button>
+									{openMenu === "context" ? (
+										<ContextPopover
+											contextUsage={contextUsage}
+											breakdown={contextBreakdown}
+											loading={loadingContextDetails}
+											isCompacting={isCompacting}
+											canCompact={canCompact}
+											onCompact={
+												onCompact === undefined
+													? undefined
+													: () => {
+															onCompact();
+															setOpenMenu(undefined);
+														}
+											}
+										/>
+									) : null}
+								</span>
 							) : null}
-						</span>
+						</>
 					) : null}
 					{/*
 					 * 发送与停止共用一个按钮：有内容要发时是发送（运行中就是排队），

@@ -581,6 +581,33 @@
 	display: flex;
 }
 
+.host-trigger-wrap {
+	position: relative;
+	display: inline-flex;
+}
+
+.host-trigger-dot {
+	position: absolute;
+	top: var(--space-1);
+	right: var(--space-1);
+	width: var(--space-2);
+	height: var(--space-2);
+	border-radius: var(--radius-pill);
+	pointer-events: none;
+}
+
+.host-trigger-dot.is-run {
+	background: var(--dot-run);
+}
+
+.host-trigger-dot.is-warn {
+	background: var(--dot-warn);
+}
+
+.host-trigger-dot.is-err {
+	background: var(--status-err-fg);
+}
+
 .host-pop {
 	position: absolute;
 	bottom: calc(100% + 8px);
@@ -672,6 +699,40 @@
 	color: var(--fg-default);
 }
 
+.host-remove.is-on {
+	color: var(--accent-fg);
+}
+
+.host-item {
+	display: flex;
+	flex-direction: column;
+}
+
+.host-inline {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	padding: 0 var(--space-3) var(--space-2);
+}
+
+.host-inline-err {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	color: var(--status-err-fg);
+	font-size: var(--text-xs);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.host-auto {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	color: var(--fg-muted);
+	font-size: var(--text-xs);
+}
+
 .host-rename {
 	flex: 1;
 	min-width: 0;
@@ -719,6 +780,258 @@
 .host-form-actions {
 	display: flex;
 	gap: var(--space-3);
+}
+
+/* Task Inbox 3 行任务卡片与 Settled 折叠抽屉 */
+.inbox-list {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+}
+
+.inbox-card {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+	padding: var(--space-3);
+	border: 1px solid var(--border-subtle);
+	border-radius: var(--radius-lg);
+	background: transparent;
+	cursor: pointer;
+	text-align: left;
+}
+
+.inbox-card:hover {
+	border-color: var(--border-default);
+	background: var(--bg-hover);
+}
+
+.inbox-card.is-on {
+	border-color: var(--border-focus);
+	background: var(--bg-active);
+}
+
+.inbox-card.is-offline {
+	opacity: 0.55;
+}
+
+.inbox-card-top {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-2);
+	min-width: 0;
+}
+
+.inbox-card-proj {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
+	min-width: 0;
+}
+
+.inbox-monogram {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	padding: 0 var(--space-1);
+	border-radius: var(--radius-sm);
+	background: var(--bg-hover);
+	color: var(--fg-muted);
+	font-size: var(--text-xs);
+}
+
+.inbox-monogram.is-muted {
+	color: var(--fg-subtle);
+}
+
+.inbox-proj-name {
+	color: var(--fg-muted);
+	font-size: var(--text-xs);
+}
+
+.inbox-card-right {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+}
+
+.inbox-card-status {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-1);
+}
+
+.inbox-time {
+	color: var(--fg-subtle);
+	font-size: var(--text-xs);
+}
+
+.inbox-settle-btn {
+	display: none;
+	align-items: center;
+	gap: var(--space-1);
+	padding: 0 var(--space-2);
+	border: 1px solid var(--border-default);
+	border-radius: var(--radius-sm);
+	background: var(--bg-elevated);
+	color: var(--fg-muted);
+	font-size: var(--text-xs);
+}
+
+.inbox-settle-btn:hover {
+	color: var(--fg-default);
+}
+
+.inbox-card:hover .inbox-card-status,
+.inbox-card:focus-within .inbox-card-status {
+	display: none;
+}
+
+.inbox-card:hover .inbox-settle-btn,
+.inbox-card:focus-within .inbox-settle-btn {
+	display: inline-flex;
+}
+
+.inbox-card-title {
+	display: -webkit-box;
+	overflow: hidden;
+	margin: 0;
+	color: var(--fg-default);
+	font-size: var(--text-ui);
+	font-weight: 500;
+	line-height: var(--leading-ui);
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+}
+
+.inbox-card-foot {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-2);
+	min-width: 0;
+	color: var(--fg-subtle);
+	font-size: var(--text-xs);
+}
+
+.inbox-card-host {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-1);
+	min-width: 0;
+}
+
+.inbox-card-agent {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	gap: var(--space-1);
+	padding: 0 var(--space-2);
+	border: 1px solid var(--border-subtle);
+	border-radius: var(--radius-sm);
+	color: var(--fg-muted);
+}
+
+.settled-drawer {
+	flex: none;
+	border-top: 1px solid var(--border-subtle);
+	padding: var(--space-2) var(--sidebar-edge) 0;
+}
+
+.settled-toggle {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	width: 100%;
+	padding: var(--space-1) 0;
+	border: 0;
+	background: transparent;
+	color: var(--fg-subtle);
+	font-size: var(--text-xs);
+	text-align: left;
+}
+
+.settled-toggle:hover {
+	color: var(--fg-muted);
+}
+
+.settled-label {
+	flex: 1;
+}
+
+.settled-count {
+	color: var(--fg-subtle);
+}
+
+.settled-list {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+	max-height: calc(var(--space-10) * 4);
+	margin: var(--space-1) 0 0;
+	padding: 0;
+	overflow-y: auto;
+	list-style: none;
+}
+
+.settled-item {
+	display: flex;
+	align-items: center;
+	gap: var(--space-1);
+	border-radius: var(--radius-md);
+}
+
+.settled-item.is-on {
+	background: var(--bg-active);
+}
+
+.settled-main {
+	display: flex;
+	flex: 1;
+	align-items: center;
+	gap: var(--space-2);
+	min-width: 0;
+	padding: var(--space-1) var(--space-2);
+	border: 0;
+	border-radius: var(--radius-md);
+	background: transparent;
+	color: var(--fg-subtle);
+	font-size: var(--text-xs);
+	text-align: left;
+}
+
+.settled-main:hover {
+	background: var(--bg-hover);
+	color: var(--fg-muted);
+}
+
+.settled-title {
+	flex: 1;
+	min-width: 0;
+}
+
+.settled-time {
+	flex: none;
+	color: var(--fg-subtle);
+}
+
+.settled-reopen {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	padding: var(--space-1);
+	border: 0;
+	border-radius: var(--radius-sm);
+	background: transparent;
+	color: var(--fg-subtle);
+}
+
+.settled-reopen:hover {
+	background: var(--bg-hover);
+	color: var(--fg-default);
 }
 
 /* 窄档：侧栏收成贴左缘的全高抽屉，从窗口顶边到底边 */

@@ -255,23 +255,9 @@
 	-webkit-app-region: no-drag;
 }
 
-/* 可关闭标签悬停或聚焦时把右侧文字/徽标渐隐让位给覆盖的 `×`，保持胶囊本身定宽不挤压邻项 */
-.workspace-tab-shell.is-closable:where(:hover, :focus-within) .workspace-tab {
-	mask-image: linear-gradient(
-		to right,
-		var(--fg-default) 0,
-		var(--fg-default) calc(100% - var(--workspace-tab-close-size) - var(--space-8)),
-		transparent calc(100% - var(--workspace-tab-close-size) - var(--space-2))
-	);
-}
-
 .workspace-tab-shell:hover .workspace-tab,
 .workspace-tab-shell[data-selected="true"] .workspace-tab {
 	color: var(--fg-default);
-}
-
-.workspace-tab-shell[data-selected="true"] .workspace-tab {
-	font-weight: 500;
 }
 
 .workspace-tab:disabled {
@@ -280,11 +266,11 @@
 	opacity: 0.45;
 }
 
-/* 关闭按钮：绝对定位覆盖在胶囊右端，悬停或聚焦时显形而不向右撑开标签 */
+/* 关闭按钮：绝对定位覆盖在标签前端图标位置，悬停或聚焦时替换图标而不遮挡文字与徽标，也便于连续点击关闭 */
 .workspace-tab-close {
 	position: absolute;
 	top: 50%;
-	right: var(--space-3);
+	left: calc(var(--workspace-tab-padding-x) - var(--space-1));
 	display: grid;
 	flex: none;
 	place-items: center;
@@ -305,7 +291,8 @@
 		color var(--dur-fast) var(--ease-standard);
 }
 
-.workspace-tab-shell:where(:hover, :focus-within) .workspace-tab-close {
+.workspace-tab-shell:hover .workspace-tab-close,
+.workspace-tab-close:focus-visible {
 	opacity: 0.8;
 	pointer-events: auto;
 }
@@ -320,6 +307,11 @@
 	display: grid;
 	flex: none;
 	place-items: center;
+	transition: opacity var(--dur-fast) var(--ease-standard);
+}
+
+.workspace-tabs:not([data-reordering="true"]) .workspace-tab-shell.is-closable:hover .workspace-tab-icon {
+	opacity: 0;
 }
 
 /* 拖拽重排期间：被拖胶囊抬升并 1:1 跟手平移，邻项按 `--tab-shift` 平滑让位，同时压住无关悬停与关闭按钮 */

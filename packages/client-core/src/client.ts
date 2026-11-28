@@ -531,6 +531,12 @@ export class SessionClient {
 		return result.agent;
 	}
 
+	async getAcpDraftConfig(
+		params: RequestParams["getAcpDraftConfig"],
+	): Promise<RequestResults["getAcpDraftConfig"]> {
+		return await this.transport.request("getAcpDraftConfig", params);
+	}
+
 	/** 启动指定 ACP 后端的交互式登录流程。 */
 	async acpLoginStart(agentId: string): Promise<{ loginId: string; authUrl?: string }> {
 		return await this.transport.request("acpLoginStart", { agentId });

@@ -7,7 +7,7 @@
 
 import type { SupportedLanguage } from "@facet/i18n";
 import type { ProjectInfo, SessionStatus, SessionSummary } from "@facet/protocol";
-import { deriveBucket } from "./session-status.ts";
+import { deriveBucket, type SessionStatusBucket } from "./session-status.ts";
 import { baseName, sessionTitle, shortTime } from "./sidebar-model.ts";
 
 /** 联合会话键：`<endpoint>::<file>`。 */
@@ -68,6 +68,8 @@ export interface SidebarTaskCard {
 	title: string;
 	agentId: string;
 	attention: TaskAttentionState;
+	/** 原版会话行状态分档（用于渲染 SessionStatusMark） */
+	bucket: SessionStatusBucket;
 	updatedAt: number;
 	timeText: string;
 }
@@ -171,6 +173,8 @@ export function buildInbox(input: InboxBuildInput): InboxData {
 	for (const feed of input.feeds) {
 		for (const summary of feed.sessions) {
 			const status = feed.statuses.get(summary.path);
+			const bucket: SessionStatusBucket =
+				feed.isOnline && status !== undefined ? deriveBucket(status) : "done";
 			const attention = deriveAttention(status);
 			if (isEmptyIdle(summary, attention)) {
 				continue;
@@ -213,6 +217,7 @@ export function buildInbox(input: InboxBuildInput): InboxData {
 				title,
 				agentId,
 				attention,
+				bucket,
 				updatedAt: summary.modified,
 				timeText: shortTime(
 					summary.modified,
@@ -263,6 +268,7 @@ export function buildInbox(input: InboxBuildInput): InboxData {
 			title: cached.title,
 			agentId: cached.agentId,
 			attention: "idle",
+			bucket: "done",
 			updatedAt: cached.updatedAt,
 			timeText: shortTime(cached.updatedAt, now, "earlier", locale),
 		});
@@ -294,6 +300,8 @@ export interface InboxSearchEntry {
 	title: string;
 	/** 关注状态（settled 条目固定为 idle） */
 	attention: TaskAttentionState;
+	/** 原版会话行状态分档（settled 条目固定为 done） */
+	bucket: SessionStatusBucket;
 	/** 是否已归档 */
 	settled: boolean;
 	/** 相对时间文案 */
@@ -374,6 +382,7 @@ export function searchInboxEntries({
 			cwd: card.cwd,
 			title: card.title,
 			attention: card.attention,
+			bucket: card.hostOnline ? card.bucket : "done",
 			settled: false,
 			timeText: card.timeText,
 			updatedAt: card.updatedAt,
@@ -396,6 +405,7 @@ export function searchInboxEntries({
 			cwd: item.cwd,
 			title: item.title,
 			attention: "idle",
+			bucket: "done",
 			settled: true,
 			timeText: item.timeText,
 			updatedAt: item.settledAt,

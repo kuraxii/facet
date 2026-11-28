@@ -73,7 +73,9 @@ describe("inbox-model", () => {
 		expect(data.active.map((item) => item.key)).toEqual([offlineKey, localKey]);
 		expect(data.active[0]?.hostOnline).toBe(false);
 		expect(data.active[0]?.projectMonogram).toBe("CL");
+		expect(data.active[0]?.bucket).toBe("done");
 		expect(data.active[1]?.attention).toBe("running");
+		expect(data.active[1]?.bucket).toBe("running");
 		expect(data.active[1]?.projectName).toBe("facet");
 
 		expect(data.settled.map((item) => item.key)).toEqual([settledKey]);

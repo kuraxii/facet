@@ -646,11 +646,6 @@
 	background: var(--dot-ok);
 }
 
-.status-mark.is-done .status-dot {
-	background: var(--fg-subtle);
-	opacity: 0.3;
-}
-
 /*
  * 失败：点外面留一圈空隙，空隙是透明的，透出下面行自己的底色。
  * 用固定底色描一圈边的话，行悬停与选中变亮时会多出一圈暗环。

@@ -19,6 +19,7 @@ import {
 	type SidebarTaskCard,
 	searchInboxEntries,
 } from "./inbox-model.ts";
+import { SessionStatusMark } from "./session-status-mark.tsx";
 
 /** 结果最多给这么多条，再多靠打字或项目过滤收窄。 */
 const RESULT_LIMIT = 40;
@@ -182,8 +183,10 @@ export function SessionSearch({
 						>
 							{entry.settled ? (
 								<Archive size={ICON_SIZE.sm} className="search-settled-icon" aria-hidden />
+							) : entry.bucket === "done" ? (
+								<span className="status-mark" aria-hidden="true" />
 							) : (
-								<span className={`inbox-dot is-${entry.attention}`} aria-hidden="true" />
+								<SessionStatusMark bucket={entry.bucket} />
 							)}
 							<span className="search-row-title ell">{entry.title}</span>
 							{entry.projectName.length > 0 ? (

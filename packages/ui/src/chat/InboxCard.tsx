@@ -1,17 +1,18 @@
 /**
  * Task Inbox 里的 3 行任务卡片。
  *
- * 第 1 行：项目缩写徽标 + 目录名；右侧默认展示状态点与时间，悬停/聚焦切换为 Settle 按钮。
+ * 第 1 行：项目名；右侧有活跃状态时始终只显示原版状态标记（不展示时间，悬停也不切出 Settle 按钮）；
+ * 无活跃状态时默认显示相对时间，悬停/聚焦切换为 Settle 按钮。
  * 第 2 行：任务标题（最多两行）。
  * 第 3 行：左侧 Host 图标与名称；右侧 Agent 图标与名称。
- * 全部状态只通过样式（颜色、脉冲点、离线降透明）表达，不写状态标签文字。
  */
 import { Check, Monitor, Server } from "lucide-react";
 import { type MouseEvent, memo, type ReactNode } from "react";
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import { ICON_SIZE } from "../styles/visual-contract.ts";
 import { BackendIcon } from "./AgentsIcon.tsx";
-import type { SidebarTaskCard, TaskAttentionState } from "./inbox-model.ts";
+import type { SidebarTaskCard } from "./inbox-model.ts";
+import { SessionStatusMark } from "./session-status-mark.tsx";
 
 export interface InboxCardProps {
 	/** 任务卡片数据 */
@@ -26,22 +27,6 @@ export interface InboxCardProps {
 	onContextMenu: (card: SidebarTaskCard, event: MouseEvent<HTMLDivElement>) => void;
 }
 
-function attentionDotClass(attention: TaskAttentionState, hostOnline: boolean): string {
-	if (!hostOnline) {
-		return "dot is-off";
-	}
-	if (attention === "needs_approval") {
-		return "dot is-warn";
-	}
-	if (attention === "running") {
-		return "dot is-run is-pulse";
-	}
-	if (attention === "unread") {
-		return "dot is-acc";
-	}
-	return "dot is-off";
-}
-
 export const InboxCard = memo(function InboxCard({
 	card,
 	isActive,
@@ -50,6 +35,7 @@ export const InboxCard = memo(function InboxCard({
 	onContextMenu,
 }: InboxCardProps): ReactNode {
 	const { t } = useI18n();
+	const showStatusMark = card.hostOnline && card.bucket !== "done";
 	const cardClass = [
 		"inbox-card",
 		isActive ? "is-on" : undefined,
@@ -81,24 +67,27 @@ export const InboxCard = memo(function InboxCard({
 					</span>
 				</span>
 				<span className="inbox-card-right">
-					<span className="inbox-card-status">
-						{card.attention === "idle" && card.hostOnline ? null : (
-							<i className={attentionDotClass(card.attention, card.hostOnline)} aria-hidden="true" />
-						)}
-						<span className="inbox-time mono">{card.timeText}</span>
-					</span>
-					<button
-						type="button"
-						className="inbox-settle-btn"
-						aria-label={t("inbox.settle")}
-						onClick={(event) => {
-							event.stopPropagation();
-							onSettle(card);
-						}}
-					>
-						<Check size={ICON_SIZE.sm} />
-						<span>{t("inbox.settle")}</span>
-					</button>
+					{showStatusMark ? (
+						<SessionStatusMark bucket={card.bucket} />
+					) : (
+						<>
+							<span className="inbox-card-status">
+								<span className="inbox-time mono">{card.timeText}</span>
+							</span>
+							<button
+								type="button"
+								className="inbox-settle-btn"
+								aria-label={t("inbox.settle")}
+								onClick={(event) => {
+									event.stopPropagation();
+									onSettle(card);
+								}}
+							>
+								<Check size={ICON_SIZE.sm} />
+								<span>{t("inbox.settle")}</span>
+							</button>
+						</>
+					)}
 				</span>
 			</div>
 

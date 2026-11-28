@@ -28,12 +28,13 @@ describe("会话行状态标记", () => {
 		expect(html).not.toContain("status-dot");
 	});
 
-	it("需要关注、失败、已完成都只是一个点", () => {
-		for (const bucket of ["attention", "failed", "done"] as const) {
+	it("需要关注、失败是一个点，已完成不画状态标记", () => {
+		for (const bucket of ["attention", "failed"] as const) {
 			const html = render(bucket);
 			expect(html).toContain("status-dot");
 			expect(html).not.toContain("status-ring");
 		}
+		expect(render("done")).toBe("");
 	});
 
 	it("槽位固定，状态写在类名与 status 上", () => {

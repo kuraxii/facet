@@ -2,7 +2,7 @@
  * 会话行首的状态标记。
  *
  * 槽位尺寸固定，只有里面的画法随状态变，所以标题不会因为状态切换而左右跳动。
- * 颜色在 `styles/chat.css` 里取 `--dot-*`，这里只管画。
+ * 颜色在 `styles/chat.css` 里取 `--dot-*`，这里只管画；`done` 不渲染占位点。
  */
 
 import { CircleAlert } from "lucide-react";
@@ -19,6 +19,9 @@ export interface SessionStatusMarkProps {
 
 export function SessionStatusMark({ bucket }: SessionStatusMarkProps) {
 	const { t } = useI18n();
+	if (bucket === "done") {
+		return null;
+	}
 	return (
 		<span
 			className={`status-mark is-${bucket}`}
@@ -28,7 +31,7 @@ export function SessionStatusMark({ bucket }: SessionStatusMarkProps) {
 		>
 			{bucket === "running" ? <StatusRing /> : null}
 			{bucket === "needs_input" ? <CircleAlert size={ICON_SIZE.sm} aria-hidden="true" /> : null}
-			{bucket === "attention" || bucket === "failed" || bucket === "done" ? (
+			{bucket === "attention" || bucket === "failed" ? (
 				<span className="status-dot" aria-hidden="true" />
 			) : null}
 		</span>

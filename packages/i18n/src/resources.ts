@@ -736,7 +736,7 @@ export const zhCN = {
 		settled: "Settled",
 		settledToast: "已归档：{{title}}",
 		empty: "暂无活跃任务",
-		noProject: "未关联项目",
+		noProject: "无项目",
 	},
 	queue: {
 		demoteSteering: "退回后续队列",

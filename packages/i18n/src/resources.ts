@@ -24,7 +24,7 @@ export const en = {
 	panel: {
 		tabs: "Open tools",
 		files: "Files",
-		changes: "Changes",
+		changes: "Review",
 		terminal: "Terminal",
 		browser: "Browser",
 		tools: "Workspace tools",

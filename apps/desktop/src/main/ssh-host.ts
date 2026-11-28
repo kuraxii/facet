@@ -198,7 +198,7 @@ if [ "\${install:-}" = "" ]; then
   printf 'none\n'
   exit 0
 fi
-data="\${FACET_DATA_DIR:-$HOME/.local/share/facet}"
+data="\${FACET_DATA_DIR:-\${FACET_HOME:-$HOME/.facet}/host}"
 mkdir -p "$data" 2>/dev/null || true
 if command -v setsid >/dev/null 2>&1; then
   setsid "$install/bin/node" "$install/lib/server.mjs" >>"$data/server.log" 2>&1 </dev/null &

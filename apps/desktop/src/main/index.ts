@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
+import { resolveFacetHome } from "@facet/agent";
 import { createI18n, readLanguageSetting, resolveLanguage, translate } from "@facet/i18n";
 import { app, BrowserWindow, dialog, ipcMain, Notification, nativeTheme, screen, shell } from "electron";
 import { HostChannels, LOCAL_TARGET } from "./host-channel.ts";
@@ -11,6 +12,7 @@ import {
 	type LocalHost,
 	readDiscovery,
 	resolveAgentDir,
+	resolveConfigDir,
 	resolveDataDir,
 } from "./host-daemon.ts";
 import { countBusySessions } from "./host-query.ts";
@@ -600,8 +602,8 @@ function parseTcpTarget(text: string): { host: string; port: number } | undefine
 }
 
 app.whenReady().then(async () => {
-	// 本地设置放在桌面自己的配置目录（Linux 上是 ~/.config/facet），与主机侧的应用设置分开
-	localSettingsFile = join(app.getPath("userData"), "desktop.json");
+	// 桌面端本地偏好收拢在 `<FACET_HOME>/config/desktop.json`，与主机侧应用设置同目录
+	localSettingsFile = join(resolveConfigDir(process.env, { isDev }), "desktop.json");
 	stateStore = new LocalStateStore({ file: localSettingsFile });
 	const initialSettings = await stateStore.init();
 	mainI18n = createI18n(resolveLanguage(initialSettings.language, app.getLocale()));
@@ -641,6 +643,7 @@ app.whenReady().then(async () => {
 				// 开发启动打开主机侧调试日志，打包运行留给 FACET_DEBUG 手动开启
 				env: {
 					...hostLaunch.env,
+					FACET_HOME: resolveFacetHome(process.env, isDev),
 					FACET_AGENT_DIR: agentDir,
 					// 开发态连 pi 的目录也一起钉住：继承来的 PI_CODING_AGENT_DIR 在主机侧优先级更高
 					...(isDev ? { PI_CODING_AGENT_DIR: agentDir } : {}),

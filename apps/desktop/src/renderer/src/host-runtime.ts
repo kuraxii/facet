@@ -363,6 +363,22 @@ export class HostRuntime {
  */
 export class HostRuntimeRegistry {
 	private readonly runtimes = new Map<string, HostRuntime>();
+	private readonly runtimeUnsubs = new Map<string, () => void>();
+	private readonly listeners = new Set<() => void>();
+	private version = 0;
+
+	/** 订阅注册表变更（新增/移除主机或任意主机状态更新）。 */
+	subscribe(listener: () => void): () => void {
+		this.listeners.add(listener);
+		return () => {
+			this.listeners.delete(listener);
+		};
+	}
+
+	/** 当前注册表版本，供 `useSyncExternalStore` 消费。 */
+	getVersion(): number {
+		return this.version;
+	}
 
 	/** 取一台主机的运行时，没有就建一个（不自动连接）。 */
 	ensure(options: HostRuntimeOptions): HostRuntime {
@@ -372,12 +388,27 @@ export class HostRuntimeRegistry {
 		}
 		const runtime = new HostRuntime(options);
 		this.runtimes.set(options.endpoint, runtime);
+		const unsub = runtime.subscribe(() => {
+			this.notify();
+		});
+		this.runtimeUnsubs.set(options.endpoint, unsub);
+		this.notify();
 		return runtime;
 	}
 
 	/** 按端点取已经建好的运行时。 */
 	get(endpoint: string): HostRuntime | undefined {
 		return this.runtimes.get(endpoint);
+	}
+
+	/** 当前存活的全部运行时。 */
+	all(): readonly HostRuntime[] {
+		return [...this.runtimes.values()];
+	}
+
+	/** 当前存活的全部 `(endpoint, runtime)` 对。 */
+	entries(): readonly [string, HostRuntime][] {
+		return [...this.runtimes.entries()];
 	}
 
 	/** 已经建好运行时的端点，界面据此标出哪几台在后台连着。 */
@@ -387,15 +418,35 @@ export class HostRuntimeRegistry {
 
 	/** 拆掉一台主机并忘掉它；工作区快照跟着运行时一起丢。 */
 	async dispose(endpoint: string): Promise<void> {
+		this.runtimeUnsubs.get(endpoint)?.();
+		this.runtimeUnsubs.delete(endpoint);
 		const runtime = this.runtimes.get(endpoint);
-		this.runtimes.delete(endpoint);
+		const removed = this.runtimes.delete(endpoint);
+		if (removed) {
+			this.notify();
+		}
 		await runtime?.dispose();
 	}
 
 	/** 拆掉全部主机，窗口关闭时用。 */
 	async disposeAll(): Promise<void> {
+		for (const unsub of this.runtimeUnsubs.values()) {
+			unsub();
+		}
+		this.runtimeUnsubs.clear();
 		const all = [...this.runtimes.values()];
+		const hadAny = this.runtimes.size > 0;
 		this.runtimes.clear();
+		if (hadAny) {
+			this.notify();
+		}
 		await Promise.all(all.map((runtime) => runtime.dispose()));
+	}
+
+	private notify(): void {
+		this.version += 1;
+		for (const listener of [...this.listeners]) {
+			listener();
+		}
 	}
 }

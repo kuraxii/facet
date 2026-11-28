@@ -14,9 +14,8 @@ import { createHash } from "node:crypto";
 import { closeSync, openSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { connect as connectSocket } from "node:net";
-import { homedir } from "node:os";
 import { basename, isAbsolute, join } from "node:path";
-import { DEFAULT_AGENT_DIR, DEV_AGENT_DIR } from "@facet/agent";
+import { resolveFacetHome } from "@facet/agent";
 import { type DiscoveryRecord, parseDiscovery } from "@facet/protocol";
 import { StreamTransport } from "@facet/transport";
 
@@ -82,31 +81,7 @@ export function namedPipePath(dataDir: string): string {
 }
 
 /**
- * 应用数据目录的根，随平台取各自的规范位置。
- *
- * 与主机侧 `apps/server/src/config.ts` 的 `dataRoot` 逐字一致：Linux 与 macOS 按 XDG 规范
- * 用 `$XDG_DATA_HOME`（没有或不是绝对路径时用 `~/.local/share`），Windows 用
- * `%LOCALAPPDATA%`（缺席时退回家目录下的 `AppData/Local`）。桌面要靠同一个目录找
- * `endpoint.json`、算命名管道名，两边算法不一致就接不上已经跑着的主机。
- */
-function dataRoot(
-	env: Record<string, string | undefined>,
-	platform: NodeJS.Platform = process.platform,
-): string {
-	if (platform === "win32") {
-		const local = env.LOCALAPPDATA?.trim();
-		return local !== undefined && local.length > 0 && isAbsolute(local)
-			? local
-			: join(homedir(), "AppData", "Local");
-	}
-	const xdg = env.XDG_DATA_HOME?.trim();
-	return xdg !== undefined && isAbsolute(xdg) ? xdg : join(homedir(), ".local", "share");
-}
-
-/**
- * 应用数据目录：桌面与主机共用的那一份，开发实例与发布实例分开。
- *
- * 目录名带 -dev 后缀：两边的项目清单、设置与主机身份互不覆盖。
+ * 宿主机运行态目录：桌面与主机共用的那一份（`<FACET_HOME>/host`），开发实例与发布实例分开。
  */
 export function resolveDataDir(
 	env: Record<string, string | undefined>,
@@ -116,7 +91,19 @@ export function resolveDataDir(
 	if (explicit !== undefined && explicit.length > 0) {
 		return explicit;
 	}
-	return join(dataRoot(env, options.platform), options.isDev === true ? "facet-dev" : "facet");
+	return join(resolveFacetHome(env, options.isDev === true), "host");
+}
+
+/** 解析 Facet 配置目录（`<FACET_HOME>/config`），存放 `desktop.json`、`projects.json` 等。 */
+export function resolveConfigDir(
+	env: Record<string, string | undefined>,
+	options: { isDev?: boolean } = {},
+): string {
+	const explicit = env.FACET_CONFIG_DIR?.trim();
+	if (explicit !== undefined && explicit.length > 0) {
+		return explicit;
+	}
+	return join(resolveFacetHome(env, options.isDev === true), "config");
 }
 
 /** 解析发现文件的内容，缺字段或读不懂时返回 undefined。 */
@@ -125,21 +112,19 @@ export function readDiscoveryFile(text: string): DiscoveryRecord | undefined {
 }
 
 /**
- * 本机 pi 数据目录。
+ * 本机 pi 数据目录（`<FACET_HOME>/pi`）。
  *
- * 发布版与 pi 命令行共用 `~/.pi/agent`；开发态固定用 `~/.pi/agent-dev`，只认
- * `FACET_DEV_AGENT_DIR`。开发态不认 `FACET_AGENT_DIR` 与 `PI_CODING_AGENT_DIR`：从 facet
- * 自带的终端、或从 pi 拉起的 shell 里启动时，这两个变量已经指向真实目录，跟着走就等于开发
- * 实例的会话与凭证写进了真实数据。
+ * 开发态只认 `FACET_DEV_AGENT_DIR` / `FACET_DEV_HOME`，不认 `FACET_AGENT_DIR` 与
+ * `PI_CODING_AGENT_DIR`，防止从正式终端拉起开发实例时误写正式数据。
  */
 export function resolveAgentDir(
 	env: Record<string, string | undefined>,
 	options: { isDev?: boolean } = {},
 ): string {
 	if (options.isDev === true) {
-		return env.FACET_DEV_AGENT_DIR?.trim() || DEV_AGENT_DIR;
+		return env.FACET_DEV_AGENT_DIR?.trim() || join(resolveFacetHome(env, true), "pi");
 	}
-	return env.FACET_AGENT_DIR?.trim() || DEFAULT_AGENT_DIR;
+	return env.FACET_AGENT_DIR?.trim() || join(resolveFacetHome(env, false), "pi");
 }
 
 /** 连到本机主机：本地 socket，不带令牌，身份由内核按文件权限或管道 ACL 判定。 */

@@ -7,10 +7,12 @@
 import type { SessionClient } from "@facet/client-core";
 import {
 	type AgentAvailability,
+	type ImageBlock,
 	PI_AGENT_ID,
 	type ProjectInfo,
 	type SessionStatus,
 	type SessionSummary,
+	type ThinkingLevel,
 } from "@facet/protocol";
 import { resolveAgentSelection, samePath } from "@facet/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -171,10 +173,28 @@ export interface SessionLifecycleOptions {
 	snapshot?: HostWorkspaceSnapshot;
 	/** 按主机端点隔离的持久化存储，用于跨重启恢复选中会话与新建目录 */
 	storage?: ScopedStorage;
+	/** 外部路由指定的当前目标会话文件；切换目标主机时据此打开对应会话 */
+	targetFile?: string | undefined;
+	/** 活跃会话文件变更时同步回外层 `(endpoint, file)` 目标路由 */
+	onActiveFileChange?: (file: string | undefined) => void;
 	/** 打开会话之后的收尾，例如把标签摆到主区域 */
 	onSessionOpened?: (file: string) => void;
 	/** 删掉会话之后的收尾，例如清掉相关标签与滚动位置 */
 	onSessionRemoved?: (path: string) => void;
+}
+
+/** 新建会话时的可选初始配置。 */
+export interface CreateSessionOptions {
+	/** 发送前选定的 Pi 模型 */
+	model?: { provider: string; id: string };
+	/** 发送前选定的思考档位 */
+	thinkingLevel?: ThinkingLevel;
+	/** 发送前选定的 ACP 会话模式 */
+	acpModeId?: string;
+	/** 发送前选定的 ACP 动态配置项（如模型、思考强度） */
+	acpConfig?: Readonly<Record<string, string>>;
+	/** 随首条消息一起发送的图片附件 */
+	images?: readonly ImageBlock[];
 }
 
 export interface SessionLifecycle {
@@ -211,7 +231,7 @@ export interface SessionLifecycle {
 	/** 打开一个会话；已经缓存过的直接切过去 */
 	openSession: (path: string, knownCwd?: string) => void;
 	/** 新建会话；传入 initialPrompt 时在会话创建完成后自动发送首条消息 */
-	createSession: (cwd: string, initialPrompt?: string) => void;
+	createSession: (cwd: string, initialPrompt?: string, options?: CreateSessionOptions) => void;
 	/** 侧栏与搜索用的稳定回调：直接选会话 */
 	selectSession: (path: string) => void;
 	/** 侧栏用的稳定回调：记下目录并新建会话 */
@@ -255,7 +275,17 @@ export interface SessionLifecycle {
 }
 
 export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLifecycle {
-	const { client, connectEpoch, projectDir, snapshot, storage, onSessionOpened, onSessionRemoved } = options;
+	const {
+		client,
+		connectEpoch,
+		projectDir,
+		snapshot,
+		storage,
+		targetFile,
+		onActiveFileChange,
+		onSessionOpened,
+		onSessionRemoved,
+	} = options;
 	/** 会话清单与状态在客户端的 store 里已经是主机的那一份，挂上来先照它显示 */
 	const [sessions, setSessions] = useState<readonly SessionSummary[]>(() =>
 		client.store.sessionList().map((entry) => entry.summary),
@@ -267,10 +297,17 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 	const [statuses, setStatuses] = useState<ReadonlyMap<string, SessionStatus>>(() => statusesOf(client));
 	const [activeFile, setActiveFile] = useState<string | undefined>(
 		() =>
+			targetFile ??
 			snapshot?.activeSessionFile ??
 			client.current?.snapshot.file ??
 			readStoredSessionPath(storage, ACTIVE_SESSION_KEY),
 	);
+	const onActiveFileChangeRef = useRef(onActiveFileChange);
+	onActiveFileChangeRef.current = onActiveFileChange;
+	const commitActiveFile = useCallback((file: string | undefined) => {
+		setActiveFile(file);
+		onActiveFileChangeRef.current?.(file);
+	}, []);
 	const [projects, setProjects] = useState<readonly ProjectInfo[]>([]);
 	const [isProjectsStale, setIsProjectsStale] = useState(false);
 	const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
@@ -335,6 +372,28 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 			return undefined;
 		}
 	}, [client]);
+
+	const prevClientRef = useRef(client);
+	// 同一工作区不重挂并切换目标主机 client 时，同步新主机的清单、偏好与活跃会话
+	useEffect(() => {
+		if (prevClientRef.current === client) {
+			return;
+		}
+		prevClientRef.current = client;
+		started.current = false;
+		switchSeq.current += 1;
+		setSessionError(undefined);
+		setTrustPrompt(undefined);
+		setSessions(client.store.sessionList().map((entry) => entry.summary));
+		setStatuses(statusesOf(client));
+		setSelectedBackendId(readStoredSessionPath(storage, SELECTED_BACKEND_KEY) ?? PI_AGENT_ID);
+		const nextCwd = snapshot?.createCwd ?? readStoredSessionPath(storage, CREATE_CWD_KEY) ?? projectDir ?? "";
+		createCwdChosen.current = nextCwd.length > 0;
+		setCreateCwd(nextCwd);
+		const nextFile = targetFile ?? snapshot?.activeSessionFile ?? client.current?.snapshot.file;
+		setActiveFile(nextFile);
+		preferredStartupFile.current = nextFile;
+	}, [client, projectDir, snapshot, storage, targetFile]);
 
 	// 主机推来清单变化时侧栏跟着变，别的端新建、改名或删除会话这边立刻看到
 	useEffect(
@@ -409,12 +468,23 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 				}
 			}
 			if (started.current) {
+				if (targetFile !== undefined && client.current?.snapshot.file !== targetFile) {
+					openSessionRef.current(targetFile);
+				}
 				return;
 			}
 			started.current = true;
+			if (targetFile !== undefined) {
+				if (client.current?.snapshot.file === targetFile) {
+					commitActiveFile(targetFile);
+				} else {
+					openSessionRef.current(targetFile);
+				}
+				return;
+			}
 			// 已经有开着的会话（切回保活主机）：屏幕上的那个由它自己继续
 			if (client.current !== undefined) {
-				setActiveFile(client.current.snapshot.file);
+				commitActiveFile(client.current.snapshot.file);
 				return;
 			}
 			// 优先恢复上次在该主机打开的会话；文件已被删掉再退回 pickStartupSession
@@ -428,7 +498,16 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 		return () => {
 			cancelled = true;
 		};
-	}, [client, connectEpoch, projectDir, refreshAgents, refreshProjects, refreshSessions]);
+	}, [
+		client,
+		connectEpoch,
+		projectDir,
+		refreshAgents,
+		refreshProjects,
+		refreshSessions,
+		commitActiveFile,
+		targetFile,
+	]);
 
 	/**
 	 * 跑一次会话切换类操作。
@@ -451,7 +530,7 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 						return;
 					}
 					onDone?.(file);
-					setActiveFile(file);
+					commitActiveFile(file);
 					setSessionError(undefined);
 					if (actionOptions.refresh !== false) {
 						await refreshSessions();
@@ -467,7 +546,7 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 				}
 			})();
 		},
-		[refreshSessions],
+		[commitActiveFile, refreshSessions],
 	);
 
 	/**
@@ -543,7 +622,7 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 				const opened = client.activateSession(path);
 				if (opened !== undefined) {
 					onSessionOpened?.(path);
-					setActiveFile(path);
+					commitActiveFile(path);
 					setSessionError(undefined);
 				}
 				void client.switchSession(path).catch(() => undefined);
@@ -553,13 +632,13 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 			const cwd = knownCwd ?? sessions.find((session) => session.path === path)?.cwd;
 			withTrust(cwd, run);
 		},
-		[client, onSessionOpened, runSessionAction, sessions, withTrust],
+		[client, commitActiveFile, onSessionOpened, runSessionAction, sessions, withTrust],
 	);
 	openSessionRef.current = openSession;
 
 	/** 新建会话：Pi 默认模型与思考档位交给 pi；ACP 后端由选中的 agentId 决定。 */
 	const createSession = useCallback(
-		(cwd: string, initialPrompt?: string) => {
+		(cwd: string, initialPrompt?: string, options?: CreateSessionOptions) => {
 			const normalizedCwd = cwd.length > 0 ? cwd : undefined;
 			withTrust(normalizedCwd, () => {
 				runSessionAction(
@@ -575,9 +654,24 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 							return;
 						}
 						onSessionOpened?.(file);
-						const trimmed = initialPrompt?.trim();
-						if (trimmed && trimmed.length > 0) {
-							client.send(trimmed);
+						if (options?.model !== undefined) {
+							client.setModel(options.model);
+						}
+						if (options?.thinkingLevel !== undefined) {
+							client.setThinkingLevel(options.thinkingLevel);
+						}
+						if (options?.acpModeId !== undefined) {
+							client.setAcpMode(options.acpModeId);
+						}
+						if (options?.acpConfig !== undefined) {
+							for (const [configId, configValue] of Object.entries(options.acpConfig)) {
+								client.setAcpConfigOption(configId, configValue);
+							}
+						}
+						const trimmed = initialPrompt?.trim() ?? "";
+						const images = options?.images;
+						if (trimmed.length > 0 || (images !== undefined && images.length > 0)) {
+							client.send(trimmed, images !== undefined && images.length > 0 ? { images: [...images] } : {});
 						}
 					},
 				);
@@ -631,14 +725,14 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 			if (activeFile !== path) {
 				return;
 			}
-			setActiveFile(undefined);
+			commitActiveFile(undefined);
 			// 还有别的会话就切过去，一个都不剩时留在空状态页
 			const next = pickStartupSession(pool, projectDir);
 			if (next !== undefined) {
 				openSessionRef.current(next.path, next.cwd);
 			}
 		},
-		[activeFile, client, onSessionRemoved, projectDir, refreshSessions],
+		[activeFile, client, commitActiveFile, onSessionRemoved, projectDir, refreshSessions],
 	);
 
 	/**
@@ -698,8 +792,8 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 	/** 丢掉当前会话：续订回不来时连订阅一起放掉，界面回到没有会话的状态。 */
 	const resetActive = useCallback(() => {
 		void client.release().catch(() => undefined);
-		setActiveFile(undefined);
-	}, [client]);
+		commitActiveFile(undefined);
+	}, [client, commitActiveFile]);
 
 	const openProjectDialog = useCallback(() => setIsProjectDialogOpen(true), []);
 	const closeProjectDialog = useCallback(() => setIsProjectDialogOpen(false), []);

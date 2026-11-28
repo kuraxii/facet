@@ -1,10 +1,10 @@
 /**
- * 一次渲染进程里的全部主机。
+ * 一次渲染进程里的全部主机运行时。
  *
- * 管三件事：清单里有哪些主机、前台是哪一台、哪几台的运行时还活着。切换只改「前台是谁」，
- * 后台那套连接照常收动作与重连；只有显式断开（或从清单里删掉）才拆掉运行时。
- *
- * 清单记在本地存储里，运行时只在内存里：窗口一关，通道随主进程一起回收。
+ * 原则：
+ * 1. 本机 Host（`LOCAL_TARGET`）永远作为常驻底座随应用启动自动拉起，不因远端状态卸载工作区。
+ * 2. 远程主机作为后台并发运行时挂载：`autoConnect === true` 的节点在启动时自动并行建连，
+ *    其余节点由用户按需触发连接；切走会话不断开，只有显式断开或删除才拆掉运行时。
  */
 import {
 	type HostListState,
@@ -15,31 +15,47 @@ import {
 	useI18n,
 	writeHostList,
 } from "@facet/ui";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { bridge } from "../bridge.ts";
 import { LOCAL_TARGET } from "../host-connection.ts";
-import { type HostRuntime, HostRuntimeRegistry } from "../host-runtime.ts";
+import { type HostRuntime, HostRuntimeRegistry, type HostRuntimeState } from "../host-runtime.ts";
 import { appStorage } from "../local-storage.ts";
 
-/** 主机的连接域，挂在一次渲染进程上。 */
+/** 全局主机注册表与连接管理域。 */
 export interface Hosts {
-	/** 前台是哪个端点 */
-	activeEndpoint: string;
-	/** 前台主机的运行时；切主机时换成另一份，已有的那份仍然活着 */
-	runtime: HostRuntime;
+	/** 全部主机运行时注册表 */
+	registry: HostRuntimeRegistry;
+	/** 注册表及任意运行时状态变更版本号 */
+	registryVersion: number;
+	/** 本机常驻运行时 */
+	localRuntime: HostRuntime;
+	/** 按端点取运行时，缺省或未连接时回退本机运行时 */
+	getRuntime: (endpoint: string | undefined) => HostRuntime;
+	/** 已连接（或正在连）的主机实时状态快照 */
+	hostStates: ReadonlyMap<string, HostRuntimeState>;
 	/** 主机清单 */
 	hostList: HostListState;
-	/** 运行时还活着的端点，含后台连着的 */
+	/** 运行时还活着的端点（含本机与后台远程主机） */
 	connectedEndpoints: readonly string[];
-	/** 把某台主机换到前台；没有运行时就连一次 */
-	selectHost: (endpoint: string) => void;
-	/** 断开某台主机：拆掉运行时，回到本机之后它会重新连 */
+	/** 在后台发起/复用与某台主机的连接 */
+	connectHost: (endpoint: string) => HostRuntime;
+	/** 断开某台远程主机（本机常驻不断开） */
 	disconnectHost: (endpoint: string) => void;
+	/** 重连某台主机 */
+	reconnectHost: (endpoint: string) => void;
+	/** 向指定主机提交 SSH 密码并重试 */
+	submitSshPassword: (endpoint: string, password: string) => void;
+	/** 取消指定主机的 SSH 密码输入 */
+	cancelSshAuth: (endpoint: string) => void;
+	/** 设置远程主机是否随启动自动连接 */
+	setHostAutoConnect: (id: string, autoConnect: boolean) => void;
+	/** 兼容旧切换接口：触发目标主机连接 */
+	selectHost: (endpoint: string) => void;
 	/** 添加一台远程主机，地址不合法或重复时返回原因 */
-	addHost: (name: string, address: string) => string | undefined;
+	addHost: (name: string, address: string, autoConnect?: boolean) => string | undefined;
 	/** 改一台远程主机的名字 */
 	renameHost: (id: string, name: string) => void;
-	/** 删除一台远程主机；删的是当前这台时回到本机 */
+	/** 删除一台远程主机并拆掉其运行时 */
 	removeHost: (id: string) => void;
 }
 
@@ -51,81 +67,103 @@ export function useHosts(): Hosts {
 	}
 	const registry = registryRef.current;
 
-	/** 主机清单：本机之外用户添加的远程主机，以及当前连着的端点 */
 	const [hostList, setHostList] = useState<HostListState>(() => {
 		const saved = readHostList(appStorage, LOCAL_TARGET);
-		// 外部给了 FACET_ENDPOINT 就以它为准：上一次连的远程主机不该盖过这次显式指定的地址
-		return bridge.hostMode === "external" ? { ...saved, activeEndpoint: LOCAL_TARGET } : saved;
+		return { ...saved, activeEndpoint: LOCAL_TARGET };
 	});
-	const [activeEndpoint, setActiveEndpoint] = useState(hostList.activeEndpoint);
-	/** 运行时还活着的端点，含后台连着的；断开时从这里去掉 */
-	const [connectedEndpoints, setConnectedEndpoints] = useState<readonly string[]>([]);
-	/** 前台运行时被断开时要换一个新实例，靠它让下面那份 memo 重算 */
-	const [runtimeEpoch, setRuntimeEpoch] = useState(0);
 
-	// 外部指定了端点时，把记着的那台改回来，别让下次启动被旧地址带着走
-	useEffect(() => {
-		if (bridge.hostMode === "external" && appStorage.getItem("facet.hosts.active") !== LOCAL_TARGET) {
-			writeHostList(appStorage, { ...hostList, activeEndpoint: LOCAL_TARGET });
-		}
-	}, [hostList]);
+	const registryVersion = useSyncExternalStore(
+		useCallback((listener) => registry.subscribe(listener), [registry]),
+		() => registry.getVersion(),
+	);
+
+	// 本机运行时始终存在且在启动时立即发起连接
+	const localRuntime = useMemo(
+		() =>
+			registry.ensure({
+				bridge,
+				endpoint: LOCAL_TARGET,
+				isLocal: true,
+			}),
+		[registry],
+	);
 
 	const updateHostList = useCallback((next: HostListState) => {
 		setHostList(next);
 		writeHostList(appStorage, next);
 	}, []);
 
-	/** 前台主机的运行时。同一台主机建过一次就一直用那一个。 */
-	// biome-ignore lint/correctness/useExhaustiveDependencies: runtimeEpoch 不是输入，是「这台主机的运行时已经废了，重取一个」的开关
-	const runtime = useMemo(
-		() =>
-			registry.ensure({
+	const connectHost = useCallback(
+		(endpoint: string): HostRuntime => {
+			const runtime = registry.ensure({
 				bridge,
-				endpoint: activeEndpoint,
-				isLocal: activeEndpoint === LOCAL_TARGET,
-			}),
-		[registry, activeEndpoint, runtimeEpoch],
-	);
-
-	// 换到一台还没连过的主机就连一次；后台连着的不再重复握手
-	useEffect(() => {
-		setConnectedEndpoints((current) =>
-			current.includes(activeEndpoint) ? current : [...current, activeEndpoint],
-		);
-		void runtime.connect();
-	}, [activeEndpoint, runtime]);
-
-	/** 换到另一台主机；旧的那台不断开，留在后台。 */
-	const selectHost = useCallback(
-		(endpoint: string) => {
-			if (endpoint === activeEndpoint) {
-				return;
-			}
-			setActiveEndpoint(endpoint);
-			updateHostList({ ...hostList, activeEndpoint: endpoint });
+				endpoint,
+				isLocal: endpoint === LOCAL_TARGET,
+			});
+			void runtime.connect();
+			return runtime;
 		},
-		[activeEndpoint, hostList, updateHostList],
+		[registry],
 	);
 
-	/** 断开某台主机：拆掉运行时与它的工作区快照。断的是前台就回到本机。 */
+	// 启动时拉起本机 Host，并为开启了 autoConnect 的远端主机并行建连
+	useEffect(() => {
+		void localRuntime.connect();
+		for (const entry of hostList.hosts) {
+			if (entry.autoConnect) {
+				connectHost(entry.endpoint);
+			}
+		}
+	}, [connectHost, hostList.hosts, localRuntime]);
+
 	const disconnectHost = useCallback(
 		(endpoint: string) => {
-			if (endpoint === activeEndpoint && endpoint !== LOCAL_TARGET) {
-				selectHost(LOCAL_TARGET);
+			if (endpoint === LOCAL_TARGET) {
+				return;
 			}
 			void registry.dispose(endpoint);
-			setConnectedEndpoints((current) => current.filter((item) => item !== endpoint));
-			// 断开的正是前台时，原来那个运行时已经废了，下一次渲染要重新建一个
-			if (endpoint === activeEndpoint) {
-				setRuntimeEpoch((current) => current + 1);
-			}
 		},
-		[activeEndpoint, registry, selectHost],
+		[registry],
 	);
 
-	/** 添加一台主机：地址收成端点，重复的直接回原因。 */
+	const reconnectHost = useCallback(
+		(endpoint: string) => {
+			const existing = registry.get(endpoint);
+			if (existing !== undefined) {
+				existing.reconnectNow();
+				return;
+			}
+			connectHost(endpoint);
+		},
+		[connectHost, registry],
+	);
+
+	const submitSshPassword = useCallback(
+		(endpoint: string, password: string) => {
+			registry.get(endpoint)?.submitPassword(password);
+		},
+		[registry],
+	);
+
+	const cancelSshAuth = useCallback(
+		(endpoint: string) => {
+			registry.get(endpoint)?.cancelPasswordPrompt();
+		},
+		[registry],
+	);
+
+	const getRuntime = useCallback(
+		(endpoint: string | undefined): HostRuntime => {
+			if (endpoint === undefined || endpoint === LOCAL_TARGET) {
+				return localRuntime;
+			}
+			return registry.get(endpoint) ?? localRuntime;
+		},
+		[localRuntime, registry],
+	);
+
 	const addHost = useCallback(
-		(name: string, address: string): string | undefined => {
+		(name: string, address: string, autoConnect = false): string | undefined => {
 			const normalized = normalizeEndpoint(address);
 			if (normalized === undefined) {
 				return t("app.invalidAddress");
@@ -137,14 +175,17 @@ export function useHosts(): Hosts {
 				id: `${Date.now().toString(36)}-${hostList.hosts.length}`,
 				name,
 				endpoint: normalized,
+				...(autoConnect ? { autoConnect: true } : {}),
 			};
 			updateHostList({ ...hostList, hosts: [...hostList.hosts, entry] });
+			if (autoConnect) {
+				connectHost(normalized);
+			}
 			return undefined;
 		},
-		[hostList, t, updateHostList],
+		[connectHost, hostList, t, updateHostList],
 	);
 
-	/** 改一台远程主机的名字，名字从清单里读，不改连接。 */
 	const renameHost = useCallback(
 		(id: string, name: string): void => {
 			const trimmed = name.trim();
@@ -159,42 +200,86 @@ export function useHosts(): Hosts {
 		[hostList, updateHostList],
 	);
 
-	/** 从清单里删掉一台远程主机：连同它的运行时一起收掉。 */
+	const setHostAutoConnect = useCallback(
+		(id: string, autoConnect: boolean): void => {
+			let matchedEndpoint: string | undefined;
+			const nextHosts = hostList.hosts.map((entry) => {
+				if (entry.id !== id) {
+					return entry;
+				}
+				matchedEndpoint = entry.endpoint;
+				return autoConnect
+					? { ...entry, autoConnect: true }
+					: { id: entry.id, name: entry.name, endpoint: entry.endpoint };
+			});
+			updateHostList({ ...hostList, hosts: nextHosts });
+			if (autoConnect && matchedEndpoint !== undefined) {
+				connectHost(matchedEndpoint);
+			}
+		},
+		[connectHost, hostList, updateHostList],
+	);
+
 	const removeHost = useCallback(
 		(id: string): void => {
 			const target = hostList.hosts.find((entry) => entry.id === id);
 			updateHostList({ ...hostList, hosts: hostList.hosts.filter((entry) => entry.id !== id) });
-			if (target === undefined) {
-				return;
+			if (target !== undefined) {
+				void registry.dispose(target.endpoint);
 			}
-			if (target.endpoint === activeEndpoint) {
-				selectHost(LOCAL_TARGET);
-			}
-			void registry.dispose(target.endpoint);
-			setConnectedEndpoints((current) => current.filter((item) => item !== target.endpoint));
 		},
-		[activeEndpoint, hostList, registry, selectHost, updateHostList],
+		[hostList, registry, updateHostList],
 	);
+
+	// registryVersion 变化时重建活跃快照表与端点列表，供多主机 UI 消费
+	const { connectedEndpoints, hostStates } = useMemo(() => {
+		void registryVersion;
+		const states = new Map<string, HostRuntimeState>();
+		for (const [endpoint, runtime] of registry.entries()) {
+			states.set(endpoint, runtime.getSnapshot());
+		}
+		return {
+			connectedEndpoints: registry.endpoints(),
+			hostStates: states as ReadonlyMap<string, HostRuntimeState>,
+		};
+	}, [registry, registryVersion]);
 
 	return useMemo(
 		() => ({
-			activeEndpoint,
-			runtime,
+			registry,
+			registryVersion,
+			localRuntime,
+			getRuntime,
+			hostStates,
 			hostList,
 			connectedEndpoints,
-			selectHost,
+			connectHost,
 			disconnectHost,
+			reconnectHost,
+			submitSshPassword,
+			cancelSshAuth,
+			setHostAutoConnect,
+			selectHost: (endpoint: string) => {
+				connectHost(endpoint);
+			},
 			addHost,
 			renameHost,
 			removeHost,
 		}),
 		[
-			activeEndpoint,
-			runtime,
+			registry,
+			registryVersion,
+			localRuntime,
+			getRuntime,
+			hostStates,
 			hostList,
 			connectedEndpoints,
-			selectHost,
+			connectHost,
 			disconnectHost,
+			reconnectHost,
+			submitSshPassword,
+			cancelSshAuth,
+			setHostAutoConnect,
 			addHost,
 			renameHost,
 			removeHost,

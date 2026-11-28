@@ -1,23 +1,21 @@
 /**
- * 一台主机的连接域。
+ * 单台目标主机的连接视图。
  *
- * 连接本身（退避重连、续订、握手）在运行时的连接链路里，切到别的主机也不会停；这里只把
- * 运行时的状态翻成界面直接用的形状，并把主机清单的切换入口一并交出去。
- *
- * 没有「换主机」这个动作：换主机是换一份运行时，这个 Hook 重新挂一次即可。
+ * 把目标 `HostRuntime` 的连接状态、模型目录与设置翻成界面直接用的形状，同时透传
+ * `Hosts` 上的多主机连接管理入口。
  */
 import type { HostHandshake } from "@facet/client-core";
 import type { FacetSettings } from "@facet/protocol";
 import type { HostListState } from "@facet/ui";
 import { useI18n } from "@facet/ui";
 import { useCallback, useMemo, useSyncExternalStore } from "react";
-import type { HostRuntime, ProviderCatalog, SshAuthPrompt } from "../host-runtime.ts";
+import type { HostRuntime, HostRuntimeState, ProviderCatalog, SshAuthPrompt } from "../host-runtime.ts";
 import type { Hosts } from "./useHosts.ts";
 
 /** 连接屏显示哪一屏。ready 表示主机已经可以收发。 */
 export type Phase = "connecting" | "ready" | "failed";
 
-/** 一台主机的连接域，给界面用的形状。 */
+/** 当前目标主机的连接域，给界面用的形状。 */
 export interface HostConnection {
 	/** 连接屏显示哪一屏 */
 	phase: Phase;
@@ -29,6 +27,8 @@ export interface HostConnection {
 	host: HostHandshake | undefined;
 	/** 主机清单 */
 	hostList: HostListState;
+	/** 全部已创建运行时的主机实时状态 */
+	hostStates: ReadonlyMap<string, HostRuntimeState>;
 	/** 连接是否可用 */
 	isOnline: boolean;
 	/** 是否正在退避重连 */
@@ -43,21 +43,31 @@ export interface HostConnection {
 	sshAuthPrompt: SshAuthPrompt | undefined;
 	/** 运行时还活着的端点，含后台连着的 */
 	connectedEndpoints: readonly string[];
-	/** 换一台主机；已经连着的直接切过去，不断开原来那台 */
+	/** 在后台连接某台主机 */
+	connectHost: (endpoint: string) => void;
+	/** 兼容旧切换接口：触发主机连接 */
 	selectHost: (endpoint: string) => void;
-	/** 断开某台主机 */
+	/** 断开某台远程主机 */
 	disconnectHost: (endpoint: string) => void;
-	/** 提交密码框里填的密码 */
+	/** 重连指定主机 */
+	reconnectHost: (endpoint: string) => void;
+	/** 提交当前目标主机的密码 */
 	submitSshPassword: (password: string) => void;
-	/** 关掉密码框，回到连不上主机那一屏 */
+	/** 关掉当前目标主机的密码框 */
 	cancelSshAuth: () => void;
+	/** 向指定主机提交密码 */
+	submitSshPasswordFor: (endpoint: string, password: string) => void;
+	/** 取消指定主机的密码框 */
+	cancelSshAuthFor: (endpoint: string) => void;
+	/** 设置启动时自动连接 */
+	setHostAutoConnect: (id: string, autoConnect: boolean) => void;
 	/** 立刻重连，取消等待中的退避 */
 	reconnectNow: () => void;
 	/** 添加一台远程主机，地址不合法或重复时返回原因 */
-	addHost: (name: string, address: string) => string | undefined;
+	addHost: (name: string, address: string, autoConnect?: boolean) => string | undefined;
 	/** 改一台远程主机的名字 */
 	renameHost: (id: string, name: string) => void;
-	/** 删掉一台远程主机；删的是当前这台时回到本机 */
+	/** 删掉一台远程主机 */
 	removeHost: (id: string) => void;
 	/** 设置页保存之后回填 */
 	applySettings: (next: FacetSettings) => void;
@@ -66,9 +76,9 @@ export interface HostConnection {
 }
 
 export interface HostConnectionOptions {
-	/** 这台主机的运行时 */
+	/** 目标主机的运行时 */
 	runtime: HostRuntime;
-	/** 主机清单与切换动作 */
+	/** 全局主机清单与连接管理动作 */
 	hosts: Hosts;
 }
 
@@ -92,6 +102,7 @@ export function useHostConnection(options: HostConnectionOptions): HostConnectio
 			failure,
 			host: state.handshake,
 			hostList: hosts.hostList,
+			hostStates: hosts.hostStates,
 			isOnline: state.link.status === "ready",
 			isReconnecting: state.link.status === "reconnecting",
 			connectEpoch: state.connectEpoch,
@@ -99,10 +110,17 @@ export function useHostConnection(options: HostConnectionOptions): HostConnectio
 			catalog: state.catalog,
 			sshAuthPrompt: state.sshAuthPrompt,
 			connectedEndpoints: hosts.connectedEndpoints,
+			connectHost: (endpoint: string) => {
+				hosts.connectHost(endpoint);
+			},
 			selectHost: hosts.selectHost,
 			disconnectHost: hosts.disconnectHost,
+			reconnectHost: hosts.reconnectHost,
 			submitSshPassword: (password: string) => runtime.submitPassword(password),
 			cancelSshAuth: () => runtime.cancelPasswordPrompt(),
+			submitSshPasswordFor: hosts.submitSshPassword,
+			cancelSshAuthFor: hosts.cancelSshAuth,
+			setHostAutoConnect: hosts.setHostAutoConnect,
 			reconnectNow: () => runtime.reconnectNow(),
 			addHost: hosts.addHost,
 			renameHost: hosts.renameHost,

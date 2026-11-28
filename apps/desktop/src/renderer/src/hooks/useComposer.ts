@@ -5,7 +5,7 @@
  * 入口的命令就地执行，不当消息发出去。
  */
 import type { HostHandshake, MessageImage, SessionClient, SessionView } from "@facet/client-core";
-import type { SlashCommand, ThinkingLevel } from "@facet/protocol";
+import type { ImageBlock, SlashCommand, ThinkingLevel } from "@facet/protocol";
 import { parseCommand, useI18n } from "@facet/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bridge } from "../bridge.ts";
@@ -159,6 +159,8 @@ export interface Composer {
 	retryTurn: (entryId: string, text: string, images: readonly MessageImage[]) => void;
 	/** 清理已删除会话的草稿，避免长期堆积 */
 	forgetDraft: (file: string) => void;
+	/** 编码并取走当前待发图片（用于新建会话引导页发送首条消息时一并投递） */
+	takePendingImages: () => Promise<ImageBlock[]>;
 }
 
 export function useComposer(options: ComposerOptions): Composer {
@@ -650,6 +652,15 @@ export function useComposer(options: ComposerOptions): Composer {
 		[client, runSessionAction, session?.state.cwd, updateDraft, withTrust],
 	);
 
+	const takePendingImages = useCallback(async (): Promise<ImageBlock[]> => {
+		if (pendingImages.length === 0) {
+			return [];
+		}
+		const encoded = await Promise.all(pendingImages.map((item) => encodeImage(item)));
+		clearImages(draftKey);
+		return encoded;
+	}, [clearImages, draftKey, pendingImages]);
+
 	return {
 		draftKey,
 		draft,
@@ -672,5 +683,6 @@ export function useComposer(options: ComposerOptions): Composer {
 		revertTo,
 		retryTurn,
 		forgetDraft,
+		takePendingImages,
 	};
 }

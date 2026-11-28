@@ -8,6 +8,7 @@ import type { ChatView, SessionView, TextPart, TranscriptItem } from "@facet/cli
 import type { InputSettings, Message, QueuedInput } from "@facet/protocol";
 import {
 	ArrowDownIcon,
+	Button,
 	baseName,
 	ChatOutline,
 	ChatTranscript,
@@ -22,6 +23,7 @@ import {
 	SteeringMessages,
 	useI18n,
 } from "@facet/ui";
+import { RotateCcw } from "lucide-react";
 import { type ReactNode, type RefObject, useMemo } from "react";
 import type { Composer as ComposerState } from "../hooks/useComposer.ts";
 import type { HostConnection } from "../hooks/useHostConnection.ts";
@@ -66,6 +68,10 @@ export interface ChatAreaProps {
 	onOpenMentionFile: (filePath: string) => void;
 	/** 本机优先的输入偏好（决定发送键位） */
 	localInput: InputSettings;
+	/** 当前会话是否已归档（Settled）；为 true 时顶部显示 Reopen 入口并在发送时自动恢复 */
+	isSettled?: boolean;
+	/** 从 Settled 恢复到活跃 Inbox */
+	onReopen?: () => void;
 }
 
 /** 当前会话里用户发过的文字，从旧到新：输入区的 `↑`/`↓` 按它回溯。 */
@@ -107,6 +113,8 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 		mentionFiles,
 		onOpenMentionFile,
 		localInput,
+		isSettled = false,
+		onReopen,
 	} = props;
 	const { t } = useI18n();
 	const client = useHostClient();
@@ -164,7 +172,12 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 			ref={composerInput}
 			value={composer.draft}
 			onChange={composer.updateDraft}
-			onSend={composer.send}
+			onSend={() => {
+				if (isSettled) {
+					onReopen?.();
+				}
+				composer.send();
+			}}
 			isSending={composer.isSending}
 			attachments={composer.pendingImages.map((item) => ({
 				id: item.id,
@@ -295,6 +308,14 @@ export function ChatArea(props: ChatAreaProps): ReactNode {
 				)}
 				<div className="footer-column chat-grid">
 					{errorBar}
+					{isSettled && onReopen !== undefined ? (
+						<div className="settled-banner">
+							<Button variant="secondary" size="sm" onClick={onReopen}>
+								<RotateCcw size={ICON_SIZE.sm} />
+								{t("inbox.reopen")}
+							</Button>
+						</div>
+					) : null}
 					{sessionView.state.initialization.kind === "failed" ? (
 						<p className="dialog-error">{sessionView.state.initialization.message}</p>
 					) : null}

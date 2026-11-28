@@ -1,6 +1,6 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
 	findRunningHost,
@@ -72,14 +72,12 @@ describe("readDiscoveryFile", () => {
 
 describe("resolveDataDir", () => {
 	it("显式给出 FACET_DATA_DIR 时用它", () => {
-		expect(resolveDataDir({ FACET_DATA_DIR: "/data/facet", XDG_DATA_HOME: "/xdg" })).toBe("/data/facet");
+		expect(resolveDataDir({ FACET_DATA_DIR: "/data/facet", FACET_HOME: "/custom" })).toBe("/data/facet");
 	});
 
-	it("开发实例的数据目录带 -dev 后缀，与发布实例分开", () => {
-		expect(resolveDataDir({ XDG_DATA_HOME: "/xdg" }, { isDev: true, platform: "linux" })).toBe(
-			join("/xdg", "facet-dev"),
-		);
-		expect(resolveDataDir({ XDG_DATA_HOME: "/xdg" }, { platform: "linux" })).toBe(join("/xdg", "facet"));
+	it("开发实例落到 ~/.facet-dev/host，发布实例落到 ~/.facet/host", () => {
+		expect(resolveDataDir({}, { isDev: true })).toBe(join(homedir(), ".facet-dev", "host"));
+		expect(resolveDataDir({})).toBe(join(homedir(), ".facet", "host"));
 	});
 
 	it("socket 优先落在运行目录，没有时落在数据目录", () => {
@@ -97,35 +95,22 @@ describe("resolveDataDir", () => {
 		);
 	});
 
-	it("按 XDG_DATA_HOME 取，没有或不是绝对路径时用家目录", () => {
-		expect(resolveDataDir({ XDG_DATA_HOME: "/xdg" }, { platform: "linux" })).toBe(join("/xdg", "facet"));
-		expect(resolveDataDir({ XDG_DATA_HOME: "relative" }, { platform: "linux" })).toBe(
-			join(homedir(), ".local", "share", "facet"),
-		);
-	});
-
-	it("Windows 上按 LOCALAPPDATA 取，缺席时退回家目录的 AppData/Local", () => {
-		// 与主机侧 apps/server/src/config.ts 一致：数据目录不同，命名管道名字也就不同
-		expect(resolveDataDir({ LOCALAPPDATA: "/appdata" }, { platform: "win32" })).toBe(
-			join("/appdata", "facet"),
-		);
-		expect(resolveDataDir({ LOCALAPPDATA: "/appdata" }, { isDev: true, platform: "win32" })).toBe(
-			join("/appdata", "facet-dev"),
-		);
-		expect(resolveDataDir({ LOCALAPPDATA: "relative" }, { platform: "win32" })).toBe(
-			join(homedir(), "AppData", "Local", "facet"),
+	it("支持 FACET_HOME 与 FACET_DEV_HOME 覆盖", () => {
+		expect(resolveDataDir({ FACET_HOME: "/custom" })).toBe(join(resolve("/custom"), "host"));
+		expect(resolveDataDir({ FACET_DEV_HOME: "/custom-dev" }, { isDev: true })).toBe(
+			join(resolve("/custom-dev"), "host"),
 		);
 	});
 });
 
 describe("resolveAgentDir", () => {
-	it("发布版与 pi 共用 ~/.pi/agent，也认 FACET_AGENT_DIR", () => {
-		expect(resolveAgentDir({})).toBe(join(homedir(), ".pi", "agent"));
+	it("发布版落到 ~/.facet/pi，也认 FACET_AGENT_DIR", () => {
+		expect(resolveAgentDir({})).toBe(join(homedir(), ".facet", "pi"));
 		expect(resolveAgentDir({ FACET_AGENT_DIR: "/data/agent" })).toBe("/data/agent");
 	});
 
-	it("开发态只认 FACET_DEV_AGENT_DIR，继承来的真实目录不参与", () => {
-		expect(resolveAgentDir({}, { isDev: true })).toBe(join(homedir(), ".pi", "agent-dev"));
+	it("开发态落到 ~/.facet-dev/pi，只认 FACET_DEV_AGENT_DIR，继承来的真实目录不参与", () => {
+		expect(resolveAgentDir({}, { isDev: true })).toBe(join(homedir(), ".facet-dev", "pi"));
 		expect(resolveAgentDir({ FACET_DEV_AGENT_DIR: "/data/agent-dev" }, { isDev: true })).toBe(
 			"/data/agent-dev",
 		);
@@ -135,7 +120,7 @@ describe("resolveAgentDir", () => {
 				{ FACET_AGENT_DIR: "/data/agent", PI_CODING_AGENT_DIR: "/data/agent" },
 				{ isDev: true },
 			),
-		).toBe(join(homedir(), ".pi", "agent-dev"));
+		).toBe(join(homedir(), ".facet-dev", "pi"));
 	});
 });
 

@@ -21,6 +21,7 @@ import { bridge } from "../bridge.ts";
 import { useComposer } from "../hooks/useComposer.ts";
 import type { HostConnection } from "../hooks/useHostConnection.ts";
 import { useMentionFiles } from "../hooks/useMentionFiles.ts";
+import { useMultiHostInbox } from "../hooks/useMultiHostInbox.ts";
 import { useNoticeBridge } from "../hooks/useNoticeBridge.ts";
 import { useSessionLifecycle } from "../hooks/useSessionLifecycle.ts";
 import { useSystemNotifications } from "../hooks/useSystemNotifications.ts";
@@ -28,16 +29,25 @@ import { useTerminalPanel } from "../hooks/useTerminalPanel.ts";
 import { useReadMarker, useTranscript } from "../hooks/useTranscript.ts";
 import { useWorkspaceDocs } from "../hooks/useWorkspaceDocs.ts";
 import { useWorkspaceShell } from "../hooks/useWorkspaceShell.ts";
-import { useHostRuntime } from "../host-context.tsx";
+import { useHostRegistry, useHostRuntime } from "../host-context.tsx";
 import { hasLocalAppearance, hasLocalInput, workspaceStorage } from "../local-storage.ts";
 import { QUOTE_SOURCE_SELECTOR } from "../selection-quote.ts";
+import type { ActiveTarget } from "../session-target.ts";
 import { useToast } from "../toast-provider.tsx";
 import { workspaceShortcutOf } from "../workspace-shortcuts.ts";
 import { Workbench } from "./workbench.tsx";
 
 export interface HostWorkspaceProps {
-	/** 这台主机的连接域 */
+	/** 当前目标主机的连接域 */
 	host: HostConnection;
+	/** 当前主工作区选中的跨主机目标 `(endpoint, file)` */
+	activeTarget: ActiveTarget | undefined;
+	/** 切换当前主工作区的目标会话 */
+	onActiveTargetChange: (target: ActiveTarget | undefined) => void;
+	/** 新建会话引导页选定的目标主机端点 */
+	draftEndpoint: string;
+	/** 切换新建会话引导页的目标主机端点 */
+	onDraftEndpointChange: (endpoint: string) => void;
 	/** 语言设置与切换 */
 	languageSetting: LanguageSetting;
 	onLanguageChange: (setting: LanguageSetting) => void;
@@ -57,6 +67,10 @@ export interface HostWorkspaceProps {
 
 export function HostWorkspace({
 	host,
+	activeTarget,
+	onActiveTargetChange,
+	draftEndpoint,
+	onDraftEndpointChange,
 	languageSetting,
 	onLanguageChange,
 	localAppearance,
@@ -69,6 +83,8 @@ export function HostWorkspace({
 	onLocalTerminalChange,
 }: HostWorkspaceProps): React.JSX.Element {
 	const toast = useToast();
+	const hosts = useHostRegistry();
+	const inbox = useMultiHostInbox(hosts);
 	const runtime = useHostRuntime();
 	const client = runtime.client;
 	const terminalClient = runtime.terminalClient;
@@ -110,6 +126,10 @@ export function HostWorkspace({
 		projectDir: runtime.isLocal && bridge.projectDir.length > 0 ? bridge.projectDir : undefined,
 		snapshot: runtime.workspace,
 		storage: wsStorage,
+		targetFile: activeTarget?.endpoint === host.endpoint ? activeTarget.file : undefined,
+		onActiveFileChange: (file) => {
+			onActiveTargetChange(file === undefined ? undefined : { endpoint: host.endpoint, file });
+		},
 		onSessionRemoved,
 	});
 
@@ -133,6 +153,9 @@ export function HostWorkspace({
 	const activity = chatActivity(sessionView);
 	/** 会话所在的目录，git 命令都在它下面跑 */
 	const sessionCwd = sessionView?.state.cwd;
+	/** 新建会话引导页选中的项目目录（undefined 表示未关联项目） */
+	const [draftCwd, setDraftCwd] = useState<string | undefined>(undefined);
+	const effectiveCwd = sessionCwd ?? draftCwd;
 	/** 终端能力：主机没装 pty 后端时不给入口 */
 	const canUseTerminal = host.host?.capabilities.includes("terminal") ?? false;
 	/** 新建终端的启动目录：依次取当前会话目录、首个项目目录、已保存的新建目录 */
@@ -245,8 +268,8 @@ export function HostWorkspace({
 		[composer],
 	);
 
-	/** `@` 补全的文件清单：跟着会话目录走 */
-	const mentionFiles = useMentionFiles(client, sessionCwd);
+	/** `@` 补全的文件清单：跟着当前会话或引导页所选项目目录走 */
+	const mentionFiles = useMentionFiles(client, effectiveCwd);
 
 	/*
 	 * 工作区三件工具的快捷键：文件与变更直接打开对应标签，终端还没有实例时先在当前目录
@@ -297,6 +320,14 @@ export function HostWorkspace({
 				openTerminal={openTerminal}
 				composerInput={composerInput}
 				mentionFiles={mentionFiles}
+				draftCwd={draftCwd}
+				onDraftCwdChange={setDraftCwd}
+				hosts={hosts}
+				inbox={inbox}
+				activeTarget={activeTarget}
+				onActiveTargetChange={onActiveTargetChange}
+				draftEndpoint={draftEndpoint}
+				onDraftEndpointChange={onDraftEndpointChange}
 			/>
 			{/* 整棵工作区只挂一份：可选中文本处给复制，对话正文另加引用 */}
 			<TextMenu onCopy={copyText} onQuote={quoteInto} quoteScope={QUOTE_SOURCE_SELECTOR} />

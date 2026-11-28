@@ -76,11 +76,11 @@ describe("readPanelState", () => {
 		expect(readPanelState(storage).openTabs).toEqual(["files", "changes", "terminal"]);
 	});
 
-	it("图谱标签能读能写", () => {
+	it("图谱与浏览器标签能读能写", () => {
 		const storage = createStorage();
-		writePanelState(storage, state({ openTabs: ["git-graph"], activeTab: "git-graph" }));
-		expect(storage.data["facet.panel.tabs"]).toBe('["git-graph"]');
-		expect(readPanelState(storage).activeTab).toBe("git-graph");
+		writePanelState(storage, state({ openTabs: ["git-graph", "browser"], activeTab: "browser" }));
+		expect(storage.data["facet.panel.tabs"]).toBe('["git-graph","browser"]');
+		expect(readPanelState(storage).activeTab).toBe("browser");
 	});
 
 	it("标签串写坏了回到空列表", () => {

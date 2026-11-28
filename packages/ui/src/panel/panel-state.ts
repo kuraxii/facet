@@ -15,7 +15,7 @@ import { clampPaneWidth, type PaneWidthBounds } from "./pane-width.ts";
  * 四者是工作区里的四类内容：文件、变更、提交图谱与终端。取值同时是本地存储里的字面量，改名
  * 要照顾旧存储，读盘时读不懂的值一律丢掉。
  */
-export type RightPanelTab = "files" | "changes" | "git-graph" | "terminal";
+export type RightPanelTab = "files" | "changes" | "git-graph" | "terminal" | "browser";
 
 /** 右栏的状态。 */
 export interface RightPanelState {
@@ -71,7 +71,7 @@ export const DEFAULT_PANEL_STATE: RightPanelState = {
 };
 
 /** 合法的工具取值，读盘时用它判定；顺序即启动清单与 `+` 菜单的顺序。 */
-export const PANEL_TABS: readonly RightPanelTab[] = ["files", "changes", "git-graph", "terminal"];
+export const PANEL_TABS: readonly RightPanelTab[] = ["files", "changes", "git-graph", "terminal", "browser"];
 
 /** 本地存储用的键。 */
 const OPEN_KEY = "facet.panel.open";

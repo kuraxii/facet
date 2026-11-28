@@ -8,7 +8,13 @@ import { RequestError, type RpcContext } from "../context.ts";
 import type { RequestHandlerMap } from "../gateway.ts";
 
 /** 后端配置域负责的方法。 */
-type AgentMethod = "listAgents" | "probeAgent" | "acpLoginStart" | "acpLoginSubmit" | "acpLoginCancel";
+type AgentMethod =
+	| "listAgents"
+	| "probeAgent"
+	| "getAcpDraftConfig"
+	| "acpLoginStart"
+	| "acpLoginSubmit"
+	| "acpLoginCancel";
 
 function requireAcpRuntime(context: RpcContext) {
 	if (context.acpRuntime === undefined) {
@@ -45,6 +51,15 @@ export const agentHandlers: Pick<RequestHandlerMap, AgentMethod> = {
 		try {
 			const agent = await acpRuntime.probeAgent(params.agentId);
 			return { agent };
+		} catch (error) {
+			throw new RequestError("bad_params", error instanceof Error ? error.message : String(error));
+		}
+	},
+
+	getAcpDraftConfig: async (params, context: RpcContext): Promise<RequestResults["getAcpDraftConfig"]> => {
+		const acpRuntime = requireAcpRuntime(context);
+		try {
+			return await acpRuntime.getDraftConfig(params);
 		} catch (error) {
 			throw new RequestError("bad_params", error instanceof Error ? error.message : String(error));
 		}

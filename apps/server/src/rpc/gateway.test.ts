@@ -429,7 +429,7 @@ describe("派发去重", () => {
 
 describe("契约表", () => {
 	it("每个方法的权限档只在生成物里声明一次", () => {
-		expect(Object.keys(REQUEST_CONTRACTS)).toHaveLength(63);
+		expect(Object.keys(REQUEST_CONTRACTS)).toHaveLength(64);
 		expect(REQUEST_CONTRACTS.contextDetails?.auth).toBe("public");
 		expect(REQUEST_CONTRACTS.respondUi?.auth).toBe("write");
 		expect(REQUEST_CONTRACTS.saveCredential?.auth).toBe("admin");

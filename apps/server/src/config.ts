@@ -5,9 +5,8 @@
  * 数据写在 facet 自己的目录，与命令行工具的数据目录分开。
  */
 import { createHash, randomBytes } from "node:crypto";
-import { homedir } from "node:os";
 import { basename, isAbsolute, join } from "node:path";
-import { DEFAULT_AGENT_DIR } from "@facet/agent";
+import { resolveFacetHome } from "@facet/agent";
 
 /** 主机的运行配置。 */
 export interface ServerConfig {
@@ -35,12 +34,18 @@ export interface ServerConfig {
 	 * 空表示不校验，只用于本机调试；独立运行入口缺省生成一个随机值写进发现文件。
 	 */
 	token: string | undefined;
-	/** 数据目录，内含凭证、模型配置与会话文件；缺省为 facet 的开发目录 */
+	/** Pi 数据目录，内含凭证、模型配置与会话文件；缺省为 `<FACET_HOME>/pi` */
 	agentDir: string | undefined;
 	/** 会话文件目录，缺省按工作目录分组存放 */
 	sessionDir: string | undefined;
-	/** 应用数据目录，缺省按 XDG 规范取 `$XDG_DATA_HOME/facet`，Windows 上是 `%LOCALAPPDATA%\facet` */
+	/** 宿主机运行态目录（socket、发现文件、审计日志），缺省为 `<FACET_HOME>/host` */
 	dataDir: string;
+	/** Facet 配置目录（projects.json、settings.json、acp-agents.json），缺省为 `<FACET_HOME>/config` */
+	configDir: string;
+	/** ACP 会话索引与占位探针目录，缺省为 `<FACET_HOME>/acp` */
+	acpDir: string;
+	/** 无项目会话的隔离临时工作区根目录，缺省为 `<FACET_HOME>/scratch` */
+	scratchDir: string;
 	/**
 	 * 远程连接的权限上限。
 	 *
@@ -119,29 +124,6 @@ export function namedPipePath(dataDir: string): string {
 	return `\\\\.\\pipe\\facet-${digest}`;
 }
 
-/**
- * 应用数据目录，随平台取各自的规范位置。
- *
- * Linux 与 macOS 按 XDG 规范用 `$XDG_DATA_HOME`，没设置或不是绝对路径时用 `~/.local/share`；
- * Windows 没有 XDG 变量，按约定用 `%LOCALAPPDATA%`，变量缺席时退回家目录下的
- * `AppData/Local`。桌面的 `resolveDataDir` 与 `scripts/dev-dirs.mjs` 推的是同一个目录：它
- * 既决定发现文件的位置，也是命名管道名字的摘要来源，两边算法不一致就接不上主机。
- */
-function dataRoot(env: Record<string, string | undefined>, platform: NodeJS.Platform): string {
-	if (platform === "win32") {
-		const local = env.LOCALAPPDATA?.trim();
-		return local !== undefined && local.length > 0 && isAbsolute(local)
-			? local
-			: join(homedir(), "AppData", "Local");
-	}
-	const xdg = env.XDG_DATA_HOME?.trim();
-	return xdg !== undefined && isAbsolute(xdg) ? xdg : join(homedir(), ".local", "share");
-}
-
-function defaultDataDir(env: Record<string, string | undefined>, platform: NodeJS.Platform): string {
-	return join(dataRoot(env, platform), "facet");
-}
-
 function readInt(value: string | undefined, fallback: number): number {
 	if (value === undefined || value.trim() === "") {
 		return fallback;
@@ -156,15 +138,22 @@ export function loadServerConfig(
 	platform: NodeJS.Platform = process.platform,
 ): ServerConfig {
 	const hostName = env.FACET_HOST_NAME?.trim();
-	const dataDir = env.FACET_DATA_DIR?.trim() || defaultDataDir(env, platform);
+	const facetHome = resolveFacetHome(env);
+	const dataDir = env.FACET_DATA_DIR?.trim() || join(facetHome, "host");
+	const configDir = env.FACET_CONFIG_DIR?.trim() || join(facetHome, "config");
+	const acpDir = env.FACET_ACP_DIR?.trim() || join(facetHome, "acp");
+	const scratchDir = env.FACET_SCRATCH_DIR?.trim() || join(facetHome, "scratch");
 	// 显式给了监听地址或端口就按 TCP 走；其余情况本机只开本地 socket，不占任何端口
 	const wantsTcp = (env.FACET_HOST?.trim() ?? "") !== "" || (env.FACET_PORT?.trim() ?? "") !== "";
 	return {
 		host: env.FACET_HOST?.trim() || DEFAULT_HOST,
 		port: readInt(env.FACET_PORT, DEFAULT_PORT),
-		agentDir: env.FACET_AGENT_DIR?.trim() || DEFAULT_AGENT_DIR,
+		agentDir: env.FACET_AGENT_DIR?.trim() || join(facetHome, "pi"),
 		sessionDir: env.FACET_SESSION_DIR?.trim() || undefined,
 		dataDir,
+		configDir,
+		acpDir,
+		scratchDir,
 		socketPath:
 			env.FACET_SOCKET?.trim() || (wantsTcp ? undefined : defaultSocketPath(env, dataDir, platform)),
 		remotePermission: env.FACET_REMOTE_PERMISSION?.trim() === "operate" ? "operate" : "view",

@@ -9,8 +9,9 @@
  * 还在推进就等它停下。运行状态本身只由 PiAgent 维护,这里不复制。
  */
 
-import { rm, stat } from "node:fs/promises";
-import { resolve } from "node:path";
+import { randomUUID } from "node:crypto";
+import { mkdir, rm, stat } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import {
 	type AcpAgentRuntime,
 	type ForkPiAgentOptions,
@@ -256,6 +257,8 @@ export interface SessionHubOptions<A extends HubAgent> {
 	readonly factory: AgentFactory<A>;
 	/** 外部 ACP 会话运行时，缺省时仅支持 Pi 会话 */
 	readonly acpRuntime?: AcpAgentRuntime;
+	/** 无项目会话的隔离临时工作区根目录 */
+	readonly scratchDir?: string;
 	/** 每个通道保留的动作条数 */
 	readonly replayLimit?: number;
 	/** entries 未指定条数时的默认页大小 */
@@ -301,6 +304,7 @@ const DEFAULT_IDLE_CLOSE_MS = 5 * 60 * 1000;
 export class SessionHub<A extends HubAgent = ManagedAgent> {
 	private readonly factory: AgentFactory<A>;
 	private readonly acpRuntime: AcpAgentRuntime | undefined;
+	private readonly scratchDir: string | undefined;
 	private readonly replayLimit: number;
 	private readonly pageSize: { default: number; max: number };
 	private readonly idleCloseMs: number;
@@ -309,6 +313,7 @@ export class SessionHub<A extends HubAgent = ManagedAgent> {
 	constructor(options: SessionHubOptions<A>) {
 		this.factory = options.factory;
 		this.acpRuntime = options.acpRuntime;
+		this.scratchDir = options.scratchDir;
 		this.replayLimit = options.replayLimit ?? 512;
 		this.pageSize = {
 			default: options.defaultPageSize ?? DEFAULT_PAGE_SIZE,
@@ -334,6 +339,12 @@ export class SessionHub<A extends HubAgent = ManagedAgent> {
 
 	/** 建一个新会话并登记。Pi 会话立即建文件；ACP 会话待初始化分配外部 id 后补全定位符。 */
 	async createSession(options: PiAgentLaunchOptions & { agentId?: string } = {}): Promise<SessionSnapshot> {
+		let cwd = options.cwd;
+		if (cwd === undefined && this.scratchDir !== undefined) {
+			const day = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+			cwd = join(this.scratchDir, `${day}-${randomUUID().slice(0, 8)}`);
+			await mkdir(cwd, { recursive: true });
+		}
 		const agentId = options.agentId;
 		if (agentId !== undefined && agentId !== PI_AGENT_ID) {
 			if (this.acpRuntime === undefined) {
@@ -341,7 +352,7 @@ export class SessionHub<A extends HubAgent = ManagedAgent> {
 			}
 			const agent = this.acpRuntime.create({
 				agentId,
-				cwd: options.cwd,
+				cwd,
 				name: options.name,
 			});
 			try {
@@ -354,7 +365,7 @@ export class SessionHub<A extends HubAgent = ManagedAgent> {
 			this.noteSessions(agent.file, "changed");
 			return this.snapshotRow(this.requireRow(agent.id));
 		}
-		const agent = await this.factory.create({ ...options, deferInitialization: true });
+		const agent = await this.factory.create({ ...options, cwd, deferInitialization: true });
 		this.attach(agent);
 		this.noteSessions(agent.file === undefined ? undefined : normalizeFile(agent.file), "changed");
 		return this.snapshotRow(this.requireRow(agent.id));

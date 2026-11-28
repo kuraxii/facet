@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { defaultSocketPath, loadServerConfig } from "./config.ts";
 
@@ -62,18 +62,22 @@ describe("Windows 上的本机 socket", () => {
 });
 
 describe("数据目录的缺省位置", () => {
-	it("Linux 按 XDG_DATA_HOME 取，非绝对路径按未设置处理", () => {
-		expect(loadServerConfig({ XDG_DATA_HOME: "/xdg" }, "linux").dataDir).toBe(join("/xdg", "facet"));
-		expect(loadServerConfig({ XDG_DATA_HOME: "relative" }, "linux").dataDir).toBe(
-			join(homedir(), ".local", "share", "facet"),
-		);
+	it("统一收拢在 ~/.facet 下的各子目录", () => {
+		const cfg = loadServerConfig({}, "linux");
+		const home = join(homedir(), ".facet");
+		expect(cfg.dataDir).toBe(join(home, "host"));
+		expect(cfg.configDir).toBe(join(home, "config"));
+		expect(cfg.agentDir).toBe(join(home, "pi"));
+		expect(cfg.acpDir).toBe(join(home, "acp"));
+		expect(cfg.scratchDir).toBe(join(home, "scratch"));
 	});
 
-	it("Windows 按 LOCALAPPDATA 取，缺席时退回家目录的 AppData/Local", () => {
-		expect(loadServerConfig({ LOCALAPPDATA: "/appdata" }, "win32").dataDir).toBe(join("/appdata", "facet"));
-		// 非绝对路径的 LOCALAPPDATA 同样按未设置处理，免得相对路径把数据目录拖到工作目录下
-		expect(loadServerConfig({ LOCALAPPDATA: "relative" }, "win32").dataDir).toBe(
-			join(homedir(), "AppData", "Local", "facet"),
-		);
+	it("支持 FACET_HOME 与子目录环境变量覆盖", () => {
+		const custom = loadServerConfig({ FACET_HOME: "/custom-facet" }, "win32");
+		expect(custom.dataDir).toBe(join(resolve("/custom-facet"), "host"));
+		expect(custom.configDir).toBe(join(resolve("/custom-facet"), "config"));
+		expect(
+			loadServerConfig({ FACET_HOME: "/custom-facet", FACET_DATA_DIR: "/override/host" }, "win32").dataDir,
+		).toBe("/override/host");
 	});
 });

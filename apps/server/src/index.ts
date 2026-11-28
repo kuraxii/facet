@@ -69,6 +69,8 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 	});
 	const acpRuntime = new AcpAgentRuntime({
 		agentDir: factory.agentDir,
+		configDir: config.configDir,
+		acpDir: config.acpDir,
 		onError: (error) => console.error("ACP runtime error", error),
 	});
 	const hostIdentity = await loadOrCreateHostId({ dataDir: config.dataDir });
@@ -79,10 +81,17 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 	const stopProviderLogin = factory.onProviderLogin((update) => {
 		modelLog.publishLogin(modelsChannelFor(hostId), update.loginId, update.providerId, update.event);
 	});
-	const projectStore = await ProjectStore.open({ file: join(config.dataDir, "projects.json") });
-	/** 会话目录首次出现时补进项目清单；已有项目保留用户改过的名字。 */
+	const projectStore = await ProjectStore.open({ file: join(config.configDir, "projects.json") });
+	const scratchPrefix = `${join(config.scratchDir, "/")}`.replace(/[/\\]+$/, "");
+	/** 会话目录首次出现时补进项目清单；已有项目保留用户改过的名字，scratch 目录不进项目表。 */
 	const ensureProject = async (cwd: string): Promise<void> => {
-		if (cwd.length === 0 || projectStore.get(projectIdOf(cwd)) !== undefined) {
+		if (
+			cwd.length === 0 ||
+			cwd === scratchPrefix ||
+			cwd.startsWith(`${scratchPrefix}\\`) ||
+			cwd.startsWith(`${scratchPrefix}/`) ||
+			projectStore.get(projectIdOf(cwd)) !== undefined
+		) {
 			return;
 		}
 		// 会话文件里记的 cwd 可能早就不在磁盘上了（目录被删掉、会话从别的主机拷过来），
@@ -102,6 +111,7 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 	const hub = new SessionHub({
 		factory,
 		acpRuntime,
+		scratchDir: config.scratchDir,
 		replayLimit: config.replayLimit,
 		idleCloseMs: config.sessionIdleMs,
 		onSessionChanged: (file, change) => sessionIndex?.note(file, change),
@@ -158,7 +168,7 @@ export async function startServer(options: Partial<ServerConfig> = {}): Promise<
 	for (const project of projects.list()) {
 		await ensureProject(project.cwd);
 	}
-	const settingsStore = await SettingsStore.open({ file: join(config.dataDir, "settings.json") });
+	const settingsStore = await SettingsStore.open({ file: join(config.configDir, "settings.json") });
 	// 每隔一段时间按数量上限回收闲置会话：长时间开着也不该越攒越多
 	const evictionTimer = setInterval(() => {
 		try {

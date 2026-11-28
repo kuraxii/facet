@@ -885,6 +885,25 @@ function buildRequestProbeAgent(): (value: unknown) => boolean {
 const checkRequestProbeAgent = buildRequestProbeAgent();
 
 /**
+ * getAcpDraftConfig 的参数判断。
+ *
+ * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
+ */
+function buildRequestGetAcpDraftConfig(): (value: unknown) => boolean {
+	// @ts-ignore
+	const check_0 = ((value) => ((typeof value === "object" && value !== null && !(Array.isArray(value))) && ("agentId" in value && (((typeof value.agentId === "string" && (value.cwd === undefined || (!("cwd" in value) || typeof value.cwd === "string"))) && (value.configId === undefined || (!("configId" in value) || typeof value.configId === "string"))) && (value.configValue === undefined || (!("configValue" in value) || typeof value.configValue === "string"))))));
+	return (value: unknown): boolean => {
+		if (!check_0(value)) return false;
+		const source = value as Record<string, unknown>;
+		return (
+			typeof source.agentId === "string" && source.agentId.length > 0
+		);
+	};
+}
+
+const checkRequestGetAcpDraftConfig = buildRequestGetAcpDraftConfig();
+
+/**
  * acpLoginStart 的参数判断。
  *
  * 生成代码，不要手改；改 Schema 之后重新跑 `npm run gen:checks`。
@@ -1300,6 +1319,7 @@ export const REQUEST_CONTRACTS: Readonly<Record<string, RequestContract | undefi
 	"removeCustomProvider": { auth: "admin", check: checkRequestRemoveCustomProvider },
 	"listAgents": { auth: "public", check: checkRequestListAgents },
 	"probeAgent": { auth: "admin", check: checkRequestProbeAgent },
+	"getAcpDraftConfig": { auth: "public", check: checkRequestGetAcpDraftConfig },
 	"acpLoginStart": { auth: "admin", check: checkRequestAcpLoginStart },
 	"acpLoginSubmit": { auth: "admin", check: checkRequestAcpLoginSubmit },
 	"acpLoginCancel": { auth: "admin", check: checkRequestAcpLoginCancel },

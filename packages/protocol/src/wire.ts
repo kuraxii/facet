@@ -8,7 +8,7 @@
 
 import type { Static, TSchema } from "typebox";
 import type { Action, ActionOrigin } from "./action.ts";
-import type { AcpAgentProfile, AgentAvailability } from "./agent.ts";
+import type { AcpAgentProfile, AcpConfigOption, AcpModeState, AgentAvailability } from "./agent.ts";
 import type { Channel } from "./channel.ts";
 import type { SlashCommand } from "./command.ts";
 import type { FileContent, FileEntry, FileWriteResult } from "./file.ts";
@@ -280,6 +280,7 @@ export interface RequestResults {
 	removeCustomProvider: { providers: CustomProviderInfo[] };
 	listAgents: { agents: AgentAvailability[]; profiles: AcpAgentProfile[] };
 	probeAgent: { agent: AgentAvailability };
+	getAcpDraftConfig: { mode?: AcpModeState; configOptions: AcpConfigOption[] };
 	acpLoginStart: { loginId: string; authUrl?: string };
 	acpLoginSubmit: { agent: AgentAvailability };
 	acpLoginCancel: Record<string, never>;

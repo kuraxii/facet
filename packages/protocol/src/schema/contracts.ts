@@ -378,6 +378,16 @@ export const REQUEST_SCHEMAS = {
 		params: Type.Object({ agentId: Id }),
 		nonEmpty: ["agentId"],
 	},
+	getAcpDraftConfig: {
+		auth: "public",
+		params: Type.Object({
+			agentId: Id,
+			cwd: Type.Optional(Cwd),
+			configId: Type.Optional(Type.String()),
+			configValue: Type.Optional(Type.String()),
+		}),
+		nonEmpty: ["agentId"],
+	},
 	acpLoginStart: {
 		auth: "admin",
 		params: Type.Object({ agentId: Id }),

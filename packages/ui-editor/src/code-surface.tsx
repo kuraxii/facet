@@ -110,6 +110,8 @@ export interface CodeSurfaceProps {
 	path: string;
 	/** 只读 */
 	readOnly?: boolean;
+	/** 是否开启自动换行 */
+	wordWrap?: boolean;
 	/** 内容变动，编辑态给 */
 	onChange?: (text: string) => void;
 	/** 编辑器就绪，宿主可以拿它做定位 */
@@ -130,20 +132,23 @@ export function CodeSurface({
 	text,
 	path,
 	readOnly = true,
+	wordWrap = false,
 	onChange,
 	onReady,
 	onSaveShortcut,
 }: CodeSurfaceProps) {
 	const host = useRef<HTMLDivElement>(null);
 	const view = useRef<EditorView | undefined>(undefined);
-	/** 语言与只读各占一个隔间，换内容时不重建视图 */
+	/** 语言、只读、主题与换行各占一个隔间，换内容时不重建视图 */
 	const languageSlot = useRef(new Compartment());
 	const readOnlySlot = useRef(new Compartment());
 	const themeSlot = useRef(new Compartment());
+	const wrapSlot = useRef(new Compartment());
 	/** 内容与回调只在建视图时读一次 */
 	const initialText = useRef(text);
-	/** 建视图时的只读状态，后续切换走隔间 */
+	/** 建视图时的只读与换行状态，后续切换走隔间 */
 	const initialReadOnly = useRef(readOnly);
+	const initialWordWrap = useRef(wordWrap);
 	const changeHandler = useRef(onChange);
 	changeHandler.current = onChange;
 	const readyHandler = useRef(onReady);
@@ -174,6 +179,7 @@ export function CodeSurface({
 						EditorState.readOnly.of(initialReadOnly.current),
 						EditorView.editable.of(!initialReadOnly.current),
 					]),
+					wrapSlot.current.of(initialWordWrap.current ? EditorView.lineWrapping : []),
 					languageSlot.current.of([]),
 					keymap.of([
 						{
@@ -257,6 +263,13 @@ export function CodeSurface({
 			]),
 		});
 	}, [readOnly]);
+
+	// 自动换行开关切换时热重配 wrap 隔间
+	useEffect(() => {
+		view.current?.dispatch({
+			effects: wrapSlot.current.reconfigure(wordWrap ? EditorView.lineWrapping : []),
+		});
+	}, [wordWrap]);
 
 	return <div className="code-surface" ref={host} />;
 }

@@ -5,17 +5,14 @@
  * 写之前带上载入时拿到的 revision。磁盘上的内容在别处被改过时主机回冲突，这里给出
  * 「重新加载」与「覆盖」两个选择，改动先留在编辑器里。
  *
- * Markdown 多一个「渲染 / 源码」的看��切换——那是呈现方式，不是权限：切到源码就能改。
+ * Markdown 多一个「渲染 / 源码」的呈现切换——那是呈现方式，不是权限：切到源码就能改。
  */
 import type { FileContent } from "@facet/protocol";
 import { useI18n } from "@facet/ui/i18n";
 import { Markdown } from "@facet/ui/markdown";
-import { IconButton } from "@facet/ui/primitives";
-import { useHoverTip } from "@facet/ui/tip";
-import { ICON_SIZE } from "@facet/ui/visual-contract";
-import { Check, Code, Eye, Save } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { CodeSurface } from "./code-surface.tsx";
+import { FileHeaderBar } from "./file-header.tsx";
 import { isMarkdownPath } from "./markdown-file.ts";
 
 /** 写回的结果。 */
@@ -26,21 +23,83 @@ export interface FileSaveResult {
 	modifiedAt: number;
 }
 
+/** `useFileDocument` 的参数。 */
+export interface UseFileDocumentOptions {
+	/** 当前打开的文件相对路径；未打开文件时为空 */
+	path?: string;
+	/** 读到的内容；未打开或尚未加载完成时为空 */
+	content?: FileContent;
+	/** 写回磁盘；内容冲突时抛出的错误带 conflict 标记 */
+	onSave?: (text: string, expectedRevision: string) => Promise<FileSaveResult>;
+	/** 重新从磁盘读取 */
+	onReload?: () => Promise<FileContent>;
+}
+
+/** 当前打开文件的编辑态与动作（供顶栏与正文共享）。 */
+export interface FileDocumentState {
+	/** 当前编辑器草稿文本 */
+	draft: string;
+	/** 更新草稿文本 */
+	setDraft: (next: string) => void;
+	/** 是否有未保存改动 */
+	isDirty: boolean;
+	/** 正在写盘 */
+	isSaving: boolean;
+	/** 刚保存成功 */
+	isSaved: boolean;
+	/** 写盘失败原因 */
+	saveError: string | undefined;
+	/** 磁盘内容与打开时不一致 */
+	hasConflict: boolean;
+	/** 是否文本文件 */
+	isText: boolean;
+	/** 是否允许 Markdown 预览/源码切换 */
+	isMarkdown: boolean;
+	/** 当前是否处于 Markdown 渲染预览态 */
+	isPreviewing: boolean;
+	/** 写回磁盘 */
+	save: () => Promise<void>;
+	/** 从磁盘重新加载并覆盖本地草稿 */
+	reload: () => Promise<void>;
+	/** 取最新 revision 并用当前草稿覆盖磁盘 */
+	overwrite: () => Promise<void>;
+	/** 切换 Markdown 预览/源码 */
+	togglePreview: () => void;
+}
+
 export interface FileViewProps {
+	/** 可选的项目名（显示在面包屑首位） */
+	projectName?: string;
 	/** 相对项目根的路径 */
 	path: string;
 	/** 读到的内容；只有文本会进编辑器 */
 	content: FileContent;
+	/** 代码区是否开启自动换行 */
+	wordWrap?: boolean;
 	/** 写回磁盘；内容冲突时抛出的错误带 conflict 标记 */
 	onSave: (text: string, expectedRevision: string) => Promise<FileSaveResult>;
 	/** 重新从磁盘读取 */
 	onReload: () => Promise<FileContent>;
+	/** 切换自动换行 */
+	onToggleWordWrap?: () => void;
 	/**
 	 * 挂在标题行最右端的额外动作。
 	 *
 	 * 工作区用它放「展开文件树」：树收起之后预览占满，这个入口跟着标题行走，位置固定。
 	 */
 	headerTrailing?: ReactNode;
+}
+
+/** `FileEditorBody` 的参数。 */
+export interface FileEditorBodyProps {
+	/** 相对项目根的路径 */
+	path: string;
+	/** 读到的内容 */
+	content: FileContent;
+	/** 代码区是否开启自动换行 */
+	wordWrap?: boolean;
+	/** `useFileDocument` 返回的文档状态 */
+	doc: FileDocumentState;
 }
 
 /** 保存失败时用来判断是不是冲突。 */
@@ -53,35 +112,34 @@ function isConflict(error: unknown): boolean {
 /** Markdown 文件的两种呈现：渲染后的预览，与可编辑的源码。 */
 type MarkdownView = "preview" | "source";
 
-export function FileView({ path, content, onSave, onReload, headerTrailing }: FileViewProps) {
-	const { t } = useI18n();
-	// 路径被省略号截断时由提示补全
-	const tip = useHoverTip();
-	/** 编辑器里的当前内容 */
-	const [draft, setDraft] = useState(content.kind === "text" ? content.content : "");
-	/** 磁盘上那份内容，用来判断有没有改动 */
-	const [baseline, setBaseline] = useState(content.kind === "text" ? content.content : "");
-	/** 最近一次从磁盘拿到的内容摘要，写回时带上 */
-	const [revision, setRevision] = useState(content.kind === "text" ? content.revision : "");
-	/** 正在写盘 */
+/** 管理当前打开文件的草稿、保存、冲突与 Markdown 预览切换。 */
+export function useFileDocument({
+	path,
+	content,
+	onSave,
+	onReload,
+}: UseFileDocumentOptions): FileDocumentState {
+	const [draft, setDraft] = useState(content?.kind === "text" ? content.content : "");
+	const [baseline, setBaseline] = useState(content?.kind === "text" ? content.content : "");
+	const [revision, setRevision] = useState(content?.kind === "text" ? content.revision : "");
 	const [isSaving, setIsSaving] = useState(false);
-	/** 写盘失败的原因 */
 	const [saveError, setSaveError] = useState<string | undefined>(undefined);
-	/** 磁盘上的内容被别处改过 */
 	const [hasConflict, setHasConflict] = useState(false);
-	/** 刚保存成功，短暂把按钮换成对勾 */
 	const [isSaved, setIsSaved] = useState(false);
-	/**
-	 * Markdown 当前是预览还是源码；非 Markdown 文件不看它。初值取一次就够：
-	 * 文件标签与文件一一对应，换文件是重挂组件，不靠重置。
-	 */
 	const [markdownView, setMarkdownView] = useState<MarkdownView>("preview");
 
-	// 换文件或重新读到内容时重置整个视图
+	// 切换到不同文件时重置预览态与短暂保存状态
 	useEffect(() => {
-		setDraft(content.kind === "text" ? content.content : "");
-		setBaseline(content.kind === "text" ? content.content : "");
-		setRevision(content.kind === "text" ? content.revision : "");
+		void path;
+		setMarkdownView("preview");
+		setIsSaved(false);
+	}, [path]);
+
+	// 换文件或重新读到内容时同步基线与草稿
+	useEffect(() => {
+		setDraft(content?.kind === "text" ? content.content : "");
+		setBaseline(content?.kind === "text" ? content.content : "");
+		setRevision(content?.kind === "text" ? content.revision : "");
 		setSaveError(undefined);
 		setHasConflict(false);
 	}, [content]);
@@ -94,11 +152,14 @@ export function FileView({ path, content, onSave, onReload, headerTrailing }: Fi
 		return () => clearTimeout(timer);
 	}, [isSaved]);
 
-	const isDirty = content.kind === "text" && draft !== baseline;
+	const isText = content?.kind === "text";
+	const isDirty = isText && draft !== baseline;
+	const isMarkdown = isText && path !== undefined && isMarkdownPath(path);
+	const isPreviewing = isMarkdown && markdownView === "preview";
 
 	/** 写回磁盘。冲突与其它失败分开处理，冲突时给两个选择。 */
 	const save = useCallback(async (): Promise<void> => {
-		if (content.kind !== "text" || isSaving) {
+		if (!isText || isSaving || onSave === undefined) {
 			return;
 		}
 		setIsSaving(true);
@@ -117,10 +178,13 @@ export function FileView({ path, content, onSave, onReload, headerTrailing }: Fi
 		} finally {
 			setIsSaving(false);
 		}
-	}, [content.kind, draft, isSaving, onSave, revision]);
+	}, [draft, isSaving, isText, onSave, revision]);
 
 	/** 重新加载：丢掉编辑器里的改动，回到磁盘上的内容。 */
 	const reload = useCallback(async (): Promise<void> => {
+		if (onReload === undefined) {
+			return;
+		}
 		try {
 			const next = await onReload();
 			if (next.kind === "text") {
@@ -137,6 +201,9 @@ export function FileView({ path, content, onSave, onReload, headerTrailing }: Fi
 
 	/** 覆盖：先用磁盘上的最新摘要，再把编辑器里的内容写回去。 */
 	const overwrite = useCallback(async (): Promise<void> => {
+		if (onReload === undefined || onSave === undefined) {
+			return;
+		}
 		try {
 			const next = await onReload();
 			if (next.kind !== "text") {
@@ -153,81 +220,98 @@ export function FileView({ path, content, onSave, onReload, headerTrailing }: Fi
 		}
 	}, [draft, onReload, onSave]);
 
-	const isText = content.kind === "text";
-	/** 能渲染预览的文件：有文本内容，且扩展名是 Markdown */
-	const isMarkdown = isText && isMarkdownPath(path);
-	/** 正在看渲染结果，没在看看源码 */
-	const isPreviewing = isMarkdown && markdownView === "preview";
+	const togglePreview = useCallback((): void => {
+		setMarkdownView((current) => (current === "preview" ? "source" : "preview"));
+	}, []);
 
+	return {
+		draft,
+		setDraft,
+		isDirty,
+		isSaving,
+		isSaved,
+		saveError,
+		hasConflict,
+		isText,
+		isMarkdown,
+		isPreviewing,
+		save,
+		reload,
+		overwrite,
+		togglePreview,
+	};
+}
+
+/** 文件正文内容区：冲突提示、保存失败提示与源码/预览切换主体。 */
+export function FileEditorBody({ path, content, wordWrap = false, doc }: FileEditorBodyProps): ReactNode {
+	const { t } = useI18n();
 	return (
-		<div className="file-view">
-			<div className="file-head">
-				<span className="file-path" {...tip.handlers(path)}>
-					{path}
-				</span>
-				{isDirty ? (
-					<span className="file-dirty" role="status" aria-label={t("editor.unsavedChanges")} />
-				) : null}
-				{isMarkdown ? (
-					<IconButton
-						variant="ghost"
-						size="sm"
-						className="ib"
-						aria-label={isPreviewing ? t("editor.viewSource") : t("editor.viewPreview")}
-						{...tip.handlers(isPreviewing ? t("editor.viewSource") : t("editor.viewPreview"))}
-						onClick={() => {
-							setMarkdownView(isPreviewing ? "source" : "preview");
-						}}
-					>
-						{isPreviewing ? <Code size={ICON_SIZE.md} /> : <Eye size={ICON_SIZE.md} />}
-					</IconButton>
-				) : null}
-				{isText ? (
-					// 没有改动时按钮是灰的：能不能点由控件自己说，不另写一句话
-					<IconButton
-						variant="ghost"
-						size="sm"
-						className="ib"
-						aria-label={t("editor.saveShortcut")}
-						disabled={!isDirty || isSaving}
-						{...tip.handlers(t("editor.saveShortcut"))}
-						onClick={() => void save()}
-					>
-						{isSaved ? <Check size={ICON_SIZE.md} /> : <Save size={ICON_SIZE.md} />}
-					</IconButton>
-				) : null}
-				{headerTrailing}
-			</div>
-			{hasConflict ? (
+		<>
+			{doc.hasConflict ? (
 				<p className="chg-note is-error">
 					文件已在磁盘上改动。
-					<button type="button" className="chg-retry" onClick={() => void reload()}>
+					<button type="button" className="chg-retry" onClick={() => void doc.reload()}>
 						重新加载
 					</button>
-					<button type="button" className="chg-retry" onClick={() => void overwrite()}>
+					<button type="button" className="chg-retry" onClick={() => void doc.overwrite()}>
 						覆盖
 					</button>
 				</p>
 			) : null}
-			{saveError === undefined ? null : <p className="chg-note is-error">{saveError}</p>}
-			{isText && isPreviewing ? (
+			{doc.saveError === undefined ? null : <p className="chg-note is-error">{doc.saveError}</p>}
+			{doc.isText && doc.isPreviewing ? (
 				<div className="file-preview scroll-both">
-					<Markdown text={draft} isStreaming={false} indexKey={path} />
+					<Markdown text={doc.draft} isStreaming={false} indexKey={path} />
 				</div>
-			) : isText ? (
+			) : doc.isText ? (
 				<CodeSurface
-					text={draft}
+					text={doc.draft}
 					path={path}
 					readOnly={false}
-					onChange={setDraft}
-					onSaveShortcut={() => void save()}
+					wordWrap={wordWrap}
+					onChange={doc.setDraft}
+					onSaveShortcut={() => void doc.save()}
 				/>
 			) : (
 				<p className="chg-note">
 					{content.kind === "binary" ? t("editor.binaryNoPreview") : t("editor.tooLargeNoPreview")}
 				</p>
 			)}
-			{tip.render()}
+		</>
+	);
+}
+
+/** 独立文件视图（含顶栏与正文）；工作区标签页直接复用顶栏全宽布局。 */
+export function FileView({
+	projectName,
+	path,
+	content,
+	wordWrap = false,
+	onSave,
+	onReload,
+	onToggleWordWrap,
+	headerTrailing,
+}: FileViewProps): ReactNode {
+	const doc = useFileDocument({ path, content, onSave, onReload });
+	return (
+		<div className="file-view">
+			<FileHeaderBar
+				projectName={projectName}
+				path={path}
+				isDirty={doc.isDirty}
+				isSaved={doc.isSaved}
+				isSaving={doc.isSaving}
+				isText={doc.isText}
+				isMarkdown={doc.isMarkdown}
+				isPreviewing={doc.isPreviewing}
+				wordWrap={wordWrap}
+				copyText={doc.isText ? doc.draft : undefined}
+				onSave={() => void doc.save()}
+				onTogglePreview={doc.togglePreview}
+				onToggleWordWrap={onToggleWordWrap}
+				trailing={headerTrailing}
+			/>
+			<FileEditorBody path={path} content={content} wordWrap={wordWrap} doc={doc} />
 		</div>
 	);
 }

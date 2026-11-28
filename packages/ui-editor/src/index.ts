@@ -7,5 +7,14 @@ export type { CodeSurfaceProps } from "./code-surface.tsx";
 export { CodeSurface } from "./code-surface.tsx";
 export type { EditorPalette } from "./editor-theme.ts";
 export { editorTheme, readEditorPalette } from "./editor-theme.ts";
-export type { FileSaveResult, FileViewProps } from "./file-view.tsx";
-export { FileView } from "./file-view.tsx";
+export { buildFileBreadcrumbs } from "./file-breadcrumbs.ts";
+export type { FileHeaderBarProps } from "./file-header.tsx";
+export { FileHeaderBar } from "./file-header.tsx";
+export type {
+	FileDocumentState,
+	FileEditorBodyProps,
+	FileSaveResult,
+	FileViewProps,
+	UseFileDocumentOptions,
+} from "./file-view.tsx";
+export { FileEditorBody, FileView, useFileDocument } from "./file-view.tsx";

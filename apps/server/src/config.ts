@@ -44,7 +44,7 @@ export interface ServerConfig {
 	configDir: string;
 	/** ACP 会话索引与占位探针目录，缺省为 `<FACET_HOME>/acp` */
 	acpDir: string;
-	/** 无项目会话的隔离临时工作区根目录，缺省为 `<FACET_HOME>/scratch` */
+	/** 无项目会话的临时工作目录，缺省为 `<FACET_HOME>/scratch` */
 	scratchDir: string;
 	/**
 	 * 远程连接的权限上限。

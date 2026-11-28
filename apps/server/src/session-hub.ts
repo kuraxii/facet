@@ -9,9 +9,8 @@
  * 还在推进就等它停下。运行状态本身只由 PiAgent 维护,这里不复制。
  */
 
-import { randomUUID } from "node:crypto";
 import { mkdir, rm, stat } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import {
 	type AcpAgentRuntime,
 	type ForkPiAgentOptions,
@@ -341,8 +340,7 @@ export class SessionHub<A extends HubAgent = ManagedAgent> {
 	async createSession(options: PiAgentLaunchOptions & { agentId?: string } = {}): Promise<SessionSnapshot> {
 		let cwd = options.cwd;
 		if (cwd === undefined && this.scratchDir !== undefined) {
-			const day = new Date().toISOString().slice(0, 10).replaceAll("-", "");
-			cwd = join(this.scratchDir, `${day}-${randomUUID().slice(0, 8)}`);
+			cwd = this.scratchDir;
 			await mkdir(cwd, { recursive: true });
 		}
 		const agentId = options.agentId;

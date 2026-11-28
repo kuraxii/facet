@@ -468,8 +468,12 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 				}
 			}
 			if (started.current) {
-				if (targetFile !== undefined && client.current?.snapshot.file !== targetFile) {
-					openSessionRef.current(targetFile);
+				if (targetFile !== undefined) {
+					if (client.current?.snapshot.file !== targetFile) {
+						openSessionRef.current(targetFile);
+					} else if (document.hasFocus()) {
+						void client.markSessionsSeen([targetFile]).catch(() => undefined);
+					}
 				}
 				return;
 			}
@@ -477,6 +481,7 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 			if (targetFile !== undefined) {
 				if (client.current?.snapshot.file === targetFile) {
 					commitActiveFile(targetFile);
+					void client.markSessionsSeen([targetFile]).catch(() => undefined);
 				} else {
 					openSessionRef.current(targetFile);
 				}
@@ -484,7 +489,11 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 			}
 			// 已经有开着的会话（切回保活主机）：屏幕上的那个由它自己继续
 			if (client.current !== undefined) {
-				commitActiveFile(client.current.snapshot.file);
+				const currentFile = client.current.snapshot.file;
+				commitActiveFile(currentFile);
+				if (currentFile !== undefined && document.hasFocus()) {
+					void client.markSessionsSeen([currentFile]).catch(() => undefined);
+				}
 				return;
 			}
 			// 优先恢复上次在该主机打开的会话；文件已被删掉再退回 pickStartupSession
@@ -613,6 +622,8 @@ export function useSessionLifecycle(options: SessionLifecycleOptions): SessionLi
 							return;
 						}
 						onSessionOpened?.(file);
+						// 未缓存会话首次打开完成后同步记已读，避免后台结束的绿点/红点不消退
+						void client.markSessionsSeen([file]).catch(() => undefined);
 					},
 				);
 			};

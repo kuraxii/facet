@@ -46,7 +46,8 @@ function readTerminalAppearance(local: TerminalLocalSettings): TerminalAppearanc
 		cursorBlink: local.cursorBlink,
 		scrollback: local.scrollback,
 		foreground: read("--fg-default", "#1a1a1e"),
-		cursor: read("--accent-fg", "#2563eb"),
+		cursor: read("--fg-default", "#1a1a1e"),
+		cursorAccent: read("--bg-surface", "#ffffff"),
 		selection: read("--bg-active", "#e4e4e7"),
 		// 与界面其它滚动容器同一份宽度与配色
 		scrollbarWidth: Number.parseFloat(read("--scrollbar-width", "8")),
